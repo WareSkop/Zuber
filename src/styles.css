@@ -2609,3 +2609,126 @@ input:checked + .slider:before {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   Sidebar Toggles & Responsive Drawer Overlay for Small Screens
+   ========================================================================== */
+
+.topbar-left-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.topbar-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.topbar-sidebar-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.topbar-sidebar-toggle.active {
+  background: var(--bg-active);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.close-sidebar-btn {
+  flex: 0 0 32px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.close-sidebar-btn:hover {
+  color: var(--obsidian-red);
+  background: rgba(248, 81, 73, 0.15) !important;
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .obsidian-app-shell {
+    grid-template-columns: 44px 1fr !important;
+  }
+
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 44px;
+    right: 0;
+    bottom: 26px;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 35;
+    backdrop-filter: blur(2px);
+  }
+
+  .left-sidebar {
+    position: fixed !important;
+    left: 44px;
+    top: 0;
+    bottom: 26px;
+    width: min(320px, calc(100vw - 48px));
+    z-index: 40;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.55);
+  }
+
+  .right-sidebar {
+    position: fixed !important;
+    right: 0;
+    top: 0;
+    bottom: 26px;
+    width: min(320px, calc(100vw - 48px));
+    z-index: 40;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.55);
+  }
+
+  .topbar-breadcrumbs {
+    max-width: 200px;
+  }
+
+  .editor-mode-switcher span {
+    display: none;
+  }
+
+  .topbar-action-btn span {
+    display: none;
+  }
+
+  .sync-status-text {
+    display: none;
+  }
+
+  .topbar-brand-title {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .topbar-breadcrumbs {
+    display: none;
+  }
+
+  .note-document-container {
+    padding: 16px 12px 60px;
+  }
+}

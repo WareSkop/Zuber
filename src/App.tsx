@@ -20,6 +20,7 @@ import {
   Settings,
   Sun,
   Upload,
+  X,
 } from 'lucide-react';
 import type {
   BacklinkItem,
@@ -76,8 +77,12 @@ export const App: React.FC = () => {
   const [editorMode, setEditorMode] = useState<EditorMode>('live');
   const [workspaceView, setWorkspaceView] = useState<MainWorkspaceView>('editor');
 
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true);
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth > 900 : true
+  );
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth > 1200 : false
+  );
   const [rightTab, setRightTab] = useState<RightSidebarTab>('backlinks');
 
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
@@ -113,6 +118,28 @@ export const App: React.FC = () => {
       unsubSync();
       unsubConflicts();
     };
+  }, []);
+
+  // Keyboard shortcuts for collapsing/expanding sidebars
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && !e.shiftKey) {
+        e.preventDefault();
+        setLeftSidebarOpen((o) => !o);
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key.toLowerCase() === 'j' || (e.shiftKey && e.key.toLowerCase() === 'b'))
+      ) {
+        e.preventDefault();
+        setRightSidebarOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const loadVaultIndex = useCallback(async () => {
@@ -730,6 +757,7 @@ export const App: React.FC = () => {
           activePath={activeNote?.path ?? null}
           tags={graphData.tags}
           selectedTagFilter={selectedTagFilter}
+          onClose={() => setLeftSidebarOpen(false)}
           {...sidebarHandlers}
         />
       )}
@@ -737,10 +765,21 @@ export const App: React.FC = () => {
       {/* Center Workspace: Editor / Global Graph / Split */}
       <main className="workspace-center">
         <header className="workspace-topbar">
-          <div className="topbar-brand">
-            <img src="/basalt-logo.svg" alt="Basalt" style={{ width: 20, height: 20 }} />
-            <span className="topbar-brand-title">Basalt</span>
-            <span className="topbar-vault-badge">{vaultPath ? vaultPath.split('/').filter(Boolean).pop() : 'Vault'}</span>
+          <div className="topbar-left-cluster">
+            <button
+              type="button"
+              className={`topbar-sidebar-toggle ${leftSidebarOpen ? 'active' : ''}`}
+              onClick={() => setLeftSidebarOpen((o) => !o)}
+              title="Linke Leiste (Dateibaum & Suche) ein-/ausblenden (Ctrl+B)"
+              aria-label="Linke Leiste umschalten"
+            >
+              <PanelLeft size={16} />
+            </button>
+            <div className="topbar-brand">
+              <img src="/basalt-logo.svg" alt="Basalt" style={{ width: 20, height: 20 }} />
+              <span className="topbar-brand-title">Basalt</span>
+              <span className="topbar-vault-badge">{vaultPath ? vaultPath.split('/').filter(Boolean).pop() : 'Vault'}</span>
+            </div>
           </div>
           <div className="topbar-breadcrumbs">
             {workspaceView === 'graph' ? (
@@ -865,6 +904,16 @@ export const App: React.FC = () => {
                 title="Einstellungen & Farb-Themes (Zahnrad)"
               >
                 <Settings size={16} />
+              </button>
+
+              <button
+                type="button"
+                className={`topbar-sidebar-toggle ${rightSidebarOpen ? 'active' : ''}`}
+                onClick={() => setRightSidebarOpen((o) => !o)}
+                title="Rechte Leiste (Backlinks, Gliederung & Graph) ein-/ausblenden (Ctrl+J)"
+                aria-label="Rechte Leiste umschalten"
+              >
+                <PanelRight size={16} />
               </button>
             </div>
           </div>
@@ -1004,6 +1053,15 @@ export const App: React.FC = () => {
             >
               <GitFork size={15} />
               <span>Graph</span>
+            </button>
+            <button
+              type="button"
+              className="sidebar-tab-btn close-sidebar-btn"
+              onClick={() => setRightSidebarOpen(false)}
+              title="Rechte Leiste schließen"
+              aria-label="Rechte Leiste schließen"
+            >
+              <X size={15} />
             </button>
           </div>
 
@@ -1197,6 +1255,18 @@ export const App: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Mobile backdrop to dismiss drawer sidebars when clicking outside */}
+      {(leftSidebarOpen || rightSidebarOpen) && (
+        <div
+          className="mobile-sidebar-backdrop"
+          onClick={() => {
+            setLeftSidebarOpen(false);
+            setRightSidebarOpen(false);
+          }}
+          aria-hidden="true"
+        />
       )}
 
       {/* Settings Modal (Theme, Security, Profiles, Sync) */}

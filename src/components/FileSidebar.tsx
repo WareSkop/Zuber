@@ -30,6 +30,7 @@ interface FileSidebarProps {
   onDeleteEntry: (path: string, name: string) => void;
   onRefresh: () => void;
   onSelectTagFilter: (tag: string | null) => void;
+  onClose?: () => void;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -44,6 +45,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onDeleteEntry,
   onRefresh,
   onSelectTagFilter,
+  onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<'files' | 'search' | 'tags'>('files');
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
@@ -224,6 +226,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           <Hash size={15} />
           <span>Tags</span>
         </button>
+        {onClose && (
+          <button
+            type="button"
+            className="sidebar-tab-btn close-sidebar-btn"
+            onClick={onClose}
+            title="Linke Leiste schließen"
+            aria-label="Linke Leiste schließen"
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
 
       {activeTab === 'files' && (
