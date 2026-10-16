@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -8,6 +9,19 @@ export interface TlsCredentials {
   certPath: string;
   keyPath: string;
   isSelfSigned: boolean;
+}
+
+export function getLocalIpAddresses(): string[] {
+  const ips: string[] = ['127.0.0.1'];
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        ips.push(iface.address);
+      }
+    }
+  }
+  return Array.from(new Set(ips));
 }
 
 export function ensureTlsCredentials(rootDir: string): TlsCredentials {
@@ -32,6 +46,9 @@ export function ensureTlsCredentials(rootDir: string): TlsCredentials {
   const certPath = path.join(certsDir, 'server.crt');
   const keyPath = path.join(certsDir, 'server.key');
 
+  const localIps = getLocalIpAddresses();
+  const sanList = ['DNS:localhost', ...localIps.map((ip) => `IP:${ip}`)].join(',');
+
   if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
     execFileSync(
       'openssl',
@@ -45,9 +62,9 @@ export function ensureTlsCredentials(rootDir: string): TlsCredentials {
         '-days',
         '3650',
         '-subj',
-        '/CN=localhost/O=ObsidianWebVault',
+        '/CN=localhost/O=Basalt',
         '-addext',
-        'subjectAltName=DNS:localhost,IP:127.0.0.1',
+        `subjectAltName=${sanList}`,
         '-keyout',
         keyPath,
         '-out',

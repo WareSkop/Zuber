@@ -17,7 +17,7 @@ import {
   verifySessionToken,
 } from './auth';
 import { configService } from './configService';
-import { ensureTlsCredentials } from './tls';
+import { ensureTlsCredentials, getLocalIpAddresses } from './tls';
 import { VaultService } from './vaultService';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -417,7 +417,12 @@ if (process.env.NODE_ENV !== 'test') {
   });
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Basalt Server läuft auf ${protocolLabel}://localhost:${PORT}`);
+    console.log(`🚀 Basalt Server läuft auf:`);
+    console.log(`   - Lokal:    ${protocolLabel}://localhost:${PORT}`);
+    const localIps = getLocalIpAddresses().filter((ip) => ip !== '127.0.0.1');
+    for (const ip of localIps) {
+      console.log(`   - Netzwerk: ${protocolLabel}://${ip}:${PORT}`);
+    }
     console.log(`📁 Vault-Verzeichnis: ${vaultService.getVaultDir()}`);
   });
 }
