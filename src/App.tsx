@@ -63,6 +63,7 @@ import { GraphView } from './components/GraphView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
+import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
 
 type MainWorkspaceView = 'editor' | 'graph' | 'split';
@@ -299,6 +300,9 @@ export const App: React.FC = () => {
       onSelectNote: (path: string) => {
         openNoteByPath(path);
         if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
+        if (typeof window !== 'undefined' && window.innerWidth < 768) {
+          setLeftSidebarOpen(false);
+        }
       },
       onCreateNote: (parentFolder?: string) => {
         setDialog({ type: 'create-note', parentFolder, initialValue: 'Neue Notiz' });
@@ -677,6 +681,12 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUploadImageFile = async (file: File): Promise<string> => {
+    const uploaded = await api.uploadAttachment(file);
+    await loadVaultIndex();
+    return uploaded.wikiEmbed || (uploaded.path ? `![[${uploaded.path}]]` : `![[${uploaded.name}]]`);
+  };
+
   const handleUploadImageClick = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -689,13 +699,17 @@ export const App: React.FC = () => {
         let tagsToInsert = '';
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          const uploaded = await api.uploadAttachment(file);
-          const embedTag = uploaded.wikiEmbed || (uploaded.path ? `![[${uploaded.path}]]` : `![[${uploaded.name}]]`);
-          tagsToInsert += `${embedTag}\n`;
+          const embedTag = await handleUploadImageFile(file);
+          if (editorRef.current) {
+            editorRef.current.insertImageEmbed(embedTag);
+          } else {
+            tagsToInsert += `${embedTag}\n`;
+          }
         }
-        const nextBody = `${activeNote.body.trimEnd()}\n\n${tagsToInsert}`;
-        handleBodyChange(nextBody);
-        await loadVaultIndex();
+        if (!editorRef.current && tagsToInsert) {
+          const nextBody = `${activeNote.body.trimEnd()}\n\n${tagsToInsert}`;
+          handleBodyChange(nextBody);
+        }
       } catch (err) {
         console.error('Fehler beim Hochladen des Bildes:', err);
       }
@@ -1250,14 +1264,21 @@ export const App: React.FC = () => {
 
       {/* Left Sidebar: File Explorer, Search, Tags */}
       {leftSidebarOpen && (
-        <FileSidebar
-          tree={tree}
-          activePath={activeNote?.path ?? null}
-          tags={graphData.tags}
-          selectedTagFilter={selectedTagFilter}
-          onClose={() => setLeftSidebarOpen(false)}
-          {...sidebarHandlers}
-        />
+        <>
+          <div
+            className="mobile-drawer-backdrop"
+            onClick={() => setLeftSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <FileSidebar
+            tree={tree}
+            activePath={activeNote?.path ?? null}
+            tags={graphData.tags}
+            selectedTagFilter={selectedTagFilter}
+            onClose={() => setLeftSidebarOpen(false)}
+            {...sidebarHandlers}
+          />
+        </>
       )}
 
       {/* Center Workspace: Editor / Global Graph / Split */}
@@ -1462,6 +1483,14 @@ export const App: React.FC = () => {
                     />
                   )}
 
+                  {/* Mobile / Touch Markdown Formatting Toolbar */}
+                  {editorMode !== 'reading' && (
+                    <EditorToolbar
+                      editorRef={editorRef}
+                      onUploadImage={handleUploadImageFile}
+                    />
+                  )}
+
                   {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
                   <LivePreviewEditor
                     ref={editorRef}
@@ -1534,7 +1563,13 @@ export const App: React.FC = () => {
 
       {/* Right Sidebar: Backlinks, Outline (Gliederung), and Local Graph */}
       {rightSidebarOpen && (
-        <aside className="right-sidebar">
+        <>
+          <div
+            className="mobile-drawer-backdrop right-backdrop"
+            onClick={() => setRightSidebarOpen(false)}
+            aria-hidden="true"
+          />
+          <aside className="right-sidebar">
           <div className="sidebar-tabs">
             <button
               type="button"
@@ -1675,6 +1710,7 @@ export const App: React.FC = () => {
             </div>
           )}
         </aside>
+      </>
       )}
 
       {/* Bottom Obsidian Status Bar */}

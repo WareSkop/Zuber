@@ -18,6 +18,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown';
 import {
   autocompletion,
+  startCompletion,
   type CompletionContext,
   type CompletionResult,
 } from '@codemirror/autocomplete';
@@ -28,13 +29,22 @@ export type EditorMode = 'live' | 'reading' | 'source';
 
 export interface LivePreviewEditorRef {
   applyFormat: (formatType: 'bold' | 'italic' | 'strikethrough' | 'highlight' | 'code') => void;
-  insertTable: () => void;
-  insertCodeBlock: () => void;
+  insertTable: (rows?: number, cols?: number) => void;
+  insertCodeBlock: (lang?: string) => void;
   insertTask: () => void;
-  insertWikiLink: () => void;
+  insertWikiLink: (openAutocomplete?: boolean) => void;
+  insertTag: (openAutocomplete?: boolean) => void;
   insertHeading: (level: number) => void;
+  insertList: (type: 'bullet' | 'number') => void;
+  indent: () => void;
+  outdent: () => void;
   insertQuote: () => void;
+  insertCallout: (type?: string) => void;
   insertHorizontalRule: () => void;
+  isCursorInTable: () => boolean;
+  insertTableRow: () => void;
+  insertTableColumn: () => void;
+  insertImageEmbed: (embedTag: string) => void;
   focus: () => void;
 }
 
@@ -54,6 +64,7 @@ export interface LivePreviewEditorProps {
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 const TABLE_SEPARATOR_REGEX = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
+const isTableRow = (text: string) => text.includes('|') && text.trim().length > 0;
 
 function splitTableCells(rowText: string): string[] {
   let trimmed = rowText.trim();
@@ -996,12 +1007,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
-  const insertCodeBlock = () => {
+  const insertCodeBlock = (lang = 'typescript') => {
     const view = viewRef.current;
     if (!view) return;
     const sel = view.state.selection.main;
     const selText = view.state.sliceDoc(sel.from, sel.to);
-    const snippet = `\`\`\`typescript\n${selText || '// Code hier'}\n\`\`\`\n`;
+    const snippet = `\`\`\`${lang}\n${selText || '// Code hier'}\n\`\`\`\n`;
     view.dispatch({
       changes: { from: sel.from, to: sel.to, insert: snippet },
       selection: { anchor: sel.from + snippet.length },
@@ -1009,15 +1020,90 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
-  const insertTable = () => {
+  const insertTable = (rows = 3, cols = 3) => {
     const view = viewRef.current;
     if (!view) return;
+    const safeCols = Math.max(1, Math.min(10, cols));
+    const safeRows = Math.max(1, Math.min(20, rows));
+
+    let header = '| ' + Array.from({ length: safeCols }, (_, i) => `Spalte ${i + 1}`).join(' | ') + ' |\n';
+    let sep = '| ' + Array.from({ length: safeCols }, () => ':---').join(' | ') + ' |\n';
+    let bodyRows = '';
+    for (let r = 0; r < safeRows; r++) {
+      bodyRows += '| ' + Array.from({ length: safeCols }, (_, c) => `Wert ${r + 1}-${c + 1}`).join(' | ') + ' |\n';
+    }
+    const table = `\n${header}${sep}${bodyRows}\n`;
     const sel = view.state.selection.main;
-    const table = `\n| Spalte 1 | Spalte 2 | Spalte 3 |\n| :--- | :--- | :--- |\n| Zeile 1 | Wert A | Wert B |\n| Zeile 2 | Wert C | Wert D |\n\n`;
     view.dispatch({
       changes: { from: sel.head, insert: table },
       selection: { anchor: sel.head + table.length },
     });
+    view.focus();
+  };
+
+  const isCursorInTable = (): boolean => {
+    const view = viewRef.current;
+    if (!view) return false;
+    const sel = view.state.selection.main;
+    const line = view.state.doc.lineAt(sel.head);
+    return isTableRow(line.text) || TABLE_SEPARATOR_REGEX.test(line.text);
+  };
+
+  const insertTableRow = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const line = view.state.doc.lineAt(sel.head);
+    if (!isTableRow(line.text) && !TABLE_SEPARATOR_REGEX.test(line.text)) return;
+    const cells = splitTableCells(line.text);
+    const count = Math.max(1, cells.length);
+    const newRow = '\n| ' + Array(count).fill('   ').join(' | ') + ' |';
+    view.dispatch({
+      changes: { from: line.to, insert: newRow },
+      selection: { anchor: line.to + newRow.length },
+    });
+    view.focus();
+  };
+
+  const insertTableColumn = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const curLine = view.state.doc.lineAt(sel.head);
+    if (!isTableRow(curLine.text) && !TABLE_SEPARATOR_REGEX.test(curLine.text)) return;
+
+    let startLineNum = curLine.number;
+    while (startLineNum > 1) {
+      const prev = view.state.doc.line(startLineNum - 1);
+      if (isTableRow(prev.text) || TABLE_SEPARATOR_REGEX.test(prev.text)) {
+        startLineNum--;
+      } else {
+        break;
+      }
+    }
+    let endLineNum = curLine.number;
+    while (endLineNum < view.state.doc.lines) {
+      const next = view.state.doc.line(endLineNum + 1);
+      if (isTableRow(next.text) || TABLE_SEPARATOR_REGEX.test(next.text)) {
+        endLineNum++;
+      } else {
+        break;
+      }
+    }
+
+    const changes = [];
+    for (let l = startLineNum; l <= endLineNum; l++) {
+      const line = view.state.doc.line(l);
+      const isSep = TABLE_SEPARATOR_REGEX.test(line.text);
+      const addition = isSep ? ' :--- |' : ' Neu |';
+      const trimmed = line.text.trimEnd();
+      if (trimmed.endsWith('|')) {
+        changes.push({ from: line.from + trimmed.length - 1, insert: addition });
+      } else {
+        changes.push({ from: line.to, insert: isSep ? ' | :--- |' : ' | Neu |' });
+      }
+    }
+    view.dispatch({ changes });
     view.focus();
   };
 
@@ -1034,17 +1120,100 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
-  const insertWikiLink = () => {
+  const insertList = (type: 'bullet' | 'number') => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const line = view.state.doc.lineAt(sel.head);
+    if (type === 'bullet') {
+      if (line.text.startsWith('- ')) {
+        view.dispatch({ changes: { from: line.from, to: line.from + 2, insert: '' } });
+      } else {
+        view.dispatch({ changes: { from: line.from, insert: '- ' } });
+      }
+    } else {
+      const numMatch = line.text.match(/^\d+\.\s+/);
+      if (numMatch) {
+        view.dispatch({ changes: { from: line.from, to: line.from + numMatch[0].length, insert: '' } });
+      } else {
+        view.dispatch({ changes: { from: line.from, insert: '1. ' } });
+      }
+    }
+    view.focus();
+  };
+
+  const indent = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const startLine = view.state.doc.lineAt(sel.from);
+    const endLine = view.state.doc.lineAt(sel.to);
+    const changes = [];
+    for (let l = startLine.number; l <= endLine.number; l++) {
+      const line = view.state.doc.line(l);
+      changes.push({ from: line.from, insert: '  ' });
+    }
+    view.dispatch({ changes });
+    view.focus();
+  };
+
+  const outdent = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const startLine = view.state.doc.lineAt(sel.from);
+    const endLine = view.state.doc.lineAt(sel.to);
+    const changes = [];
+    for (let l = startLine.number; l <= endLine.number; l++) {
+      const line = view.state.doc.line(l);
+      const spaces = line.text.match(/^ {1,2}/);
+      if (spaces) {
+        changes.push({ from: line.from, to: line.from + spaces[0].length, insert: '' });
+      }
+    }
+    if (changes.length > 0) view.dispatch({ changes });
+    view.focus();
+  };
+
+  const insertWikiLink = (openAutocomplete = true) => {
     const view = viewRef.current;
     if (!view) return;
     const sel = view.state.selection.main;
     const selText = view.state.sliceDoc(sel.from, sel.to);
-    const insert = selText ? `[[${selText}]]` : '[[';
+    if (selText) {
+      const insert = `[[${selText}]]`;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert },
+        selection: { anchor: sel.from + insert.length },
+      });
+    } else {
+      view.dispatch({
+        changes: { from: sel.head, insert: '[[]]' },
+        selection: { anchor: sel.head + 2 },
+      });
+      if (openAutocomplete) {
+        setTimeout(() => {
+          if (viewRef.current) startCompletion(viewRef.current);
+        }, 30);
+      }
+    }
+    view.focus();
+  };
+
+  const insertTag = (openAutocomplete = true) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
     view.dispatch({
-      changes: { from: sel.from, to: sel.to, insert },
-      selection: { anchor: sel.from + insert.length },
+      changes: { from: sel.head, insert: '#' },
+      selection: { anchor: sel.head + 1 },
     });
     view.focus();
+    if (openAutocomplete) {
+      setTimeout(() => {
+        if (viewRef.current) startCompletion(viewRef.current);
+      }, 30);
+    }
   };
 
   const insertHeading = (level: number) => {
@@ -1077,6 +1246,18 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
+  const insertCallout = (type = 'NOTE') => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const snippet = `> [!${type.toUpperCase()}] Hinweis\n> Text hier einfügen...\n\n`;
+    view.dispatch({
+      changes: { from: sel.head, insert: snippet },
+      selection: { anchor: sel.head + snippet.length },
+    });
+    view.focus();
+  };
+
   const insertHorizontalRule = () => {
     const view = viewRef.current;
     if (!view) return;
@@ -1089,15 +1270,36 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
+  const insertImageEmbed = (embedTag: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const snippet = `${embedTag}\n`;
+    view.dispatch({
+      changes: { from: sel.head, insert: snippet },
+      selection: { anchor: sel.head + snippet.length },
+    });
+    view.focus();
+  };
+
   useImperativeHandle(ref, () => ({
     applyFormat,
     insertTable,
     insertCodeBlock,
     insertTask,
     insertWikiLink,
+    insertTag,
     insertHeading,
+    insertList,
+    indent,
+    outdent,
     insertQuote,
+    insertCallout,
     insertHorizontalRule,
+    isCursorInTable,
+    insertTableRow,
+    insertTableColumn,
+    insertImageEmbed,
     focus: () => viewRef.current?.focus(),
   }));
 

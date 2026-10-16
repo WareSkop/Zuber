@@ -270,12 +270,36 @@ Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**
 
 ---
 
-## 8. Responsive Seitenleisten-Steuerung (Mobile & Small Screens)
+## 8. Responsive Seitenleisten-Steuerung & Mobile Drawers
 
-Auf kleinen Displays (z. B. Smartphones, Chromebooks mit geteiltem Bildschirm) können beide Seitenleisten unabhängig voneinander ein- und ausgeblendet werden:
-- **Linke Leiste (Dateibaum):**
-  - Umschaltbar über den linken Toggle-Button im Header (`PanelLeftClose` / `PanelLeft`) sowie über das Tastenkürzel `Ctrl+\`.
-- **Rechte Leiste (Graph / Backlinks / Gliederung):**
-  - Umschaltbar über den rechten Toggle-Button im Header (`PanelRightClose` / `PanelRight`) sowie über das Tastenkürzel `Ctrl+Alt+\`.
-- Bei ausgeblendeten Leisten nutzt der Editor bzw. Graph die volle Bildschirmbreite aus.
+Auf mobilen Touchscreens und schmalen Bildschirmen (< 768px, z. B. Smartphones, Chromebooks mit geteiltem Display):
+- **100dvh (Dynamic Viewport Height):** Die Shell nutzt `100dvh`, wodurch sich das Layout beim Ein- und Ausblenden der virtuellen Bildschirmtastatur auf mobilen Geräten nahtlos anpasst.
+- **Overlay-Drawers mit Backdrop:**
+  - Die linke Leiste (`FileSidebar`) und rechte Leiste (Backlinks / Gliederung / Lokaler Graph) öffnen sich als überlagernde Drawer-Panels (`z-index: 100`, max. 320px Breite) mit abgedunkeltem Hintergrund-Overlay (`.mobile-drawer-backdrop`).
+  - Ein Klick/Tipp auf das Backdrop oder die Auswahl einer Notiz schließt den Drawer automatisch.
+- **Berührungsfreundliche Tippflächen (Touch-Targets):**
+  - Auf Geräten mit Touch-Eingabe (`@media (pointer: coarse)`) besitzen interaktive Buttons und Icons eine garantierte Mindest-Tippfläche von $40 \times 40\,\text{px}$.
+
+---
+
+## 9. Mobile Touch-Formatierungsleiste ([`src/components/EditorToolbar.tsx`](../src/components/EditorToolbar.tsx))
+
+Direkt oberhalb des Editors (oder angedockt über der Bildschirmtastatur) steht auf mobilen Geräten sowie im Desktop-Editor eine horizontal scrollbare **Formatierungsleiste** bereit:
+
+- **Überschriften-Menü:** Dropdown für H1 bis H6 (toggelt die `#`-Präfixe der Zeile).
+- **Textformatierung:**
+  - **Fett (`B`)**, **Kursiv (`I`)**, **Durchgestrichen (`S`)**, **Highlight (`==text==`)**, **Inline-Code (`<>`)**.
+- **Listen & Einrückung (ohne physische Tastatur):**
+  - **Aufzählungsliste (`- `)**, **Nummerierte Liste (`1. `)**, **Aufgaben-Checkbox (`- [ ] `)**.
+  - **Einrücken (`Indent` +2 Leerzeichen)** und **Ausrücken (`Outdent` -2 Leerzeichen)**.
+- **Links & Autocomplete-Trigger:**
+  - **Wiki-Link (`[[ ]]`)**: Fügt `[[]]` ein und triggert sofort das CodeMirror-Autocomplete-Menü (`startCompletion`), sodass am Smartphone direkt aus den Notiz-Vorschlägen ausgewählt werden kann.
+  - **Tag (`#`)**: Fügt `#` ein und öffnet das Tag-Autocomplete.
+- **Interaktiver Tabellen-Generator & Tabellen-Aktionen:**
+  - Popover zur Auswahl von vordefinierten Größen (`2×2`, `3×3`, `4×4`) oder individueller Zeilen- und Spaltenanzahl.
+  - Befindet sich der Cursor bereits in einer Markdown-Tabelle (`isCursorInTable()`), schaltet das Menü um auf **„+ Zeile darunter“** und **„+ Spalte rechts“**.
+- **Foto & Kamera-Upload am Smartphone:**
+  - Direkte Auswahl zwischen **„Foto/Datei aus Galerie“** (`<input type="file" accept="image/*,application/pdf">`) und **„Foto mit Kamera aufnehmen“** (`<input type="file" capture="environment">`).
+  - Das aufgenommene Foto wird über `onUploadImage` hochgeladen (oder offline gecacht) und sofort an der Cursorposition als `![[foto.jpg]]` eingebettet.
+
 
