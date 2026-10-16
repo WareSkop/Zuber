@@ -1,6 +1,6 @@
-# Obsidian Web Vault – Technische Dokumentation & LLM-Handbuch
+# Basalt – Technische Dokumentation & LLM-Handbuch
 
-Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Obsidian Web Vault**. Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
+Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Basalt** (ehemals „Obsidian Web Vault“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
 
 ---
 
@@ -21,9 +21,11 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 
 ## 1. Projektziel & Kernfunktionen
 
-**Obsidian Web Vault** stellt einen lokalen Obsidian-Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx`) über eine **TLS/HTTPS-verschlüsselte Web-Applikation** im Browser bereit.
+**Basalt** stellt einen lokalen Obsidian-kompatiblen Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx`) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
 
 ### Hauptmerkmale
+- **Progressive Web App (PWA) & Offline-App-Shell:**
+  - Service Worker (`public/sw.js`) und Web-Manifest (`public/manifest.webmanifest`) ermöglichen Standalone-Installation und sofortigen Start selbst bei getrennter Netzwerkverbindung.
 - **Obsidian-artiger Editor mit 3 Modi (`live`, `reading`, `source`):**
   - **Live-Preview (Standard):** CodeMirror 6 Editor, der Markdown-Syntax (`# Überschriften`, `**Fett**`, `==Highlight==`, `` `Code` ``, `- [ ] Aufgaben`, `[[Wiki-Links]]`, `[Links](pfad)`, `![[Einbettungen]]`, `![Bilder](pfad)`, `> [!callouts]`, `#tags` und `| Markdown | Tabellen |`) visuell rendert, sobald sich der Cursor außerhalb der betreffenden Zeile bzw. Tabelle befindet.
   - **Lese-Modus (`reading`):** Vollständig gerenderte HTML-Ansicht (GFM inkl. Tabellen, Callouts, Bildern, klickbaren Wiki-Links und Tags).

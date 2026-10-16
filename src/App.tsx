@@ -588,7 +588,7 @@ export const App: React.FC = () => {
   };
 
   if (!authChecked) {
-    return <div className="loading-screen">Lade Obsidian Web Vault...</div>;
+    return <div className="loading-screen">Lade Basalt...</div>;
   }
 
   if (!authenticated) {
@@ -719,6 +719,11 @@ export const App: React.FC = () => {
       {/* Center Workspace: Editor / Global Graph / Split */}
       <main className="workspace-center">
         <header className="workspace-topbar">
+          <div className="topbar-brand">
+            <img src="/basalt-logo.svg" alt="Basalt" style={{ width: 20, height: 20 }} />
+            <span className="topbar-brand-title">Basalt</span>
+            <span className="topbar-vault-badge">{vaultPath ? vaultPath.split('/').filter(Boolean).pop() : 'Vault'}</span>
+          </div>
           <div className="topbar-breadcrumbs">
             {workspaceView === 'graph' ? (
               <span className="breadcrumb-active">

@@ -1,8 +1,8 @@
 {
-  "name": "obsidian-web-vault",
+  "name": "basalt",
   "version": "1.0.0",
   "private": true,
-  "description": "Obsidian-inspired Web Application with Live-Preview Markdown Editor, Visual Frontmatter Properties, Graph View, HTTPS, and Real-Time Vault Sync",
+  "description": "Basalt – Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",

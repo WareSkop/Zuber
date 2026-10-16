@@ -34,11 +34,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       <div className="login-card">
         <div className="login-header">
           <div className="login-logo">
-            <Sparkles size={26} />
+            <img src="/basalt-logo.svg" alt="Basalt" style={{ width: 44, height: 44 }} />
           </div>
-          <h1>Obsidian Web Vault</h1>
+          <h1>Basalt</h1>
           <p className="login-subtitle">
-            Verschlüsselter Browser-Zugriff auf deine Markdown-Wissensbasis
+            Offline-First Wissensbasis & Markdown-Editor
           </p>
         </div>
 
