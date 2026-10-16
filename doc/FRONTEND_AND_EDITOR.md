@@ -271,18 +271,22 @@ Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**
 
 ---
 
-## 8. Responsive Seitenleisten-Steuerung & Touch-Wischgesten (Mobile Swipe)
+## 8. Responsive Seitenleisten-Steuerung, Touch-Wischgesten & Android-Keyboard-Fix
 
 Auf mobilen Touchscreens und schmalen Bildschirmen (< 768px, z. B. Smartphones, Chromebooks mit geteiltem Display):
-- **100dvh (Dynamic Viewport Height):** Die Shell nutzt `100dvh`, wodurch sich das Layout beim Ein- und Ausblenden der virtuellen Bildschirmtastatur auf mobilen Geräten nahtlos anpasst.
-- **Initial ausgeblendet:** Beim Start auf Geräten `< 768px` ist die linke Leiste geschlossen, sodass der gesamte Bildschirm direkt dem Editor gehört.
+- **100% Editor-Vollbild ohne störende Leisten:** Auf Bildschirmen `< 768px` ist die linke Ribbon-Iconleiste im Standard-Zustand ausgeblendet (`display: none`). Der Editor nimmt die volle Bildschirmbreite ($100\,\%$, $0\,\text{px}$ bis zum rechten Bildschirmrand) ein.
+- **Integrierter Mobile-Drawer (`.left-drawer-panel`):** Wird die linke Seitenleiste geöffnet (per Touch-Wischgeste oder Menü-Icon), slidet der Drawer gemeinsam als Einheit aus Ribbon-Iconleiste ($46\,\text{px}$) und Dateibaum/Suche ein.
+- **Android Virtual Keyboard & Viewport-Locking (`interactive-widget=resizes-content` & `visualViewport`):**
+  - Im `index.html` Meta-Viewport ist `interactive-widget=resizes-content, maximum-scale=1.0, user-scalable=no` gesetzt, damit Android Chrome den Layout-Viewport auf den sichtbaren Bereich über der Bildschirmtastatur beschränkt.
+  - Ein dynamischer `window.visualViewport`-Listener in `App.tsx` synchronisiert `--vvh` in Pixeln bei jedem Tastatur-Aufklappen oder Scroll-Event.
+  - `html, body { position: fixed; width: 100%; height: 100%; overflow: hidden; }` und `.obsidian-app-shell { height: var(--vvh, 100dvh); overflow: hidden; }` verhindern, dass Android das Gesamtfeld nach oben verschiebt. Die Topbar und Sticky-Editor-Toolbar bleiben somit absolut ortsfest sichtbar am oberen Displayrand verankert, während ausschließlich `.editor-pane.scroller` vertikal scrollt.
 - **Touch-Wischgesten (Swipe Left-to-Right & Right-to-Left):**
-  - **Öffnen:** Ein Wisch vom linken Displayrand (`touchStartX <= 35px`) oder ein deutlicher horizontaler Swipe (`deltaX > 65px` bei `Math.abs(deltaX) > Math.abs(deltaY) * 1.5`) öffnet die Seitenleiste als überlagernden Drawer.
+  - **Öffnen:** Ein Wisch vom linken Displayrand (`touchStartX <= 35px`) oder ein deutlicher horizontaler Swipe (`deltaX > 65px` bei `Math.abs(deltaX) > Math.abs(deltaY) * 1.5`) öffnet den Drawer.
   - **Schließen:** Bei geöffneter Leiste schließt eine Wischgeste nach links (`deltaX < -55px` bei `Math.abs(deltaX) > Math.abs(deltaY) * 1.3`), ein Tipp auf das Backdrop oder die Auswahl einer Notiz die Leiste sofort wieder.
   - **Scroll-Schutz:** Vertikales Scrollen im Dokument (`Math.abs(deltaY) > Math.abs(deltaX)`) wird erkannt und löst die Wischgesten niemals versehentlich aus.
 - **Desktop-Verhalten (>= 768px):**
   - Kein Backdrop oder Unschärfe-Filter (kein Blur). Die Seitenleisten reihen sich nahtlos in das CSS-Grid der App-Shell ein.
-  - Das Anklicken einer Notiz im Dateibaum wechselt sofort zur gewählten Notiz und lässt die Leiste geöffnet, sodass bequem zwischen Notizen navigiert werden kann.
+  - Das Anklicken einer Notiz im Dateibaum wechselt sofort zur gewählten Notiz und lässt die Leiste geöffnet.
 - **Berührungsfreundliche Tippflächen (Touch-Targets):**
   - Auf Geräten mit Touch-Eingabe (`@media (pointer: coarse)`) besitzen interaktive Buttons und Icons eine garantierte Mindest-Tippfläche von $40 \times 40\,\text{px}$.
 
@@ -311,10 +315,11 @@ Direkt oberhalb des scrollenden Editor-Bereichs steht eine feste **Sticky-Format
   - Aktivierbar per Shortcut `Alt+Z`, über den Topbar-Button „Zen“ oder über die Befehlspalette.
   - Beendbar per `Alt+Z`, `Escape` oder über den dezenten Schwebeknopf oben rechts (`.zen-mode-exit-btn`).
   - Blendet sämtliche Bedienelemente (Ribbon, Seitenleisten, Header, Statusleiste, Eigenschaften und Formatierungsleiste) komplett aus.
-  - Zentriert das Schreib-Layout auf max. $780\,\text{px}$ Bildschirmbreite für fokussiertes Schreiben.
+  - **Zentrierung:** Das übergeordnete Workspace-Layout schaltet auf ein einspaltiges Flex-Layout mit `align-items: center` und `grid-column: 1 / -1` um, sodass der Textblock exakt horizontal im Browserfenster zentriert ist (max. $820\,\text{px}$) und nicht an den rechten Rand gedrückt wird.
 - **Dokumenten-Layout & Überschriften:**
-  - Der bearbeitbare Notiztitel befindet sich **ausschließlich unterhalb** der Eigenschaften und Toolbar direkt über dem Editor-Text (keine doppelte Überschrift mehr).
-  - Das Frontmatter-Eigenschaften-Panel (`PropertiesEditor`) ist beim Öffnen der App sowie beim Wechseln von Notizen **standardmäßig eingeklappt** (`collapsed: true`) und zeigt nur die Kopfzeile `> Eigenschaften [Anzahl]`.
+  - Die separate statische H1-Titelzeile oberhalb des Editors wurde entfernt. Markdown-Dokumente mit Überschriften wie `# Mein Titel` werden nun ohne Dopplung direkt im CodeMirror-Editor angezeigt und bearbeitet.
+  - Das Frontmatter-Eigenschaften-Panel (`PropertiesEditor`) ist beim Öffnen der App sowie beim Wechseln von Notizen **standardmäßig eingeklappt** (`collapsed: true`) und zeigt nur die schmale Kopfzeile `> Eigenschaften [Anzahl]`.
+
 
 
 

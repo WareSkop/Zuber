@@ -132,6 +132,23 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Sync Android / mobile visual viewport dynamically to prevent keyboard clipping
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const updateViewport = () => {
+      document.documentElement.style.setProperty('--vvh', `${vv.height}px`);
+      document.documentElement.style.setProperty('--vv-offset-top', `${vv.offsetTop}px`);
+    };
+    updateViewport();
+    vv.addEventListener('resize', updateViewport);
+    vv.addEventListener('scroll', updateViewport);
+    return () => {
+      vv.removeEventListener('resize', updateViewport);
+      vv.removeEventListener('scroll', updateViewport);
+    };
+  }, []);
+
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -1250,106 +1267,118 @@ export const App: React.FC = () => {
         .filter(Boolean).length
     : 0;
 
+  const renderRibbon = (extraClass = '') => (
+    <nav className={`obsidian-ribbon ${extraClass}`} aria-label="Hauptnavigation">
+      <div className="ribbon-top">
+        <button
+          type="button"
+          className={`ribbon-btn ${leftSidebarOpen ? 'active' : ''}`}
+          onClick={() => setLeftSidebarOpen((o) => !o)}
+          title="Dateibaum & Suche ein-/ausblenden"
+        >
+          <PanelLeft size={19} />
+        </button>
+
+        <button
+          type="button"
+          className="ribbon-btn"
+          onClick={() => {
+            setDialog({
+              type: 'create-note',
+              initialValue: 'Unbenannte Notiz',
+            });
+            setDialogInput('Unbenannte Notiz');
+          }}
+          title="Neue Notiz erstellen"
+        >
+          <FilePlus size={19} />
+        </button>
+
+        <button
+          type="button"
+          className={`ribbon-btn ${workspaceView === 'editor' ? 'active' : ''}`}
+          onClick={() => {
+            setWorkspaceView('editor');
+            if (isMobile) setLeftSidebarOpen(false);
+          }}
+          title="Editor-Ansicht"
+        >
+          <FileText size={19} />
+        </button>
+
+        <button
+          type="button"
+          className={`ribbon-btn ${workspaceView === 'graph' ? 'active' : ''}`}
+          onClick={() => {
+            setWorkspaceView('graph');
+            if (isMobile) setLeftSidebarOpen(false);
+          }}
+          title="Globale Graph-Ansicht öffnen"
+        >
+          <GitFork size={19} />
+        </button>
+
+        <button
+          type="button"
+          className={`ribbon-btn ${workspaceView === 'split' ? 'active' : ''}`}
+          onClick={() => {
+            setWorkspaceView((v) => (v === 'split' ? 'editor' : 'split'));
+            if (isMobile) setLeftSidebarOpen(false);
+          }}
+          title="Split-Screen: Editor + Graph nebeneinander"
+        >
+          <Columns size={19} />
+        </button>
+      </div>
+
+      <div className="ribbon-bottom">
+        <button
+          type="button"
+          className="ribbon-btn"
+          onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          title={
+            theme === 'dark'
+              ? 'Zum hellen Design wechseln'
+              : 'Zum dunklen Design wechseln'
+          }
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+
+        <button
+          type="button"
+          className={`ribbon-btn ${rightSidebarOpen ? 'active' : ''}`}
+          onClick={() => {
+            setRightSidebarOpen((o) => !o);
+            if (isMobile) setLeftSidebarOpen(false);
+          }}
+          title="Rechte Seitenleiste (Backlinks, Gliederung & Lokaler Graph)"
+        >
+          <PanelRight size={19} />
+        </button>
+
+        <button
+          type="button"
+          className="ribbon-btn logout-btn"
+          onClick={handleLogout}
+          title="Abmelden / Vault sperren"
+        >
+          <LogOut size={18} />
+        </button>
+      </div>
+    </nav>
+  );
+
   return (
     <div
       className={`obsidian-app-shell ${zenMode ? 'zen-mode-active' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Leftmost Icon Ribbon (like Obsidian) */}
-      {!zenMode && (
-        <nav className="obsidian-ribbon" aria-label="Hauptnavigation">
-          <div className="ribbon-top">
-            <button
-              type="button"
-              className={`ribbon-btn ${leftSidebarOpen ? 'active' : ''}`}
-              onClick={() => setLeftSidebarOpen((o) => !o)}
-              title="Dateibaum & Suche ein-/ausblenden"
-            >
-              <PanelLeft size={19} />
-            </button>
+      {/* Leftmost Icon Ribbon on Desktop */}
+      {!zenMode && !isMobile && renderRibbon()}
 
-            <button
-              type="button"
-              className="ribbon-btn"
-              onClick={() => {
-                setDialog({
-                  type: 'create-note',
-                  initialValue: 'Unbenannte Notiz',
-                });
-                setDialogInput('Unbenannte Notiz');
-              }}
-              title="Neue Notiz erstellen"
-            >
-              <FilePlus size={19} />
-            </button>
-
-            <button
-              type="button"
-              className={`ribbon-btn ${workspaceView === 'editor' ? 'active' : ''}`}
-              onClick={() => setWorkspaceView('editor')}
-              title="Editor-Ansicht"
-            >
-              <FileText size={19} />
-            </button>
-
-            <button
-              type="button"
-              className={`ribbon-btn ${workspaceView === 'graph' ? 'active' : ''}`}
-              onClick={() => setWorkspaceView('graph')}
-              title="Globale Graph-Ansicht öffnen"
-            >
-              <GitFork size={19} />
-            </button>
-
-            <button
-              type="button"
-              className={`ribbon-btn ${workspaceView === 'split' ? 'active' : ''}`}
-              onClick={() =>
-                setWorkspaceView((v) => (v === 'split' ? 'editor' : 'split'))
-              }
-              title="Split-Screen: Editor + Graph nebeneinander"
-            >
-              <Columns size={19} />
-            </button>
-          </div>
-
-          <div className="ribbon-bottom">
-            <button
-              type="button"
-              className="ribbon-btn"
-              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              title={
-                theme === 'dark'
-                  ? 'Zum hellen Design wechseln'
-                  : 'Zum dunklen Design wechseln'
-              }
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            <button
-              type="button"
-              className={`ribbon-btn ${rightSidebarOpen ? 'active' : ''}`}
-              onClick={() => setRightSidebarOpen((o) => !o)}
-              title="Rechte Seitenleiste (Backlinks, Gliederung & Lokaler Graph)"
-            >
-              <PanelRight size={19} />
-            </button>
-
-            <button
-              type="button"
-              className="ribbon-btn logout-btn"
-              onClick={handleLogout}
-              title="Abmelden / Vault sperren"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </nav>
-      )}
-
-      {/* Left Sidebar: File Explorer, Search, Tags */}
+      {/* Left Sidebar / Mobile Drawer: File Explorer, Search, Tags */}
       {!zenMode && leftSidebarOpen && (
         <>
           {isMobile && (
@@ -1359,14 +1388,28 @@ export const App: React.FC = () => {
               aria-hidden="true"
             />
           )}
-          <FileSidebar
-            tree={tree}
-            activePath={activeNote?.path ?? null}
-            tags={graphData.tags}
-            selectedTagFilter={selectedTagFilter}
-            onClose={() => setLeftSidebarOpen(false)}
-            {...sidebarHandlers}
-          />
+          {isMobile ? (
+            <div className="left-drawer-panel">
+              {renderRibbon('in-drawer')}
+              <FileSidebar
+                tree={tree}
+                activePath={activeNote?.path ?? null}
+                tags={graphData.tags}
+                selectedTagFilter={selectedTagFilter}
+                onClose={() => setLeftSidebarOpen(false)}
+                {...sidebarHandlers}
+              />
+            </div>
+          ) : (
+            <FileSidebar
+              tree={tree}
+              activePath={activeNote?.path ?? null}
+              tags={graphData.tags}
+              selectedTagFilter={selectedTagFilter}
+              onClose={() => setLeftSidebarOpen(false)}
+              {...sidebarHandlers}
+            />
+          )}
         </>
       )}
 
@@ -1588,24 +1631,6 @@ export const App: React.FC = () => {
                         }}
                       />
                     )}
-
-                    {/* Single Inline Title Underneath Properties and Toolbar */}
-                    <div className="note-title-row">
-                      <h1
-                        className="note-inline-title"
-                        title="Klicken zum Umbenennen"
-                        onClick={() => {
-                          setDialog({
-                            type: 'rename',
-                            targetPath: activeNote.path,
-                            initialValue: activeNote.name,
-                          });
-                          setDialogInput(activeNote.name);
-                        }}
-                      >
-                        {activeNote.name.replace(/\.md$/i, '')}
-                      </h1>
-                    </div>
 
                     {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
                     <LivePreviewEditor
