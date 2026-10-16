@@ -260,6 +260,13 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         }
       }
 
+      const computedStyle = getComputedStyle(canvas);
+      const activeColor = computedStyle.getPropertyValue('--accent-color').trim() || '#d4af37';
+      const secondaryColor = computedStyle.getPropertyValue('--accent-secondary').trim() || '#29b6c8';
+      const textColor = computedStyle.getPropertyValue('--text-primary').trim() || '#e6edf3';
+      const mutedColor = computedStyle.getPropertyValue('--text-muted').trim() || '#6e7681';
+      const edgeDefaultColor = computedStyle.getPropertyValue('--border-color').trim() || '#30363d';
+
       // Draw edges
       for (const edge of edges) {
         const src = nodeMap.get(edge.source);
@@ -276,7 +283,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         ctx.lineTo(tgt.x, tgt.y);
 
         if (isHighlighted) {
-          ctx.strokeStyle = edge.type === 'tag' ? '#a6e3a1' : '#cba6f7';
+          ctx.strokeStyle = edge.type === 'tag' ? secondaryColor : activeColor;
           ctx.lineWidth = 2.2;
         } else if (isDimmed) {
           ctx.strokeStyle = 'rgba(147, 153, 178, 0.14)';
@@ -284,8 +291,8 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         } else {
           ctx.strokeStyle =
             edge.type === 'tag'
-              ? 'rgba(166, 227, 161, 0.35)'
-              : 'rgba(180, 190, 254, 0.38)';
+              ? `${secondaryColor}66`
+              : `${edgeDefaultColor}aa`;
           ctx.lineWidth = 1.3;
         }
 
@@ -309,8 +316,8 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
           ctx.beginPath();
           ctx.arc(n.x, n.y, radius + 5, 0, Math.PI * 2);
           ctx.fillStyle = isActive
-            ? 'rgba(203, 166, 247, 0.28)'
-            : 'rgba(137, 180, 250, 0.28)';
+            ? `${activeColor}44`
+            : `${secondaryColor}44`;
           ctx.fill();
         }
 
@@ -318,13 +325,13 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
 
         if (n.type === 'tag') {
-          ctx.fillStyle = isDimmed ? 'rgba(166, 227, 161, 0.22)' : '#a6e3a1';
+          ctx.fillStyle = isDimmed ? `${secondaryColor}33` : secondaryColor;
         } else if (n.type === 'unresolved') {
-          ctx.fillStyle = isDimmed ? 'rgba(147, 153, 178, 0.18)' : '#6c7086';
+          ctx.fillStyle = isDimmed ? 'rgba(147, 153, 178, 0.18)' : mutedColor;
         } else if (isActive) {
-          ctx.fillStyle = '#cba6f7';
+          ctx.fillStyle = activeColor;
         } else {
-          ctx.fillStyle = isDimmed ? 'rgba(137, 180, 250, 0.22)' : '#89b4fa';
+          ctx.fillStyle = isDimmed ? `${secondaryColor}33` : secondaryColor;
         }
 
         ctx.fill();
@@ -341,7 +348,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         if (showLabel && !isDimmed) {
           ctx.font = `${isActive || isHovered ? '600 ' : ''}12px Inter, system-ui, sans-serif`;
           ctx.textAlign = 'center';
-          ctx.fillStyle = isActive || isHovered ? '#ffffff' : '#cdd6f4';
+          ctx.fillStyle = isActive || isHovered ? activeColor : textColor;
           ctx.fillText(n.label, n.x, n.y + radius + 13);
         }
       }

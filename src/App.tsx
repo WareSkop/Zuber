@@ -17,6 +17,7 @@ import {
   PanelLeft,
   PanelRight,
   Radio,
+  Settings,
   Sun,
   Upload,
 } from 'lucide-react';
@@ -37,6 +38,9 @@ import { FileSidebar } from './components/FileSidebar';
 import { PropertiesEditor } from './components/PropertiesEditor';
 import { LivePreviewEditor, type EditorMode } from './components/LivePreviewEditor';
 import { GraphView } from './components/GraphView';
+import { SettingsModal } from './components/SettingsModal';
+import { ConflictModal } from './components/ConflictModal';
+import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
 
 type MainWorkspaceView = 'editor' | 'graph' | 'split';
 type RightSidebarTab = 'backlinks' | 'outline' | 'local-graph';
@@ -80,7 +84,10 @@ export const App: React.FC = () => {
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [wsConnected, setWsConnected] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem('basalt_theme') || 'basalt');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState>('offline');
+  const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
 
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogInput, setDialogInput] = useState('');
@@ -95,8 +102,18 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.style.colorScheme = theme;
+    document.documentElement.style.colorScheme = theme.startsWith('light') ? 'light' : 'dark';
+    localStorage.setItem('basalt_theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    const unsubSync = syncEngine.subscribe(setSyncState);
+    const unsubConflicts = syncEngine.subscribeConflicts(setConflicts);
+    return () => {
+      unsubSync();
+      unsubConflicts();
+    };
+  }, []);
 
   const loadVaultIndex = useCallback(async () => {
     const [treeRes, graphRes] = await Promise.all([api.getTree(), api.getGraph()]);
@@ -340,9 +357,10 @@ export const App: React.FC = () => {
         setSaveState('saving');
         lastLocalSaveTimeRef.current = Date.now();
         try {
-          const saved = await api.saveNote({
+          const saved = await syncEngine.saveNote({
             path,
             ...payload,
+            baseMtime: activeNote?.updatedAt,
           });
           lastLocalSaveTimeRef.current = Date.now();
           // Only merge derived metadata – never overwrite text the user typed while saving
@@ -811,6 +829,44 @@ export const App: React.FC = () => {
               <GitFork size={15} />
               <span>{workspaceView === 'graph' ? 'Zurück zur Notiz' : 'Graph-Ansicht'}</span>
             </button>
+
+            {/* Sync & Settings */}
+            <div className="topbar-sync-settings">
+              <button
+                type="button"
+                className={`topbar-sync-indicator status-${syncState}`}
+                onClick={() => setSettingsOpen(true)}
+                title={`Verbindungs- und Sync-Status: ${
+                  syncState === 'synced'
+                    ? 'Synchronisiert'
+                    : syncState === 'offline'
+                    ? 'Offline-Modus'
+                    : syncState === 'syncing'
+                    ? 'Synchronisiere...'
+                    : syncState === 'conflict'
+                    ? 'Konflikt vorhanden'
+                    : 'Online'
+                }`}
+              >
+                <span className={`sync-status-dot ${syncState}`} />
+                <span className="sync-status-text">
+                  {syncState === 'synced' && 'Synchronisiert'}
+                  {syncState === 'syncing' && 'Sync...'}
+                  {syncState === 'offline' && 'Offline'}
+                  {syncState === 'conflict' && 'Konflikt'}
+                  {syncState === 'online' && 'Online'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                className="topbar-settings-btn"
+                onClick={() => setSettingsOpen(true)}
+                title="Einstellungen & Farb-Themes (Zahnrad)"
+              >
+                <Settings size={16} />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1142,6 +1198,21 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Settings Modal (Theme, Security, Profiles, Sync) */}
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        currentTheme={theme}
+        onThemeChange={(newTheme) => setTheme(newTheme)}
+        fileTree={tree}
+      />
+
+      {/* Interactive Conflict Resolution Modal */}
+      <ConflictModal
+        conflicts={conflicts}
+        onClose={() => setConflicts([])}
+      />
     </div>
   );
 };

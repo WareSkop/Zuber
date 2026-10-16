@@ -1,5 +1,6 @@
-// Basalt Service Worker - App Shell Offline Support
+// Basalt Service Worker - App Shell & Attachment Offline Support
 const CACHE_NAME = 'basalt-app-shell-v1';
+const ATTACHMENT_CACHE_NAME = 'basalt-attachments-v1';
 const APP_SHELL_ASSETS = [
   '/',
   '/index.html',
@@ -21,7 +22,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
+          if (key !== CACHE_NAME && key !== ATTACHMENT_CACHE_NAME) {
             return caches.delete(key);
           }
         })
@@ -33,8 +34,40 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Never intercept /api, /ws, or cross-origin requests
-  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/ws') || url.origin !== self.location.origin) {
+  // Never intercept /ws or cross-origin requests
+  if (url.pathname.startsWith('/ws') || url.origin !== self.location.origin) {
+    return;
+  }
+
+  // Handle binary attachments: Cache-first with network fallback and cache update
+  if (url.pathname === '/api/vault/attachment') {
+    event.respondWith(
+      caches.open(ATTACHMENT_CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        if (cached) {
+          // Fetch update in background if online
+          fetch(event.request).then((res) => {
+            if (res.status === 200) cache.put(event.request, res);
+          }).catch(() => {});
+          return cached;
+        }
+
+        try {
+          const networkRes = await fetch(event.request);
+          if (networkRes.status === 200) {
+            cache.put(event.request, networkRes.clone());
+          }
+          return networkRes;
+        } catch (err) {
+          return cached || new Response('Offline Anhang nicht im Cache', { status: 503 });
+        }
+      })
+    );
+    return;
+  }
+
+  // Other /api endpoints are NOT cached in Service Worker (they are handled by IndexedDB sync engine)
+  if (url.pathname.startsWith('/api')) {
     return;
   }
 
@@ -60,7 +93,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch in background to update cache
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));

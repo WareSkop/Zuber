@@ -69,6 +69,28 @@ Dieses Dokument richtet sich direkt an **LLM-Coding-Agenten**, die diese Softwar
 
 ---
 
+### Playbook D: Arbeiten mit der IndexedDB Sync-Engine (`src/sync/`)
+*(Beispiel: Du fügst eine neue Mutation oder Offline-Entität hinzu)*
+
+1. **Mutation-Typ in `src/sync/localDb.ts` definieren:**
+   Erweitere `OutboxMutation.type` (z. B. `'star_note'`).
+2. **Replay in `syncEngine.flushOutbox()` einbauen:**
+   Füge die entsprechende Server-API-Ausführung in den Replay-Loop von `flushOutbox()` in [`src/sync/syncEngine.ts`](../src/sync/syncEngine.ts) ein.
+3. **Optimistic Update:**
+   Aktualisiere die IndexedDB (`localDb.putNote` oder `localDb.setMeta`) immer **vor** dem Netzwerk-Aufruf, damit das UI sofort reagiert.
+
+---
+
+### Playbook E: Ein neues Farb-Theme hinzufügen
+*(Beispiel: Du sollst ein Theme 'solarized-dark' ergänzen)*
+
+1. **CSS-Variablen in `src/styles.css` anlegen:**
+   Erstelle den Selektor `[data-theme='solarized-dark']` mit allen Basalt-Variablen (`--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--text-primary`, `--accent-color`, `--accent-secondary`, `--border-color`).
+2. **Theme-Auswahl in `src/components/SettingsModal.tsx` eintragen:**
+   Füge das neue Theme mit Name, Farbwerten und Beschreibung in das `themes`-Array ein.
+
+---
+
 ## 3. Fehlerdiagnose & Troubleshooting
 
 ### Problem 1: Bilder laden langsam oder gar nicht

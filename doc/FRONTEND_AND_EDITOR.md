@@ -148,3 +148,40 @@ Die Graph-Ansicht nutzt ein HTML5 `<canvas>` mit eigener 2D-Kräftesimulation (o
   - **Ziehen auf leerem Hintergrund:** Verschieben der Arbeitsfläche (`panX`, `panY`)
   - **Ziehen eines Knotens:** Bewegt den Knoten (`dragNodeId`) und weckt die Physik-Simulation auf (`alpha = 0.35`)
   - **Klick auf einen Knoten (ohne Ziehen):** Öffnet die entsprechende Notiz im Editor (`onSelectNote(node.id)`)
+
+---
+
+## 5. Einstellungs-Modal & Theme-System ([`src/components/SettingsModal.tsx`](../src/components/SettingsModal.tsx))
+
+Basalt bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-Toolbar und im Ribbon erreichbar):
+
+- **Menü 1: „Darstellung & Themes“:**
+  - Steuert über `data-theme` auf `document.documentElement` alle Farben im Editor, in Sidebars, Tabellen und im Canvas-Graphen.
+  - Das Theme wird persistent in `localStorage` unter `basalt_theme` gesichert.
+  - **Die 5 Themes:**
+    1. `basalt`: Dunkles Basalt (#0d1117/#161c24), Kristall-Gold (`#d4af37`) & Facetten-Türkis (`#29b6c8`).
+    2. `dark-cold`: Mitternachtsblau (#0f172a/#1e293b) & Eisblau-Akzent (`#38bdf8`).
+    3. `dark-warm`: Espresso-Anthrazit (#1c1917/#292524) & Bernstein-Akzent (`#f59e0b`).
+    4. `light-cold`: Eisweiß (#f8fafc/#f1f5f9) & Kobaltblau-Akzent (`#2563eb`).
+    5. `light-warm`: Elfenbein-Papier (#fdfbf7/#f5f0e6) & Bronze-Akzent (`#b45309`).
+- **Menü 2: „Sicherheit & Passwort“:**
+  - Schaltet den Passwortschutz per Toggle-Switch ein/aus und ändert das Server-Passwort über `POST /api/settings/security`.
+- **Menü 3: „Vault-Verbindungen (Server-Profile)“:**
+  - Verwaltet Server-Profile (`VaultProfile[]`), wechselt Server und bietet den Button „Verbindung prüfen“ (inkl. Direktlink zum Bestätigen von Self-Signed TLS-Zertifikaten).
+- **Menü 4: „Synchronisation & Offline-Speicher“:**
+  - Zeigt Live-Statistiken (lokal gecachte Notizen, gecachte Anhänge, geschätzter Speicherplatz) und erlaubt die Auswahl von Ordnern für den vollständigen Offline-Download von Bildern/PDFs.
+
+---
+
+## 6. Offline-First Sync & Konfliktlösung ([`src/sync/`](../src/sync/) & [`src/components/ConflictModal.tsx`](../src/components/ConflictModal.tsx))
+
+- **IndexedDB (`src/sync/localDb.ts`):**
+  - Getrennte Datenbank pro Server-Profil (`basalt_cache_<profileId>`).
+  - Stores: `meta` (Baum, Tags, Graph), `notes` (alle `.md`-Notizen vollständig lokal), `attachments` (gecachte Binär-Blobs) und `outbox` (Offline-Änderungen).
+- **SyncEngine (`src/sync/syncEngine.ts`):**
+  - Online: Flusht die `outbox`, vergleicht `GET /api/vault/sync-manifest`, lädt Deltas per `POST /api/vault/notes-batch` und aktualisiert ausgewählte Offline-Anhänge im Hintergrund.
+  - Offline: Bedient alle Lese- und Schreibvorgänge nahtlos aus der IndexedDB (Optimistic UI).
+- **Konflikt-Modal (`src/components/ConflictModal.tsx`):**
+  - Erkennt bei Reconnect HTTP `409 Conflict` (abweichende `baseMtime`) und zeigt Side-by-Side-Vergleich von lokalem Text und Server-Stand.
+  - Drei Lösungsstrategien: „Lokale Version behalten (Server überschreiben)“, „Server-Version behalten (Lokal verwerfen)“ oder „Beide behalten (Konflikt-Kopie mit Zeitstempel anlegen)“.
+  - Bietet Checkbox für Batch-Anwendung auf alle verbleibenden Konflikte.

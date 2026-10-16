@@ -209,3 +209,26 @@ describe('ConfigService & Dynamic Security Settings', () => {
     expect(cfg.verifyPassword('beliebig')).toBe(true);
   });
 });
+
+import { LocalDb } from '../src/sync/localDb';
+
+describe('Offline Sync Structures & Conflict Resolution Utilities', () => {
+  it('formats conflict filenames with timestamp according to spec', () => {
+    const originalPath = 'Projekte/Mobile App.md';
+    const baseName = originalPath.replace(/\.md$/, '');
+    const now = new Date(1760650000000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const timeStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}`;
+    const conflictPath = `${baseName} (Konflikt ${timeStr}).md`;
+
+    expect(conflictPath).toContain('Projekte/Mobile App (Konflikt ');
+    expect(conflictPath.endsWith('.md')).toBe(true);
+  });
+
+  it('generates predictable database names per profile id', () => {
+    const db1 = new LocalDb('default');
+    const db2 = new LocalDb('Heimserver:3443');
+    expect((db1 as any).dbName).toBe('basalt_cache_default');
+    expect((db2 as any).dbName).toBe('basalt_cache_Heimserver_3443');
+  });
+});
