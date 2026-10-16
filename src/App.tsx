@@ -38,6 +38,8 @@ import {
   Trash2,
   Edit3,
   Download,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import type {
   BacklinkItem,
@@ -101,12 +103,13 @@ export const App: React.FC = () => {
   const [workspaceView, setWorkspaceView] = useState<MainWorkspaceView>('editor');
 
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth > 900 : true
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
   );
   const [rightSidebarOpen, setRightSidebarOpen] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth > 1200 : false
   );
   const [rightTab, setRightTab] = useState<RightSidebarTab>('backlinks');
+  const [zenMode, setZenMode] = useState(false);
 
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
@@ -128,6 +131,45 @@ export const App: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.changedTouches.length === 0) return;
+    const startX = touchStartRef.current.x;
+    const startY = touchStartRef.current.y;
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+    touchStartRef.current = null;
+
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    if (absY > absX) return;
+
+    if (!leftSidebarOpen) {
+      const isEdgeStart = startX <= 35;
+      const isStrongSwipe = deltaX > 65 && absX > absY * 1.5;
+      if (isEdgeStart || isStrongSwipe) {
+        setLeftSidebarOpen(true);
+      }
+    } else {
+      if (deltaX < -55 && absX > absY * 1.3) {
+        setLeftSidebarOpen(false);
+      }
+    }
+  };
 
   const editorRef = useRef<LivePreviewEditorRef>(null);
 
@@ -162,6 +204,24 @@ export const App: React.FC = () => {
   // Global Keyboard shortcuts (Command Palette, Save, Settings, New Note, Sidebars)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Zen Mode (Alt+Z)
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'z' || e.key === 'Z' || e.code === 'KeyZ')) {
+        e.preventDefault();
+        setZenMode((prev) => !prev);
+        return;
+      }
+
+      // Exit Zen Mode on Escape
+      if (e.key === 'Escape') {
+        setZenMode((prev) => {
+          if (prev) {
+            e.preventDefault();
+            return false;
+          }
+          return prev;
+        });
+      }
+
       // Command Palette (Ctrl+P / Cmd+P)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
@@ -959,6 +1019,15 @@ export const App: React.FC = () => {
 
       // Views
       {
+        id: 'view-zen',
+        title: 'Ansicht: Zen-Modus umschalten (Fokus)',
+        category: 'Ansicht',
+        shortcut: 'Alt+Z',
+        icon: <Maximize2 size={16} />,
+        keywords: ['zen', 'fokus', 'vollbild', 'distraction free', 'schreiben'],
+        action: () => setZenMode((prev) => !prev),
+      },
+      {
         id: 'view-live',
         title: 'Ansicht: Live-Preview-Modus aktivieren',
         category: 'Ansicht',
@@ -1182,100 +1251,106 @@ export const App: React.FC = () => {
     : 0;
 
   return (
-    <div className="obsidian-app-shell">
+    <div
+      className={`obsidian-app-shell ${zenMode ? 'zen-mode-active' : ''}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Leftmost Icon Ribbon (like Obsidian) */}
-      <nav className="obsidian-ribbon" aria-label="Hauptnavigation">
-        <div className="ribbon-top">
-          <button
-            type="button"
-            className={`ribbon-btn ${leftSidebarOpen ? 'active' : ''}`}
-            onClick={() => setLeftSidebarOpen((o) => !o)}
-            title="Dateibaum & Suche ein-/ausblenden"
-          >
-            <PanelLeft size={19} />
-          </button>
+      {!zenMode && (
+        <nav className="obsidian-ribbon" aria-label="Hauptnavigation">
+          <div className="ribbon-top">
+            <button
+              type="button"
+              className={`ribbon-btn ${leftSidebarOpen ? 'active' : ''}`}
+              onClick={() => setLeftSidebarOpen((o) => !o)}
+              title="Dateibaum & Suche ein-/ausblenden"
+            >
+              <PanelLeft size={19} />
+            </button>
 
-          <button
-            type="button"
-            className="ribbon-btn"
-            onClick={() => {
-              setDialog({
-                type: 'create-note',
-                initialValue: 'Unbenannte Notiz',
-              });
-              setDialogInput('Unbenannte Notiz');
-            }}
-            title="Neue Notiz erstellen"
-          >
-            <FilePlus size={19} />
-          </button>
+            <button
+              type="button"
+              className="ribbon-btn"
+              onClick={() => {
+                setDialog({
+                  type: 'create-note',
+                  initialValue: 'Unbenannte Notiz',
+                });
+                setDialogInput('Unbenannte Notiz');
+              }}
+              title="Neue Notiz erstellen"
+            >
+              <FilePlus size={19} />
+            </button>
 
-          <button
-            type="button"
-            className={`ribbon-btn ${workspaceView === 'editor' ? 'active' : ''}`}
-            onClick={() => setWorkspaceView('editor')}
-            title="Editor-Ansicht"
-          >
-            <FileText size={19} />
-          </button>
+            <button
+              type="button"
+              className={`ribbon-btn ${workspaceView === 'editor' ? 'active' : ''}`}
+              onClick={() => setWorkspaceView('editor')}
+              title="Editor-Ansicht"
+            >
+              <FileText size={19} />
+            </button>
 
-          <button
-            type="button"
-            className={`ribbon-btn ${workspaceView === 'graph' ? 'active' : ''}`}
-            onClick={() => setWorkspaceView('graph')}
-            title="Globale Graph-Ansicht öffnen"
-          >
-            <GitFork size={19} />
-          </button>
+            <button
+              type="button"
+              className={`ribbon-btn ${workspaceView === 'graph' ? 'active' : ''}`}
+              onClick={() => setWorkspaceView('graph')}
+              title="Globale Graph-Ansicht öffnen"
+            >
+              <GitFork size={19} />
+            </button>
 
-          <button
-            type="button"
-            className={`ribbon-btn ${workspaceView === 'split' ? 'active' : ''}`}
-            onClick={() =>
-              setWorkspaceView((v) => (v === 'split' ? 'editor' : 'split'))
-            }
-            title="Split-Screen: Editor + Graph nebeneinander"
-          >
-            <Columns size={19} />
-          </button>
-        </div>
+            <button
+              type="button"
+              className={`ribbon-btn ${workspaceView === 'split' ? 'active' : ''}`}
+              onClick={() =>
+                setWorkspaceView((v) => (v === 'split' ? 'editor' : 'split'))
+              }
+              title="Split-Screen: Editor + Graph nebeneinander"
+            >
+              <Columns size={19} />
+            </button>
+          </div>
 
-        <div className="ribbon-bottom">
-          <button
-            type="button"
-            className="ribbon-btn"
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            title={
-              theme === 'dark'
-                ? 'Zum hellen Design wechseln'
-                : 'Zum dunklen Design wechseln'
-            }
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+          <div className="ribbon-bottom">
+            <button
+              type="button"
+              className="ribbon-btn"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              title={
+                theme === 'dark'
+                  ? 'Zum hellen Design wechseln'
+                  : 'Zum dunklen Design wechseln'
+              }
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
 
-          <button
-            type="button"
-            className={`ribbon-btn ${rightSidebarOpen ? 'active' : ''}`}
-            onClick={() => setRightSidebarOpen((o) => !o)}
-            title="Rechte Seitenleiste (Backlinks, Gliederung & Lokaler Graph)"
-          >
-            <PanelRight size={19} />
-          </button>
+            <button
+              type="button"
+              className={`ribbon-btn ${rightSidebarOpen ? 'active' : ''}`}
+              onClick={() => setRightSidebarOpen((o) => !o)}
+              title="Rechte Seitenleiste (Backlinks, Gliederung & Lokaler Graph)"
+            >
+              <PanelRight size={19} />
+            </button>
 
-          <button
-            type="button"
-            className="ribbon-btn logout-btn"
-            onClick={handleLogout}
-            title="Abmelden / Vault sperren"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
-      </nav>
+            <button
+              type="button"
+              className="ribbon-btn logout-btn"
+              onClick={handleLogout}
+              title="Abmelden / Vault sperren"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+        </nav>
+      )}
 
       {/* Left Sidebar: File Explorer, Search, Tags */}
-      {leftSidebarOpen && (
+      {!zenMode && leftSidebarOpen && (
         <>
           {isMobile && (
             <div
@@ -1297,7 +1372,19 @@ export const App: React.FC = () => {
 
       {/* Center Workspace: Editor / Global Graph / Split */}
       <main className="workspace-center">
-        <header className="workspace-topbar">
+        {zenMode ? (
+          <button
+            type="button"
+            className="zen-mode-exit-btn"
+            onClick={() => setZenMode(false)}
+            title="Zen-Modus beenden (Alt+Z oder Esc)"
+            aria-label="Zen-Modus beenden"
+          >
+            <Minimize2 size={16} />
+            <span>Zen beenden (Alt+Z)</span>
+          </button>
+        ) : (
+          <header className="workspace-topbar">
           <div className="topbar-left-cluster">
             <button
               type="button"
@@ -1412,6 +1499,17 @@ export const App: React.FC = () => {
               <span>Befehle</span>
             </button>
 
+            <button
+              type="button"
+              className="topbar-action-btn"
+              onClick={() => setZenMode(true)}
+              title="Ablenkungsfreier Zen-Modus (Alt+Z)"
+              aria-label="Zen-Modus aktivieren"
+            >
+              <Maximize2 size={15} />
+              <span>Zen</span>
+            </button>
+
             {/* Sync & Settings */}
             <div className="topbar-sync-settings">
               <button
@@ -1461,91 +1559,96 @@ export const App: React.FC = () => {
             </div>
           </div>
         </header>
+        )}
 
         <div className={`workspace-panes view-${workspaceView}`}>
           {(workspaceView === 'editor' || workspaceView === 'split') && (
-            <section className="editor-pane scroller">
-              {activeNote ? (
-                <div className="note-document-container">
-                  <div className="note-title-row">
-                    <h1
-                      className="note-inline-title"
-                      title="Klicken zum Umbenennen"
-                      onClick={() => {
-                        setDialog({
-                          type: 'rename',
-                          targetPath: activeNote.path,
-                          initialValue: activeNote.name,
-                        });
-                        setDialogInput(activeNote.name);
-                      }}
-                    >
-                      {activeNote.name}
-                    </h1>
-                  </div>
+            <section className="editor-pane-container">
+              {/* Sticky Formatting Toolbar at the top */}
+              {activeNote && editorMode !== 'reading' && !zenMode && (
+                <EditorToolbar
+                  editorRef={editorRef}
+                  onUploadImage={handleUploadImageFile}
+                />
+              )}
 
-                  {/* Visual Frontmatter Properties UI (No raw YAML shown!) */}
-                  {editorMode !== 'source' && (
-                    <PropertiesEditor
-                      properties={activeNote.properties}
+              <div className="editor-pane scroller">
+                {activeNote ? (
+                  <div className="note-document-container">
+                    {/* Visual Frontmatter Properties UI (No raw YAML shown!) */}
+                    {editorMode !== 'source' && !zenMode && (
+                      <PropertiesEditor
+                        notePath={activeNote.path}
+                        properties={activeNote.properties}
+                        allTags={allTagNames}
+                        onChange={handlePropertiesChange}
+                        onTagClick={(tag) => {
+                          setSelectedTagFilter(tag.replace(/^#+/, ''));
+                          setLeftSidebarOpen(true);
+                        }}
+                      />
+                    )}
+
+                    {/* Single Inline Title Underneath Properties and Toolbar */}
+                    <div className="note-title-row">
+                      <h1
+                        className="note-inline-title"
+                        title="Klicken zum Umbenennen"
+                        onClick={() => {
+                          setDialog({
+                            type: 'rename',
+                            targetPath: activeNote.path,
+                            initialValue: activeNote.name,
+                          });
+                          setDialogInput(activeNote.name);
+                        }}
+                      >
+                        {activeNote.name.replace(/\.md$/i, '')}
+                      </h1>
+                    </div>
+
+                    {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
+                    <LivePreviewEditor
+                      ref={editorRef}
+                      notePath={activeNote.path}
+                      body={activeNote.body}
+                      rawContent={activeNote.rawContent}
+                      mode={editorMode}
+                      allNotes={allNotesForEditor}
                       allTags={allTagNames}
-                      onChange={handlePropertiesChange}
-                      onTagClick={(tag) => {
+                      scrollToLine={scrollToLine}
+                      onChangeBody={handleBodyChange}
+                      onChangeRaw={handleRawChange}
+                      onNavigateWikiLink={handleNavigateWikiLink}
+                      onSelectTag={(tag) => {
                         setSelectedTagFilter(tag.replace(/^#+/, ''));
                         setLeftSidebarOpen(true);
                       }}
                     />
-                  )}
-
-                  {/* Mobile / Touch Markdown Formatting Toolbar */}
-                  {editorMode !== 'reading' && (
-                    <EditorToolbar
-                      editorRef={editorRef}
-                      onUploadImage={handleUploadImageFile}
-                    />
-                  )}
-
-                  {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
-                  <LivePreviewEditor
-                    ref={editorRef}
-                    notePath={activeNote.path}
-                    body={activeNote.body}
-                    rawContent={activeNote.rawContent}
-                    mode={editorMode}
-                    allNotes={allNotesForEditor}
-                    allTags={allTagNames}
-                    scrollToLine={scrollToLine}
-                    onChangeBody={handleBodyChange}
-                    onChangeRaw={handleRawChange}
-                    onNavigateWikiLink={handleNavigateWikiLink}
-                    onSelectTag={(tag) => {
-                      setSelectedTagFilter(tag.replace(/^#+/, ''));
-                      setLeftSidebarOpen(true);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="empty-workspace-state">
-                  <FileText size={42} />
-                  <h2>Keine Notiz geöffnet</h2>
-                  <p>
-                    Wähle links im Dateibaum eine Notiz aus oder erstelle eine neue Notiz.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => {
-                      setDialog({
-                        type: 'create-note',
-                        initialValue: 'Neue Notiz',
-                      });
-                      setDialogInput('Neue Notiz');
-                    }}
-                  >
-                    + Neue Notiz erstellen
-                  </button>
-                </div>
-              )}
+                  </div>
+                ) : (
+                  <div className="empty-workspace-state">
+                    <FileText size={42} />
+                    <h2>Keine Notiz geöffnet</h2>
+                    <p>
+                      Wähle links im Dateibaum eine Notiz aus oder erstelle eine neue Notiz.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() => {
+                        setDialog({
+                          type: 'create-note',
+                          initialValue: 'Neue Notiz',
+                        });
+                        setDialogInput('Neue Notiz');
+                      }}
+                    >
+                      + Neue Notiz erstellen
+                    </button>
+                  </div>
+                )}
+              </div>
             </section>
           )}
 
@@ -1576,7 +1679,7 @@ export const App: React.FC = () => {
       </main>
 
       {/* Right Sidebar: Backlinks, Outline (Gliederung), and Local Graph */}
-      {rightSidebarOpen && (
+      {!zenMode && rightSidebarOpen && (
         <>
           {isMobile && (
             <div
@@ -1730,38 +1833,40 @@ export const App: React.FC = () => {
       )}
 
       {/* Bottom Obsidian Status Bar */}
-      <footer className="obsidian-statusbar">
-        <div className="statusbar-left">
-          <span className="status-item" title="Verschlüsselte Verbindung">
-            <Lock size={12} />
-            {httpsActive ? 'HTTPS / TLS aktiv' : 'HTTP'}
-          </span>
-          <span
-            className={`status-item ${wsConnected ? 'sync-online' : 'sync-offline'}`}
-            title="Live File-Watcher (Chokidar + WebSockets)"
-          >
-            <Radio size={12} />
-            {wsConnected ? 'Live-Vault-Sync aktiv' : 'Verbinde Watcher...'}
-          </span>
-        </div>
+      {!zenMode && (
+        <footer className="obsidian-statusbar">
+          <div className="statusbar-left">
+            <span className="status-item" title="Verschlüsselte Verbindung">
+              <Lock size={12} />
+              {httpsActive ? 'HTTPS / TLS aktiv' : 'HTTP'}
+            </span>
+            <span
+              className={`status-item ${wsConnected ? 'sync-online' : 'sync-offline'}`}
+              title="Live File-Watcher (Chokidar + WebSockets)"
+            >
+              <Radio size={12} />
+              {wsConnected ? 'Live-Vault-Sync aktiv' : 'Verbinde Watcher...'}
+            </span>
+          </div>
 
-        <div className="statusbar-right">
-          {activeNote && (
-            <>
-              <span className="status-item">
-                { currentBacklinks.length } Backlinks
-              </span>
-              <span className="status-item">{wordCount} Wörter</span>
-              <span className="status-item">
-                {activeNote.body.length} Zeichen
-              </span>
-            </>
-          )}
-          <span className="status-item">
-            {allNotesForEditor.length} Notizen im Vault
-          </span>
-        </div>
-      </footer>
+          <div className="statusbar-right">
+            {activeNote && (
+              <>
+                <span className="status-item">
+                  { currentBacklinks.length } Backlinks
+                </span>
+                <span className="status-item">{wordCount} Wörter</span>
+                <span className="status-item">
+                  {activeNote.body.length} Zeichen
+                </span>
+              </>
+            )}
+            <span className="status-item">
+              {allNotesForEditor.length} Notizen im Vault
+            </span>
+          </div>
+        </footer>
+      )}
 
       {/* Modal Dialog for Create / Rename / Delete */}
       {dialog && (

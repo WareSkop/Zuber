@@ -395,3 +395,87 @@ describe('Basalt - Graph Semantic Zoom, Anti-Collision & Color Groups', () => {
   });
 });
 
+describe('Basalt - Editor Toolbar & Mobile Swipe Gestures', () => {
+  it('generates correct heading prefixes and replaces existing prefixes or strips for normal text (level 0)', () => {
+    const applyHeadingPrefix = (lineText: string, level: number) => {
+      const hashes = level > 0 ? '#'.repeat(level) + ' ' : '';
+      const match = lineText.match(/^#{1,6}\s+/);
+      if (match) {
+        return hashes + lineText.slice(match[0].length);
+      }
+      return hashes + lineText;
+    };
+
+    expect(applyHeadingPrefix('Hallo Welt', 1)).toBe('# Hallo Welt');
+    expect(applyHeadingPrefix('Hallo Welt', 3)).toBe('### Hallo Welt');
+    expect(applyHeadingPrefix('### Alter Titel', 1)).toBe('# Alter Titel');
+    expect(applyHeadingPrefix('# Alter Titel', 0)).toBe('Alter Titel'); // Normaler Text
+  });
+
+  it('generates standardized Callout blocks with localized titles', () => {
+    const titleMap: Record<string, string> = {
+      NOTE: 'Hinweis',
+      INFO: 'Information',
+      TIP: 'Tipp',
+      WARNING: 'Warnung',
+      DANGER: 'Gefahr',
+      QUESTION: 'Frage',
+    };
+
+    const createCalloutSnippet = (type: string) => {
+      const upper = type.toUpperCase();
+      const title = titleMap[upper] || upper;
+      return `> [!${upper}] ${title}\n> Text hier einfügen...\n\n`;
+    };
+
+    expect(createCalloutSnippet('note')).toContain('> [!NOTE] Hinweis');
+    expect(createCalloutSnippet('tip')).toContain('> [!TIP] Tipp');
+    expect(createCalloutSnippet('danger')).toContain('> [!DANGER] Gefahr');
+    expect(createCalloutSnippet('warning')).toContain('> [!WARNING] Warnung');
+    expect(createCalloutSnippet('info')).toContain('> [!INFO] Information');
+    expect(createCalloutSnippet('question')).toContain('> [!QUESTION] Frage');
+  });
+
+  it('evaluates touch swipe gestures to open/close sidebar while suppressing vertical scroll', () => {
+    const evaluateSwipe = (
+      isOpen: boolean,
+      startX: number,
+      startY: number,
+      endX: number,
+      endY: number
+    ): 'open' | 'close' | 'none' => {
+      const deltaX = endX - startX;
+      const deltaY = endY - startY;
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      if (absY > absX) return 'none'; // Vertical scroll ignored
+
+      if (!isOpen) {
+        const isEdgeStart = startX <= 35;
+        const isStrongSwipe = deltaX > 65 && absX > absY * 1.5;
+        if (isEdgeStart || isStrongSwipe) return 'open';
+      } else {
+        if (deltaX < -55 && absX > absY * 1.3) return 'close';
+      }
+      return 'none';
+    };
+
+    // Open from left edge (touchStartX 20px, deltaX +70px)
+    expect(evaluateSwipe(false, 20, 100, 90, 102)).toBe('open');
+
+    // Strong horizontal swipe anywhere (touchStartX 100px, deltaX +80px)
+    expect(evaluateSwipe(false, 100, 200, 180, 205)).toBe('open');
+
+    // Vertical scrolling should be ignored even with slight horizontal movement
+    expect(evaluateSwipe(false, 20, 100, 50, 250)).toBe('none');
+
+    // Close when open with swipe left (deltaX -70px)
+    expect(evaluateSwipe(true, 250, 100, 180, 105)).toBe('close');
+
+    // Slight swipe right when already open does nothing
+    expect(evaluateSwipe(true, 100, 100, 140, 102)).toBe('none');
+  });
+});
+
+

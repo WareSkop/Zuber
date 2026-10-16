@@ -265,18 +265,21 @@ Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**
 | `Ctrl+Shift+L` | Aufgabenliste einfügen (`- [ ]`) |
 | `Alt+Shift+T` | Markdown-Tabelle einfügen |
 | `Ctrl+K` | Wiki-Link einfügen (`[[...]]`) |
+| `Alt+Z` | Ablenkungsfreien Zen-Modus aktivieren / beenden |
 | `Ctrl+\` | Linke Dateibaum-Leiste ein-/ausblenden |
 | `Ctrl+Alt+\` | Rechte Leiste (Graph/Backlinks/Outline) ein-/ausblenden |
 
 ---
 
-## 8. Responsive Seitenleisten-Steuerung & Mobile Drawers
+## 8. Responsive Seitenleisten-Steuerung & Touch-Wischgesten (Mobile Swipe)
 
 Auf mobilen Touchscreens und schmalen Bildschirmen (< 768px, z. B. Smartphones, Chromebooks mit geteiltem Display):
 - **100dvh (Dynamic Viewport Height):** Die Shell nutzt `100dvh`, wodurch sich das Layout beim Ein- und Ausblenden der virtuellen Bildschirmtastatur auf mobilen Geräten nahtlos anpasst.
-- **Overlay-Drawers mit Backdrop (Nur mobil < 768px):**
-  - Die linke Leiste (`FileSidebar`) und rechte Leiste (Backlinks / Gliederung / Lokaler Graph) öffnen sich mobil als überlagernde Drawer-Panels (`z-index: 100`, max. 320px Breite) mit abgedunkeltem Hintergrund-Overlay (`.mobile-drawer-backdrop`).
-  - Ein Klick/Tipp auf das Backdrop oder die Auswahl einer Notiz schließt den Drawer automatisch.
+- **Initial ausgeblendet:** Beim Start auf Geräten `< 768px` ist die linke Leiste geschlossen, sodass der gesamte Bildschirm direkt dem Editor gehört.
+- **Touch-Wischgesten (Swipe Left-to-Right & Right-to-Left):**
+  - **Öffnen:** Ein Wisch vom linken Displayrand (`touchStartX <= 35px`) oder ein deutlicher horizontaler Swipe (`deltaX > 65px` bei `Math.abs(deltaX) > Math.abs(deltaY) * 1.5`) öffnet die Seitenleiste als überlagernden Drawer.
+  - **Schließen:** Bei geöffneter Leiste schließt eine Wischgeste nach links (`deltaX < -55px` bei `Math.abs(deltaX) > Math.abs(deltaY) * 1.3`), ein Tipp auf das Backdrop oder die Auswahl einer Notiz die Leiste sofort wieder.
+  - **Scroll-Schutz:** Vertikales Scrollen im Dokument (`Math.abs(deltaY) > Math.abs(deltaX)`) wird erkannt und löst die Wischgesten niemals versehentlich aus.
 - **Desktop-Verhalten (>= 768px):**
   - Kein Backdrop oder Unschärfe-Filter (kein Blur). Die Seitenleisten reihen sich nahtlos in das CSS-Grid der App-Shell ein.
   - Das Anklicken einer Notiz im Dateibaum wechselt sofort zur gewählten Notiz und lässt die Leiste geöffnet, sodass bequem zwischen Notizen navigiert werden kann.
@@ -285,24 +288,33 @@ Auf mobilen Touchscreens und schmalen Bildschirmen (< 768px, z. B. Smartphones, 
 
 ---
 
-## 9. Mobile Touch-Formatierungsleiste ([`src/components/EditorToolbar.tsx`](../src/components/EditorToolbar.tsx))
+## 9. Sticky Formatierungsleiste & Portal-Dropdowns ([`src/components/EditorToolbar.tsx`](../src/components/EditorToolbar.tsx))
 
-Direkt oberhalb des Editors (oder angedockt über der Bildschirmtastatur) steht auf mobilen Geräten sowie im Desktop-Editor eine horizontal scrollbare **Formatierungsleiste** bereit:
+Direkt oberhalb des scrollenden Editor-Bereichs steht eine feste **Sticky-Formatierungsleiste** bereit:
+- **Sticky-Positionierung:** Die Toolbar befindet sich außerhalb des vertikal scrollenden Text-Containers (`.editor-pane.scroller`), sodass sie beim Scrollen durch lange Notizen immer fest am oberen Rand sichtbar bleibt.
+- **React Portal Dropdowns (`createPortal`):**
+  - Alle Dropdown-Popovers (`H ⌄`, `Tabelle ⌄`, `Callout ⌄`, `Bild ⌄`) werden via React Portal direkt in `document.body` mit `position: fixed` und `z-index: 1000` gerendert. Dadurch wird verhindert, dass horizontales Scrollen der Toolbar (`overflow-x: auto`) die Menüs am unteren Rand abschneidet.
+  - **CodeMirror-Fokus-Erhaltung:** Sämtliche Buttons und Menü-Einträge nutzen `onMouseDown={(e) => e.preventDefault()}`, wodurch CodeMirror seine Textmarkierung / Cursor-Position beim Klicken nicht verliert.
+- **Überschriften-Menü:** Schnellauswahl zwischen `Normaler Text (Absatz)` (Level 0, entfernt bestehende `# `-Präfixe) sowie `H1` bis `H6`.
+- **Textformatierung:** `Fett`, `Kursiv`, `Durchgestrichen`, `Highlight`, `Inline-Code`.
+- **Listen & Einrückung:** Aufzählung (`- `), Nummeriert (`1. `), Aufgaben (`- [ ] `), Einrücken/Ausrücken.
+- **Links & Autocomplete:** Wiki-Links (`[[ ]]`) und Tags (`#`) mit automatischem Start des Autocomplete-Popups.
+- **Interaktiver Tabellen-Generator:** Voreinstellungen (`2×2`, `3×3`, `4×4`), manuelle Spalten-/Zeilenangabe sowie zeilen-/spaltenweise Erweiterung bei aktiver Tabelle.
+- **Obsidian Callouts:** Standardisierte Callout-Blöcke (`[!NOTE]`, `[!INFO]`, `[!TIP]`, `[!WARNING]`, `[!DANGER]`, `[!QUESTION]`) mit farbigen Badges und lokalisierten Titeln.
+- **Foto- & Kamera-Upload:** Direkte Wahl zwischen Dateiauswahl / Galerie und Live-Kameraaufnahme.
 
-- **Überschriften-Menü:** Dropdown für H1 bis H6 (toggelt die `#`-Präfixe der Zeile).
-- **Textformatierung:**
-  - **Fett (`B`)**, **Kursiv (`I`)**, **Durchgestrichen (`S`)**, **Highlight (`==text==`)**, **Inline-Code (`<>`)**.
-- **Listen & Einrückung (ohne physische Tastatur):**
-  - **Aufzählungsliste (`- `)**, **Nummerierte Liste (`1. `)**, **Aufgaben-Checkbox (`- [ ] `)**.
-  - **Einrücken (`Indent` +2 Leerzeichen)** und **Ausrücken (`Outdent` -2 Leerzeichen)**.
-- **Links & Autocomplete-Trigger:**
-  - **Wiki-Link (`[[ ]]`)**: Fügt `[[]]` ein und triggert sofort das CodeMirror-Autocomplete-Menü (`startCompletion`), sodass am Smartphone direkt aus den Notiz-Vorschlägen ausgewählt werden kann.
-  - **Tag (`#`)**: Fügt `#` ein und öffnet das Tag-Autocomplete.
-- **Interaktiver Tabellen-Generator & Tabellen-Aktionen:**
-  - Popover zur Auswahl von vordefinierten Größen (`2×2`, `3×3`, `4×4`) oder individueller Zeilen- und Spaltenanzahl.
-  - Befindet sich der Cursor bereits in einer Markdown-Tabelle (`isCursorInTable()`), schaltet das Menü um auf **„+ Zeile darunter“** und **„+ Spalte rechts“**.
-- **Foto & Kamera-Upload am Smartphone:**
-  - Direkte Auswahl zwischen **„Foto/Datei aus Galerie“** (`<input type="file" accept="image/*,application/pdf">`) und **„Foto mit Kamera aufnehmen“** (`<input type="file" capture="environment">`).
-  - Das aufgenommene Foto wird über `onUploadImage` hochgeladen (oder offline gecacht) und sofort an der Cursorposition als `![[foto.jpg]]` eingebettet.
+---
+
+## 10. Zen-Modus (`Alt+Z`) & Notiz-Dokumenten-Layout
+
+- **Zen-Modus (`Alt+Z`):**
+  - Aktivierbar per Shortcut `Alt+Z`, über den Topbar-Button „Zen“ oder über die Befehlspalette.
+  - Beendbar per `Alt+Z`, `Escape` oder über den dezenten Schwebeknopf oben rechts (`.zen-mode-exit-btn`).
+  - Blendet sämtliche Bedienelemente (Ribbon, Seitenleisten, Header, Statusleiste, Eigenschaften und Formatierungsleiste) komplett aus.
+  - Zentriert das Schreib-Layout auf max. $780\,\text{px}$ Bildschirmbreite für fokussiertes Schreiben.
+- **Dokumenten-Layout & Überschriften:**
+  - Der bearbeitbare Notiztitel befindet sich **ausschließlich unterhalb** der Eigenschaften und Toolbar direkt über dem Editor-Text (keine doppelte Überschrift mehr).
+  - Das Frontmatter-Eigenschaften-Panel (`PropertiesEditor`) ist beim Öffnen der App sowie beim Wechseln von Notizen **standardmäßig eingeklappt** (`collapsed: true`) und zeigt nur die Kopfzeile `> Eigenschaften [Anzahl]`.
+
 
 

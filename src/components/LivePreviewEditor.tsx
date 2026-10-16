@@ -1221,13 +1221,13 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     if (!view) return;
     const sel = view.state.selection.main;
     const line = view.state.doc.lineAt(sel.head);
-    const hashes = '#'.repeat(level) + ' ';
+    const hashes = level > 0 ? '#'.repeat(level) + ' ' : '';
     const match = line.text.match(/^#{1,6}\s+/);
     if (match) {
       view.dispatch({
         changes: { from: line.from, to: line.from + match[0].length, insert: hashes },
       });
-    } else {
+    } else if (hashes) {
       view.dispatch({ changes: { from: line.from, insert: hashes } });
     }
     view.focus();
@@ -1250,7 +1250,17 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     const view = viewRef.current;
     if (!view) return;
     const sel = view.state.selection.main;
-    const snippet = `> [!${type.toUpperCase()}] Hinweis\n> Text hier einfügen...\n\n`;
+    const upper = type.toUpperCase();
+    const titleMap: Record<string, string> = {
+      NOTE: 'Hinweis',
+      INFO: 'Information',
+      TIP: 'Tipp',
+      WARNING: 'Warnung',
+      DANGER: 'Gefahr',
+      QUESTION: 'Frage',
+    };
+    const title = titleMap[upper] || upper;
+    const snippet = `> [!${upper}] ${title}\n> Text hier einfügen...\n\n`;
     view.dispatch({
       changes: { from: sel.head, insert: snippet },
       selection: { anchor: sel.head + snippet.length },

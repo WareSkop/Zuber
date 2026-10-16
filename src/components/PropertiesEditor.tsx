@@ -19,6 +19,7 @@ import { normalizePropertyValue } from '../../shared/markdownUtils';
 interface PropertiesEditorProps {
   properties: FrontmatterProperty[];
   allTags: string[];
+  notePath?: string;
   onChange: (updated: FrontmatterProperty[]) => void;
   onTagClick?: (tag: string) => void;
 }
@@ -38,10 +39,15 @@ const PROPERTY_SUGGESTIONS = [
 export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
   properties,
   allTags,
+  notePath,
   onChange,
   onTagClick,
 }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
+
+  React.useEffect(() => {
+    setCollapsed(true);
+  }, [notePath]);
   const [listInputs, setListInputs] = useState<Record<number, string>>({});
 
   const updateProperty = (index: number, patch: Partial<FrontmatterProperty>) => {
