@@ -2919,47 +2919,7 @@ input:checked + .slider:before {
   background: rgba(248, 81, 73, 0.15) !important;
 }
 
-.mobile-sidebar-backdrop {
-  display: none;
-}
-
 @media (max-width: 900px) {
-  .obsidian-app-shell {
-    grid-template-columns: 44px 1fr !important;
-  }
-
-  .mobile-sidebar-backdrop {
-    display: block;
-    position: fixed;
-    top: 0;
-    left: 44px;
-    right: 0;
-    bottom: 26px;
-    background: rgba(0, 0, 0, 0.55);
-    z-index: 35;
-    backdrop-filter: blur(2px);
-  }
-
-  .left-sidebar {
-    position: fixed !important;
-    left: 44px;
-    top: 0;
-    bottom: 26px;
-    width: min(320px, calc(100vw - 48px));
-    z-index: 40;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.55);
-  }
-
-  .right-sidebar {
-    position: fixed !important;
-    right: 0;
-    top: 0;
-    bottom: 26px;
-    width: min(320px, calc(100vw - 48px));
-    z-index: 40;
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.55);
-  }
-
   .topbar-breadcrumbs {
     max-width: 200px;
   }
@@ -3527,18 +3487,23 @@ input:checked + .slider:before {
   min-width: 210px;
 }
 
-/* Mobile Drawer Backdrop */
+/* Mobile Drawer Backdrop - Hidden by default on desktop */
 .mobile-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(2px);
-  z-index: 85;
-  animation: fadeIn 0.15s ease-out;
+  display: none;
 }
 
 /* Touchscreens & Mobile Devices (< 768px) */
 @media (max-width: 768px) {
+  .mobile-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(2px);
+    z-index: 85;
+    animation: fadeIn 0.15s ease-out;
+  }
+
   .obsidian-app-shell {
     grid-template-columns: 44px 1fr;
     grid-template-rows: 1fr;
@@ -3546,6 +3511,7 @@ input:checked + .slider:before {
     width: 100vw;
   }
 
+  .left-sidebar,
   .file-sidebar {
     position: fixed !important;
     top: 0;

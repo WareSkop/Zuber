@@ -274,9 +274,12 @@ Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**
 
 Auf mobilen Touchscreens und schmalen Bildschirmen (< 768px, z. B. Smartphones, Chromebooks mit geteiltem Display):
 - **100dvh (Dynamic Viewport Height):** Die Shell nutzt `100dvh`, wodurch sich das Layout beim Ein- und Ausblenden der virtuellen Bildschirmtastatur auf mobilen Geräten nahtlos anpasst.
-- **Overlay-Drawers mit Backdrop:**
-  - Die linke Leiste (`FileSidebar`) und rechte Leiste (Backlinks / Gliederung / Lokaler Graph) öffnen sich als überlagernde Drawer-Panels (`z-index: 100`, max. 320px Breite) mit abgedunkeltem Hintergrund-Overlay (`.mobile-drawer-backdrop`).
+- **Overlay-Drawers mit Backdrop (Nur mobil < 768px):**
+  - Die linke Leiste (`FileSidebar`) und rechte Leiste (Backlinks / Gliederung / Lokaler Graph) öffnen sich mobil als überlagernde Drawer-Panels (`z-index: 100`, max. 320px Breite) mit abgedunkeltem Hintergrund-Overlay (`.mobile-drawer-backdrop`).
   - Ein Klick/Tipp auf das Backdrop oder die Auswahl einer Notiz schließt den Drawer automatisch.
+- **Desktop-Verhalten (>= 768px):**
+  - Kein Backdrop oder Unschärfe-Filter (kein Blur). Die Seitenleisten reihen sich nahtlos in das CSS-Grid der App-Shell ein.
+  - Das Anklicken einer Notiz im Dateibaum wechselt sofort zur gewählten Notiz und lässt die Leiste geöffnet, sodass bequem zwischen Notizen navigiert werden kann.
 - **Berührungsfreundliche Tippflächen (Touch-Targets):**
   - Auf Geräten mit Touch-Eingabe (`@media (pointer: coarse)`) besitzen interaktive Buttons und Icons eine garantierte Mindest-Tippfläche von $40 \times 40\,\text{px}$.
 

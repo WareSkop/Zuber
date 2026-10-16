@@ -117,6 +117,18 @@ export const App: React.FC = () => {
   const [syncState, setSyncState] = useState<SyncState>('offline');
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const editorRef = useRef<LivePreviewEditorRef>(null);
 
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -300,7 +312,7 @@ export const App: React.FC = () => {
       onSelectNote: (path: string) => {
         openNoteByPath(path);
         if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
-        if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        if (isMobile) {
           setLeftSidebarOpen(false);
         }
       },
@@ -324,7 +336,7 @@ export const App: React.FC = () => {
       },
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
     }),
-    [openNoteByPath, loadVaultIndex]
+    [openNoteByPath, loadVaultIndex, isMobile]
   );
 
   // Initial authentication check
@@ -1265,11 +1277,13 @@ export const App: React.FC = () => {
       {/* Left Sidebar: File Explorer, Search, Tags */}
       {leftSidebarOpen && (
         <>
-          <div
-            className="mobile-drawer-backdrop"
-            onClick={() => setLeftSidebarOpen(false)}
-            aria-hidden="true"
-          />
+          {isMobile && (
+            <div
+              className="mobile-drawer-backdrop"
+              onClick={() => setLeftSidebarOpen(false)}
+              aria-hidden="true"
+            />
+          )}
           <FileSidebar
             tree={tree}
             activePath={activeNote?.path ?? null}
@@ -1564,11 +1578,13 @@ export const App: React.FC = () => {
       {/* Right Sidebar: Backlinks, Outline (Gliederung), and Local Graph */}
       {rightSidebarOpen && (
         <>
-          <div
-            className="mobile-drawer-backdrop right-backdrop"
-            onClick={() => setRightSidebarOpen(false)}
-            aria-hidden="true"
-          />
+          {isMobile && (
+            <div
+              className="mobile-drawer-backdrop right-backdrop"
+              onClick={() => setRightSidebarOpen(false)}
+              aria-hidden="true"
+            />
+          )}
           <aside className="right-sidebar">
           <div className="sidebar-tabs">
             <button
@@ -1802,17 +1818,6 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Mobile backdrop to dismiss drawer sidebars when clicking outside */}
-      {(leftSidebarOpen || rightSidebarOpen) && (
-        <div
-          className="mobile-sidebar-backdrop"
-          onClick={() => {
-            setLeftSidebarOpen(false);
-            setRightSidebarOpen(false);
-          }}
-          aria-hidden="true"
-        />
-      )}
 
       {/* Settings Modal (Theme, Security, Profiles, Sync) */}
       <SettingsModal
