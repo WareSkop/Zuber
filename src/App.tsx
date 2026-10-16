@@ -1371,7 +1371,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`obsidian-app-shell ${zenMode ? 'zen-mode-active' : ''}`}
+      className={`obsidian-app-shell ${zenMode ? 'zen-mode-active zen-mode' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >

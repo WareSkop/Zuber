@@ -3655,10 +3655,11 @@ input:checked + .slider:before {
    Zen Mode (Distraction-Free Alt+Z)
    ========================================================================== */
 
-.obsidian-app-shell.zen-mode-active {
+.obsidian-app-shell.zen-mode-active,
+.obsidian-app-shell.zen-mode {
   display: flex !important;
   flex-direction: column !important;
-  align-items: center !important;
+  align-items: stretch !important;
   justify-content: flex-start !important;
   width: 100vw !important;
   height: var(--vvh, 100dvh) !important;
@@ -3671,46 +3672,86 @@ input:checked + .slider:before {
 .zen-mode-active .obsidian-ribbon,
 .zen-mode-active .workspace-topbar,
 .zen-mode-active .obsidian-statusbar,
-.zen-mode-active .mobile-editor-toolbar {
+.zen-mode-active .mobile-editor-toolbar,
+.zen-mode .obsidian-ribbon,
+.zen-mode .workspace-topbar,
+.zen-mode .obsidian-statusbar,
+.zen-mode .mobile-editor-toolbar {
   display: none !important;
 }
 
-.zen-mode-active .workspace-center {
+.zen-mode-active .workspace-center,
+.zen-mode .workspace-center {
   grid-column: 1 / -1 !important;
   grid-row: 1 / -1 !important;
   width: 100% !important;
+  max-width: none !important;
   height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
-  align-items: center !important;
-  margin: 0 auto !important;
+  align-items: stretch !important;
+  margin: 0 !important;
+  overflow: hidden !important;
 }
 
 .zen-mode-active .workspace-panes,
-.zen-mode-active .editor-pane-container {
+.zen-mode-active .editor-pane-container,
+.zen-mode .workspace-panes,
+.zen-mode .editor-pane-container {
   width: 100% !important;
+  max-width: none !important;
   height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
-  align-items: center !important;
+  align-items: stretch !important;
+  margin: 0 !important;
 }
 
-.zen-mode-active .editor-pane {
+/* Outer scroll container spans full window width so scrollbar is at the right window edge */
+.zen-mode-active .editor-pane,
+.zen-mode-active .editor-scroll-container,
+.zen-mode-active .note-document-container,
+.zen-mode-active .codemirror-editor-wrapper,
+.zen-mode-active .cm-editor,
+.zen-mode-active .cm-scroller,
+.zen-mode .editor-pane,
+.zen-mode .editor-scroll-container,
+.zen-mode .note-document-container,
+.zen-mode .codemirror-editor-wrapper,
+.zen-mode .cm-editor,
+.zen-mode .cm-scroller {
   width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.zen-mode-active .editor-pane,
+.zen-mode .editor-pane {
+  padding-top: 48px !important;
+  padding-bottom: 80px !important;
+  overflow-y: auto !important;
+}
+
+/* Center only the inner content within the full-width scroll container */
+.zen-mode-active .cm-content,
+.zen-mode-active .reading-view-container,
+.zen-mode-active .reading-view-content,
+.zen-mode-active .editor-inner-content,
+.zen-mode .cm-content,
+.zen-mode .reading-view-container,
+.zen-mode .reading-view-content,
+.zen-mode .editor-inner-content {
   max-width: 820px !important;
+  width: 100% !important;
   margin-left: auto !important;
   margin-right: auto !important;
-  padding: 48px 24px !important;
-}
-
-.zen-mode-active .note-document-container {
-  width: 100% !important;
-  max-width: 820px !important;
-  margin: 0 auto !important;
-}
-
-.zen-mode-active .cm-editor {
-  width: 100% !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+  box-sizing: border-box !important;
 }
 
 .zen-mode-exit-btn {

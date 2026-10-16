@@ -1110,12 +1110,33 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const insertTask = () => {
     const view = viewRef.current;
     if (!view) return;
-    const sel = view.state.selection.main;
-    const line = view.state.doc.lineAt(sel.head);
-    if (line.text.startsWith('- [ ] ') || line.text.startsWith('- [x] ')) {
-      view.dispatch({ changes: { from: line.from, to: line.from + 6, insert: '' } });
+    const state = view.state;
+    const sel = state.selection.main;
+    const line = state.doc.lineAt(sel.head);
+    const taskMatch = line.text.match(/^-\s+\[([ xX])\]\s+/);
+
+    if (taskMatch) {
+      // Toggle off
+      const oldPrefixLen = taskMatch[0].length;
+      const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+      const newCursorPos = line.from + offsetInContent;
+      view.dispatch({
+        changes: { from: line.from, to: line.from + oldPrefixLen, insert: '' },
+        selection: { anchor: newCursorPos, head: newCursorPos },
+        scrollIntoView: true,
+      });
     } else {
-      view.dispatch({ changes: { from: line.from, insert: '- [ ] ' } });
+      // Check if bullet or number exists to replace
+      const existingMatch = line.text.match(/^(-\s+|\d+\.\s+)/);
+      const oldPrefixLen = existingMatch ? existingMatch[0].length : 0;
+      const newPrefix = '- [ ] ';
+      const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+      const newCursorPos = line.from + newPrefix.length + offsetInContent;
+      view.dispatch({
+        changes: { from: line.from, to: line.from + oldPrefixLen, insert: newPrefix },
+        selection: { anchor: newCursorPos, head: newCursorPos },
+        scrollIntoView: true,
+      });
     }
     view.focus();
   };
@@ -1123,20 +1144,59 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const insertList = (type: 'bullet' | 'number') => {
     const view = viewRef.current;
     if (!view) return;
-    const sel = view.state.selection.main;
-    const line = view.state.doc.lineAt(sel.head);
+    const state = view.state;
+    const sel = state.selection.main;
+    const line = state.doc.lineAt(sel.head);
+
     if (type === 'bullet') {
-      if (line.text.startsWith('- ')) {
-        view.dispatch({ changes: { from: line.from, to: line.from + 2, insert: '' } });
+      const match = line.text.match(/^-\s+/);
+      if (match) {
+        // Toggle off
+        const oldPrefixLen = match[0].length;
+        const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+        const newCursorPos = line.from + offsetInContent;
+        view.dispatch({
+          changes: { from: line.from, to: line.from + oldPrefixLen, insert: '' },
+          selection: { anchor: newCursorPos, head: newCursorPos },
+          scrollIntoView: true,
+        });
       } else {
-        view.dispatch({ changes: { from: line.from, insert: '- ' } });
+        // Check if there is an ordered list or task prefix to replace
+        const existingMatch = line.text.match(/^(\d+\.\s+|-\s*\[[ xX]\]\s+)/);
+        const oldPrefixLen = existingMatch ? existingMatch[0].length : 0;
+        const newPrefix = '- ';
+        const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+        const newCursorPos = line.from + newPrefix.length + offsetInContent;
+        view.dispatch({
+          changes: { from: line.from, to: line.from + oldPrefixLen, insert: newPrefix },
+          selection: { anchor: newCursorPos, head: newCursorPos },
+          scrollIntoView: true,
+        });
       }
     } else {
-      const numMatch = line.text.match(/^\d+\.\s+/);
-      if (numMatch) {
-        view.dispatch({ changes: { from: line.from, to: line.from + numMatch[0].length, insert: '' } });
+      const match = line.text.match(/^\d+\.\s+/);
+      if (match) {
+        // Toggle off
+        const oldPrefixLen = match[0].length;
+        const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+        const newCursorPos = line.from + offsetInContent;
+        view.dispatch({
+          changes: { from: line.from, to: line.from + oldPrefixLen, insert: '' },
+          selection: { anchor: newCursorPos, head: newCursorPos },
+          scrollIntoView: true,
+        });
       } else {
-        view.dispatch({ changes: { from: line.from, insert: '1. ' } });
+        // Check if bullet or task exists to replace
+        const existingMatch = line.text.match(/^(-\s*\[[ xX]\]\s+|-\s+)/);
+        const oldPrefixLen = existingMatch ? existingMatch[0].length : 0;
+        const newPrefix = '1. ';
+        const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+        const newCursorPos = line.from + newPrefix.length + offsetInContent;
+        view.dispatch({
+          changes: { from: line.from, to: line.from + oldPrefixLen, insert: newPrefix },
+          selection: { anchor: newCursorPos, head: newCursorPos },
+          scrollIntoView: true,
+        });
       }
     }
     view.focus();
@@ -1219,29 +1279,57 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const insertHeading = (level: number) => {
     const view = viewRef.current;
     if (!view) return;
-    const sel = view.state.selection.main;
-    const line = view.state.doc.lineAt(sel.head);
-    const hashes = level > 0 ? '#'.repeat(level) + ' ' : '';
-    const match = line.text.match(/^#{1,6}\s+/);
-    if (match) {
-      view.dispatch({
-        changes: { from: line.from, to: line.from + match[0].length, insert: hashes },
-      });
-    } else if (hashes) {
-      view.dispatch({ changes: { from: line.from, insert: hashes } });
-    }
+    const state = view.state;
+    const sel = state.selection.main;
+    const line = state.doc.lineAt(sel.head);
+    const existingMatch = line.text.match(/^(#{1,6})\s+/);
+    const oldPrefixLen = existingMatch ? existingMatch[0].length : 0;
+    const newPrefix = level > 0 ? `${'#'.repeat(level)} ` : '';
+
+    const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+    const newCursorPos = line.from + newPrefix.length + offsetInContent;
+
+    view.dispatch({
+      changes: {
+        from: line.from,
+        to: line.from + oldPrefixLen,
+        insert: newPrefix,
+      },
+      selection: {
+        anchor: newCursorPos,
+        head: newCursorPos,
+      },
+      scrollIntoView: true,
+    });
     view.focus();
   };
 
   const insertQuote = () => {
     const view = viewRef.current;
     if (!view) return;
-    const sel = view.state.selection.main;
-    const line = view.state.doc.lineAt(sel.head);
-    if (line.text.startsWith('> ')) {
-      view.dispatch({ changes: { from: line.from, to: line.from + 2, insert: '' } });
+    const state = view.state;
+    const sel = state.selection.main;
+    const line = state.doc.lineAt(sel.head);
+    const quoteMatch = line.text.match(/^>\s*/);
+
+    if (quoteMatch) {
+      const oldPrefixLen = quoteMatch[0].length;
+      const offsetInContent = Math.max(0, sel.head - (line.from + oldPrefixLen));
+      const newCursorPos = line.from + offsetInContent;
+      view.dispatch({
+        changes: { from: line.from, to: line.from + oldPrefixLen, insert: '' },
+        selection: { anchor: newCursorPos, head: newCursorPos },
+        scrollIntoView: true,
+      });
     } else {
-      view.dispatch({ changes: { from: line.from, insert: '> ' } });
+      const newPrefix = '> ';
+      const offsetInContent = Math.max(0, sel.head - line.from);
+      const newCursorPos = line.from + newPrefix.length + offsetInContent;
+      view.dispatch({
+        changes: { from: line.from, insert: newPrefix },
+        selection: { anchor: newCursorPos, head: newCursorPos },
+        scrollIntoView: true,
+      });
     }
     view.focus();
   };

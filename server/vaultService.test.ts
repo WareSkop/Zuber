@@ -476,6 +476,33 @@ describe('Basalt - Editor Toolbar & Mobile Swipe Gestures', () => {
     // Slight swipe right when already open does nothing
     expect(evaluateSwipe(true, 100, 100, 140, 102)).toBe('none');
   });
+
+  it('correctly calculates cursor position after inserting headings, lists, tasks, and quotes', () => {
+    const calculatePrefixCursor = (
+      lineText: string,
+      cursorOffsetInLine: number,
+      newPrefix: string,
+      oldPrefixRegex?: RegExp
+    ) => {
+      const match = oldPrefixRegex ? lineText.match(oldPrefixRegex) : null;
+      const oldPrefixLen = match ? match[0].length : 0;
+      const offsetInContent = Math.max(0, cursorOffsetInLine - oldPrefixLen);
+      return newPrefix.length + offsetInContent;
+    };
+
+    // Heading # on line with existing text
+    expect(calculatePrefixCursor('Meine Notiz', 0, '# ', /^#{1,6}\s+/)).toBe(2);
+    // Heading ### on empty line
+    expect(calculatePrefixCursor('', 0, '### ', /^#{1,6}\s+/)).toBe(4);
+    // Switch from # to ## with cursor inside content (offset 8 in "# Meine Notiz" -> after "Meine ")
+    expect(calculatePrefixCursor('# Meine Notiz', 8, '## ', /^#{1,6}\s+/)).toBe(9);
+    // List item -
+    expect(calculatePrefixCursor('Erster Punkt', 0, '- ', /^-\s+/)).toBe(2);
+    // Task item - [ ]
+    expect(calculatePrefixCursor('Aufgabe', 0, '- [ ] ', /^-\s+\[[ xX]\]\s+/)).toBe(6);
+    // Quote >
+    expect(calculatePrefixCursor('Zitat', 0, '> ', /^>\s*/)).toBe(2);
+  });
 });
 
 
