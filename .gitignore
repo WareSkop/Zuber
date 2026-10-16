@@ -1,0 +1,8 @@
+node_modules/
+dist/
+vault/
+certs/
+.env
+server-config.json
+*.log
+tsconfig.tsbuildinfo

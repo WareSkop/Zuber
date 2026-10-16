@@ -1,0 +1,150 @@
+# Frontend & CodeMirror 6 Live-Preview Architecture (`doc/FRONTEND_AND_EDITOR.md`)
+
+Dieses Dokument beschreibt den Aufbau des React-Frontends (`src/`) und insbesondere die Funktionsweise des an Obsidian angelehnten **CodeMirror 6 Live-Preview Editors** ([`src/components/LivePreviewEditor.tsx`](../src/components/LivePreviewEditor.tsx)).
+
+---
+
+## 1. Komponenten-Überblick & Datenfluss
+
+```mermaid
+flowchart TD
+    App["App.tsx (Zentraler Vault- & Editor-State)"]
+    Login["LoginModal.tsx"]
+    Sidebar["FileSidebar.tsx (Dateibaum, Suche, Tags)"]
+    Props["PropertiesEditor.tsx (Visuelles Frontmatter)"]
+    Editor["LivePreviewEditor.tsx (CodeMirror 6 + Lese-Ansicht)"]
+    Graph["GraphView.tsx (2D Force-Directed Canvas)"]
+
+    App --> Login
+    App --> Sidebar
+    App --> Props
+    App --> Editor
+    App --> Graph
+```
+
+### 1.1 Zentraler State in [`src/App.tsx`](../src/App.tsx)
+
+`App.tsx` hält den gesamten Anwendungszustand zusammen:
+
+- **Authentifizierung:** `authChecked`, `authenticated`, `authRequired`
+- **Vault-Übersicht:**
+  - `vaultName`: Name des Wurzelverzeichnisses
+  - `tree`: Hierarchischer `FileNode[]`-Baum für die linke Seitenleiste
+  - `allNotes`: Flache Liste aller Markdown-Notizen (`Array<{ path, name, folder }>`) für schnelles `[[`-Autovervollständigen und den Schnellöffner (`Ctrl/Cmd + O`)
+  - `tags`: Alle im Vault vorkommenden `#tags` mit Häufigkeitszähler
+- **Aktive Notiz & Tabs:**
+  - `openTabs`: Liste der geöffneten Notizpfade (`string[]`), persistiert in `localStorage` (`obsidian_web_open_tabs`)
+  - `activeNote`: Aktuell geladenes `NotePayload`-Objekt
+  - `editorBody`: Aktueller Markdown-Text (ohne Frontmatter) im Editor
+  - `editorProps`: Aktuelle `FrontmatterProperty[]`-Liste im visuellen Eigenschaften-Panel
+  - `dirty`: `boolean` – gibt an, ob ungespeicherte Änderungen vorliegen
+  - `saving`: `boolean` – gibt an, ob gerade ein Speicher-Request läuft
+- **Ansichtsmodi:**
+  - `editorMode`: `'live'` (Obsidian Live-Preview) | `'source'` (Reiner Markdown-Quelltext) | `'reading'` (Komplett gerenderte HTML-Leseansicht)
+  - `centerView`: `'editor'` (Standard) | `'graph'` (Vollbild-Graph im Hauptbereich)
+  - `rightTab`: `'graph'` (Lokaler Nachbarschafts-Graph in der rechten Seitenleiste) | `'backlinks'` (Eingehende & ausgehende Verweise) | `'outline'` (Gliederung nach Überschriften)
+
+### 1.2 Auto-Save & Schutz vor Race-Conditions
+
+1. **Debounced Auto-Save (700 ms):**
+   Jede Änderung am Markdown-Text (`handleBodyChange`) oder an den Eigenschaften (`handlePropertiesChange`) setzt `dirty = true` und startet einen `700ms`-Timer (`saveTimerRef`). Nach Ablauf ruft `persistNote(path, body, props)` `api.saveNote()` auf.
+2. **Sofortiges Speichern vor Notizwechsel:**
+   Wenn der Benutzer in [`openNote(targetPath)`](../src/App.tsx) zu einer anderen Notiz wechselt, während `dirty === true` ist, wird ein ausstehender Timer abgebrochen und die aktuelle Notiz **vor** dem Laden der neuen Notiz gespeichert.
+3. **Unterdrückung von Echo-Reloads (`lastLocalSaveRef`):**
+   Wenn `persistNote` speichert, wird `lastLocalSaveRef.current = Date.now()` gesetzt. Trifft innerhalb von `1500ms` danach eine WebSocket-Nachricht `vault:changed` für dieselbe Datei ein, wird das erneute Laden übersprungen, damit der Cursor im Editor nicht springt.
+
+---
+
+## 2. Der CodeMirror 6 Live-Preview Editor ([`src/components/LivePreviewEditor.tsx`](../src/components/LivePreviewEditor.tsx))
+
+Der Editor bildet das Herzstück der Applikation und implementiert Obsidians **Live-Preview-Konzept**:
+- Solange sich der **Cursor (oder die Textauswahl) außerhalb** eines Markdown-Elements befindet, werden Steuerzeichen (`#`, `**`, `*`, `~~`, `[[...]]`, `![[...]]`, `![...](...)`, Tabellen-Pipes `|`) ausgeblendet (`Decoration.replace({})`) oder durch interaktive Widgets ersetzt.
+- Sobald der **Cursor in die Zeile bzw. den Bereich** des Elements bewegt wird, klappt das Element automatisch in seinen rohen Markdown-Quelltext auf, sodass es direkt bearbeitet werden kann.
+
+### 2.1 Performance: Viewport-Windowing
+
+Bei sehr langen Notizen wäre das Erzeugen von tausenden DOM-Widgets im gesamten Dokument zu langsam. Deshalb berechnet [`buildLivePreviewDecorations(view)`](../src/components/LivePreviewEditor.tsx) Dekorationen nur für die aktuell sichtbaren Bereiche (`view.visibleRanges`) mit einem Sicherheitspuffer von **$\pm 1500$ Zeichen**:
+
+```ts
+const vpFrom = Math.max(0, view.viewport.from - 1500);
+const vpTo = Math.min(docLength, view.viewport.to + 1500);
+```
+
+### 2.2 Übersicht aller Live-Preview-Dekorationen & Widgets
+
+| Markdown-Element | Cursor außerhalb | Cursor innerhalb | Implementierung in `LivePreviewEditor.tsx` |
+| :--- | :--- | :--- | :--- |
+| **Überschriften** (`# H1` .. `###### H6`) | `### ` wird ausgeblendet, Zeile erhält `.cm-lp-h1` .. `.cm-lp-h6` | `### ` wird mit `.cm-lp-formatting` gedimmt eingeblendet | Zeilen-Scan + `selectionTouchesLine` |
+| **Blockquotes** (`> Zitat`) | Zeile erhält `.cm-lp-blockquote` (linker Akzentbalken) | Bleibt `.cm-lp-blockquote` | Zeilen-Scan |
+| **Horizontale Linie** (`---`, `***`) | Ersetzt durch `<hr class="cm-lp-hr" />` (`HrWidget`) | Rohes `---` sichtbar | Zeilen-Scan + `selectionTouchesLine` |
+| **Aufgabenlisten** (`- [ ] `, `- [x] `) | `- [ ]` wird durch interaktives `<input type="checkbox">` (`CheckboxWidget`) ersetzt. Klick schaltet `[ ]` $\leftrightarrow$ `[x]` direkt im Dokument um! | `- [ ]` als Text sichtbar | Zeilen-Scan + `CheckboxWidget` |
+| **Aufzählungslisten** (`- `, `* `, `+ `) | `-` wird durch einen gestylten Listenpunkt `•` (`BulletWidget`) ersetzt | `-` als Text sichtbar | Zeilen-Scan + `BulletWidget` |
+| **Codeblöcke** (` ```lang ... ``` `) | Alle Zeilen erhalten `.cm-lp-codeblock-line` (dunkler Hintergrund, Monospace) | Öffnende/schließende ` ``` `-Zeilen sind außerhalb gedimmt | Mehrzeilen-Zustandsautomat (`inCodeFence`) |
+| **Markdown-Tabellen** (`\| A \| B \|`) | Erste Zeile wird durch gerendertes HTML-`<table>` (`TableWidget`) ersetzt; Folgezeilen der Tabelle werden per `.cm-lp-table-collapsed-line` ausgeblendet. Klick auf die Tabelle setzt den Cursor hinein zum Bearbeiten. | Kompletter Markdown-Tabellenquelltext sichtbar (`.cm-lp-table-source-line`) | Mehrzeilen-Tabellen-Detektor (`isTableRow`, `isTableSeparator`) + `TableWidget` |
+| **Obsidian-Embeds** (`![[bild.png\|400]]`, `![[doc.pdf]]`) | Ersetzt durch `EmbedWidget` (`<img>` mit Lazy-Loading, `<audio>`, `<video>`, PDF-Karte oder Notiz-Einbettung) | Roher Code `![[...]]` sichtbar | Regex `WIKI_REGEX` + `selectionTouches` |
+| **Wiki-Links** (`[[Ziel\|Alias]]`) | Ersetzt durch klickbares `WikiLinkWidget` (`<span class="cm-lp-wikilink">`). Klick öffnet die Zielnotiz! | Roher Code `[[Ziel\|Alias]]` sichtbar | Regex `WIKI_REGEX` + `WikiLinkWidget` |
+| **Markdown-Bilder** (`![alt](pfad.png)`) | Ersetzt durch `EmbedWidget` (übergibt auch `currentNotePath` für relative Pfade wie `attachments/img.png` und `decodeURIComponent` für `%20`) | Roher Code `![alt](pfad.png)` sichtbar | Regex `MD_LINK_REGEX` (`isEmbed === true`) |
+| **Markdown-Links** (`[Text](Ziel.md)` oder `[Web](https://...)`) | Ersetzt durch `WikiLinkWidget` (interne Links öffnen die Notiz/Datei; externe Links öffnen im neuen Browser-Tab mit `↗`) | Roher Code `[Text](...)` sichtbar | Regex `MD_LINK_REGEX` (`isEmbed === false`) |
+| **Fettdruck** (`**Text**`) | `**` wird ausgeblendet, Text erhält `.cm-lp-bold` | `**` sichtbar | Regex `BOLD_REGEX` |
+| **Kursiv** (`*Text*`) | `*` wird ausgeblendet, Text erhält `.cm-lp-italic` | `*` sichtbar | Regex `ITALIC_REGEX` |
+| **Durchgestrichen** (`~~Text~~`) | `~~` wird ausgeblendet, Text erhält `.cm-lp-strike` | `~~` sichtbar | Regex `STRIKE_REGEX` |
+| **Highlight** (`==Text==`) | `==` wird ausgeblendet, Text erhält `.cm-lp-highlight` (gelbe Markierung) | `==` sichtbar | Regex `HIGHLIGHT_REGEX` |
+| **Inline-Code** (`` `code` ``) | Backticks ausgeblendet, Text erhält `.cm-lp-inline-code` | Backticks sichtbar | Regex `INLINE_CODE_REGEX` |
+| **Tags** (`#tag/subtag`) | Ersetzt durch klickbares `TagPillWidget` (`#tag/subtag`). Klick filtert nach diesem Tag! | Roher Text `#tag/subtag` sichtbar | Regex `TAG_REGEX` |
+
+> [!WARNING]
+> **Wichtige CodeMirror-6-Einschränkung bei mehrzeiligen Dekorationen:**
+> Ein `ViewPlugin` darf in CodeMirror 6 **niemals** `Decoration.replace(...)` über Zeilenumbrüche (`\n`) hinweg verwenden (führt sofort zum Fehler `RangeError: Decorations that replace line breaks may not be specified via plugins`).
+> Deshalb rendert unser Tabellen-Detektor das `TableWidget` als `Decoration.widget({ widget: new TableWidget(tableLines) })` am Anfang der ersten Tabellenzeile und kollabiert die einzelnen Tabellenzeilen zeilenweise mit `Decoration.line({ class: 'cm-lp-table-collapsed-line' })` (`font-size: 0; line-height: 0; height: 0; overflow: hidden`).
+
+### 2.3 Wiki-Link (`[[`) und Tag (`#`) Autovervollständigung
+
+Die Funktion [`wikiLinkCompletion`](../src/components/LivePreviewEditor.tsx) ist bei `@codemirror/autocomplete` registriert:
+- Tippt der Benutzer `[[` gefolgt von beliebigen Zeichen, durchsucht die Funktion `allNotesRef.current` nach passenden Notiznamen und Pfaden (bis zu 30 Vorschläge) und vervollständigt beim Bestätigen automatisch zu `[[Notizname]]`.
+- Tippt der Benutzer `#` nach einem Leerzeichen oder am Zeilenanfang, schlägt die Funktion existierende Tags aus `allTagsRef.current` vor.
+
+### 2.4 Drag & Drop sowie Zwischenablage-Upload für Bilder
+
+Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab:
+- Enthält das Event eine Datei (`event.dataTransfer.files` bzw. `event.clipboardData.items`), wird [`onUploadAttachment(file)`](../src/App.tsx) aufgerufen.
+- Die Datei wird nach `/api/vault/upload?folder=attachments` hochgeladen und an der aktuellen Cursorposition automatisch als `![[Dateiname.png]]` (bzw. `[[Dateiname.pdf]]`) eingefügt.
+
+### 2.5 Lese-Ansicht (`mode === 'reading'`)
+
+Im Lese-Modus wird anstelle von CodeMirror `marked` (mit aktiviertem GitHub Flavored Markdown `gfm: true` für Tabellen, Aufgabenlisten und Durchstreichungen) nach einer Vorverarbeitung durch [`preprocessObsidianMarkdown`](../src/components/LivePreviewEditor.tsx) gerendert. Klicks auf interne Links und Tags werden per Event-Delegation (`data-wiki-target`, `data-tag`) abgefangen.
+
+---
+
+## 3. Visueller Eigenschaften-Editor ([`src/components/PropertiesEditor.tsx`](../src/components/PropertiesEditor.tsx))
+
+Wie vom Benutzer gewünscht, wird YAML-Frontmatter niemals als roher YAML-Quelltext im Editor angezeigt. Stattdessen sitzt oberhalb des Editors das einklappbare Panel **"Eigenschaften"**:
+
+- Jede Eigenschaft besteht aus:
+  1. **Typ-Umschalter Button** (Icon links: `Aa` Text, `#` Zahl, `☑` Checkbox, `📅` Datum, `≡` Liste, `🏷` Tags) – Klick wechselt zyklisch den `PropertyType` und konvertiert den Wert passend.
+  2. **Schlüssel-Eingabefeld** (`key`).
+  3. **Typspezifisches Wert-Eingabefeld:**
+     - `'text'` $\rightarrow$ `<input type="text">`
+     - `'number'` $\rightarrow$ `<input type="number">`
+     - `'checkbox'` $\rightarrow$ `<input type="checkbox">`
+     - `'date'` $\rightarrow$ `<input type="date">`
+     - `'list'` / `'tags'` $\rightarrow$ Chip-/Pill-Liste mit `×`-Button zum Entfernen einzelner Einträge und `Enter`/`Komma`-Eingabe zum Hinzufügen neuer Werte.
+  4. **Löschen-Button (`×`)** zum Entfernen der Eigenschaft.
+- Über **"+ Eigenschaft hinzufügen"** oder die Schnell-Buttons (`+ tags`, `+ aliases`, `+ status`) können neue Frontmatter-Felder angelegt werden.
+
+---
+
+## 4. Interaktive Graph-Ansicht ([`src/components/GraphView.tsx`](../src/components/GraphView.tsx))
+
+Die Graph-Ansicht nutzt ein HTML5 `<canvas>` mit eigener 2D-Kräftesimulation (ohne schwere externe Graph-Bibliotheken):
+
+- **Lokaler vs. Globaler Modus (`localCenterPath`):**
+  - Im rechten Seitenleisten-Tab wird `localCenterPath={activeNote.path}` übergeben. Der Graph filtert die Knoten auf die aktive Notiz plus alle direkt verbundenen Nachbarn (Tiefe 1).
+  - Im Hauptbereich (`centerView === 'graph'`) wird der gesamte Vault-Graph angezeigt.
+- **Physik-Kühlung (`alphaRef` & `wakeUpRef`):**
+  - Damit ein Vault mit 1.800+ Notizen nicht dauerhaft CPU/GPU-Last erzeugt, besitzt die Simulation einen Temperaturfaktor `alphaRef` (Startwert `1.0`), der pro Frame mit `0.985` multipliziert wird.
+  - Sobald `alpha < 0.005` erreicht ist, werden die Knotenpositionen eingefroren (kein $O(V^2)$ Repulsions-Loop mehr!), bis der Benutzer einen Knoten zieht oder den Filter ändert (`wakeUpRef.current()`).
+- **Interaktionen:**
+  - **Mausrad:** Zoomen um den Mauszeiger (`scale` zwischen `0.15` und `3.5`)
+  - **Ziehen auf leerem Hintergrund:** Verschieben der Arbeitsfläche (`panX`, `panY`)
+  - **Ziehen eines Knotens:** Bewegt den Knoten (`dragNodeId`) und weckt die Physik-Simulation auf (`alpha = 0.35`)
+  - **Klick auf einen Knoten (ohne Ziehen):** Öffnet die entsprechende Notiz im Editor (`onSelectNote(node.id)`)
