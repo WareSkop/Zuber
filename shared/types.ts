@@ -63,6 +63,15 @@ export interface SyncManifestEntry {
   size: number;
 }
 
+export interface UploadResponse {
+  ok: boolean;
+  path: string;
+  name: string;
+  originalName: string;
+  size: number;
+  wikiEmbed: string;
+}
+
 export interface SecuritySettingsResponse {
   authEnabled: boolean;
 }

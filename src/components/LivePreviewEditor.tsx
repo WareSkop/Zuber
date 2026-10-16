@@ -770,37 +770,73 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
 
     const uploadHandler = EditorView.domEventHandlers({
       paste(event, view) {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
-        for (const item of Array.from(items)) {
-          if (item.type.startsWith('image/')) {
-            const file = item.getAsFile();
-            if (file) {
-              event.preventDefault();
-              api.uploadAttachment(file).then((res) => {
-                const pos = view.state.selection.main.head;
-                view.dispatch({
-                  changes: { from: pos, insert: `${res.wikiEmbed}\n` },
-                });
-              });
-              return true;
+        const clipboard = event.clipboardData;
+        if (!clipboard) return false;
+
+        const files: File[] = [];
+        if (clipboard.files && clipboard.files.length > 0) {
+          for (let i = 0; i < clipboard.files.length; i++) {
+            files.push(clipboard.files[i]);
+          }
+        } else if (clipboard.items) {
+          for (const item of Array.from(clipboard.items)) {
+            if (item.kind === 'file') {
+              const f = item.getAsFile();
+              if (f) files.push(f);
             }
           }
+        }
+
+        const imageFiles = files.filter(
+          (f) => f.type.startsWith('image/') || IMAGE_EXT_REGEX.test(f.name)
+        );
+
+        if (imageFiles.length > 0) {
+          event.preventDefault();
+          for (const file of imageFiles) {
+            api
+              .uploadAttachment(file)
+              .then((res) => {
+                const embedTag =
+                  res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`);
+                const pos = view.state.selection.main.head;
+                view.dispatch({
+                  changes: { from: pos, insert: `${embedTag}\n` },
+                  selection: { anchor: pos + embedTag.length + 1 },
+                });
+              })
+              .catch((err) => {
+                console.error('Fehler beim Einfügen aus der Zwischenablage:', err);
+              });
+          }
+          return true;
         }
         return false;
       },
       drop(event, view) {
         const files = event.dataTransfer?.files;
         if (!files || files.length === 0) return false;
-        const file = files[0];
-        if (file && file.type.startsWith('image/')) {
+        const imageFiles = Array.from(files).filter(
+          (f) => f.type.startsWith('image/') || IMAGE_EXT_REGEX.test(f.name)
+        );
+        if (imageFiles.length > 0) {
           event.preventDefault();
-          api.uploadAttachment(file).then((res) => {
-            const pos = view.state.selection.main.head;
-            view.dispatch({
-              changes: { from: pos, insert: `${res.wikiEmbed}\n` },
-            });
-          });
+          for (const file of imageFiles) {
+            api
+              .uploadAttachment(file)
+              .then((res) => {
+                const embedTag =
+                  res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`);
+                const pos = view.state.selection.main.head;
+                view.dispatch({
+                  changes: { from: pos, insert: `${embedTag}\n` },
+                  selection: { anchor: pos + embedTag.length + 1 },
+                });
+              })
+              .catch((err) => {
+                console.error('Fehler beim Drop des Bildes:', err);
+              });
+          }
           return true;
         }
         return false;

@@ -7,6 +7,7 @@ import type {
   SecuritySettingsResponse,
   SyncManifestEntry,
   UpdateSecurityRequest,
+  UploadResponse,
   VaultProfile,
 } from '../shared/types';
 
@@ -265,15 +266,17 @@ export const api = {
     return `${baseUrl}/api/vault/attachment?${params.toString()}`;
   },
 
-  async uploadAttachment(
-    file: File
-  ): Promise<{ path: string; name: string; wikiEmbed: string }> {
+  async uploadAttachment(file: File): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('folder', 'attachments');
-    return apiFetch('/api/vault/upload', {
+    const res = await apiFetch<UploadResponse>('/api/vault/upload', {
       method: 'POST',
       body: formData,
     });
+    return {
+      ...res,
+      wikiEmbed: res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`),
+    };
   },
 };

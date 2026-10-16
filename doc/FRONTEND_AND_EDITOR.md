@@ -103,11 +103,13 @@ Die Funktion [`wikiLinkCompletion`](../src/components/LivePreviewEditor.tsx) ist
 - Tippt der Benutzer `[[` gefolgt von beliebigen Zeichen, durchsucht die Funktion `allNotesRef.current` nach passenden Notiznamen und Pfaden (bis zu 30 Vorschläge) und vervollständigt beim Bestätigen automatisch zu `[[Notizname]]`.
 - Tippt der Benutzer `#` nach einem Leerzeichen oder am Zeilenanfang, schlägt die Funktion existierende Tags aus `allTagsRef.current` vor.
 
-### 2.4 Drag & Drop sowie Zwischenablage-Upload für Bilder
+### 2.4 Drag & Drop, Zwischenablage-Upload und Bild-Einfügen-Button
 
-Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab:
-- Enthält das Event eine Datei (`event.dataTransfer.files` bzw. `event.clipboardData.items`), wird [`onUploadAttachment(file)`](../src/App.tsx) aufgerufen.
-- Die Datei wird nach `/api/vault/upload?folder=attachments` hochgeladen und an der aktuellen Cursorposition automatisch als `![[Dateiname.png]]` (bzw. `[[Dateiname.pdf]]`) eingefügt.
+Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zusätzlich steht in der Topbar der Button **Bild einfügen** zur Verfügung:
+- Sowohl Clipboard-Items (`event.clipboardData.items`), Clipboard-Dateien (`event.clipboardData.files`), Drag & Drop-Dateien (`event.dataTransfer.files`) als auch die Dateiauswahl per Button unterstützen Einzel- und Mehrfach-Uploads.
+- Bei Blobs aus der Zwischenablage ohne Dateiendung wird der MIME-Typ analysiert (`image/png`, `image/jpeg` etc.), sodass auf dem Server stets eine gültige Dateiendung vergeben wird.
+- Die Datei wird nach `/api/vault/upload?folder=attachments` hochgeladen und an der aktuellen Cursorposition bzw. am Ende der Notiz automatisch als fertiger Obsidian-Tag `![[attachments/dateiname.png]]` eingefügt.
+- Die CodeMirror-Dekoration (`EmbedWidget`) erkennt die Bild-Syntax sofort und rendert die Grafik direkt im Live-Preview-Modus.
 
 ### 2.5 Lese-Ansicht (`mode === 'reading'`)
 

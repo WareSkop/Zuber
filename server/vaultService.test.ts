@@ -111,6 +111,18 @@ describe('VaultService & Sync Engine', () => {
         'Projekte/3d Drucker/Tinmorry Fillament PLA .md'
       )
     ).toBe('Projekte/3d Drucker/attachments/image1.png');
+
+    // Uploaded root attachment in attachments/ folder
+    const rootAttachDir = path.join(tmpDir, 'attachments');
+    fs.mkdirSync(rootAttachDir, { recursive: true });
+    fs.writeFileSync(path.join(rootAttachDir, 'pasted-image-1729110000.png'), 'fake-png');
+    service.indexFile('attachments/pasted-image-1729110000.png');
+    expect(
+      service.resolveWikiTarget('attachments/pasted-image-1729110000.png')
+    ).toBe('attachments/pasted-image-1729110000.png');
+    expect(
+      service.resolveWikiTarget('pasted-image-1729110000.png')
+    ).toBe('attachments/pasted-image-1729110000.png');
   });
 
   it('updates WikiLinks across the vault when a note is renamed', () => {

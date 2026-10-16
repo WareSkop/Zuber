@@ -621,13 +621,24 @@ export const App: React.FC = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*,.svg,.pdf';
+    input.multiple = true;
     input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file || !activeNote) return;
-      const uploaded = await api.uploadAttachment(file);
-      const nextBody = `${activeNote.body.trimEnd()}\n\n${uploaded.wikiEmbed}\n`;
-      handleBodyChange(nextBody);
-      await loadVaultIndex();
+      const files = input.files;
+      if (!files || files.length === 0 || !activeNote) return;
+      try {
+        let tagsToInsert = '';
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const uploaded = await api.uploadAttachment(file);
+          const embedTag = uploaded.wikiEmbed || (uploaded.path ? `![[${uploaded.path}]]` : `![[${uploaded.name}]]`);
+          tagsToInsert += `${embedTag}\n`;
+        }
+        const nextBody = `${activeNote.body.trimEnd()}\n\n${tagsToInsert}`;
+        handleBodyChange(nextBody);
+        await loadVaultIndex();
+      } catch (err) {
+        console.error('Fehler beim Hochladen des Bildes:', err);
+      }
     };
     input.click();
   };

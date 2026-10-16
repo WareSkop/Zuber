@@ -313,9 +313,18 @@ export function createApp(vaultService: VaultService) {
         cb(null, absFolder);
       },
       filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        const base = path.basename(file.originalname, ext).replace(/[^\w.-]/g, '_');
-        cb(null, `${base}-${Date.now()}${ext}`);
+        let ext = path.extname(file.originalname || '');
+        if (!ext && file.mimetype) {
+          if (file.mimetype === 'image/png') ext = '.png';
+          else if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/jpg') ext = '.jpg';
+          else if (file.mimetype === 'image/gif') ext = '.gif';
+          else if (file.mimetype === 'image/webp') ext = '.webp';
+          else if (file.mimetype === 'image/svg+xml') ext = '.svg';
+          else ext = '.png';
+        }
+        let base = path.basename(file.originalname || 'image', ext).replace(/[^\w.-]/g, '_');
+        if (!base || base === 'blob') base = 'pasted-image';
+        cb(null, `${base}-${Date.now()}${ext || '.png'}`);
       },
     }),
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
@@ -332,12 +341,14 @@ export function createApp(vaultService: VaultService) {
       }
       const relPath = path.relative(vaultService.getVaultDir(), req.file.path).replace(/\\/g, '/');
       vaultService.indexFile(relPath);
+      const wikiEmbed = `![[${relPath}]]`;
       res.json({
         ok: true,
         path: relPath,
         name: req.file.filename,
         originalName: req.file.originalname,
         size: req.file.size,
+        wikiEmbed,
       });
     }
   );
