@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from 'react';
 import {
   EditorState,
   RangeSetBuilder,
@@ -26,7 +26,19 @@ import { api } from '../api';
 
 export type EditorMode = 'live' | 'reading' | 'source';
 
-interface LivePreviewEditorProps {
+export interface LivePreviewEditorRef {
+  applyFormat: (formatType: 'bold' | 'italic' | 'strikethrough' | 'highlight' | 'code') => void;
+  insertTable: () => void;
+  insertCodeBlock: () => void;
+  insertTask: () => void;
+  insertWikiLink: () => void;
+  insertHeading: (level: number) => void;
+  insertQuote: () => void;
+  insertHorizontalRule: () => void;
+  focus: () => void;
+}
+
+export interface LivePreviewEditorProps {
   notePath: string;
   body: string;
   rawContent: string;
@@ -277,7 +289,11 @@ class EmbedWidget extends WidgetType {
     readonly target: string,
     readonly alt: string,
     readonly notePath: string,
-    readonly onNavigate: (target: string) => void
+    readonly onNavigate: (target: string) => void,
+    readonly width?: number,
+    readonly align?: 'left' | 'center' | 'right',
+    readonly range?: { from: number; to: number },
+    readonly onUpdateTag?: (newTag: string, from: number, to: number) => void
   ) {
     super();
   }
@@ -286,31 +302,21 @@ class EmbedWidget extends WidgetType {
     return (
       other.target === this.target &&
       other.alt === this.alt &&
-      other.notePath === this.notePath
+      other.notePath === this.notePath &&
+      other.width === this.width &&
+      other.align === this.align &&
+      other.range?.from === this.range?.from &&
+      other.range?.to === this.range?.to
     );
   }
 
   toDOM() {
-    const wrapper = document.createElement('span');
-    wrapper.className = 'cm-embed-widget';
     const cleanTarget = this.target.split('#')[0].trim();
     const isImage = IMAGE_EXT_REGEX.test(cleanTarget);
 
-    if (isImage) {
-      const img = document.createElement('img');
-      img.src = /^(https?:|data:)/i.test(cleanTarget)
-        ? cleanTarget
-        : api.getAttachmentUrl(cleanTarget, this.notePath);
-      img.alt = this.alt || cleanTarget;
-      img.className = 'cm-embedded-image';
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      // Support optional Obsidian width syntax like ![[image.png|400]]
-      if (/^\d+$/.test(this.alt.trim())) {
-        img.style.maxWidth = `${this.alt.trim()}px`;
-      }
-      wrapper.appendChild(img);
-    } else {
+    if (!isImage) {
+      const wrapper = document.createElement('span');
+      wrapper.className = 'cm-embed-widget';
       const card = document.createElement('span');
       card.className = 'cm-embedded-note-pill';
       card.textContent = `📄 ${this.alt || cleanTarget}`;
@@ -320,7 +326,189 @@ class EmbedWidget extends WidgetType {
         this.onNavigate(this.target);
       });
       wrapper.appendChild(card);
+      return wrapper;
     }
+
+    // --- Interactive Image Embed Wrapper ---
+    const wrapper = document.createElement('span');
+    wrapper.className = 'cm-embed-widget cm-image-embed-wrapper';
+    if (this.align) {
+      wrapper.setAttribute('data-align', this.align);
+    }
+
+    let currentWidth = this.width;
+    let currentAlign = this.align;
+
+    const img = document.createElement('img');
+    img.src = /^(https?:|data:)/i.test(cleanTarget)
+      ? cleanTarget
+      : api.getAttachmentUrl(cleanTarget, this.notePath);
+    img.alt = this.alt || cleanTarget;
+    img.className = 'cm-embedded-image';
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    if (currentWidth) {
+      img.style.width = `${currentWidth}px`;
+      img.setAttribute('width', String(currentWidth));
+    }
+    if (currentAlign) {
+      img.setAttribute('align', currentAlign);
+    }
+
+    const applyChange = (newWidth?: number, newAlign?: 'left' | 'center' | 'right') => {
+      if (!this.range || !this.onUpdateTag) return;
+      currentWidth = newWidth;
+      currentAlign = newAlign;
+
+      const parts = [`<img src="${cleanTarget}"`];
+      if (this.alt && this.alt !== cleanTarget && !/^\d+$/.test(this.alt)) {
+        parts.push(`alt="${this.alt.replace(/"/g, '&quot;')}"`);
+      }
+      if (currentWidth) {
+        parts.push(`width="${currentWidth}"`);
+      }
+      if (currentAlign) {
+        parts.push(`align="${currentAlign}"`);
+      }
+      parts.push('/>');
+      const newTag = parts.join(' ');
+      this.onUpdateTag(newTag, this.range.from, this.range.to);
+    };
+
+    // Toolbar
+    const toolbar = document.createElement('span');
+    toolbar.className = 'cm-image-toolbar';
+
+    const createBtn = (alignVal: 'left' | 'center' | 'right' | undefined, title: string, svg: string) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `cm-image-btn ${currentAlign === alignVal ? 'active' : ''}`;
+      btn.title = title;
+      btn.innerHTML = svg;
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        applyChange(currentWidth, alignVal);
+      });
+      return btn;
+    };
+
+    // Left, Center, Right, Inline buttons
+    toolbar.appendChild(
+      createBtn(
+        'left',
+        'Linksbündig (float: left)',
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="15" y1="12" x2="3" y2="12"></line><line x1="17" y1="18" x2="3" y2="18"></line></svg>'
+      )
+    );
+    toolbar.appendChild(
+      createBtn(
+        'center',
+        'Zentriert (margin: auto)',
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="19" y1="12" x2="5" y2="12"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>'
+      )
+    );
+    toolbar.appendChild(
+      createBtn(
+        'right',
+        'Rechtsbündig (float: right)',
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="12" x2="9" y2="12"></line><line x1="21" y1="18" x2="7" y2="18"></line></svg>'
+      )
+    );
+    toolbar.appendChild(
+      createBtn(
+        undefined,
+        'Inline (Keine Ausrichtung)',
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="12" x2="3" y2="12"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>'
+      )
+    );
+
+    const sizeBadge = document.createElement('span');
+    sizeBadge.className = 'cm-image-size-badge';
+    sizeBadge.textContent = currentWidth ? `${currentWidth} px` : 'Auto';
+    toolbar.appendChild(sizeBadge);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'cm-image-btn cm-image-btn-reset';
+    resetBtn.title = 'Originalbreite wiederherstellen';
+    resetBtn.innerHTML =
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>';
+    resetBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      applyChange(undefined, currentAlign);
+    });
+    toolbar.appendChild(resetBtn);
+
+    // Resize Handles
+    const handleSE = document.createElement('span');
+    handleSE.className = 'cm-image-resize-handle cm-image-resize-handle-se';
+    handleSE.title = 'Bildgröße mit der Maus anpassen (Ziehen)';
+
+    const handleSW = document.createElement('span');
+    handleSW.className = 'cm-image-resize-handle cm-image-resize-handle-sw';
+    handleSW.title = 'Bildgröße mit der Maus anpassen (Ziehen)';
+
+    const setupDrag = (handle: HTMLElement, isLeft: boolean) => {
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = img.offsetWidth || 300;
+        wrapper.classList.add('is-resizing');
+        document.body.style.cursor = isLeft ? 'nesw-resize' : 'nwse-resize';
+
+        let targetWidth = startW;
+
+        const onMouseMove = (ev: MouseEvent) => {
+          ev.preventDefault();
+          const dx = isLeft ? startX - ev.clientX : ev.clientX - startX;
+          targetWidth = Math.max(60, Math.min(1400, Math.round(startW + dx)));
+          img.style.width = `${targetWidth}px`;
+          sizeBadge.textContent = `${targetWidth} px`;
+        };
+
+        const onMouseUp = () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          document.body.style.cursor = '';
+          wrapper.classList.remove('is-resizing');
+          applyChange(targetWidth, currentAlign);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+      });
+    };
+
+    setupDrag(handleSE, false);
+    setupDrag(handleSW, true);
+
+    wrapper.appendChild(toolbar);
+    wrapper.appendChild(img);
+    wrapper.appendChild(handleSE);
+    wrapper.appendChild(handleSW);
+
+    // Toggle selection
+    wrapper.addEventListener('mousedown', (e) => {
+      if ((e.target as HTMLElement).closest('.cm-image-toolbar, .cm-image-resize-handle')) {
+        return;
+      }
+      e.preventDefault();
+      document.querySelectorAll('.cm-image-embed-wrapper.is-selected').forEach((el) => {
+        if (el !== wrapper) el.classList.remove('is-selected');
+      });
+      wrapper.classList.toggle('is-selected');
+    });
+
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapper.contains(e.target as Node)) {
+        wrapper.classList.remove('is-selected');
+      }
+    };
+    document.addEventListener('pointerdown', onDocClick);
+
     return wrapper;
   }
 }
@@ -329,7 +517,8 @@ function buildLivePreviewDecorations(
   view: EditorView,
   notePath: string,
   onNavigate: (target: string) => void,
-  onSelectTag: (tag: string) => void
+  onSelectTag: (tag: string) => void,
+  onUpdateTag: (newTag: string, from: number, to: number) => void
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
@@ -526,11 +715,30 @@ function buildLivePreviewDecorations(
       const alias = match[4]?.trim() || target;
 
       if (isEmbed) {
+        let imgWidth: number | undefined;
+        let imgAlign: 'left' | 'center' | 'right' | undefined;
+        const rawAlt = match[4]?.trim() || '';
+        if (rawAlt) {
+          const parts = rawAlt.split('|').map((s) => s.trim().toLowerCase());
+          for (const p of parts) {
+            if (/^\d+$/.test(p)) imgWidth = parseInt(p, 10);
+            else if (p === 'left' || p === 'center' || p === 'right') imgAlign = p;
+          }
+        }
         inlineDecos.push({
           from: fullStart,
           to: fullEnd,
           deco: Decoration.replace({
-            widget: new EmbedWidget(target, match[4]?.trim() || '', notePath, onNavigate),
+            widget: new EmbedWidget(
+              target,
+              rawAlt,
+              notePath,
+              onNavigate,
+              imgWidth,
+              imgAlign,
+              { from: fullStart, to: fullEnd },
+              onUpdateTag
+            ),
           }),
         });
       } else {
@@ -558,7 +766,16 @@ function buildLivePreviewDecorations(
           from: fullStart,
           to: fullEnd,
           deco: Decoration.replace({
-            widget: new EmbedWidget(href, label, notePath, onNavigate),
+            widget: new EmbedWidget(
+              href,
+              label,
+              notePath,
+              onNavigate,
+              undefined,
+              undefined,
+              { from: fullStart, to: fullEnd },
+              onUpdateTag
+            ),
           }),
         });
       } else {
@@ -567,6 +784,41 @@ function buildLivePreviewDecorations(
           to: fullEnd,
           deco: Decoration.replace({
             widget: new WikiLinkWidget(href, label || href, onNavigate),
+          }),
+        });
+      }
+    }
+
+    // 3.5. HTML <img> tags: <img src="..." width="..." align="..." />
+    const htmlImgRegex = /<img\b([^>]*?)\/?>/gi;
+    while ((match = htmlImgRegex.exec(text)) !== null) {
+      const fullStart = line.from + match.index;
+      const fullEnd = fullStart + match[0].length;
+      const tagContent = match[0];
+      const srcMatch = /src=["']([^"']+)["']/i.exec(tagContent);
+      if (srcMatch) {
+        const src = srcMatch[1];
+        const altMatch = /alt=["']([^"']*)["']/i.exec(tagContent);
+        const widthMatch = /width=["']?(\d+)["']?/i.exec(tagContent);
+        const alignMatch = /align=["']?(left|center|right)["']?/i.exec(tagContent);
+        const width = widthMatch ? parseInt(widthMatch[1], 10) : undefined;
+        const align = alignMatch
+          ? (alignMatch[1].toLowerCase() as 'left' | 'center' | 'right')
+          : undefined;
+        inlineDecos.push({
+          from: fullStart,
+          to: fullEnd,
+          deco: Decoration.replace({
+            widget: new EmbedWidget(
+              src,
+              altMatch ? altMatch[1] : '',
+              notePath,
+              onNavigate,
+              width,
+              align,
+              { from: fullStart, to: fullEnd },
+              onUpdateTag
+            ),
           }),
         });
       }
@@ -646,19 +898,21 @@ function buildLivePreviewDecorations(
   return builder.finish();
 }
 
-export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
-  notePath,
-  body,
-  rawContent,
-  mode,
-  allNotes,
-  allTags,
-  scrollToLine,
-  onChangeBody,
-  onChangeRaw,
-  onNavigateWikiLink,
-  onSelectTag,
-}) => {
+export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEditorProps>((props, ref) => {
+  const {
+    notePath,
+    body,
+    rawContent,
+    mode,
+    allNotes,
+    allTags,
+    scrollToLine,
+    onChangeBody,
+    onChangeRaw,
+    onNavigateWikiLink,
+    onSelectTag,
+  } = props;
+
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const livePluginCompartment = useRef(new Compartment());
@@ -683,6 +937,169 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
     allNotes,
     allTags,
   };
+
+  const applyFormat = (
+    formatType: 'bold' | 'italic' | 'strikethrough' | 'highlight' | 'code'
+  ) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const formatDelimiters: Record<string, { delim: string; placeholder: string }> = {
+      bold: { delim: '**', placeholder: 'Fetter Text' },
+      italic: { delim: '*', placeholder: 'Kursiver Text' },
+      strikethrough: { delim: '~~', placeholder: 'Durchgestrichen' },
+      highlight: { delim: '==', placeholder: 'Markierter Text' },
+      code: { delim: '`', placeholder: 'Code' },
+    };
+    const { delim, placeholder: ph } =
+      formatDelimiters[formatType] || { delim: '**', placeholder: 'Text' };
+    const dLen = delim.length;
+    const selection = view.state.selection.main;
+    const selText = view.state.sliceDoc(selection.from, selection.to);
+
+    if (selText) {
+      if (selText.startsWith(delim) && selText.endsWith(delim) && selText.length >= dLen * 2) {
+        const inner = selText.slice(dLen, -dLen);
+        view.dispatch({
+          changes: { from: selection.from, to: selection.to, insert: inner },
+          selection: { anchor: selection.from, head: selection.from + inner.length },
+        });
+      } else {
+        const wrapped = `${delim}${selText}${delim}`;
+        view.dispatch({
+          changes: { from: selection.from, to: selection.to, insert: wrapped },
+          selection: { anchor: selection.from + dLen, head: selection.to + dLen },
+        });
+      }
+    } else {
+      const doc = view.state.doc;
+      const before = doc.sliceString(Math.max(0, selection.from - dLen), selection.from);
+      const after = doc.sliceString(selection.from, Math.min(doc.length, selection.from + dLen));
+      if (before === delim && after === delim) {
+        view.dispatch({
+          changes: [
+            { from: selection.from - dLen, to: selection.from, insert: '' },
+            { from: selection.from, to: selection.from + dLen, insert: '' },
+          ],
+          selection: { anchor: selection.from - dLen },
+        });
+      } else {
+        const wrapped = `${delim}${ph}${delim}`;
+        view.dispatch({
+          changes: { from: selection.from, to: selection.from, insert: wrapped },
+          selection: {
+            anchor: selection.from + dLen,
+            head: selection.from + dLen + ph.length,
+          },
+        });
+      }
+    }
+    view.focus();
+  };
+
+  const insertCodeBlock = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const selText = view.state.sliceDoc(sel.from, sel.to);
+    const snippet = `\`\`\`typescript\n${selText || '// Code hier'}\n\`\`\`\n`;
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert: snippet },
+      selection: { anchor: sel.from + snippet.length },
+    });
+    view.focus();
+  };
+
+  const insertTable = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const table = `\n| Spalte 1 | Spalte 2 | Spalte 3 |\n| :--- | :--- | :--- |\n| Zeile 1 | Wert A | Wert B |\n| Zeile 2 | Wert C | Wert D |\n\n`;
+    view.dispatch({
+      changes: { from: sel.head, insert: table },
+      selection: { anchor: sel.head + table.length },
+    });
+    view.focus();
+  };
+
+  const insertTask = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const line = view.state.doc.lineAt(sel.head);
+    if (line.text.startsWith('- [ ] ') || line.text.startsWith('- [x] ')) {
+      view.dispatch({ changes: { from: line.from, to: line.from + 6, insert: '' } });
+    } else {
+      view.dispatch({ changes: { from: line.from, insert: '- [ ] ' } });
+    }
+    view.focus();
+  };
+
+  const insertWikiLink = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const selText = view.state.sliceDoc(sel.from, sel.to);
+    const insert = selText ? `[[${selText}]]` : '[[';
+    view.dispatch({
+      changes: { from: sel.from, to: sel.to, insert },
+      selection: { anchor: sel.from + insert.length },
+    });
+    view.focus();
+  };
+
+  const insertHeading = (level: number) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const line = view.state.doc.lineAt(sel.head);
+    const hashes = '#'.repeat(level) + ' ';
+    const match = line.text.match(/^#{1,6}\s+/);
+    if (match) {
+      view.dispatch({
+        changes: { from: line.from, to: line.from + match[0].length, insert: hashes },
+      });
+    } else {
+      view.dispatch({ changes: { from: line.from, insert: hashes } });
+    }
+    view.focus();
+  };
+
+  const insertQuote = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const line = view.state.doc.lineAt(sel.head);
+    if (line.text.startsWith('> ')) {
+      view.dispatch({ changes: { from: line.from, to: line.from + 2, insert: '' } });
+    } else {
+      view.dispatch({ changes: { from: line.from, insert: '> ' } });
+    }
+    view.focus();
+  };
+
+  const insertHorizontalRule = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const hr = '\n\n---\n\n';
+    view.dispatch({
+      changes: { from: sel.head, insert: hr },
+      selection: { anchor: sel.head + hr.length },
+    });
+    view.focus();
+  };
+
+  useImperativeHandle(ref, () => ({
+    applyFormat,
+    insertTable,
+    insertCodeBlock,
+    insertTask,
+    insertWikiLink,
+    insertHeading,
+    insertQuote,
+    insertHorizontalRule,
+    focus: () => viewRef.current?.focus(),
+  }));
 
   const activeDocText = mode === 'source' ? rawContent : body;
 
@@ -740,6 +1157,16 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
 
     const createLivePreviewPlugin = (enabled: boolean) => {
       if (!enabled) return [];
+      const onUpdateTag = (newTag: string, from: number, to: number) => {
+        const v = viewRef.current;
+        if (!v) return;
+        const docLen = v.state.doc.length;
+        const safeFrom = Math.max(0, Math.min(from, docLen));
+        const safeTo = Math.max(safeFrom, Math.min(to, docLen));
+        v.dispatch({
+          changes: { from: safeFrom, to: safeTo, insert: newTag },
+        });
+      };
       return ViewPlugin.fromClass(
         class {
           decorations: DecorationSet;
@@ -748,7 +1175,8 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
               view,
               callbacksRef.current.notePath,
               (t) => callbacksRef.current.onNavigateWikiLink(t),
-              (tag) => callbacksRef.current.onSelectTag(tag)
+              (tag) => callbacksRef.current.onSelectTag(tag),
+              onUpdateTag
             );
           }
           update(update: ViewUpdate) {
@@ -757,7 +1185,8 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
                 update.view,
                 callbacksRef.current.notePath,
                 (t) => callbacksRef.current.onNavigateWikiLink(t),
-                (tag) => callbacksRef.current.onSelectTag(tag)
+                (tag) => callbacksRef.current.onSelectTag(tag),
+                onUpdateTag
               );
             }
           }
@@ -847,7 +1276,20 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
       doc: activeDocText,
       extensions: [
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        keymap.of([
+          { key: 'Mod-b', run: () => { applyFormat('bold'); return true; } },
+          { key: 'Mod-i', run: () => { applyFormat('italic'); return true; } },
+          { key: 'Mod-e', run: () => { applyFormat('code'); return true; } },
+          { key: 'Mod-Shift-x', run: () => { applyFormat('strikethrough'); return true; } },
+          { key: 'Alt-h', run: () => { applyFormat('highlight'); return true; } },
+          { key: 'Mod-Shift-c', run: () => { insertCodeBlock(); return true; } },
+          { key: 'Mod-Shift-l', run: () => { insertTask(); return true; } },
+          { key: 'Alt-Shift-t', run: () => { insertTable(); return true; } },
+          { key: 'Mod-k', run: () => { insertWikiLink(); return true; } },
+          ...defaultKeymap,
+          ...historyKeymap,
+          indentWithTab,
+        ]),
         markdown(),
         EditorView.lineWrapping,
         placeholder('Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)'),
@@ -958,6 +1400,17 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
       }
     );
 
+    // 3.5. Transform HTML <img> tags to resolve relative vault paths
+    processed = processed.replace(
+      /<img\b([^>]*?src=["']([^"']+)["'][^>]*?)\/?>/gi,
+      (fullTag, _attrs, src) => {
+        const cleanSrc = String(src).trim();
+        if (/^(https?:|data:)/i.test(cleanSrc)) return fullTag;
+        const resolvedUrl = api.getAttachmentUrl(cleanSrc, notePath);
+        return fullTag.replace(src, resolvedUrl);
+      }
+    );
+
     // 4. Transform Standard Markdown Links [label](url)
     processed = processed.replace(
       /(?<!!)\[([^\]\n]+)\]\(([^)\n]+)\)/g,
@@ -1019,4 +1472,6 @@ export const LivePreviewEditor: React.FC<LivePreviewEditorProps> = ({
   }
 
   return <div ref={editorContainerRef} className="codemirror-editor-wrapper" />;
-};
+});
+
+LivePreviewEditor.displayName = 'LivePreviewEditor';

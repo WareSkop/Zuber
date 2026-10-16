@@ -21,6 +21,23 @@ import {
   Sun,
   Upload,
   X,
+  Bold,
+  Italic,
+  Strikethrough,
+  Highlighter,
+  Table,
+  CheckSquare,
+  Quote,
+  Heading1,
+  Heading2,
+  Heading3,
+  Minus,
+  Terminal,
+  Palette,
+  RefreshCw,
+  Trash2,
+  Edit3,
+  Download,
 } from 'lucide-react';
 import type {
   BacklinkItem,
@@ -37,10 +54,15 @@ import { api, getStoredToken } from './api';
 import { LoginModal } from './components/LoginModal';
 import { FileSidebar } from './components/FileSidebar';
 import { PropertiesEditor } from './components/PropertiesEditor';
-import { LivePreviewEditor, type EditorMode } from './components/LivePreviewEditor';
+import {
+  LivePreviewEditor,
+  type EditorMode,
+  type LivePreviewEditorRef,
+} from './components/LivePreviewEditor';
 import { GraphView } from './components/GraphView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
+import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
 
 type MainWorkspaceView = 'editor' | 'graph' | 'split';
@@ -93,6 +115,8 @@ export const App: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('offline');
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const editorRef = useRef<LivePreviewEditorRef>(null);
 
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [dialogInput, setDialogInput] = useState('');
@@ -120,13 +144,49 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Keyboard shortcuts for collapsing/expanding sidebars
+  const manualSaveRef = useRef<(() => void) | null>(null);
+
+  // Global Keyboard shortcuts (Command Palette, Save, Settings, New Note, Sidebars)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      // Command Palette (Ctrl+P / Cmd+P)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
         return;
       }
+
+      // Quick Save (Ctrl+S / Cmd+S)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        manualSaveRef.current?.();
+        return;
+      }
+
+      // Quick Settings (Ctrl+,)
+      if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
+
+      // Quick New Note (Ctrl+N)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        setDialog({ type: 'create-note', initialValue: '' });
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b' && !e.shiftKey) {
         e.preventDefault();
         setLeftSidebarOpen((o) => !o);
@@ -643,6 +703,433 @@ export const App: React.FC = () => {
     input.click();
   };
 
+  const handleManualSave = useCallback(async () => {
+    if (!activeNote) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    setSaveState('saving');
+    try {
+      const saved = await syncEngine.saveNote({
+        path: activeNote.path,
+        body: activeNote.body,
+        properties: activeNote.properties,
+        rawContent: activeNote.rawContent,
+      });
+      setActiveNote((prev) =>
+        prev && prev.path === saved.path
+          ? {
+              ...prev,
+              properties: saved.properties,
+              frontmatter: saved.frontmatter,
+              links: saved.links,
+              embeds: saved.embeds,
+              tags: saved.tags,
+              headings: saved.headings,
+              updatedAt: saved.updatedAt,
+            }
+          : prev
+      );
+      setSaveState('saved');
+    } catch (err) {
+      console.error('Speicherfehler:', err);
+    }
+  }, [activeNote]);
+  manualSaveRef.current = handleManualSave;
+
+  const handleDownloadNote = useCallback(() => {
+    if (!activeNote) return;
+    const content =
+      activeNote.rawContent ||
+      serializeMarkdownWithFrontmatter(activeNote.properties, activeNote.body);
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = activeNote.name.endsWith('.md')
+      ? activeNote.name
+      : `${activeNote.name}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [activeNote]);
+
+  const commands: CommandItem[] = useMemo(() => {
+    return [
+      // Formatting
+      {
+        id: 'format-bold',
+        title: 'Fett umschalten (Bold)',
+        category: 'Formatierung',
+        shortcut: 'Strg+B',
+        icon: <Bold size={16} />,
+        keywords: ['bold', 'fett', 'stark', 'text'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.applyFormat('bold'), 50);
+        },
+      },
+      {
+        id: 'format-italic',
+        title: 'Kursiv umschalten (Italic)',
+        category: 'Formatierung',
+        shortcut: 'Strg+I',
+        icon: <Italic size={16} />,
+        keywords: ['italic', 'kursiv', 'schräg'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.applyFormat('italic'), 50);
+        },
+      },
+      {
+        id: 'format-strikethrough',
+        title: 'Durchgestrichen umschalten (Strikethrough)',
+        category: 'Formatierung',
+        shortcut: 'Strg+Shift+X',
+        icon: <Strikethrough size={16} />,
+        keywords: ['strikethrough', 'durchstreichen'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.applyFormat('strikethrough'), 50);
+        },
+      },
+      {
+        id: 'format-highlight',
+        title: 'Markierung einfügen (Highlight)',
+        category: 'Formatierung',
+        shortcut: 'Alt+H',
+        icon: <Highlighter size={16} />,
+        keywords: ['highlight', 'markieren', 'gelb', 'text'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.applyFormat('highlight'), 50);
+        },
+      },
+      {
+        id: 'format-code',
+        title: 'Inline-Code umschalten',
+        category: 'Formatierung',
+        shortcut: 'Strg+E',
+        icon: <Code2 size={16} />,
+        keywords: ['code', 'inline', 'backtick'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.applyFormat('code'), 50);
+        },
+      },
+      {
+        id: 'insert-codeblock',
+        title: 'Codeblock einfügen',
+        category: 'Formatierung',
+        shortcut: 'Strg+Shift+C',
+        icon: <Code2 size={16} />,
+        keywords: ['codeblock', 'pre', 'syntax', 'programmieren'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertCodeBlock(), 50);
+        },
+      },
+      {
+        id: 'insert-table',
+        title: 'Tabelle einfügen',
+        category: 'Formatierung',
+        shortcut: 'Alt+Shift+T',
+        icon: <Table size={16} />,
+        keywords: ['tabelle', 'table', 'grid', 'spalten'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertTable(), 50);
+        },
+      },
+      {
+        id: 'insert-task',
+        title: 'Aufgabenliste / Checkbox einfügen',
+        category: 'Formatierung',
+        shortcut: 'Strg+Shift+L',
+        icon: <CheckSquare size={16} />,
+        keywords: ['task', 'todo', 'aufgabe', 'checkbox', 'haken'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertTask(), 50);
+        },
+      },
+      {
+        id: 'insert-image',
+        title: 'Bild oder Anhang einfügen',
+        category: 'Editor',
+        shortcut: 'Strg+Shift+I',
+        icon: <ImagePlus size={16} />,
+        keywords: ['bild', 'image', 'foto', 'grafik', 'upload', 'anhang'],
+        action: handleUploadImageClick,
+      },
+      {
+        id: 'insert-wikilink',
+        title: 'Wiki-Link einfügen',
+        category: 'Formatierung',
+        shortcut: 'Strg+K',
+        icon: <Link2 size={16} />,
+        keywords: ['link', 'wikilink', 'verweis', 'interne notiz'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertWikiLink(), 50);
+        },
+      },
+      {
+        id: 'insert-quote',
+        title: 'Zitatblock einfügen',
+        category: 'Formatierung',
+        shortcut: 'Strg+Shift+.',
+        icon: <Quote size={16} />,
+        keywords: ['quote', 'zitat', 'block'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertQuote(), 50);
+        },
+      },
+      {
+        id: 'insert-h1',
+        title: 'Überschrift 1 (H1) einfügen',
+        category: 'Formatierung',
+        icon: <Heading1 size={16} />,
+        keywords: ['h1', 'titel', 'überschrift', 'heading'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertHeading(1), 50);
+        },
+      },
+      {
+        id: 'insert-h2',
+        title: 'Überschrift 2 (H2) einfügen',
+        category: 'Formatierung',
+        icon: <Heading2 size={16} />,
+        keywords: ['h2', 'untertitel', 'überschrift'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertHeading(2), 50);
+        },
+      },
+      {
+        id: 'insert-h3',
+        title: 'Überschrift 3 (H3) einfügen',
+        category: 'Formatierung',
+        icon: <Heading3 size={16} />,
+        keywords: ['h3', 'überschrift'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertHeading(3), 50);
+        },
+      },
+      {
+        id: 'insert-hr',
+        title: 'Trennlinie / Horizontale Linie einfügen',
+        category: 'Formatierung',
+        icon: <Minus size={16} />,
+        keywords: ['linie', 'divider', 'hr', 'trennlinie'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertHorizontalRule(), 50);
+        },
+      },
+
+      // Views
+      {
+        id: 'view-live',
+        title: 'Ansicht: Live-Preview-Modus aktivieren',
+        category: 'Ansicht',
+        shortcut: 'Alt+1',
+        icon: <Eye size={16} />,
+        keywords: ['live', 'preview', 'editor'],
+        action: () => setEditorMode('live'),
+      },
+      {
+        id: 'view-reading',
+        title: 'Ansicht: Lese-Modus aktivieren',
+        category: 'Ansicht',
+        shortcut: 'Alt+2',
+        icon: <BookOpen size={16} />,
+        keywords: ['lesen', 'reading', 'read'],
+        action: () => setEditorMode('reading'),
+      },
+      {
+        id: 'view-source',
+        title: 'Ansicht: Quellcode-Modus aktivieren',
+        category: 'Ansicht',
+        shortcut: 'Alt+3',
+        icon: <Code2 size={16} />,
+        keywords: ['source', 'quellcode', 'raw', 'markdown'],
+        action: () => {
+          if (editorMode !== 'source' && activeNote) {
+            setActiveNote((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    rawContent: serializeMarkdownWithFrontmatter(
+                      prev.properties,
+                      prev.body
+                    ),
+                  }
+                : prev
+            );
+          }
+          setEditorMode('source');
+        },
+      },
+      {
+        id: 'view-graph',
+        title: 'Ansicht: Graph-Ansicht öffnen / umschalten',
+        category: 'Ansicht',
+        shortcut: 'Alt+G',
+        icon: <GitFork size={16} />,
+        keywords: ['graph', 'netzwerk', 'beziehungen', 'karte'],
+        action: () =>
+          setWorkspaceView((v) => (v === 'graph' ? 'editor' : 'graph')),
+      },
+
+      // Navigation & Sidebars
+      {
+        id: 'nav-left-sidebar',
+        title: 'Navigation: Linke Seitenleiste ein-/ausblenden',
+        category: 'Navigation',
+        shortcut: 'Strg+B',
+        icon: <PanelLeft size={16} />,
+        keywords: ['dateien', 'ordner', 'sidebar', 'links'],
+        action: () => setLeftSidebarOpen((o) => !o),
+      },
+      {
+        id: 'nav-right-sidebar',
+        title: 'Navigation: Rechte Seitenleiste ein-/ausblenden',
+        category: 'Navigation',
+        shortcut: 'Strg+J',
+        icon: <PanelRight size={16} />,
+        keywords: ['backlinks', 'gliederung', 'sidebar', 'rechts'],
+        action: () => setRightSidebarOpen((o) => !o),
+      },
+
+      // Vault & Notes
+      {
+        id: 'vault-new-note',
+        title: 'Vault: Neue Notiz erstellen',
+        category: 'Vault',
+        shortcut: 'Strg+N',
+        icon: <FilePlus size={16} />,
+        keywords: ['neu', 'notiz', 'anlegen', 'erstellen'],
+        action: () => setDialog({ type: 'create-note', initialValue: '' }),
+      },
+      {
+        id: 'vault-save-note',
+        title: 'Vault: Notiz sofort speichern',
+        category: 'Vault',
+        shortcut: 'Strg+S',
+        icon: <Check size={16} />,
+        keywords: ['speichern', 'save', 'persistieren'],
+        action: handleManualSave,
+      },
+      {
+        id: 'vault-rename-note',
+        title: 'Vault: Aktuelle Notiz umbenennen',
+        category: 'Vault',
+        icon: <Edit3 size={16} />,
+        keywords: ['umbenennen', 'rename', 'titel'],
+        action: () => {
+          if (!activeNote) return;
+          setDialog({
+            type: 'rename',
+            targetPath: activeNote.path,
+            initialValue: activeNote.name.replace(/\.md$/i, ''),
+          });
+        },
+      },
+      {
+        id: 'vault-delete-note',
+        title: 'Vault: Aktuelle Notiz löschen',
+        category: 'Vault',
+        icon: <Trash2 size={16} />,
+        keywords: ['löschen', 'delete', 'entfernen', 'papierkorb'],
+        action: () => {
+          if (!activeNote) return;
+          setDialog({
+            type: 'delete',
+            targetPath: activeNote.path,
+            initialValue: '',
+          });
+        },
+      },
+      {
+        id: 'vault-download-note',
+        title: 'Vault: Aktuelle Notiz als .md herunterladen',
+        category: 'Vault',
+        icon: <Download size={16} />,
+        keywords: ['export', 'download', 'herunterladen', 'datei'],
+        action: handleDownloadNote,
+      },
+
+      // Settings & Themes
+      {
+        id: 'settings-open',
+        title: 'Einstellungen: Einstellungen & Profile öffnen',
+        category: 'Einstellungen',
+        shortcut: 'Strg+,',
+        icon: <Settings size={16} />,
+        keywords: ['settings', 'konfiguration', 'passwort', 'profile'],
+        action: () => setSettingsOpen(true),
+      },
+      {
+        id: 'sync-now',
+        title: 'Synchronisation: Jetzt vollständigen Sync ausführen',
+        category: 'Einstellungen',
+        icon: <RefreshCw size={16} />,
+        keywords: ['sync', 'abgleich', 'server', 'offline'],
+        action: () => syncEngine.syncNow(),
+      },
+      {
+        id: 'theme-dark',
+        title: 'Darstellung: Theme „Basalt Dark“ (Standard)',
+        category: 'Einstellungen',
+        icon: <Palette size={16} />,
+        keywords: ['theme', 'dark', 'dunkel', 'basalt'],
+        action: () => setTheme('basalt'),
+      },
+      {
+        id: 'theme-light',
+        title: 'Darstellung: Theme „Obsidian Light“',
+        category: 'Einstellungen',
+        icon: <Palette size={16} />,
+        keywords: ['theme', 'light', 'hell', 'weiß'],
+        action: () => setTheme('theme-obsidian-light'),
+      },
+      {
+        id: 'theme-amoled',
+        title: 'Darstellung: Theme „AMOLED Schwarz“',
+        category: 'Einstellungen',
+        icon: <Palette size={16} />,
+        keywords: ['theme', 'amoled', 'oled', 'schwarz'],
+        action: () => setTheme('theme-amoled-black'),
+      },
+      {
+        id: 'theme-sepia',
+        title: 'Darstellung: Theme „Warm Sepia“',
+        category: 'Einstellungen',
+        icon: <Palette size={16} />,
+        keywords: ['theme', 'sepia', 'warm', 'papier'],
+        action: () => setTheme('theme-warm-sepia'),
+      },
+      {
+        id: 'theme-dracula',
+        title: 'Darstellung: Theme „Dracula“',
+        category: 'Einstellungen',
+        icon: <Palette size={16} />,
+        keywords: ['theme', 'dracula', 'lila', 'purple'],
+        action: () => setTheme('theme-dracula'),
+      },
+    ];
+  }, [
+    editorMode,
+    activeNote,
+    handleUploadImageClick,
+    handleManualSave,
+    handleDownloadNote,
+  ]);
+
   if (!authChecked) {
     return <div className="loading-screen">Lade Basalt...</div>;
   }
@@ -880,6 +1367,16 @@ export const App: React.FC = () => {
               <span>{workspaceView === 'graph' ? 'Zurück zur Notiz' : 'Graph-Ansicht'}</span>
             </button>
 
+            <button
+              type="button"
+              className="topbar-action-btn"
+              onClick={() => setCommandPaletteOpen(true)}
+              title="Befehlspalette öffnen (Strg+P)"
+            >
+              <Terminal size={15} />
+              <span>Befehle</span>
+            </button>
+
             {/* Sync & Settings */}
             <div className="topbar-sync-settings">
               <button
@@ -967,6 +1464,7 @@ export const App: React.FC = () => {
 
                   {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
                   <LivePreviewEditor
+                    ref={editorRef}
                     notePath={activeNote.path}
                     body={activeNote.body}
                     rawContent={activeNote.rawContent}
@@ -1293,6 +1791,13 @@ export const App: React.FC = () => {
       <ConflictModal
         conflicts={conflicts}
         onClose={() => setConflicts([])}
+      />
+
+      {/* Command Palette (Strg+P) */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        commands={commands}
       />
     </div>
   );

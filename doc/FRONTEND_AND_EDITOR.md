@@ -111,7 +111,26 @@ Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zus
 - Die Datei wird nach `/api/vault/upload?folder=attachments` hochgeladen und an der aktuellen Cursorposition bzw. am Ende der Notiz automatisch als fertiger Obsidian-Tag `![[attachments/dateiname.png]]` eingefügt.
 - Die CodeMirror-Dekoration (`EmbedWidget`) erkennt die Bild-Syntax sofort und rendert die Grafik direkt im Live-Preview-Modus.
 
-### 2.5 Lese-Ansicht (`mode === 'reading'`)
+### 2.5 Interaktive Bildanpassung (Größenänderung per Maus & Ausrichtung via HTML-Attribute)
+
+Für maximale Kompatibilität mit Obsidian, GitHub Flavored Markdown und Standard-Webviewern speichert Basalt Bildgrößen und -ausrichtungen nicht über proprietäre Syntax, sondern über Standard-HTML-Attribute:
+`<img src="attachments/beispiel.png" alt="Bildbeschreibung" width="450" align="center" />`
+
+- **Interaktiver Auswahl-Rahmen:** Ein Klick auf ein gerendertes Bild im Live-Preview-Modus selektiert das Bild (`selected = true`) und blendet eine schwebende Schnellzugriffs-Toolbar sowie Größenanfasser (Drag-Handles) ein.
+- **Größenänderung mit der Maus (Drag Handle):**
+  - An den unteren Ecken (Südost `se-resize` und Südwest `sw-resize`) befinden sich Drag-Handles.
+  - Beim Ziehen mit gedrückter Maustaste wird die Bildbreite in Echtzeit skaliert und als numerische Pixelanzeige im Badge visualisiert (unter Wahrung der Aspekt-Ratio).
+  - Beim Loslassen der Maustaste wird das Markdown-Dokument atomar aktualisiert (oder von Wiki-Embed `![[...]]` in `<img ... width="..." />` überführt).
+- **Ausrichtungs-Toolbar (`align`):**
+  - **Links:** `align="left"` (Fließtext rechts um das Bild)
+  - **Zentriert:** `align="center"` (zentrierter Block)
+  - **Rechts:** `align="right"` (Fließtext links um das Bild)
+  - **Inline:** entfernt das `align`-Attribut
+  - **Größe zurücksetzen:** Setzt die Breite auf Originalgröße zurück.
+- **Unterstützung im Lese-Modus (`reading`):**
+  - Auch in `preprocessObsidianMarkdown` und `marked` werden `<img ... width="..." align="...">` Tags vollständig mit passendem CSS-Styling (Float bzw. zentrierte Blockdarstellung) gerendert.
+
+### 2.6 Lese-Ansicht (`mode === 'reading'`)
 
 Im Lese-Modus wird anstelle von CodeMirror `marked` (mit aktiviertem GitHub Flavored Markdown `gfm: true` für Tabellen, Aufgabenlisten und Durchstreichungen) nach einer Vorverarbeitung durch [`preprocessObsidianMarkdown`](../src/components/LivePreviewEditor.tsx) gerendert. Klicks auf interne Links und Tags werden per Event-Delegation (`data-wiki-target`, `data-tag`) abgefangen.
 
@@ -187,3 +206,58 @@ Basalt bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-
   - Erkennt bei Reconnect HTTP `409 Conflict` (abweichende `baseMtime`) und zeigt Side-by-Side-Vergleich von lokalem Text und Server-Stand.
   - Drei Lösungsstrategien: „Lokale Version behalten (Server überschreiben)“, „Server-Version behalten (Lokal verwerfen)“ oder „Beide behalten (Konflikt-Kopie mit Zeitstempel anlegen)“.
   - Bietet Checkbox für Batch-Anwendung auf alle verbleibenden Konflikte.
+
+---
+
+## 7. Obsidian-Befehlspalette (`Ctrl+P` / `Cmd+P`) & Shortcuts ([`src/components/CommandPalette.tsx`](../src/components/CommandPalette.tsx))
+
+Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie über den Button **„Befehle“** (`Terminal`-Icon) in der Top-Toolbar aufgerufen werden kann:
+
+- **Eigenschaften & Bedienung:**
+  - **Fuzzy-/Volltextsuche:** Durchsucht Titel, Beschreibungen, Kategorien und Synonyme (z. B. „fett“, „table“, „theme“, „sync“).
+  - **Tastaturnavigation:** Pfeiltasten `↑` / `↓` zur Navigation, `Enter` zum Ausführen, `Escape` zum Schließen. Automatische vertikale Nachführung (`scrollIntoView`) des fokussierten Eintrags.
+  - **Kategorie-Badges & Shortcuts:** Zeigt visuell Kategorien (`Editor`, `Ansicht`, `Einfügen`, `Theme`, `Vault`, `System`) und die jeweils zugeordneten Tastaturkürzel (`<kbd>`).
+- **Imperatives Editor-Interface (`LivePreviewEditorRef`):**
+  Über `forwardRef` stellt der Editor Methoden bereit, die aus der Befehlspalette aufgerufen werden können:
+  - `applyFormat('bold' | 'italic' | 'strike' | 'highlight' | 'inlineCode')`
+  - `insertTable(rows, cols)`
+  - `insertCodeBlock(language)`
+  - `insertTask()`
+  - `insertWikiLink()`
+  - `insertHeading(level)`
+  - `insertQuote()`
+  - `insertHorizontalRule()`
+  - `focus()`
+
+### Wichtigste Shortcuts im Überblick
+
+| Shortcut | Aktion |
+| :--- | :--- |
+| `Ctrl+P` / `Cmd+P` | Befehlspalette öffnen |
+| `Ctrl+O` / `Cmd+O` | Schnellöffner (Dateien suchen & öffnen) |
+| `Ctrl+S` / `Cmd+S` | Manuell speichern (Auto-Save ist zusätzlich aktiv) |
+| `Ctrl+N` / `Cmd+N` | Neue Notiz erstellen |
+| `Ctrl+,` / `Cmd+,` | Einstellungen öffnen |
+| `Ctrl+B` / `Cmd+B` | Text fett formatieren (`**Text**`) |
+| `Ctrl+I` / `Cmd+I` | Text kursiv formatieren (`*Text*`) |
+| `Ctrl+Shift+X` | Text durchstreichen (`~~Text~~`) |
+| `Alt+H` | Text gelb markieren (`==Text==`) |
+| `Ctrl+E` | Inline-Code (`` `Code` ``) |
+| `Ctrl+Shift+C` | Codeblock einfügen (```` ``` ````) |
+| `Ctrl+Shift+L` | Aufgabenliste einfügen (`- [ ]`) |
+| `Alt+Shift+T` | Markdown-Tabelle einfügen |
+| `Ctrl+K` | Wiki-Link einfügen (`[[...]]`) |
+| `Ctrl+\` | Linke Dateibaum-Leiste ein-/ausblenden |
+| `Ctrl+Alt+\` | Rechte Leiste (Graph/Backlinks/Outline) ein-/ausblenden |
+
+---
+
+## 8. Responsive Seitenleisten-Steuerung (Mobile & Small Screens)
+
+Auf kleinen Displays (z. B. Smartphones, Chromebooks mit geteiltem Bildschirm) können beide Seitenleisten unabhängig voneinander ein- und ausgeblendet werden:
+- **Linke Leiste (Dateibaum):**
+  - Umschaltbar über den linken Toggle-Button im Header (`PanelLeftClose` / `PanelLeft`) sowie über das Tastenkürzel `Ctrl+\`.
+- **Rechte Leiste (Graph / Backlinks / Gliederung):**
+  - Umschaltbar über den rechten Toggle-Button im Header (`PanelRightClose` / `PanelRight`) sowie über das Tastenkürzel `Ctrl+Alt+\`.
+- Bei ausgeblendeten Leisten nutzt der Editor bzw. Graph die volle Bildschirmbreite aus.
+

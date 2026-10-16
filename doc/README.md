@@ -30,6 +30,13 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
   - **Live-Preview (Standard):** CodeMirror 6 Editor, der Markdown-Syntax (`# Überschriften`, `**Fett**`, `==Highlight==`, `` `Code` ``, `- [ ] Aufgaben`, `[[Wiki-Links]]`, `[Links](pfad)`, `![[Einbettungen]]`, `![Bilder](pfad)`, `> [!callouts]`, `#tags` und `| Markdown | Tabellen |`) visuell rendert, sobald sich der Cursor außerhalb der betreffenden Zeile bzw. Tabelle befindet.
   - **Lese-Modus (`reading`):** Vollständig gerenderte HTML-Ansicht (GFM inkl. Tabellen, Callouts, Bildern, klickbaren Wiki-Links und Tags).
   - **Quellcode-Modus (`source`):** Direkte Bearbeitung des kompletten Roh-Markdown-Dokuments inklusive `---` YAML-Frontmatter-Block.
+- **Interaktive Bildanpassung (Größenänderung per Maus & Ausrichtung):**
+  - Bilder können im Editor markiert, an den Drag-Handles mit der Maus in der Größe skaliert und über eine Toolbar links, zentriert, rechts oder inline ausgerichtet werden.
+  - Gespeichert wird standardkonform als `<img src="..." width="..." align="..." />` für maximale Kompatibilität mit Markdown und Webviewern.
+- **Obsidian-Befehlspalette (`Ctrl+P` / `Cmd+P`):**
+  - Globaler Schnellzugriff auf alle Befehle (Formatierung, Tabellen, Aufgaben, Codeblöcke, Ansichtsumschaltung, Themes, Sync) mit Tastaturnavigation und Shortcut-Anzeige.
+- **Responsive Oberfläche & ein-/ausblendbare Seitenleisten:**
+  - Linke und rechte Leiste können über Header-Buttons oder Shortcuts (`Ctrl+\` bzw. `Ctrl+Alt+\`) eingeklappt werden, ideal für kleine Bildschirme und Smartphones.
 - **Visuelle Frontmatter-Verwaltung („Eigenschaften“):**
   - YAML-Frontmatter wird niemals als roher YAML-Code im Live-Preview- oder Lese-Modus angezeigt, sondern oberhalb des Editors durch `PropertiesEditor.tsx` als interaktives Formular (`text`, `list` / Tags-Chips, `date`, `checkbox`, `number`) verwaltet.
 - **Hierarchischer Dateibaum, Volltextsuche & Tag-Explorer (`FileSidebar.tsx`):**

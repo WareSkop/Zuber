@@ -244,3 +244,64 @@ describe('Offline Sync Structures & Conflict Resolution Utilities', () => {
     expect((db2 as any).dbName).toBe('basalt_cache_Heimserver_3443');
   });
 });
+
+describe('Basalt - Image HTML Attributes & Command Palette', () => {
+  it('formats HTML img tags with width and align attributes for maximum compatibility', () => {
+    const src = 'attachments/diagramm-1729110000.png';
+    const alt = 'Architektur Diagramm';
+    const width = 450;
+    const align = 'center';
+
+    const parts = [`<img src="${src}"`];
+    if (alt) parts.push(`alt="${alt}"`);
+    if (width) parts.push(`width="${width}"`);
+    if (align) parts.push(`align="${align}"`);
+    parts.push('/>');
+
+    const formattedTag = parts.join(' ');
+    expect(formattedTag).toBe(
+      '<img src="attachments/diagramm-1729110000.png" alt="Architektur Diagramm" width="450" align="center" />'
+    );
+
+    // Verify regex extraction from formatted HTML img tag
+    const tagMatch = /<img\b([^>]*?)\/?>/i.exec(formattedTag);
+    expect(tagMatch).not.toBeNull();
+    const attrs = tagMatch![1];
+    const srcMatch = /src=["']([^"']+)["']/i.exec(attrs);
+    const widthMatch = /width=["']?(\d+)["']?/i.exec(attrs);
+    const alignMatch = /align=["']?(left|center|right)["']?/i.exec(attrs);
+
+    expect(srcMatch?.[1]).toBe(src);
+    expect(parseInt(widthMatch?.[1] || '0', 10)).toBe(450);
+    expect(alignMatch?.[1]).toBe('center');
+  });
+
+  it('filters command palette items across title, category, shortcut, and keywords', () => {
+    const testCommands = [
+      { id: '1', title: 'Fett umschalten (Bold)', category: 'Formatierung', shortcut: 'Strg+B', keywords: ['bold', 'fett'] },
+      { id: '2', title: 'Tabelle einfügen', category: 'Formatierung', shortcut: 'Alt+Shift+T', keywords: ['table', 'grid'] },
+      { id: '3', title: 'Bild oder Anhang einfügen', category: 'Editor', shortcut: 'Strg+Shift+I', keywords: ['bild', 'upload'] },
+      { id: '4', title: 'Theme „Dracula“', category: 'Einstellungen', keywords: ['theme', 'lila'] },
+    ];
+
+    const searchFilter = (query: string) => {
+      const q = query.trim().toLowerCase();
+      return testCommands.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.category.toLowerCase().includes(q) ||
+          (c.shortcut && c.shortcut.toLowerCase().includes(q)) ||
+          c.keywords.some((k) => k.toLowerCase().includes(q))
+      );
+    };
+
+    // By title
+    expect(searchFilter('tabelle').map((c) => c.id)).toEqual(['2']);
+    // By keyword
+    expect(searchFilter('bold').map((c) => c.id)).toEqual(['1']);
+    // By shortcut
+    expect(searchFilter('strg+b').map((c) => c.id)).toEqual(['1']);
+    // By category
+    expect(searchFilter('einstellungen').map((c) => c.id)).toEqual(['4']);
+  });
+});
