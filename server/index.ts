@@ -13,10 +13,10 @@ import {
   COOKIE_NAME,
   createSessionToken,
   extractTokenFromRequest,
-  getExpectedPassword,
   requireAuth,
   verifySessionToken,
 } from './auth';
+import { configService } from './configService';
 import { ensureTlsCredentials } from './tls';
 import { VaultService } from './vaultService';
 
@@ -35,6 +35,8 @@ export function createApp(vaultService: VaultService) {
     cors({
       origin: true,
       credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
     })
   );
   app.use(express.json({ limit: '25mb' }));
@@ -42,10 +44,12 @@ export function createApp(vaultService: VaultService) {
 
   // --- Auth Endpoints ---
   app.get('/api/auth/status', (req, res) => {
+    const authRequired = configService.isAuthRequired();
     const token = extractTokenFromRequest(req);
-    const authenticated = verifySessionToken(token);
+    const authenticated = !authRequired || verifySessionToken(token);
     res.json({
       authenticated,
+      authRequired,
       https: ENABLE_HTTPS || req.secure || req.headers['x-forwarded-proto'] === 'https',
       vaultPath: vaultService.getVaultDir(),
     });
@@ -53,9 +57,8 @@ export function createApp(vaultService: VaultService) {
 
   app.post('/api/auth/login', (req, res) => {
     const { password } = req.body as { password?: string };
-    const expected = getExpectedPassword();
 
-    if (!password || password !== expected) {
+    if (!configService.verifyPassword(password || '')) {
       res.status(401).json({ error: 'Ungültiges Passwort.' });
       return;
     }
@@ -65,7 +68,7 @@ export function createApp(vaultService: VaultService) {
       httpOnly: true,
       sameSite: 'lax',
       secure: ENABLE_HTTPS,
-      maxAge: 1000 * 60 * 60 * 24 * 14,
+      maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
     res.json({
@@ -77,6 +80,66 @@ export function createApp(vaultService: VaultService) {
   app.post('/api/auth/logout', (_req, res) => {
     res.clearCookie(COOKIE_NAME);
     res.json({ authenticated: false });
+  });
+
+  // --- Security Settings Endpoints ---
+  app.get('/api/settings/security', requireAuth, (_req, res) => {
+    res.json({ authEnabled: configService.isAuthRequired() });
+  });
+
+  app.post('/api/settings/security', requireAuth, (req, res) => {
+    try {
+      const { currentPassword, authEnabled, newPassword } = req.body as {
+        currentPassword?: string;
+        authEnabled: boolean;
+        newPassword?: string;
+      };
+
+      if (configService.isAuthRequired()) {
+        if (!currentPassword || !configService.verifyPassword(currentPassword)) {
+          res.status(401).json({ error: 'Aktuelles Passwort ist ungültig.' });
+          return;
+        }
+      }
+
+      configService.updateSecurity(authEnabled, newPassword);
+      const token = createSessionToken();
+      if (authEnabled) {
+        res.cookie(COOKIE_NAME, token, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: ENABLE_HTTPS,
+          maxAge: 1000 * 60 * 60 * 24 * 30,
+        });
+      }
+      res.json({ ok: true, authEnabled, token });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
+  });
+
+  // --- Sync Endpoints ---
+  app.get('/api/vault/sync-manifest', requireAuth, (_req, res) => {
+    try {
+      const manifest = vaultService.getSyncManifest();
+      res.json(manifest);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/api/vault/notes-batch', requireAuth, (req, res) => {
+    try {
+      const { paths } = req.body as { paths?: string[] };
+      if (!Array.isArray(paths)) {
+        res.status(400).json({ error: 'paths array erforderlich.' });
+        return;
+      }
+      const notes = vaultService.getNotesBatch(paths);
+      res.json({ notes });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
   });
 
   // --- Protected Vault API Endpoints ---
@@ -106,14 +169,24 @@ export function createApp(vaultService: VaultService) {
 
   app.post('/api/vault/note', requireAuth, (req, res) => {
     try {
-      const { path: relPath, rawContent, body, properties } = req.body;
+      const { path: relPath, rawContent, body, properties, baseMtime, forceOverwrite } = req.body;
       if (!relPath || typeof relPath !== 'string') {
         res.status(400).json({ error: 'Pfad fehlt.' });
         return;
       }
-      const saved = vaultService.saveNote(relPath, { rawContent, body, properties });
+      const saved = vaultService.saveNote(relPath, {
+        rawContent,
+        body,
+        properties,
+        baseMtime,
+        forceOverwrite,
+      });
       res.json(saved);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.statusCode === 409) {
+        res.status(409).json({ error: 'Conflict', serverNote: err.serverNote });
+        return;
+      }
       res.status(400).json({ error: (err as Error).message });
     }
   });
@@ -211,52 +284,63 @@ export function createApp(vaultService: VaultService) {
       }
       const resolvedRel = vaultService.resolveWikiTarget(target, from) || target;
       const absPath = vaultService.resolveSafePath(resolvedRel);
-      // Browser may cache for 1h; afterwards it revalidates cheaply via ETag/Last-Modified.
       res.sendFile(
         absPath,
         {
           cacheControl: false,
           lastModified: true,
           etag: true,
-          headers: { 'Cache-Control': 'private, max-age=3600' },
+          maxAge: 0,
         },
         (err) => {
-          if (err && !res.headersSent) res.status(404).send('Anhang nicht gefunden');
+          if (err && !res.headersSent) {
+            res.status(404).send('Anhang nicht gefunden');
+          }
         }
       );
-    } catch (err) {
-      res.status(400).send((err as Error).message);
+    } catch {
+      res.status(404).send('Anhang nicht gefunden');
     }
   });
 
-  // Upload image/attachment into vault Attachments folder
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-  app.post('/api/vault/upload', requireAuth, upload.single('file'), (req, res) => {
-    try {
-      const file = req.file;
-      if (!file) {
+  // Binary file uploads (e.g. pasted or dropped images)
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (req, _file, cb) => {
+        const folder = String(req.query.folder || 'attachments');
+        const absFolder = vaultService.resolveSafePath(folder);
+        fs.mkdirSync(absFolder, { recursive: true });
+        cb(null, absFolder);
+      },
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const base = path.basename(file.originalname, ext).replace(/[^\w.-]/g, '_');
+        cb(null, `${base}-${Date.now()}${ext}`);
+      },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+  });
+
+  app.post(
+    '/api/vault/upload',
+    requireAuth,
+    upload.single('file'),
+    (req, res) => {
+      if (!req.file) {
         res.status(400).json({ error: 'Keine Datei hochgeladen.' });
         return;
       }
-      const folder = String(req.body.folder || 'Attachments').replace(/^[/\\]+/, '');
-      const safeName = file.originalname.replace(/[^a-zA-Z0-9._äöüÄÖÜß -]/g, '_');
-      const relPath = `${folder}/${Date.now()}-${safeName}`;
-      const absPath = vaultService.resolveSafePath(relPath);
-      const dir = path.dirname(absPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(absPath, file.buffer);
+      const relPath = path.relative(vaultService.getVaultDir(), req.file.path).replace(/\\/g, '/');
       vaultService.indexFile(relPath);
       res.json({
+        ok: true,
         path: relPath,
-        name: path.basename(relPath),
-        wikiEmbed: `![[${path.basename(relPath)}]]`,
+        name: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
       });
-    } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
     }
-  });
+  );
 
   // Serve built static frontend in production
   const distDir = path.join(ROOT_DIR, 'dist');
@@ -295,14 +379,13 @@ if (process.env.NODE_ENV !== 'test') {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws: WebSocket, req) => {
-    // Parse token from cookie or query string
     const url = new URL(req.url || '/ws', 'http://localhost');
     const queryToken = url.searchParams.get('token');
     const cookieHeader = req.headers.cookie || '';
     const cookieMatch = cookieHeader
       .split(';')
       .map((c) => c.trim())
-      .find((c) => c.startsWith(`${COOKIE_NAME}=`));
+      .find((c) => c.startsWith(`${COOKIE_NAME}=`) || c.startsWith('obsidian_vault_session='));
     const cookieToken = cookieMatch ? decodeURIComponent(cookieMatch.split('=')[1]) : null;
 
     if (!verifySessionToken(queryToken || cookieToken)) {
@@ -334,7 +417,7 @@ if (process.env.NODE_ENV !== 'test') {
   });
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Obsidian Web Vault Server läuft auf ${protocolLabel}://localhost:${PORT}`);
+    console.log(`🚀 Basalt Server läuft auf ${protocolLabel}://localhost:${PORT}`);
     console.log(`📁 Vault-Verzeichnis: ${vaultService.getVaultDir()}`);
   });
 }

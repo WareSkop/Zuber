@@ -119,19 +119,50 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
 
 ---
 
-## 6. Sicherheit: TLS/HTTPS & Single-User-Authentifizierung
+## 6. Sicherheit: TLS/HTTPS, CORS & Dynamische Authentifizierung
 
 ### TLS / HTTPS (`server/tls.ts`)
 - Ist `ENABLE_HTTPS=true` (Standard in `.env`), nutzt der Server HTTPS.
 - Sind `TLS_CERT_PATH` und `TLS_KEY_PATH` in `.env` gesetzt und vorhanden, werden diese geladen.
 - Andernfalls prüft `ensureTlsCredentials` das Verzeichnis `./certs/`. Fehlen `server.crt` oder `server.key`, erzeugt der Server automatisch per `openssl req -x509 -newkey rsa:2048` ein 10 Jahre gültiges Self-Signed-Zertifikat für `DNS:localhost,IP:127.0.0.1`.
 
-### Authentifizierung (`server/auth.ts`)
-- Erwartetes Passwort: `process.env.OBSIDIAN_WEB_PASSWORD || 'obsidian'`.
-- Bei erfolgreichem Login (`POST /api/auth/login`) erzeugt `createSessionToken()` ein 14 Tage gültiges JSON-Payload (`{ user: 'owner', iat, exp }`), Base64URL-codiert und mit `HMAC-SHA256` (`process.env.SESSION_SECRET`) signiert.
-- Das Token wird sowohl als HTTP-Only-Cookie (`obsidian_vault_session`) gesetzt als auch im JSON-Response zurückgegeben (vom Frontend zusätzlich in `localStorage` unter `obsidian_web_vault_token` gespeichert).
+### Dynamische Passwort- & Sicherheitskonfiguration (`server/configService.ts`)
+- Basalt speichert Sicherheitseinstellungen persistent in `server-config.json` im Projekt-Root (`{ authEnabled: boolean, passwordHash: string, salt: string, updatedAt: number }`).
+- Beim ersten Start ohne `server-config.json` wird das Initialpasswort aus `process.env.OBSIDIAN_WEB_PASSWORD || 'obsidian'` mit `crypto.scryptSync(password, salt, 64)` gehasht.
+- Über `GET /api/settings/security` und `POST /api/settings/security` kann der Benutzer im UI das Passwort ändern oder den Passwortschutz komplett deaktivieren (`authEnabled: false`).
+- Ist `authEnabled === false`, lässt `authMiddleware` alle Requests ohne Token durch (`GET /api/auth/status` antwortet mit `{ authenticated: true, authRequired: false }`).
+
+### CORS & Multi-Origin Support (`server/index.ts`)
+- Da Basalt als PWA auf mehreren Geräten installiert werden und sich mit entfernten Basalt-Servern verbinden kann, erlaubt die CORS-Middleware Cross-Origin-Anfragen (`origin: true`, `credentials: true`, `methods: GET, POST, PUT, DELETE, OPTIONS`, `allowedHeaders: Content-Type, Authorization`).
+
+### Authentifizierungs-Token (`server/auth.ts`)
+- Bei erfolgreichem Login (`POST /api/auth/login`) oder Passwort-Update erzeugt `createSessionToken()` ein 30 Tage gültiges JSON-Payload (`{ user: 'owner', iat, exp }`), Base64URL-codiert und mit `HMAC-SHA256` signiert.
+- Das Token wird als HTTP-Only-Cookie (`basalt_session`) gesetzt und im JSON-Response zurückgegeben (vom Frontend in `localStorage` unter `basalt_token` gespeichert).
 - `extractTokenFromRequest(req)` akzeptiert das Token aus:
-  1. Cookie `obsidian_vault_session`
-  2. Header `Authorization: Bearer <token>`
-  3. Query-Parameter `?token=<token>` (wichtig für `<img src="/api/vault/attachment?...">` und WebSocket `/ws?token=...`)
+  1. Header `Authorization: Bearer <token>` (bevorzugt für Cross-Origin PWA)
+  2. Cookie `basalt_session` (oder `obsidian_vault_session` als Fallback)
+  3. Query-Parameter `?token=<token>` (für `<img>`-Tags und WebSocket `/ws?token=...`)
 - Die Signaturprüfung in `verifySessionToken` nutzt `crypto.timingSafeEqual`, um Timing-Angriffe auszuschließen.
+
+---
+
+## 7. Sync-Manifest, Batch-Download & Konflikterkennung (`VaultService`)
+
+### Sync-Manifest (`GET /api/vault/sync-manifest`)
+- Liefert $O(N)$ blitzschnell aus dem In-Memory-Index (`this.files`) alle Dateien im Vault mit Pfad, Typ (`markdown` oder `attachment`), Zeitstempel (`mtime`) und Dateigröße (`size`).
+- Verhindert teure Dateisystem-Scans und ermöglicht dem PWA-Client einen effizienten Delta-Vergleich.
+
+### Notizen-Batch (`POST /api/vault/notes-batch`)
+- Erlaubt das gebündelte Abrufen mehrerer Markdown-Notizen über ein einzelnes Array von Pfaden (`{ paths: string[] }`).
+- Alle angeforderten Notizen werden direkt aus dem In-Memory-Index (`this.notes`) in Millisekunden zurückgegeben (`{ notes: NoteData[] }`).
+
+### Konflikterkennung & HTTP 409 Conflict (`POST /api/vault/note`)
+- Client-Requests können `baseMtime?: number` und `forceOverwrite?: boolean` übergeben.
+- Existiert die Datei auf dem Server bereits und weicht `baseMtime` um mehr als 50 ms vom aktuellen Server-Stand (`updatedAt`) ab, lehnt der Server das Überschreiben ab und antwortet mit **HTTP `409 Conflict`**:
+  ```json
+  {
+    "error": "Conflict",
+    "serverNote": { "path": "Notiz.md", "updatedAt": 1792182000000, ... }
+  }
+  ```
+- Sendet der Client `forceOverwrite: true`, wird die Datei unabhängig von `baseMtime` überschrieben.

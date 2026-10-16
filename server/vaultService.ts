@@ -9,6 +9,7 @@ import type {
   GraphEdge,
   GraphNode,
   NoteData,
+  SyncManifestEntry,
 } from '../shared/types';
 import {
   extractHeadings,
@@ -30,6 +31,7 @@ interface FileEntry {
   basename: string;
   extension: string;
   mtimeMs: number;
+  size: number;
 }
 
 export class VaultService {
@@ -279,6 +281,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
       basename: name.replace(/\.[^.]+$/, ''),
       extension,
       mtimeMs: stat.mtimeMs,
+      size: stat.size,
     });
 
     // Register parent folders
@@ -636,15 +639,64 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
     return this.notes.get(relPath)!;
   }
 
+  public getSyncManifest(): SyncManifestEntry[] {
+    const manifest: SyncManifestEntry[] = [];
+    for (const file of this.files.values()) {
+      manifest.push({
+        path: file.path,
+        type: file.extension === 'md' ? 'markdown' : 'attachment',
+        mtime: Math.round(file.mtimeMs),
+        size: file.size || 0,
+      });
+    }
+    return manifest;
+  }
+
+  public getNotesBatch(paths: string[]): NoteData[] {
+    const result: NoteData[] = [];
+    for (const p of paths) {
+      const normalized = p.endsWith('.md') ? p : `${p}.md`;
+      const note = this.notes.get(normalized);
+      if (note) {
+        result.push(note);
+      } else {
+        try {
+          const loaded = this.getNote(normalized);
+          if (loaded) result.push(loaded);
+        } catch {
+          // Ignore missing note
+        }
+      }
+    }
+    return result;
+  }
+
   public saveNote(
     relPath: string,
     payload: {
       rawContent?: string;
       body?: string;
       properties?: FrontmatterProperty[];
+      baseMtime?: number;
+      forceOverwrite?: boolean;
     }
   ): NoteData {
     const normalizedRel = relPath.endsWith('.md') ? relPath : `${relPath}.md`;
+    const existing = this.notes.get(normalizedRel);
+
+    if (existing && !payload.forceOverwrite && typeof payload.baseMtime === 'number') {
+      const diff = Math.abs(existing.updatedAt - payload.baseMtime);
+      if (diff > 50) {
+        const conflictErr = new Error('Conflict') as Error & {
+          statusCode: number;
+          serverNote: NoteData;
+        };
+        conflictErr.statusCode = 409;
+        conflictErr.serverNote = existing;
+        throw conflictErr;
+      }
+    }
+
     const absPath = this.resolveSafePath(normalizedRel);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
 

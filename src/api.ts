@@ -4,12 +4,18 @@ import type {
   FrontmatterProperty,
   GraphData,
   NoteData,
+  SecuritySettingsResponse,
+  SyncManifestEntry,
+  UpdateSecurityRequest,
+  VaultProfile,
 } from '../shared/types';
 
-const TOKEN_STORAGE_KEY = 'obsidian_web_vault_token';
+const TOKEN_STORAGE_KEY = 'basalt_token';
+const ACTIVE_PROFILE_KEY = 'basalt_active_profile_id';
+const PROFILES_STORAGE_KEY = 'basalt_vault_profiles';
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+  return localStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem('obsidian_web_vault_token');
 }
 
 export function setStoredToken(token: string | null): void {
@@ -17,10 +23,68 @@ export function setStoredToken(token: string | null): void {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem('obsidian_web_vault_token');
   }
 }
 
-async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
+export function getStoredProfiles(): VaultProfile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return [
+    {
+      id: 'default',
+      name: 'Aktueller Server',
+      serverUrl: typeof window !== 'undefined' ? window.location.origin : '',
+      token: getStoredToken() || undefined,
+    },
+  ];
+}
+
+export function saveStoredProfiles(profiles: VaultProfile[]): void {
+  localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+}
+
+export function getActiveProfile(): VaultProfile {
+  const profiles = getStoredProfiles();
+  const activeId = localStorage.getItem(ACTIVE_PROFILE_KEY);
+  const found = profiles.find((p) => p.id === activeId);
+  return found || profiles[0];
+}
+
+export function setActiveProfile(profileId: string): void {
+  localStorage.setItem(ACTIVE_PROFILE_KEY, profileId);
+  const profiles = getStoredProfiles();
+  const profile = profiles.find((p) => p.id === profileId);
+  if (profile?.token) {
+    setStoredToken(profile.token);
+  }
+}
+
+export function getBaseUrl(): string {
+  const active = getActiveProfile();
+  if (active && active.serverUrl) {
+    return active.serverUrl.replace(/\/+$/, '');
+  }
+  return typeof window !== 'undefined' ? window.location.origin : '';
+}
+
+export class ApiConflictError extends Error {
+  public statusCode = 409;
+  public serverNote: NoteData;
+
+  constructor(message: string, serverNote: NoteData) {
+    super(message);
+    this.name = 'ApiConflictError';
+    this.serverNote = serverNote;
+  }
+}
+
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const headers = new Headers(options.headers || {});
   if (token) {
@@ -30,7 +94,12 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(url, {
+  const baseUrl = getBaseUrl();
+  const fullUrl = path.startsWith('http://') || path.startsWith('https://')
+    ? path
+    : `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+
+  const res = await fetch(fullUrl, {
     ...options,
     headers,
     credentials: 'include',
@@ -38,11 +107,15 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     let errMsg = `HTTP ${res.status}`;
+    let serverNote: NoteData | undefined;
     try {
       const data = await res.json();
       if (data.error) errMsg = data.error;
-    } catch {
-      // ignore
+      if (data.serverNote) serverNote = data.serverNote;
+    } catch {}
+
+    if (res.status === 409 && serverNote) {
+      throw new ApiConflictError(errMsg || 'Konflikt beim Speichern', serverNote);
     }
     throw new Error(errMsg);
   }
@@ -51,7 +124,7 @@ async function apiFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  checkAuthStatus(): Promise<{ authenticated: boolean; https: boolean; vaultPath: string }> {
+  checkAuthStatus(): Promise<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }> {
     return apiFetch('/api/auth/status');
   },
 
@@ -62,13 +135,45 @@ export const api = {
     });
     if (res.token) {
       setStoredToken(res.token);
+      const active = getActiveProfile();
+      if (active) {
+        const profiles = getStoredProfiles().map((p) =>
+          p.id === active.id ? { ...p, token: res.token } : p
+        );
+        saveStoredProfiles(profiles);
+      }
     }
     return res;
   },
 
   async logout(): Promise<void> {
-    await apiFetch('/api/auth/logout', { method: 'POST' });
-    setStoredToken(null);
+    try {
+      await apiFetch('/api/auth/logout', { method: 'POST' });
+    } finally {
+      setStoredToken(null);
+    }
+  },
+
+  getSecuritySettings(): Promise<SecuritySettingsResponse> {
+    return apiFetch('/api/settings/security');
+  },
+
+  updateSecuritySettings(req: UpdateSecurityRequest): Promise<{ ok: boolean; authEnabled: boolean; token?: string }> {
+    return apiFetch('/api/settings/security', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  },
+
+  getSyncManifest(): Promise<SyncManifestEntry[]> {
+    return apiFetch('/api/vault/sync-manifest');
+  },
+
+  getNotesBatch(paths: string[]): Promise<{ notes: NoteData[] }> {
+    return apiFetch('/api/vault/notes-batch', {
+      method: 'POST',
+      body: JSON.stringify({ paths }),
+    });
   },
 
   getTree(): Promise<{
@@ -88,6 +193,8 @@ export const api = {
     rawContent?: string;
     body?: string;
     properties?: FrontmatterProperty[];
+    baseMtime?: number;
+    forceOverwrite?: boolean;
   }): Promise<NoteData> {
     return apiFetch('/api/vault/note', {
       method: 'POST',
@@ -154,7 +261,8 @@ export const api = {
     const params = new URLSearchParams({ target });
     if (fromNotePath) params.set('from', fromNotePath);
     if (token) params.set('token', token);
-    return `/api/vault/attachment?${params.toString()}`;
+    const baseUrl = getBaseUrl();
+    return `${baseUrl}/api/vault/attachment?${params.toString()}`;
   },
 
   async uploadAttachment(
@@ -162,7 +270,7 @@ export const api = {
   ): Promise<{ path: string; name: string; wikiEmbed: string }> {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('folder', 'Attachments');
+    formData.append('folder', 'attachments');
     return apiFetch('/api/vault/upload', {
       method: 'POST',
       body: formData,

@@ -1,21 +1,18 @@
 import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
+import { configService } from './configService';
 
-const COOKIE_NAME = 'obsidian_vault_session';
+const COOKIE_NAME = 'basalt_session';
 
 function getSecret(): string {
-  return process.env.SESSION_SECRET || 'obsidian-web-vault-secret-key-change-me-in-prod';
-}
-
-export function getExpectedPassword(): string {
-  return process.env.OBSIDIAN_WEB_PASSWORD || 'obsidian';
+  return process.env.SESSION_SECRET || 'basalt-offline-vault-secret-key-change-me-in-prod';
 }
 
 export function createSessionToken(): string {
   const payload = JSON.stringify({
     user: 'owner',
     iat: Date.now(),
-    exp: Date.now() + 1000 * 60 * 60 * 24 * 14, // 14 days
+    exp: Date.now() + 1000 * 60 * 60 * 24 * 30, // 30 days
   });
   const base64Payload = Buffer.from(payload, 'utf-8').toString('base64url');
   const sig = crypto
@@ -26,6 +23,10 @@ export function createSessionToken(): string {
 }
 
 export function verifySessionToken(token?: string | null): boolean {
+  if (!configService.isAuthRequired()) {
+    return true;
+  }
+
   if (!token || !token.includes('.')) return false;
   const [base64Payload, sig] = token.split('.');
   if (!base64Payload || !sig) return false;
@@ -53,13 +54,13 @@ export function verifySessionToken(token?: string | null): boolean {
 }
 
 export function extractTokenFromRequest(req: Request): string | null {
-  const cookieToken = req.cookies?.[COOKIE_NAME];
-  if (cookieToken) return cookieToken;
-
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     return authHeader.slice(7).trim();
   }
+
+  const cookieToken = req.cookies?.[COOKIE_NAME] || req.cookies?.['obsidian_vault_session'];
+  if (cookieToken) return cookieToken;
 
   if (typeof req.query.token === 'string') {
     return req.query.token;
@@ -69,6 +70,10 @@ export function extractTokenFromRequest(req: Request): string | null {
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  if (!configService.isAuthRequired()) {
+    return next();
+  }
+
   const token = extractTokenFromRequest(req);
   if (!verifySessionToken(token)) {
     res.status(401).json({ error: 'Nicht authentifiziert. Bitte einloggen.' });

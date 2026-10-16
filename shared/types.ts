@@ -43,6 +43,43 @@ export interface NoteData {
   updatedAt: number;
 }
 
+export interface NoteSaveRequest {
+  path: string;
+  body: string;
+  properties: FrontmatterProperty[];
+  baseMtime?: number;
+  forceOverwrite?: boolean;
+}
+
+export interface ConflictErrorResponse {
+  error: 'Conflict';
+  serverNote: NoteData;
+}
+
+export interface SyncManifestEntry {
+  path: string;
+  type: 'markdown' | 'attachment';
+  mtime: number;
+  size: number;
+}
+
+export interface SecuritySettingsResponse {
+  authEnabled: boolean;
+}
+
+export interface UpdateSecurityRequest {
+  currentPassword?: string;
+  authEnabled: boolean;
+  newPassword?: string;
+}
+
+export interface VaultProfile {
+  id: string;
+  name: string;
+  serverUrl: string;
+  token?: string;
+}
+
 export interface GraphNode {
   id: string;
   label: string;

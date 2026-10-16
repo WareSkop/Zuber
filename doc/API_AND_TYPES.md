@@ -80,6 +80,37 @@ export interface NoteSaveRequest {
   path: string;
   body: string;               // Markdown-Text ohne Frontmatter
   properties: FrontmatterProperty[]; // Wird mit serializeNote() vor dem Schreiben zu YAML zusammengefügt
+  baseMtime?: number;         // Server-mtime vor der lokalen Bearbeitung (zur Konflikterkennung)
+  forceOverwrite?: boolean;   // Erzwingt das Überschreiben trotz Konflikt
+}
+
+export interface ConflictErrorResponse {
+  error: 'Conflict';
+  serverNote: NotePayload;    // Aktueller Stand der Notiz auf dem Server
+}
+
+export interface SyncManifestEntry {
+  path: string;               // Relativer Vault-Pfad
+  type: 'markdown' | 'attachment';
+  mtime: number;              // Änderungszeitstempel in ms
+  size: number;               // Dateigröße in Bytes
+}
+
+export interface SecuritySettingsResponse {
+  authEnabled: boolean;
+}
+
+export interface UpdateSecurityRequest {
+  currentPassword?: string;
+  authEnabled: boolean;
+  newPassword?: string;
+}
+
+export interface VaultProfile {
+  id: string;
+  name: string;
+  serverUrl: string;
+  token?: string;
 }
 ```
 
@@ -111,26 +142,30 @@ export interface GraphData {
 
 ## 2. REST-API Endpunkte ([`server/index.ts`](../server/index.ts))
 
-Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../server/auth.ts) geschützt. Wenn keine gültige Sitzung vorliegt, antwortet der Server mit HTTP `401 Unauthorized` und `{ "error": "Unauthorized" }`.
+Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../server/auth.ts) geschützt (Header `Authorization: Bearer <token>` oder Cookie `basalt_session`). Ist `authEnabled === false`, werden alle Anfragen automatisch autorisiert.
 
-### 2.1 Authentifizierung
+### 2.1 Authentifizierung & Sicherheit
 
 | Methode | Pfad | Beschreibung | Request Body / Query | Response (`200 OK`) |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/auth/status` | Prüft, ob das Cookie `obsidian_web_session` gültig ist oder ob kein Passwort konfiguriert wurde. | — | `{ authenticated: boolean, authRequired: boolean }` |
-| `POST` | `/api/auth/login` | Prüft das Passwort zeitkonstant und setzt das `HttpOnly`-Cookie `obsidian_web_session`. | `{ password: string }` | `{ authenticated: true }` (oder `401`) |
+| `GET` | `/api/auth/status` | Prüft, ob ein gültiges Token vorliegt oder ob der Passwortschutz deaktiviert ist. | — | `{ authenticated: boolean, authRequired: boolean, https: boolean, vaultPath: string }` |
+| `POST` | `/api/auth/login` | Prüft das Passwort zeitkonstant gegen `server-config.json` und gibt Token zurück. | `{ password: string }` | `{ authenticated: true, token: string }` (oder `401`) |
 | `POST` | `/api/auth/logout` | Löscht das Sitzungs-Cookie. | — | `{ authenticated: false }` |
+| `GET` | `/api/settings/security` | Liefert den aktuellen Status des Passwortschutzes. | — | `{ authEnabled: boolean }` |
+| `POST` | `/api/settings/security` | Ändert Passwort oder schaltet Auth ein/aus (prüft altes Passwort). | `{ currentPassword?: string, authEnabled: boolean, newPassword?: string }` | `{ ok: true, authEnabled: boolean, token?: string }` |
 
-### 2.2 Vault-Baum & Dateien
+### 2.2 Vault-Baum, Sync & Notizen
 
 | Methode | Pfad | Beschreibung | Request Body / Query | Response (`200 OK`) |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/vault/tree` | Liefert den gecachten Verzeichnisbaum, alle Notizpfade (für `[[`-Autocomplete) und alle Tags (mit Häufigkeiten). | — | `{ vaultName: string, tree: FileNode[], allNotes: Array<{path, name, folder}>, tags: Array<{tag, count}> }` |
-| `GET` | `/api/vault/note` | Liest eine Markdown-Notiz, parst Frontmatter und berechnet Backlinks. | Query: `?path=Ordner/Notiz.md` | `NotePayload` (oder `404`) |
-| `POST` | `/api/vault/note` | Speichert eine Notiz (serialisiert `properties` + `body`) oder legt sie neu an. Aktualisiert sofort den In-Memory-Index. | Body: `NoteSaveRequest` (`{ path, body, properties }`) | `NotePayload` |
+| `GET` | `/api/vault/sync-manifest` | Liefert blitzschnell $O(N)$ alle Dateien im Vault mit Typ, mtime und Größe für PWA-Delta-Sync. | — | `SyncManifestEntry[]` |
+| `POST` | `/api/vault/notes-batch` | Lädt mehrere Notizen gebündelt aus dem In-Memory-Index herunter. | Body: `{ paths: string[] }` | `{ notes: NoteData[] }` |
+| `GET` | `/api/vault/tree` | Liefert den gecachten Verzeichnisbaum und alle Dateieinträge. | — | `{ tree: FileTreeNode[], files: Array<{path, name, basename, extension}>, vaultPath: string }` |
+| `GET` | `/api/vault/note` | Liest eine Markdown-Notiz inkl. Backlinks. | Query: `?path=Ordner/Notiz.md` | `NoteData` (oder `404`) |
+| `POST` | `/api/vault/note` | Speichert eine Notiz mit optionaler Konflikterkennung (`baseMtime`). Bei Konflikt -> HTTP `409 Conflict`. | Body: `NoteSaveRequest` | `NoteData` (oder `409` mit `{ error: 'Conflict', serverNote }`) |
 | `POST` | `/api/vault/folder` | Erstellt einen neuen Ordner (inkl. Zwischenordnern). | Body: `{ path: string }` | `{ ok: true, path: string }` |
-| `POST` | `/api/vault/rename` | Benennt eine Datei oder einen Ordner um bzw. verschiebt sie. Falls es eine `.md`-Datei ist, werden `[[AlteNotiz]]`-Links im Vault automatisch aktualisiert. | Body: `{ oldPath: string, newPath: string }` | `{ ok: true, newPath: string }` |
-| `DELETE` | `/api/vault/entry` | Löscht eine Datei oder einen kompletten Ordner rekursiv. | Query: `?path=Ordner/Datei.md` | `{ ok: true }` |
+| `POST` | `/api/vault/rename` | Benennt eine Datei/Ordner um und passt `[[Links]]` vault-weit an. | Body: `{ oldPath: string, newPath: string }` | `{ ok: true, newPath: string }` |
+| `DELETE` | `/api/vault/entry` | Löscht eine Datei oder einen Ordner rekursiv. | Query: `?path=Ordner/Datei.md` | `{ ok: true }` |
 
 ### 2.3 Graph, Backlinks, Suche & Link-Auflösung
 

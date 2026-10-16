@@ -10,12 +10,13 @@ import {
 } from '../shared/markdownUtils';
 import { VaultService } from './vaultService';
 import { ensureTlsCredentials } from './tls';
+import { ConfigService } from './configService';
 
-describe('Obsidian Web Vault - Markdown & Frontmatter Utils', () => {
+describe('Basalt - Markdown & Frontmatter Utils', () => {
   it('parses frontmatter into visual properties and separates body from YAML', () => {
     const raw = `---
 tags:
-  - obsidian
+  - basalt
   - wissen
 status: Aktiv
 favorit: true
@@ -35,7 +36,7 @@ Auch ein #inlineTag ist dabei.`;
 
     const tagsProp = parsed.properties.find((p) => p.key === 'tags');
     expect(tagsProp?.type).toBe('list');
-    expect(tagsProp?.value).toEqual(['obsidian', 'wissen']);
+    expect(tagsProp?.value).toEqual(['basalt', 'wissen']);
 
     const favProp = parsed.properties.find((p) => p.key === 'favorit');
     expect(favProp?.type).toBe('checkbox');
@@ -49,7 +50,7 @@ Auch ein #inlineTag ist dabei.`;
     expect(embeds).toEqual(['diagramm.svg']);
 
     const allTags = extractTags(parsed.properties, parsed.body);
-    expect(allTags).toEqual(['obsidian', 'wissen', 'inlineTag']);
+    expect(allTags).toEqual(['basalt', 'wissen', 'inlineTag']);
   });
 
   it('serializes visual properties back into clean YAML frontmatter + body', () => {
@@ -66,12 +67,12 @@ Auch ein #inlineTag ist dabei.`;
   });
 });
 
-describe('VaultService & Graph Builder', () => {
+describe('VaultService & Sync Engine', () => {
   let tmpDir: string;
   let service: VaultService;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obsidian-vault-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'basalt-vault-test-'));
     service = new VaultService(tmpDir);
   });
 
@@ -123,10 +124,88 @@ describe('VaultService & Graph Builder', () => {
     expect(welcome.body).toContain('[[System-Architektur]]');
   });
 
+  it('generates sync manifest and supports batch note downloads in O(1)', () => {
+    const manifest = service.getSyncManifest();
+    expect(manifest.length).toBeGreaterThan(0);
+    const mdEntries = manifest.filter((e) => e.type === 'markdown');
+    expect(mdEntries.length).toBeGreaterThan(0);
+    expect(mdEntries[0].mtime).toBeGreaterThan(0);
+
+    const paths = mdEntries.slice(0, 3).map((e) => e.path);
+    const batch = service.getNotesBatch(paths);
+    expect(batch.length).toBe(paths.length);
+    expect(batch[0].path).toBe(paths[0]);
+  });
+
+  it('detects save conflicts when baseMtime differs from server note', () => {
+    const initialNote = service.saveNote('Konflikt-Test.md', {
+      body: 'Server Version 1',
+    });
+    const firstMtime = initialNote.updatedAt;
+
+    // Simulate server side edit or other user modifying the file
+    // Wait a brief moment to ensure mtime ticks or force newer mtime
+    const updatedServer = service.saveNote('Konflikt-Test.md', {
+      body: 'Server Version 2 von anderem Client',
+      forceOverwrite: true,
+    });
+    expect(updatedServer.body).toContain('Server Version 2');
+
+    // Client tries to save with stale baseMtime (firstMtime - 5000)
+    expect(() => {
+      service.saveNote('Konflikt-Test.md', {
+        body: 'Mein lokaler Offline-Text',
+        baseMtime: firstMtime - 1000,
+        forceOverwrite: false,
+      });
+    }).toThrowError('Conflict');
+
+    // Force overwrite bypasses conflict
+    const forced = service.saveNote('Konflikt-Test.md', {
+      body: 'Mein erzwungener Text',
+      forceOverwrite: true,
+    });
+    expect(forced.body).toBe('Mein erzwungener Text');
+  });
+
   it('auto-generates self-signed TLS credentials for HTTPS', () => {
     const tls = ensureTlsCredentials(tmpDir);
     expect(tls.isSelfSigned).toBe(true);
     expect(tls.cert).toContain('BEGIN CERTIFICATE');
     expect(tls.key).toContain('BEGIN PRIVATE KEY');
+  });
+});
+
+describe('ConfigService & Dynamic Security Settings', () => {
+  let tmpConfigDir: string;
+  let configPath: string;
+
+  beforeEach(() => {
+    tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'basalt-config-test-'));
+    configPath = path.join(tmpConfigDir, 'server-config.json');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpConfigDir, { recursive: true, force: true });
+  });
+
+  it('creates initial server-config.json and verifies default password', () => {
+    const cfg = new ConfigService(configPath);
+    expect(cfg.isAuthRequired()).toBe(true);
+    expect(cfg.verifyPassword('obsidian')).toBe(true);
+    expect(cfg.verifyPassword('wrong-password')).toBe(false);
+  });
+
+  it('updates password and toggles authEnabled dynamically', () => {
+    const cfg = new ConfigService(configPath);
+    cfg.updateSecurity(true, 'neues-sicheres-passwort-123');
+
+    expect(cfg.verifyPassword('neues-sicheres-passwort-123')).toBe(true);
+    expect(cfg.verifyPassword('obsidian')).toBe(false);
+
+    // Disable auth
+    cfg.updateSecurity(false);
+    expect(cfg.isAuthRequired()).toBe(false);
+    expect(cfg.verifyPassword('beliebig')).toBe(true);
   });
 });
