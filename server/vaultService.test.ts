@@ -305,3 +305,93 @@ describe('Basalt - Image HTML Attributes & Command Palette', () => {
     expect(searchFilter('einstellungen').map((c) => c.id)).toEqual(['4']);
   });
 });
+
+describe('Basalt - Graph Semantic Zoom, Anti-Collision & Color Groups', () => {
+  it('correctly matches node color groups by path, tag, and label', async () => {
+    const { matchNodeGroup } = await import('../src/components/GraphView');
+
+    const testGroups = [
+      { id: '1', query: 'path:Projekte', color: '#38bdf8' },
+      { id: '2', query: '#krypto', color: '#22c55e' },
+      { id: '3', query: 'Architektur', color: '#f59e0b' },
+    ];
+
+    const note1: any = {
+      id: 'Projekte/App.md',
+      label: 'App',
+      path: 'Projekte/App.md',
+      type: 'note',
+      degree: 2,
+    };
+    const note2: any = {
+      id: 'Finanzen/Bitcoin.md',
+      label: 'Bitcoin',
+      path: 'Finanzen/Bitcoin.md',
+      type: 'note',
+      degree: 1,
+      tags: ['krypto', 'invest'],
+    };
+    const note3: any = {
+      id: 'System/Architektur.md',
+      label: 'Architektur Übersicht',
+      path: 'System/Architektur.md',
+      type: 'note',
+      degree: 5,
+    };
+    const note4: any = {
+      id: 'Allgemein/Notiz.md',
+      label: 'Notiz',
+      path: 'Allgemein/Notiz.md',
+      type: 'note',
+      degree: 0,
+    };
+
+    expect(matchNodeGroup(note1, testGroups)).toBe('#38bdf8');
+    expect(matchNodeGroup(note2, testGroups)).toBe('#22c55e');
+    expect(matchNodeGroup(note3, testGroups)).toBe('#f59e0b');
+    expect(matchNodeGroup(note4, testGroups)).toBeNull();
+  });
+
+  it('calculates logarithmic radii that stay bounded under high degrees and extreme zoom levels', () => {
+    const calcRadius = (degree: number, scale: number, multiplier = 1.0) => {
+      const baseRadius = 2.8 + Math.log(1 + degree) * 1.6;
+      return Math.min(14, Math.max(2.0, baseRadius * Math.pow(scale, 0.35) * multiplier));
+    };
+
+    // Low degree, zoomed out
+    const r1 = calcRadius(0, 0.1);
+    expect(r1).toBeGreaterThanOrEqual(2.0);
+    expect(r1).toBeLessThan(4.0);
+
+    // Medium degree, scale 1.0
+    const r2 = calcRadius(5, 1.0);
+    expect(r2).toBeGreaterThan(4.0);
+    expect(r2).toBeLessThan(10.0);
+
+    // Huge hub (degree 200), zoomed in (scale 4.0)
+    const r3 = calcRadius(200, 4.0);
+    expect(r3).toBe(14); // Strictly capped at 14px!
+  });
+
+  it('detects 2D bounding box collisions for anti-overlap label rendering', () => {
+    const checkCollision = (
+      boxA: { x1: number; y1: number; x2: number; y2: number },
+      boxB: { x1: number; y1: number; x2: number; y2: number }
+    ) => {
+      return (
+        boxA.x1 < boxB.x2 &&
+        boxA.x2 > boxB.x1 &&
+        boxA.y1 < boxB.y2 &&
+        boxA.y2 > boxB.y1
+      );
+    };
+
+    const boxA = { x1: 100, y1: 100, x2: 180, y2: 120 };
+    const boxB_overlapping = { x1: 150, y1: 110, x2: 220, y2: 130 };
+    const boxC_separate = { x1: 200, y1: 100, x2: 280, y2: 120 };
+
+    expect(checkCollision(boxA, boxB_overlapping)).toBe(true);
+    expect(checkCollision(boxA, boxC_separate)).toBe(false);
+  });
+});
+

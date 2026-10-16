@@ -156,19 +156,37 @@ Wie vom Benutzer gewünscht, wird YAML-Frontmatter niemals als roher YAML-Quellt
 
 ## 4. Interaktive Graph-Ansicht ([`src/components/GraphView.tsx`](../src/components/GraphView.tsx))
 
-Die Graph-Ansicht nutzt ein HTML5 `<canvas>` mit eigener 2D-Kräftesimulation (ohne schwere externe Graph-Bibliotheken):
+Die Graph-Ansicht nutzt ein performantes HTML5 `<canvas>` mit screen-space Rendering und eigener $O(N)$ Kräftesimulation, optimiert für große Vaults mit 1.800+ Notizen:
 
-- **Lokaler vs. Globaler Modus (`localCenterPath`):**
-  - Im rechten Seitenleisten-Tab wird `localCenterPath={activeNote.path}` übergeben. Der Graph filtert die Knoten auf die aktive Notiz plus alle direkt verbundenen Nachbarn (Tiefe 1).
-  - Im Hauptbereich (`centerView === 'graph'`) wird der gesamte Vault-Graph angezeigt.
-- **Physik-Kühlung (`alphaRef` & `wakeUpRef`):**
-  - Damit ein Vault mit 1.800+ Notizen nicht dauerhaft CPU/GPU-Last erzeugt, besitzt die Simulation einen Temperaturfaktor `alphaRef` (Startwert `1.0`), der pro Frame mit `0.985` multipliziert wird.
-  - Sobald `alpha < 0.005` erreicht ist, werden die Knotenpositionen eingefroren (kein $O(V^2)$ Repulsions-Loop mehr!), bis der Benutzer einen Knoten zieht oder den Filter ändert (`wakeUpRef.current()`).
-- **Interaktionen:**
-  - **Mausrad:** Zoomen um den Mauszeiger (`scale` zwischen `0.15` und `3.5`)
-  - **Ziehen auf leerem Hintergrund:** Verschieben der Arbeitsfläche (`panX`, `panY`)
-  - **Ziehen eines Knotens:** Bewegt den Knoten (`dragNodeId`) und weckt die Physik-Simulation auf (`alpha = 0.35`)
-  - **Klick auf einen Knoten (ohne Ziehen):** Öffnet die entsprechende Notiz im Editor (`onSelectNote(node.id)`)
+- **Semantischer Zoom & Screen-Space Rendering (kein globales `ctx.scale`):**
+  - Der Zoom-Faktor `scale` (`0.08` bis `6.0`) skaliert primär den räumlichen Abstand zwischen den Knoten (`(node.x - viewCenterX) * scale + canvasWidth / 2 + panX`), wodurch Knoten beim Hineinzoomen auseinanderdriften.
+  - **Logarithmischer Knoten-Radius:**
+    `baseRadius = 2.8 + Math.log(1 + degree) * 1.6;`
+    `drawRadius = Math.min(14, Math.max(2.0, baseRadius * Math.pow(scale, 0.35) * nodeSizeMultiplier));`
+    Knoten bleiben auf allen Zoomstufen elegante, scharfe Datenpunkte statt riesiger Bälle.
+  - **Dezente Standardfarben & Hover-Spotlight:**
+    - Normale Notizen: Dezent grau/slate (`#9ca3af`)
+    - Aktive Notiz: Goldener Theme-Akzent (`#d4af37`) mit sanftem Scheinring
+    - Nicht-erstellte Notizen (`type === 'unresolved'`): Gedimmtes Grau (Opacity 0.45)
+    - Kanten (Links): Sehr fein (`lineWidth: 0.8`) mit reduzierter Deckkraft
+    - **Spotlight:** Beim Hovern oder Antippen werden der Zielknoten, alle direkten Nachbarn und die Verbindungskanten voll hervorgehoben (`opacity: 1.0`), während der restliche Graph sanft auf `opacity: 0.15` gedimmt wird.
+- **Intelligente Anti-Kollisions-Labels (Level-of-Detail):**
+  - Feste Bildschirm-Schriftgröße: `11.5px` (skaliert nicht künstlich auf 40px hoch).
+  - Zoom-Schwelle `textFadeThreshold` (Standard `0.55`): Im Weitwinkel werden reguläre Labels ausgeblendet; nur spotlightete Knoten und zentrale Hubs (`degree >= 12`) bleiben sichtbar.
+  - **2D-Bounding-Box-Kollisionsprüfung:** Knoten werden vor dem Rendern nach Wichtigkeit sortiert (Spotlight $\rightarrow$ Aktive Notiz $\rightarrow$ `degree` absteigend). Überlappende Labels werden automatisch übersprungen – der Graph bleibt garantiert lesbar und aufgeräumt.
+- **Obsidian-artige Cluster-Physik & Vogel-Spirale:**
+  - **Initiales Layout:** Gleichmäßige Vogel-Spirale (Golden-Angle Sunflower-Verteilung $\approx 137.5^\circ$) um das Zentrum.
+  - **Spatial Hashing für Coulomb-Abstoßung:** Der Raum wird in ein Grid (Zellgröße `180px`) unterteilt. Jeder Knoten berechnet die Abstoßung nur gegen seine 9 Nachbarzellen $\rightarrow$ Skalierung in $O(N)$ statt $O(N^2)$ für flüssige 60 FPS auch bei 1.800+ Notizen.
+  - **Degree-gewichtete Federkräfte:** Blatt-Knoten (`degree === 1`) werden nah an ihren Themen-Hub gezogen (`targetDist = linkDist * 0.55`), während Kanten zwischen zwei großen Hubs (`degree > 5`) mehr Abstand halten (`targetDist = linkDist * 1.8`), um klare, sternförmige Cluster zu bilden.
+- **Einklappbares Einstellungs-Panel (`basalt_graph_settings` in `localStorage`):**
+  - **Filter:** Volltext- und Prefix-Filter (`path:Ordner`, `#tag`), Toggles für Orphans (verwaiste Knoten), Tags und ungelöste Links.
+  - **Farb-Gruppen:** Benutzerdefinierte Farb-Regeln (`{ id, query, color }`) nach Pfad, Tag oder Titel mit Farbwähler.
+  - **Anzeige & Kräfte:** Schieberegler für Knotengröße, Textschwelle, Zentripetalkraft, Abstoßung und Link-Abstand.
+- **Touch-Steuerung (Smartphones & Touchscreens):**
+  - `touch-action: none` auf dem Canvas.
+  - 1-Finger-Pan & Knoten-Drag.
+  - 1-Finger-Tap: Selektiert Knoten, aktiviert Spotlight und zeigt schwebende Schnellzugriffs-Pille („Notiz öffnen ↗“).
+  - 2-Finger-Pinch-to-Zoom: Stufenloser Zoom um den Mittelpunkt zwischen beiden Fingern.
 
 ---
 

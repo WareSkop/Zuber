@@ -96,6 +96,7 @@ export interface GraphNode {
   type: 'note' | 'tag' | 'unresolved';
   folder?: string;
   degree: number;
+  tags?: string[];
 }
 
 export interface GraphEdge {

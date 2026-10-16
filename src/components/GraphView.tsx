@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   Compass,
   Filter,
@@ -8,8 +8,107 @@ import {
   Search,
   ZoomIn,
   ZoomOut,
+  Sliders,
+  Plus,
+  Trash2,
+  ExternalLink,
+  X,
+  FileQuestion,
+  CircleDot,
+  Radio,
 } from 'lucide-react';
 import type { GraphData, GraphNode } from '../../shared/types';
+
+export interface GraphGroup {
+  id: string;
+  query: string;
+  color: string;
+}
+
+export interface GraphSettings {
+  filterQuery: string;
+  showTags: boolean;
+  showUnresolved: boolean;
+  showOrphans: boolean;
+  groups: GraphGroup[];
+  nodeSizeMultiplier: number;
+  textFadeThreshold: number;
+  centerStrength: number;
+  repelStrength: number;
+  linkDistance: number;
+}
+
+const DEFAULT_GRAPH_SETTINGS: GraphSettings = {
+  filterQuery: '',
+  showTags: false,
+  showUnresolved: false,
+  showOrphans: true,
+  groups: [
+    { id: '1', query: 'path:attachments', color: '#f59e0b' },
+  ],
+  nodeSizeMultiplier: 1.0,
+  textFadeThreshold: 0.55,
+  centerStrength: 0.018,
+  repelStrength: 2400,
+  linkDistance: 110,
+};
+
+const STORAGE_KEY = 'basalt_graph_settings';
+
+function loadGraphSettings(): GraphSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_GRAPH_SETTINGS, ...parsed };
+    }
+  } catch {
+    // Ignore error
+  }
+  return DEFAULT_GRAPH_SETTINGS;
+}
+
+function saveGraphSettings(settings: GraphSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore error
+  }
+}
+
+export function matchNodeGroup(node: GraphNode, groups: GraphGroup[]): string | null {
+  for (const g of groups) {
+    const q = g.query.trim();
+    if (!q) continue;
+
+    if (q.toLowerCase().startsWith('path:')) {
+      const sub = q.slice(5).trim().toLowerCase();
+      const nodePath = (node.path || node.id).toLowerCase();
+      if (nodePath.includes(sub)) return g.color;
+    } else if (q.startsWith('#') || q.toLowerCase().startsWith('tag:')) {
+      const tagSub = (q.startsWith('#') ? q.slice(1) : q.slice(4)).trim().toLowerCase();
+      if (
+        node.tags &&
+        node.tags.some(
+          (t) => t.toLowerCase() === tagSub || t.toLowerCase() === `#${tagSub}`
+        )
+      ) {
+        return g.color;
+      }
+      if (
+        node.type === 'tag' &&
+        node.label.toLowerCase().replace(/^#+/, '') === tagSub
+      ) {
+        return g.color;
+      }
+    } else {
+      if (node.label.toLowerCase().includes(q.toLowerCase())) {
+        return g.color;
+      }
+    }
+  }
+  return null;
+}
 
 interface GraphViewProps {
   graphData: GraphData;
@@ -25,6 +124,9 @@ interface SimNode extends GraphNode {
   vx: number;
   vy: number;
   pinned?: boolean;
+  screenX?: number;
+  screenY?: number;
+  drawRadius?: number;
 }
 
 const GraphViewImpl: React.FC<GraphViewProps> = ({
@@ -35,29 +137,66 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
   onSelectTag,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [showTags, setShowTags] = useState(!isLocalGraph ? false : true);
-  const [showUnresolved, setShowUnresolved] = useState(false);
-  const [filterQuery, setFilterQuery] = useState('');
+  const [settings, setSettings] = useState<GraphSettings>(() => {
+    const init = loadGraphSettings();
+    if (isLocalGraph) {
+      init.showTags = true;
+    }
+    return init;
+  });
+
   const [localMode, setLocalMode] = useState(isLocalGraph);
-  const [repulsionStrength, setRepulsionStrength] = useState(isLocalGraph ? 1800 : 2200);
   const [showControls, setShowControls] = useState(false);
+  const [controlsTab, setControlsTab] = useState<'filter' | 'groups' | 'physics'>('filter');
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [touchSelectedNode, setTouchSelectedNode] = useState<SimNode | null>(null);
 
   const alphaRef = useRef(1.0);
   const wakeUpRef = useRef<() => void>(() => {});
+  const transformRef = useRef({ x: 0, y: 0, scale: isLocalGraph ? 0.95 : 0.75 });
 
-  // Sync prop changes
+  // Update settings with persistence
+  const updateSettings = useCallback((updater: (prev: GraphSettings) => GraphSettings) => {
+    setSettings((prev) => {
+      const next = updater(prev);
+      saveGraphSettings(next);
+      return next;
+    });
+    alphaRef.current = Math.max(alphaRef.current, 0.4);
+    wakeUpRef.current();
+  }, []);
+
+  // Sync prop changes for local graph
   useEffect(() => {
     setLocalMode(isLocalGraph);
+    if (isLocalGraph) {
+      transformRef.current.scale = 0.95;
+    }
+    alphaRef.current = 1.0;
+    wakeUpRef.current();
   }, [isLocalGraph]);
 
   // Filter nodes & edges based on settings and local/global mode
   const filteredGraph = useMemo(() => {
     let nodes = graphData.nodes.filter((n) => {
-      if (!showTags && n.type === 'tag') return false;
-      if (!showUnresolved && n.type === 'unresolved') return false;
-      if (filterQuery.trim()) {
-        return n.label.toLowerCase().includes(filterQuery.trim().toLowerCase());
+      if (!settings.showTags && n.type === 'tag') return false;
+      if (!settings.showUnresolved && n.type === 'unresolved') return false;
+      if (!settings.showOrphans && n.degree === 0) return false;
+
+      if (settings.filterQuery.trim()) {
+        const q = settings.filterQuery.trim().toLowerCase();
+        if (q.startsWith('path:')) {
+          const sub = q.slice(5).trim();
+          if (!(n.path || n.id).toLowerCase().includes(sub)) return false;
+        } else if (q.startsWith('#') || q.startsWith('tag:')) {
+          const tagSub = (q.startsWith('#') ? q.slice(1) : q.slice(4)).trim();
+          const matchTag =
+            n.tags?.some((t) => t.toLowerCase().includes(tagSub)) ||
+            (n.type === 'tag' && n.label.toLowerCase().includes(tagSub));
+          if (!matchTag) return false;
+        } else {
+          if (!n.label.toLowerCase().includes(q)) return false;
+        }
       }
       return true;
     });
@@ -79,23 +218,31 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
     }
 
     return { nodes, edges };
-  }, [graphData, showTags, showUnresolved, filterQuery, localMode, activeNotePath]);
+  }, [graphData, settings, localMode, activeNotePath]);
 
   const simNodesRef = useRef<SimNode[]>([]);
-  const transformRef = useRef({ x: 0, y: 0, scale: isLocalGraph ? 0.95 : 0.75 });
   const dragStateRef = useRef<{
     type: 'none' | 'pan' | 'node';
     nodeId?: string;
     startX: number;
     startY: number;
     moved: boolean;
-  }>({ type: 'none', startX: 0, startY: 0, moved: false });
+    startTime: number;
+  }>({ type: 'none', startX: 0, startY: 0, moved: false, startTime: 0 });
 
-  // Rebuild simulation nodes preserving existing positions when possible
+  // Pinch-to-zoom state
+  const touchStateRef = useRef<{
+    initialDist: number;
+    initialScale: number;
+    centerScreenX: number;
+    centerScreenY: number;
+  } | null>(null);
+
+  // Initialize nodes with Vogel-Spirale (Golden-Angle sunflower distribution)
   useEffect(() => {
     const prevMap = new Map(simNodesRef.current.map((n) => [n.id, n]));
     const count = filteredGraph.nodes.length || 1;
-    const radius = Math.min(420, 45 + Math.sqrt(count) * 28);
+    const radius = Math.min(520, 60 + Math.sqrt(count) * 26);
 
     simNodesRef.current = filteredGraph.nodes.map((n, idx) => {
       const existing = prevMap.get(n.id);
@@ -105,7 +252,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
           ...n,
         };
       }
-      const goldenAngle = idx * 2.399963229728653;
+      const goldenAngle = idx * 2.399963229728653; // Golden angle in radians
       const r = Math.sqrt((idx + 0.5) / count) * radius;
       const isCenter = n.id === activeNotePath;
       return {
@@ -121,6 +268,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
     wakeUpRef.current();
   }, [filteredGraph, activeNotePath]);
 
+  // Main Render & Simulation Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -162,56 +310,100 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
       const nodeMap = new Map(nodes.map((n) => [n.id, n]));
       const alpha = alphaRef.current;
 
-      // --- Physics Step (only while alpha > 0.008) ---
+      // -------------------------------------------------------------
+      // 1. Physics Step (Coulomb Repulsion via Spatial Hash + Springs)
+      // -------------------------------------------------------------
       if (alpha > 0.008) {
-        // 1. Center gravity
+        // 1.1 Weak radial centripetal force
+        const cStrength = settings.centerStrength;
         for (const n of nodes) {
           if (n.pinned) continue;
-          const gravity = n.id === activeNotePath && localMode ? 0.05 : 0.015;
+          const gravity =
+            n.id === activeNotePath && localMode ? cStrength * 2.8 : cStrength;
           n.vx -= n.x * gravity * alpha;
           n.vy -= n.y * gravity * alpha;
         }
 
-        // 2. Pairwise repulsion with distance cutoff
-        const cutoffSq = 360 * 360;
-        const rep = repulsionStrength * alpha;
+        // 1.2 Spatial Hashing Grid for O(N) Coulomb Repulsion
+        const cellSize = 180;
+        const grid = new Map<number, number[]>();
+        const hash = (cx: number, cy: number) =>
+          ((cx & 0xffff) << 16) | (cy & 0xffff);
+
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          const cx = Math.floor(n.x / cellSize);
+          const cy = Math.floor(n.y / cellSize);
+          const key = hash(cx, cy);
+          const list = grid.get(key);
+          if (list) list.push(i);
+          else grid.set(key, [i]);
+        }
+
+        const rep = settings.repelStrength * alpha;
+        const cutoffSq = 380 * 380;
+
         for (let i = 0; i < nodes.length; i++) {
           const a = nodes[i];
-          for (let j = i + 1; j < nodes.length; j++) {
-            const b = nodes[j];
-            const dx = b.x - a.x;
-            if (dx > 360 || dx < -360) continue;
-            const dy = b.y - a.y;
-            if (dy > 360 || dy < -360) continue;
-            const distSq = dx * dx + dy * dy + 80;
-            if (distSq > cutoffSq) continue;
-            const force = rep / distSq;
-            const invDist = 1 / Math.sqrt(distSq);
-            const fx = dx * invDist * force;
-            const fy = dy * invDist * force;
+          const acx = Math.floor(a.x / cellSize);
+          const acy = Math.floor(a.y / cellSize);
 
-            if (!a.pinned) {
-              a.vx -= fx;
-              a.vy -= fy;
-            }
-            if (!b.pinned) {
-              b.vx += fx;
-              b.vy += fy;
+          for (let cx = acx - 1; cx <= acx + 1; cx++) {
+            for (let cy = acy - 1; cy <= acy + 1; cy++) {
+              const cell = grid.get(hash(cx, cy));
+              if (!cell) continue;
+              for (const j of cell) {
+                if (j <= i) continue; // Only once per pair
+                const b = nodes[j];
+                const dx = b.x - a.x;
+                if (dx > 380 || dx < -380) continue;
+                const dy = b.y - a.y;
+                if (dy > 380 || dy < -380) continue;
+                const distSq = dx * dx + dy * dy + 80;
+                if (distSq > cutoffSq) continue;
+
+                const force = rep / distSq;
+                const invDist = 1 / Math.sqrt(distSq);
+                const fx = dx * invDist * force;
+                const fy = dy * invDist * force;
+
+                if (!a.pinned) {
+                  a.vx -= fx;
+                  a.vy -= fy;
+                }
+                if (!b.pinned) {
+                  b.vx += fx;
+                  b.vy += fy;
+                }
+              }
             }
           }
         }
 
-        // 3. Spring attraction along edges
-        const targetLen = isLocalGraph ? 95 : 125;
+        // 1.3 Degree-weighted Spring Force along edges
+        const baseLinkDist = settings.linkDistance;
         for (const edge of edges) {
           const src = nodeMap.get(edge.source);
           const tgt = nodeMap.get(edge.target);
           if (!src || !tgt) continue;
+
+          const degA = src.degree || 1;
+          const degB = tgt.degree || 1;
+          let targetDist = baseLinkDist;
+
+          // Leaf node hanging off a hub is pulled closer
+          if (degA === 1 || degB === 1) {
+            targetDist = baseLinkDist * 0.55;
+          } else if (degA > 5 && degB > 5) {
+            // Two major hubs keep a larger distance to prevent cluster collision
+            targetDist = baseLinkDist * 1.8;
+          }
+
           const dx = tgt.x - src.x;
           const dy = tgt.y - src.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const displacement = dist - targetLen;
-          const springK = (edge.type === 'tag' ? 0.025 : 0.045) * alpha;
+          const displacement = dist - targetDist;
+          const springK = (edge.type === 'tag' ? 0.022 : 0.04) * alpha;
           const fx = (dx / dist) * displacement * springK;
           const fy = (dy / dist) * displacement * springK;
 
@@ -225,132 +417,248 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
           }
         }
 
-        // 4. Integrate velocities with damping
+        // 1.4 Velocity integration & damping
         for (const n of nodes) {
           if (n.pinned) continue;
           n.vx *= 0.78;
           n.vy *= 0.78;
-          n.x += Math.max(-15, Math.min(15, n.vx));
-          n.y += Math.max(-15, Math.min(15, n.vy));
+          n.x += Math.max(-16, Math.min(16, n.vx));
+          n.y += Math.max(-16, Math.min(16, n.vy));
         }
 
-        alphaRef.current *= nodes.length > 300 ? 0.92 : 0.95;
+        alphaRef.current *= nodes.length > 300 ? 0.93 : 0.95;
         needsDraw = true;
       }
 
       if (!needsDraw) return;
       needsDraw = false;
 
-      // --- Drawing Step ---
+      // -------------------------------------------------------------
+      // 2. Screen-Space Rendering (Semantic Zoom)
+      // -------------------------------------------------------------
       ctx.save();
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, width, height);
 
       const scale = transformRef.current.scale;
-      ctx.translate(width / 2 + transformRef.current.x, height / 2 + transformRef.current.y);
-      ctx.scale(scale, scale);
+      const panX = transformRef.current.x;
+      const panY = transformRef.current.y;
 
-      // Determine connected neighbors if a node is hovered
+      const toScreenX = (wx: number) => wx * scale + width / 2 + panX;
+      const toScreenY = (wy: number) => wy * scale + height / 2 + panY;
+
+      // Calculate screen positions and radii for each node
+      for (const n of nodes) {
+        n.screenX = toScreenX(n.x);
+        n.screenY = toScreenY(n.y);
+        const baseRadius = 2.8 + Math.log(1 + (n.degree || 0)) * 1.6;
+        n.drawRadius = Math.min(
+          14,
+          Math.max(
+            2.0,
+            baseRadius * Math.pow(scale, 0.35) * settings.nodeSizeMultiplier
+          )
+        );
+      }
+
+      // Highlight / spotlight calculations
+      const spotlightId = hoveredNodeId || touchSelectedNode?.id || null;
       const highlightedSet = new Set<string>();
-      if (hoveredNodeId) {
-        highlightedSet.add(hoveredNodeId);
+      if (spotlightId) {
+        highlightedSet.add(spotlightId);
         for (const e of edges) {
-          if (e.source === hoveredNodeId) highlightedSet.add(e.target);
-          if (e.target === hoveredNodeId) highlightedSet.add(e.source);
+          if (e.source === spotlightId) highlightedSet.add(e.target);
+          if (e.target === spotlightId) highlightedSet.add(e.source);
         }
       }
 
       const computedStyle = getComputedStyle(canvas);
-      const activeColor = computedStyle.getPropertyValue('--accent-color').trim() || '#d4af37';
-      const secondaryColor = computedStyle.getPropertyValue('--accent-secondary').trim() || '#29b6c8';
-      const textColor = computedStyle.getPropertyValue('--text-primary').trim() || '#e6edf3';
-      const mutedColor = computedStyle.getPropertyValue('--text-muted').trim() || '#6e7681';
-      const edgeDefaultColor = computedStyle.getPropertyValue('--border-color').trim() || '#30363d';
+      const activeColor =
+        computedStyle.getPropertyValue('--accent-color').trim() || '#d4af37';
+      const secondaryColor =
+        computedStyle.getPropertyValue('--accent-secondary').trim() || '#29b6c8';
+      const textColor =
+        computedStyle.getPropertyValue('--text-primary').trim() || '#e6edf3';
+      const mutedColor =
+        computedStyle.getPropertyValue('--text-muted').trim() || '#8b949e';
+      const edgeBaseColor = 'rgba(145, 155, 175, 0.22)';
 
-      // Draw edges
+      // 2.1 Draw edges (fine lines)
       for (const edge of edges) {
         const src = nodeMap.get(edge.source);
         const tgt = nodeMap.get(edge.target);
-        if (!src || !tgt) continue;
+        if (!src || !tgt || src.screenX == null || tgt.screenX == null) continue;
 
         const isHighlighted =
-          hoveredNodeId &&
-          (edge.source === hoveredNodeId || edge.target === hoveredNodeId);
-        const isDimmed = hoveredNodeId && !isHighlighted;
+          spotlightId &&
+          (edge.source === spotlightId || edge.target === spotlightId);
+        const isDimmed = spotlightId && !isHighlighted;
 
         ctx.beginPath();
-        ctx.moveTo(src.x, src.y);
-        ctx.lineTo(tgt.x, tgt.y);
+        ctx.moveTo(src.screenX, src.screenY!);
+        ctx.lineTo(tgt.screenX, tgt.screenY!);
 
         if (isHighlighted) {
           ctx.strokeStyle = edge.type === 'tag' ? secondaryColor : activeColor;
-          ctx.lineWidth = 2.2;
+          ctx.lineWidth = 1.6;
+          ctx.globalAlpha = 1.0;
         } else if (isDimmed) {
-          ctx.strokeStyle = 'rgba(147, 153, 178, 0.14)';
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(145, 155, 175, 0.06)';
+          ctx.lineWidth = 0.6;
+          ctx.globalAlpha = 0.15;
         } else {
-          ctx.strokeStyle =
-            edge.type === 'tag'
-              ? `${secondaryColor}66`
-              : `${edgeDefaultColor}aa`;
-          ctx.lineWidth = 1.3;
+          ctx.strokeStyle = edge.type === 'tag' ? `${secondaryColor}55` : edgeBaseColor;
+          ctx.lineWidth = 0.8;
+          ctx.globalAlpha = 0.85;
         }
 
         ctx.stroke();
       }
 
-      const manyNodes = nodes.length > 180;
-
-      // Draw nodes
+      // 2.2 Draw nodes
       for (const n of nodes) {
-        const isActive = n.id === activeNotePath;
-        const isHovered = n.id === hoveredNodeId;
-        const isConnected = highlightedSet.has(n.id);
-        const isDimmed = hoveredNodeId && !isConnected;
-        const radius =
-          (n.type === 'tag' ? 5 : 6) +
-          Math.min(9, n.degree * 1.2) +
-          (isActive ? 2.5 : 0);
+        if (n.screenX == null || n.screenY == null || n.drawRadius == null) continue;
 
-        if (isActive || isHovered) {
+        const isSpecial = n.id === activeNotePath || n.id === spotlightId;
+        const isConnected = highlightedSet.has(n.id);
+        const isDimmed = spotlightId && !isConnected;
+
+        // Determine node color
+        let nodeColor = '#9ca3af'; // default subtle grey/slate
+        const groupColor = matchNodeGroup(n, settings.groups);
+
+        if (groupColor) {
+          nodeColor = groupColor;
+        } else if (n.type === 'tag') {
+          nodeColor = secondaryColor;
+        } else if (n.type === 'unresolved') {
+          nodeColor = mutedColor;
+        } else if (n.id === activeNotePath) {
+          nodeColor = activeColor;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = isDimmed ? 0.15 : n.type === 'unresolved' ? 0.45 : 1.0;
+
+        // Outer glow/ring for active or spotlighted node
+        if (isSpecial) {
           ctx.beginPath();
-          ctx.arc(n.x, n.y, radius + 5, 0, Math.PI * 2);
-          ctx.fillStyle = isActive
-            ? `${activeColor}44`
-            : `${secondaryColor}44`;
+          ctx.arc(n.screenX, n.screenY, n.drawRadius + 4, 0, Math.PI * 2);
+          ctx.fillStyle = `${nodeColor}38`;
           ctx.fill();
         }
 
+        // Inner solid circle
         ctx.beginPath();
-        ctx.arc(n.x, n.y, radius, 0, Math.PI * 2);
-
-        if (n.type === 'tag') {
-          ctx.fillStyle = isDimmed ? `${secondaryColor}33` : secondaryColor;
-        } else if (n.type === 'unresolved') {
-          ctx.fillStyle = isDimmed ? 'rgba(147, 153, 178, 0.18)' : mutedColor;
-        } else if (isActive) {
-          ctx.fillStyle = activeColor;
-        } else {
-          ctx.fillStyle = isDimmed ? `${secondaryColor}33` : secondaryColor;
-        }
-
+        ctx.arc(n.screenX, n.screenY, n.drawRadius, 0, Math.PI * 2);
+        ctx.fillStyle = nodeColor;
         ctx.fill();
+        ctx.restore();
+      }
 
-        // Draw labels selectively when zoomed out on huge graphs to keep 60fps
-        const showLabel =
-          isActive ||
-          isHovered ||
-          isConnected ||
-          !manyNodes ||
-          scale > 0.95 ||
-          (scale > 0.55 && n.degree >= 2);
-
-        if (showLabel && !isDimmed) {
-          ctx.font = `${isActive || isHovered ? '600 ' : ''}12px Inter, system-ui, sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.fillStyle = isActive || isHovered ? activeColor : textColor;
-          ctx.fillText(n.label, n.x, n.y + radius + 13);
+      // -------------------------------------------------------------
+      // 2.3 Intelligent Anti-Collision Label Rendering
+      // -------------------------------------------------------------
+      const textThreshold = settings.textFadeThreshold;
+      const candidateNodes = nodes.filter((n) => {
+        if (n.screenX == null || n.screenY == null) return false;
+        // Cull outside canvas bounds with margin
+        if (
+          n.screenX < -100 ||
+          n.screenX > width + 100 ||
+          n.screenY < -100 ||
+          n.screenY > height + 100
+        ) {
+          return false;
         }
+
+        const isHover = n.id === spotlightId;
+        const isConnected = highlightedSet.has(n.id);
+        const isMajorHub = (n.degree || 0) >= 12;
+
+        if (scale < textThreshold) {
+          // When zoomed out, only show spotlighted, connected or major hubs
+          return isHover || isConnected || isMajorHub;
+        }
+        return true;
+      });
+
+      // Priority sort: Spotlighted -> Active Note -> Degree descending
+      candidateNodes.sort((a, b) => {
+        if (a.id === spotlightId) return -1;
+        if (b.id === spotlightId) return 1;
+        if (highlightedSet.has(a.id) && !highlightedSet.has(b.id)) return -1;
+        if (highlightedSet.has(b.id) && !highlightedSet.has(a.id)) return 1;
+        if (a.id === activeNotePath) return -1;
+        if (b.id === activeNotePath) return 1;
+        return (b.degree || 0) - (a.degree || 0);
+      });
+
+      const placedBoxes: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+      const globalTextAlpha =
+        scale < textThreshold
+          ? 0.8
+          : Math.min(1.0, (scale - textThreshold) / 0.4);
+
+      for (const n of candidateNodes) {
+        if (n.screenX == null || n.screenY == null || n.drawRadius == null) continue;
+
+        const isSpotlight = n.id === spotlightId;
+        const isConnected = highlightedSet.has(n.id);
+        const isDimmed = spotlightId && !isConnected;
+        if (isDimmed) continue;
+
+        const label = n.label;
+        const approxWidth = label.length * 6.2;
+        const box = {
+          x1: n.screenX - approxWidth / 2 - 4,
+          y1: n.screenY + n.drawRadius + 2,
+          x2: n.screenX + approxWidth / 2 + 4,
+          y2: n.screenY + n.drawRadius + 18,
+        };
+
+        // Anti-overlap check
+        let collides = false;
+        for (const pb of placedBoxes) {
+          if (box.x1 < pb.x2 && box.x2 > pb.x1 && box.y1 < pb.y2 && box.y2 > pb.y1) {
+            collides = true;
+            break;
+          }
+        }
+
+        if (collides && !isSpotlight) {
+          continue;
+        }
+
+        placedBoxes.push(box);
+
+        ctx.save();
+        const fontAlpha = isSpotlight || isConnected ? 1.0 : globalTextAlpha;
+        ctx.globalAlpha = fontAlpha;
+        ctx.font = `${
+          isSpotlight || n.id === activeNotePath ? '600 ' : '400 '
+        }11.5px Inter, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        // Draw pill background for spotlighted text to guarantee 100% legibility
+        if (isSpotlight) {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.beginPath();
+          ctx.roundRect(
+            box.x1 - 2,
+            box.y1 - 1,
+            box.x2 - box.x1 + 4,
+            box.y2 - box.y1 + 2,
+            4
+          );
+          ctx.fill();
+        }
+
+        ctx.fillStyle =
+          isSpotlight || n.id === activeNotePath ? activeColor : textColor;
+        ctx.fillText(label, n.screenX, n.screenY + n.drawRadius + 4);
+        ctx.restore();
       }
 
       ctx.restore();
@@ -364,37 +672,57 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
     return () => {
       if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
     };
-  }, [filteredGraph, activeNotePath, hoveredNodeId, repulsionStrength, localMode, isLocalGraph]);
+  }, [
+    filteredGraph,
+    activeNotePath,
+    hoveredNodeId,
+    touchSelectedNode,
+    settings,
+    localMode,
+  ]);
 
-  // Convert screen coordinates to simulation coordinates
-  const screenToWorld = (clientX: number, clientY: number) => {
+  // Screen to world coordinates converter
+  const screenToWorld = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
+    const scale = transformRef.current.scale;
     const sx = clientX - rect.left - rect.width / 2 - transformRef.current.x;
     const sy = clientY - rect.top - rect.height / 2 - transformRef.current.y;
     return {
-      x: sx / transformRef.current.scale,
-      y: sy / transformRef.current.scale,
+      x: sx / scale,
+      y: sy / scale,
     };
-  };
+  }, []);
 
-  const findNodeAt = (wx: number, wy: number): SimNode | null => {
-    for (let i = simNodesRef.current.length - 1; i >= 0; i--) {
-      const n = simNodesRef.current[i];
-      const radius = 8 + Math.min(9, n.degree * 1.2);
-      const dx = wx - n.x;
-      const dy = wy - n.y;
-      if (dx * dx + dy * dy <= (radius + 5) * (radius + 5)) {
-        return n;
+  const findNodeAt = useCallback(
+    (clientX: number, clientY: number): SimNode | null => {
+      const { x: wx, y: wy } = screenToWorld(clientX, clientY);
+      const scale = transformRef.current.scale;
+
+      // Hit test using screen-space distance for precision on all zoom levels
+      for (let i = simNodesRef.current.length - 1; i >= 0; i--) {
+        const n = simNodesRef.current[i];
+        const dx = wx - n.x;
+        const dy = wy - n.y;
+        const distWorld = Math.sqrt(dx * dx + dy * dy);
+        const distScreen = distWorld * scale;
+        const hitRadius = Math.max(16, (n.drawRadius || 8) + 8);
+        if (distScreen <= hitRadius) {
+          return n;
+        }
       }
-    }
-    return null;
-  };
+      return null;
+    },
+    [screenToWorld]
+  );
 
+  // Pointer / Mouse Events
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    const { x, y } = screenToWorld(e.clientX, e.clientY);
-    const hit = findNodeAt(x, y);
+    // If two or more touches are active, pinch handler takes over
+    if (e.pointerType === 'touch' && touchStateRef.current) return;
+
+    const hit = findNodeAt(e.clientX, e.clientY);
     if (hit) {
       hit.pinned = true;
       dragStateRef.current = {
@@ -403,6 +731,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         startX: e.clientX,
         startY: e.clientY,
         moved: false,
+        startTime: Date.now(),
       };
     } else {
       dragStateRef.current = {
@@ -410,16 +739,18 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         startX: e.clientX - transformRef.current.x,
         startY: e.clientY - transformRef.current.y,
         moved: false,
+        startTime: Date.now(),
       };
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const state = dragStateRef.current;
+
     if (state.type === 'node' && state.nodeId) {
       const dx = Math.abs(e.clientX - state.startX);
       const dy = Math.abs(e.clientY - state.startY);
-      if (dx > 3 || dy > 3) state.moved = true;
+      if (dx > 4 || dy > 4) state.moved = true;
 
       const { x, y } = screenToWorld(e.clientX, e.clientY);
       const node = simNodesRef.current.find((n) => n.id === state.nodeId);
@@ -442,41 +773,116 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
       return;
     }
 
-    const { x, y } = screenToWorld(e.clientX, e.clientY);
-    const hit = findNodeAt(x, y);
-    const nextHover = hit ? hit.id : null;
-    if (nextHover !== hoveredNodeId) {
-      setHoveredNodeId(nextHover);
-      wakeUpRef.current();
+    // Hover detection for mouse pointers
+    if (e.pointerType === 'mouse') {
+      const hit = findNodeAt(e.clientX, e.clientY);
+      const nextHover = hit ? hit.id : null;
+      if (nextHover !== hoveredNodeId) {
+        setHoveredNodeId(nextHover);
+        wakeUpRef.current();
+      }
     }
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const state = dragStateRef.current;
     if (state.type === 'node' && state.nodeId) {
       const node = simNodesRef.current.find((n) => n.id === state.nodeId);
       if (node) {
         node.pinned = false;
         if (!state.moved) {
-          if (node.type === 'note' && node.path) {
-            onSelectNote(node.path, false);
-          } else if (node.type === 'unresolved') {
-            onSelectNote(node.label, true);
-          } else if (node.type === 'tag' && onSelectTag) {
-            onSelectTag(node.label.replace(/^#+/, ''));
+          // Tap / Click action
+          if (e.pointerType === 'touch') {
+            // Touch device: select node and show floating action pill
+            setTouchSelectedNode(node);
+            wakeUpRef.current();
+          } else {
+            // Desktop mouse click: open note directly
+            navigateToNode(node);
           }
         }
       }
+    } else if (state.type === 'pan' && !state.moved) {
+      // Tap on empty space: clear touch selection
+      if (touchSelectedNode) {
+        setTouchSelectedNode(null);
+        wakeUpRef.current();
+      }
     }
-    dragStateRef.current = { type: 'none', startX: 0, startY: 0, moved: false };
+
+    dragStateRef.current = {
+      type: 'none',
+      startX: 0,
+      startY: 0,
+      moved: false,
+      startTime: 0,
+    };
   };
 
+  const navigateToNode = (node: SimNode) => {
+    if (node.type === 'note' && node.path) {
+      onSelectNote(node.path, false);
+    } else if (node.type === 'unresolved') {
+      onSelectNote(node.label, true);
+    } else if (node.type === 'tag' && onSelectTag) {
+      onSelectTag(node.label.replace(/^#+/, ''));
+    }
+  };
+
+  // Mouse wheel zoom
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.12 : 0.9;
-    const nextScale = Math.max(0.15, Math.min(3.5, transformRef.current.scale * factor));
+    const factor = e.deltaY < 0 ? 1.15 : 0.87;
+    const nextScale = Math.max(0.08, Math.min(6.0, transformRef.current.scale * factor));
     transformRef.current.scale = nextScale;
     wakeUpRef.current();
+  };
+
+  // Touch handlers for 2-finger pinch-to-zoom
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      touchStateRef.current = {
+        initialDist: dist,
+        initialScale: transformRef.current.scale,
+        centerScreenX: (t1.clientX + t2.clientX) / 2,
+        centerScreenY: (t1.clientY + t2.clientY) / 2,
+      };
+      dragStateRef.current = {
+        type: 'none',
+        startX: 0,
+        startY: 0,
+        moved: false,
+        startTime: 0,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2 && touchStateRef.current) {
+      e.preventDefault();
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currentDist = Math.hypot(
+        t2.clientX - t1.clientX,
+        t2.clientY - t1.clientY
+      );
+      if (touchStateRef.current.initialDist > 0) {
+        const ratio = currentDist / touchStateRef.current.initialDist;
+        const newScale = Math.max(
+          0.08,
+          Math.min(6.0, touchStateRef.current.initialScale * ratio)
+        );
+        transformRef.current.scale = newScale;
+        wakeUpRef.current();
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStateRef.current = null;
   };
 
   const resetCamera = () => {
@@ -485,8 +891,39 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
     wakeUpRef.current();
   };
 
+  const addGroup = () => {
+    const colors = ['#f59e0b', '#38bdf8', '#a855f7', '#ec4899', '#22c55e', '#ef4444'];
+    const randomColor = colors[settings.groups.length % colors.length];
+    const newGroup: GraphGroup = {
+      id: String(Date.now()),
+      query: '',
+      color: randomColor,
+    };
+    updateSettings((prev) => ({
+      ...prev,
+      groups: [...prev.groups, newGroup],
+    }));
+  };
+
+  const updateGroup = (id: string, partial: Partial<GraphGroup>) => {
+    updateSettings((prev) => ({
+      ...prev,
+      groups: prev.groups.map((g) => (g.id === id ? { ...g, ...partial } : g)),
+    }));
+  };
+
+  const removeGroup = (id: string) => {
+    updateSettings((prev) => ({
+      ...prev,
+      groups: prev.groups.filter((g) => g.id !== id),
+    }));
+  };
+
   return (
-    <div className={`graph-view-container ${isLocalGraph ? 'local-graph' : 'global-graph'}`}>
+    <div
+      className={`graph-view-container ${isLocalGraph ? 'local-graph' : 'global-graph'}`}
+    >
+      {/* Top Toolbar */}
       <div className="graph-toolbar">
         <div className="graph-toolbar-left">
           <button
@@ -510,8 +947,10 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
           </button>
           <button
             type="button"
-            className={`graph-pill-btn ${showTags ? 'active' : ''}`}
-            onClick={() => setShowTags((v) => !v)}
+            className={`graph-pill-btn ${settings.showTags ? 'active' : ''}`}
+            onClick={() =>
+              updateSettings((s) => ({ ...s, showTags: !s.showTags }))
+            }
             title="#Tag-Knoten ein-/ausblenden"
           >
             <Hash size={14} />
@@ -524,7 +963,10 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             type="button"
             className="graph-icon-btn"
             onClick={() => {
-              transformRef.current.scale = Math.min(3.5, transformRef.current.scale * 1.2);
+              transformRef.current.scale = Math.min(
+                6.0,
+                transformRef.current.scale * 1.25
+              );
               wakeUpRef.current();
             }}
             title="Vergrößern"
@@ -535,7 +977,10 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             type="button"
             className="graph-icon-btn"
             onClick={() => {
-              transformRef.current.scale = Math.max(0.15, transformRef.current.scale * 0.8);
+              transformRef.current.scale = Math.max(
+                0.08,
+                transformRef.current.scale * 0.8
+              );
               wakeUpRef.current();
             }}
             title="Verkleinern"
@@ -554,70 +999,337 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             type="button"
             className={`graph-icon-btn ${showControls ? 'active' : ''}`}
             onClick={() => setShowControls((s) => !s)}
-            title="Graph-Filter & Physik"
+            title="Graph-Einstellungen (Filter, Farbgruppen & Physik)"
           >
-            <Filter size={15} />
+            <Sliders size={15} />
           </button>
         </div>
       </div>
 
+      {/* Collapsible Graph Settings Panel */}
       {showControls && (
         <div className="graph-controls-popover">
-          <div className="graph-control-row">
-            <Search size={13} />
-            <input
-              type="text"
-              placeholder="Knoten filtern..."
-              value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-            />
+          <div className="graph-controls-tabs">
+            <button
+              type="button"
+              className={`graph-tab-btn ${controlsTab === 'filter' ? 'active' : ''}`}
+              onClick={() => setControlsTab('filter')}
+            >
+              Filter
+            </button>
+            <button
+              type="button"
+              className={`graph-tab-btn ${controlsTab === 'groups' ? 'active' : ''}`}
+              onClick={() => setControlsTab('groups')}
+            >
+              Gruppen ({settings.groups.length})
+            </button>
+            <button
+              type="button"
+              className={`graph-tab-btn ${controlsTab === 'physics' ? 'active' : ''}`}
+              onClick={() => setControlsTab('physics')}
+            >
+              Kräfte
+            </button>
+            <button
+              type="button"
+              className="graph-tab-close"
+              onClick={() => setShowControls(false)}
+            >
+              <X size={14} />
+            </button>
           </div>
-          <label className="graph-control-checkbox">
-            <input
-              type="checkbox"
-              className="checkbox-custom"
-              checked={showTags}
-              onChange={(e) => setShowTags(e.target.checked)}
-            />
-            <span>#Tag-Knoten anzeigen</span>
-          </label>
-          <label className="graph-control-checkbox">
-            <input
-              type="checkbox"
-              className="checkbox-custom"
-              checked={showUnresolved}
-              onChange={(e) => setShowUnresolved(e.target.checked)}
-            />
-            <span>Noch nicht erstellte Links</span>
-          </label>
-          <div className="graph-control-slider">
-            <span>Abstoßung</span>
-            <input
-              type="range"
-              min={600}
-              max={5000}
-              step={200}
-              value={repulsionStrength}
-              onChange={(e) => {
-                setRepulsionStrength(Number(e.target.value));
-                alphaRef.current = 0.6;
-                wakeUpRef.current();
-              }}
-            />
+
+          <div className="graph-controls-body">
+            {controlsTab === 'filter' && (
+              <div className="graph-panel-section">
+                <div className="graph-control-row">
+                  <Search size={13} />
+                  <input
+                    type="text"
+                    placeholder="Suchen (Text, path:..., #tag)..."
+                    value={settings.filterQuery}
+                    onChange={(e) =>
+                      updateSettings((s) => ({ ...s, filterQuery: e.target.value }))
+                    }
+                  />
+                  {settings.filterQuery && (
+                    <button
+                      type="button"
+                      className="graph-clear-btn"
+                      onClick={() =>
+                        updateSettings((s) => ({ ...s, filterQuery: '' }))
+                      }
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                <label className="graph-control-checkbox">
+                  <input
+                    type="checkbox"
+                    className="checkbox-custom"
+                    checked={settings.showOrphans}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        showOrphans: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Verwaiste Notizen (Orphans) anzeigen</span>
+                </label>
+
+                <label className="graph-control-checkbox">
+                  <input
+                    type="checkbox"
+                    className="checkbox-custom"
+                    checked={settings.showTags}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        showTags: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>#Tag-Knoten anzeigen</span>
+                </label>
+
+                <label className="graph-control-checkbox">
+                  <input
+                    type="checkbox"
+                    className="checkbox-custom"
+                    checked={settings.showUnresolved}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        showUnresolved: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Noch nicht erstellte Links anzeigen</span>
+                </label>
+              </div>
+            )}
+
+            {controlsTab === 'groups' && (
+              <div className="graph-panel-section">
+                <div className="graph-groups-header">
+                  <span>Farb-Gruppen ({settings.groups.length})</span>
+                  <button
+                    type="button"
+                    className="btn-add-group"
+                    onClick={addGroup}
+                    title="Neue Gruppe hinzufügen"
+                  >
+                    <Plus size={12} /> Gruppe
+                  </button>
+                </div>
+                <div className="graph-groups-list">
+                  {settings.groups.length === 0 ? (
+                    <div className="graph-groups-empty">
+                      Keine Gruppen definiert. Klicke auf „+ Gruppe“, um Notizen nach Pfad oder Tag einzufärben.
+                    </div>
+                  ) : (
+                    settings.groups.map((group) => (
+                      <div key={group.id} className="graph-group-row">
+                        <input
+                          type="color"
+                          className="graph-group-color"
+                          value={group.color}
+                          onChange={(e) =>
+                            updateGroup(group.id, { color: e.target.value })
+                          }
+                          title="Farbe wählen"
+                        />
+                        <input
+                          type="text"
+                          className="graph-group-query"
+                          placeholder="z. B. path:Projekte oder #krypto"
+                          value={group.query}
+                          onChange={(e) =>
+                            updateGroup(group.id, { query: e.target.value })
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="graph-group-delete"
+                          onClick={() => removeGroup(group.id)}
+                          title="Gruppe löschen"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {controlsTab === 'physics' && (
+              <div className="graph-panel-section">
+                <div className="graph-control-slider">
+                  <div className="slider-label">
+                    <span>Knotengröße</span>
+                    <span className="slider-val">{settings.nodeSizeMultiplier.toFixed(1)}×</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2.5}
+                    step={0.1}
+                    value={settings.nodeSizeMultiplier}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        nodeSizeMultiplier: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="graph-control-slider">
+                  <div className="slider-label">
+                    <span>Text-Schwelle</span>
+                    <span className="slider-val">{settings.textFadeThreshold.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1.5}
+                    step={0.05}
+                    value={settings.textFadeThreshold}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        textFadeThreshold: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="graph-control-slider">
+                  <div className="slider-label">
+                    <span>Zentripetalkraft</span>
+                    <span className="slider-val">{Math.round(settings.centerStrength * 1000)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.005}
+                    max={0.05}
+                    step={0.002}
+                    value={settings.centerStrength}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        centerStrength: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="graph-control-slider">
+                  <div className="slider-label">
+                    <span>Abstoßungskraft</span>
+                    <span className="slider-val">{settings.repelStrength}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={600}
+                    max={5000}
+                    step={200}
+                    value={settings.repelStrength}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        repelStrength: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="graph-control-slider">
+                  <div className="slider-label">
+                    <span>Link-Abstand</span>
+                    <span className="slider-val">{settings.linkDistance}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={40}
+                    max={240}
+                    step={10}
+                    value={settings.linkDistance}
+                    onChange={(e) =>
+                      updateSettings((s) => ({
+                        ...s,
+                        linkDistance: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-reset-physics"
+                  onClick={() => {
+                    updateSettings(() => ({ ...DEFAULT_GRAPH_SETTINGS }));
+                    resetCamera();
+                  }}
+                >
+                  <RotateCcw size={13} /> Auf Standard zurücksetzen
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
+      {/* HTML5 Canvas with Touch Gestures */}
       <canvas
         ref={canvasRef}
         className="graph-canvas"
-        style={{ cursor: hoveredNodeId ? 'pointer' : 'grab' }}
+        style={{ cursor: hoveredNodeId ? 'pointer' : 'grab', touchAction: 'none' }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       />
 
+      {/* Touch-Friendly Action Pill for Selected Node */}
+      {touchSelectedNode && (
+        <div className="graph-touch-action-pill">
+          <div className="touch-pill-info">
+            <span className="touch-pill-label">{touchSelectedNode.label}</span>
+            <span className="touch-pill-meta">
+              {touchSelectedNode.degree} {touchSelectedNode.degree === 1 ? 'Link' : 'Links'}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="touch-pill-btn"
+            onClick={() => {
+              navigateToNode(touchSelectedNode);
+              setTouchSelectedNode(null);
+            }}
+          >
+            <span>Notiz öffnen</span>
+            <ExternalLink size={13} />
+          </button>
+          <button
+            type="button"
+            className="touch-pill-close"
+            onClick={() => setTouchSelectedNode(null)}
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Legend */}
       <div className="graph-legend">
         <span className="legend-item">
           <span className="legend-dot note-dot" /> Notiz
@@ -625,12 +1337,12 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         <span className="legend-item">
           <span className="legend-dot active-dot" /> Aktuell
         </span>
-        {showTags && (
+        {settings.showTags && (
           <span className="legend-item">
             <span className="legend-dot tag-dot" /> #Tag
           </span>
         )}
-        {showUnresolved && (
+        {settings.showUnresolved && (
           <span className="legend-item">
             <span className="legend-dot unresolved-dot" /> Offen
           </span>

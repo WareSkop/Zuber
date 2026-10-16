@@ -801,6 +801,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
         type: 'note',
         folder: folder === '.' ? '' : folder,
         degree: 0,
+        tags: note.tags,
       });
     }
 
