@@ -232,6 +232,103 @@ export class LocalDb {
     } catch {}
   }
 
+  public async addEntryToTree(relPath: string, type: 'file' | 'folder'): Promise<void> {
+    try {
+      const tree = (await this.getMeta<FileTreeNode[]>('tree')) || [];
+      const parts = relPath.split('/').filter(Boolean);
+      const updatedTree = insertNodeIntoTree(tree, parts, relPath, type);
+      await this.setMeta('tree', updatedTree);
+
+      if (type === 'file') {
+        const allNotes = (await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes')) || [];
+        const fileName = relPath.split('/').pop() || relPath;
+        const basename = fileName.replace(/\.[^/.]+$/, '');
+        if (!allNotes.some((n) => n.path === relPath)) {
+          allNotes.push({ path: relPath, name: fileName, basename });
+          await this.setMeta('allNotes', allNotes);
+        }
+      }
+    } catch {}
+  }
+
+  public async renameEntryInTree(oldPath: string, newPath: string): Promise<void> {
+    const db = await this.openDb();
+    const oldPrefix = `${oldPath}/`;
+    const newPrefix = `${newPath}/`;
+
+    // 1. Rename notes in IndexedDB
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('notes', 'readwrite');
+      const store = tx.objectStore('notes');
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          const key = cursor.key as string;
+          if (key === oldPath) {
+            const val = cursor.value;
+            val.path = newPath;
+            val.name = newPath.split('/').pop()?.replace(/\.md$/, '') || newPath;
+            store.delete(key);
+            store.put(val);
+          } else if (key.startsWith(oldPrefix)) {
+            const val = cursor.value;
+            val.path = newPrefix + key.slice(oldPrefix.length);
+            store.delete(key);
+            store.put(val);
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+
+    // 2. Update tree in meta
+    try {
+      const tree = await this.getMeta<FileTreeNode[]>('tree');
+      if (tree) {
+        const updateTree = (nodes: FileTreeNode[]): FileTreeNode[] => {
+          return nodes.map((node) => {
+            let updatedNode = { ...node };
+            if (node.path === oldPath) {
+              updatedNode.path = newPath;
+              updatedNode.name = newPath.split('/').pop() || newPath;
+              if (updatedNode.type === 'file' && updatedNode.name.includes('.')) {
+                updatedNode.extension = updatedNode.name.split('.').pop();
+              }
+            } else if (node.path.startsWith(oldPrefix)) {
+              updatedNode.path = newPrefix + node.path.slice(oldPrefix.length);
+            }
+            if (updatedNode.children) {
+              updatedNode.children = updateTree(updatedNode.children);
+            }
+            return updatedNode;
+          });
+        };
+        await this.setMeta('tree', sortTreeNodes(updateTree(tree)));
+      }
+
+      // 3. Update allNotes in meta
+      const allNotes = await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes');
+      if (allNotes) {
+        const updatedNotes = allNotes.map((n) => {
+          if (n.path === oldPath) {
+            const name = newPath.split('/').pop() || newPath;
+            return { path: newPath, name, basename: name.replace(/\.[^/.]+$/, '') };
+          } else if (n.path.startsWith(oldPrefix)) {
+            const subPath = newPrefix + n.path.slice(oldPrefix.length);
+            const name = subPath.split('/').pop() || subPath;
+            return { path: subPath, name, basename: name.replace(/\.[^/.]+$/, '') };
+          }
+          return n;
+        });
+        await this.setMeta('allNotes', updatedNotes);
+      }
+    } catch {}
+  }
+
   // --- Attachments Store ---
   public async getAttachment(path: string): Promise<CachedAttachment | null> {
     const db = await this.openDb();
@@ -284,9 +381,16 @@ export class LocalDb {
 
   public async addOutboxMutation(mutation: OutboxMutation): Promise<void> {
     const db = await this.openDb();
+    const existing = await this.getOutbox();
+    const duplicate = existing.find(
+      (m) => m.type === mutation.type && m.path === mutation.path && m.type === 'save_note'
+    );
     return new Promise((resolve, reject) => {
       const tx = db.transaction('outbox', 'readwrite');
       const store = tx.objectStore('outbox');
+      if (duplicate) {
+        store.delete(duplicate.id);
+      }
       const req = store.put(mutation);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
@@ -331,3 +435,76 @@ export class LocalDb {
     });
   }
 }
+
+function insertNodeIntoTree(
+  nodes: FileTreeNode[],
+  parts: string[],
+  fullPath: string,
+  type: 'file' | 'folder'
+): FileTreeNode[] {
+  if (parts.length === 0) return nodes;
+  const [currentPart, ...remaining] = parts;
+  const isLeaf = remaining.length === 0;
+
+  let existingIndex = nodes.findIndex((n) => n.name === currentPart);
+
+  if (isLeaf) {
+    if (existingIndex >= 0) {
+      return nodes;
+    }
+    const newNode: FileTreeNode = {
+      name: currentPart,
+      path: fullPath,
+      type,
+      extension: type === 'file' && currentPart.includes('.') ? currentPart.split('.').pop() : undefined,
+      children: type === 'folder' ? [] : undefined,
+      updatedAt: Date.now(),
+    };
+    const updated = [...nodes, newNode];
+    return sortTreeNodes(updated);
+  }
+
+  // Intermediate directory
+  let targetFolder: FileTreeNode;
+  let nextNodes: FileTreeNode[];
+
+  if (existingIndex >= 0 && nodes[existingIndex].type === 'folder') {
+    targetFolder = nodes[existingIndex];
+    nextNodes = [...nodes];
+  } else {
+    const folderPath = fullPath.split('/').slice(0, fullPath.split('/').length - remaining.length).join('/');
+    targetFolder = {
+      name: currentPart,
+      path: folderPath,
+      type: 'folder',
+      children: [],
+      updatedAt: Date.now(),
+    };
+    nextNodes = [...nodes, targetFolder];
+    existingIndex = nextNodes.length - 1;
+  }
+
+  const updatedChildren = insertNodeIntoTree(
+    targetFolder.children || [],
+    remaining,
+    fullPath,
+    type
+  );
+
+  nextNodes[existingIndex] = {
+    ...targetFolder,
+    children: updatedChildren,
+  };
+
+  return sortTreeNodes(nextNodes);
+}
+
+function sortTreeNodes(nodes: FileTreeNode[]): FileTreeNode[] {
+  return [...nodes].sort((a, b) => {
+    if (a.type !== b.type) {
+      return a.type === 'folder' ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+}
+

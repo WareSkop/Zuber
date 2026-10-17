@@ -174,10 +174,18 @@ class SyncEngine {
     for (const m of mutations) {
       try {
         if (m.type === 'save_note') {
+          // Always read the latest note data from local IndexedDB so all edits made offline
+          // (whether via body, raw editor, or frontmatter) are sent to the server.
+          const latestLocalNote = await this.localDb.getNote(m.path);
+          const bodyToSend = latestLocalNote ? latestLocalNote.body : (m.body ?? '');
+          const propsToSend = latestLocalNote ? latestLocalNote.properties : (m.properties ?? []);
+          const rawToSend = latestLocalNote?.rawContent;
+
           await api.saveNote({
             path: m.path,
-            body: m.body,
-            properties: m.properties,
+            body: bodyToSend,
+            properties: propsToSend,
+            rawContent: rawToSend,
             baseMtime: m.baseMtime,
             forceOverwrite: false,
           });
@@ -195,11 +203,12 @@ class SyncEngine {
         if (err instanceof ApiConflictError) {
           // Add to conflicts modal queue
           if (!this.activeConflicts.some((c) => c.id === m.id)) {
+            const latestLocalNote = await this.localDb.getNote(m.path);
             this.activeConflicts.push({
               id: m.id,
               path: m.path,
-              localBody: m.body || '',
-              localProperties: m.properties || [],
+              localBody: latestLocalNote?.body ?? m.body ?? '',
+              localProperties: latestLocalNote?.properties ?? m.properties ?? [],
               localTimestamp: m.timestamp,
               serverNote: err.serverNote,
             });
@@ -391,6 +400,7 @@ class SyncEngine {
 
     // Optimistically update local database
     await this.localDb.putNote(updatedNote);
+    await this.localDb.addEntryToTree(payload.path, 'file');
 
     // If online, try to persist to server directly
     if (navigator.onLine && this.syncState !== 'offline') {
@@ -421,13 +431,79 @@ class SyncEngine {
       id: `save-${payload.path}-${Date.now()}`,
       type: 'save_note',
       path: payload.path,
-      body: payload.body,
-      properties: payload.properties,
+      body: updatedNote.body,
+      properties: updatedNote.properties,
       baseMtime: payload.baseMtime,
       timestamp: Date.now(),
     };
     await this.localDb.addOutboxMutation(mutation);
     return updatedNote;
+  }
+
+  public async createNote(
+    relPath: string,
+    body: string = '',
+    properties: FrontmatterProperty[] = []
+  ): Promise<NoteData> {
+    return this.saveNote({
+      path: relPath,
+      body,
+      properties,
+    });
+  }
+
+  public async createFolder(relPath: string): Promise<void> {
+    // 1. Locally insert into tree
+    await this.localDb.addEntryToTree(relPath, 'folder');
+
+    // 2. If online, call server API
+    if (navigator.onLine && this.syncState !== 'offline') {
+      try {
+        await api.createFolder(relPath);
+        return;
+      } catch (err: any) {
+        if (err instanceof ApiHttpError && err.status < 500) {
+          throw err;
+        }
+      }
+    }
+
+    // 3. Queue in outbox if offline or server unreachable
+    const mutation: OutboxMutation = {
+      id: `folder-${relPath}-${Date.now()}`,
+      type: 'create_folder',
+      path: relPath,
+      timestamp: Date.now(),
+    };
+    await this.localDb.addOutboxMutation(mutation);
+  }
+
+  public async renameEntry(oldPath: string, newPath: string): Promise<{ newPath: string }> {
+    // 1. Locally rename in DB and tree
+    await this.localDb.renameEntryInTree(oldPath, newPath);
+
+    // 2. If online, call server API
+    if (navigator.onLine && this.syncState !== 'offline') {
+      try {
+        const res = await api.renameEntry(oldPath, newPath);
+        return res;
+      } catch (err: any) {
+        if (err instanceof ApiHttpError && err.status < 500) {
+          throw err;
+        }
+      }
+    }
+
+    // 3. Queue in outbox
+    const mutation: OutboxMutation = {
+      id: `rename-${oldPath}-${Date.now()}`,
+      type: 'rename',
+      path: oldPath,
+      newPath,
+      timestamp: Date.now(),
+    };
+    await this.localDb.addOutboxMutation(mutation);
+    return { newPath };
   }
 
   public async deleteEntry(relPath: string): Promise<void> {

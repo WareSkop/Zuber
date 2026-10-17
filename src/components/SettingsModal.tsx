@@ -318,53 +318,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="settings-modal">
-        {/* Left Navigation Sidebar */}
+    <div className="settings-modal-overlay" onClick={onClose}>
+      <div className="settings-modal-container settings-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Navigation Sidebar (Desktop) / Top Header & Horizontal Tabs (Mobile) */}
         <aside className="settings-nav">
           <div className="settings-nav-header">
             <h2>{t('settings.title')}</h2>
+            <button
+              type="button"
+              className="settings-close-btn mobile-only"
+              onClick={onClose}
+              title={t('common.close')}
+              aria-label={t('common.close')}
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button
-            type="button"
-            className={`settings-nav-item ${activeTab === 'appearance' ? 'active' : ''}`}
-            onClick={() => setActiveTab('appearance')}
-          >
-            <Palette size={16} />
-            <span>{t('settings.tabAppearance')}</span>
-          </button>
-          <button
-            type="button"
-            className={`settings-nav-item ${activeTab === 'editor' ? 'active' : ''}`}
-            onClick={() => setActiveTab('editor')}
-          >
-            <FileText size={16} />
-            <span>{t('settings.tabEditor')}</span>
-          </button>
-          <button
-            type="button"
-            className={`settings-nav-item ${activeTab === 'security' ? 'active' : ''}`}
-            onClick={() => setActiveTab('security')}
-          >
-            <Shield size={16} />
-            <span>{t('settings.tabSecurity')}</span>
-          </button>
-          <button
-            type="button"
-            className={`settings-nav-item ${activeTab === 'servers' ? 'active' : ''}`}
-            onClick={() => setActiveTab('servers')}
-          >
-            <Server size={16} />
-            <span>{t('settings.tabServers')}</span>
-          </button>
-          <button
-            type="button"
-            className={`settings-nav-item ${activeTab === 'sync' ? 'active' : ''}`}
-            onClick={() => setActiveTab('sync')}
-          >
-            <CloudDownload size={16} />
-            <span>{t('settings.tabSync')}</span>
-          </button>
+          <div className="settings-nav-items-wrapper">
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'appearance' ? 'active' : ''}`}
+              onClick={() => setActiveTab('appearance')}
+            >
+              <Palette size={16} />
+              <span>{t('settings.tabAppearance')}</span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'editor' ? 'active' : ''}`}
+              onClick={() => setActiveTab('editor')}
+            >
+              <FileText size={16} />
+              <span>{t('settings.tabEditor')}</span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'security' ? 'active' : ''}`}
+              onClick={() => setActiveTab('security')}
+            >
+              <Shield size={16} />
+              <span>{t('settings.tabSecurity')}</span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'servers' ? 'active' : ''}`}
+              onClick={() => setActiveTab('servers')}
+            >
+              <Server size={16} />
+              <span>{t('settings.tabServers')}</span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'sync' ? 'active' : ''}`}
+              onClick={() => setActiveTab('sync')}
+            >
+              <CloudDownload size={16} />
+              <span>{t('settings.tabSync')}</span>
+            </button>
+          </div>
         </aside>
 
         {/* Right Content Area */}
@@ -377,7 +388,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {activeTab === 'servers' && t('settings.serversTitle')}
               {activeTab === 'sync' && t('settings.syncTitle')}
             </h3>
-            <button type="button" className="settings-close-btn" onClick={onClose} title={t('common.close')}>
+            <button
+              type="button"
+              className="settings-close-btn desktop-only"
+              onClick={onClose}
+              title={t('common.close')}
+              aria-label={t('common.close')}
+            >
               <X size={18} />
             </button>
           </div>

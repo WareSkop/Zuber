@@ -252,15 +252,6 @@ export const App: React.FC = () => {
     localStorage.setItem('knowmesh_theme', theme);
   }, [theme]);
 
-  useEffect(() => {
-    const unsubSync = syncEngine.subscribe(setSyncState);
-    const unsubConflicts = syncEngine.subscribeConflicts(setConflicts);
-    return () => {
-      unsubSync();
-      unsubConflicts();
-    };
-  }, []);
-
   const manualSaveRef = useRef<(() => void) | null>(null);
 
   // Global Keyboard shortcuts (Command Palette, Save, Settings, New Note, Sidebars)
@@ -356,16 +347,19 @@ export const App: React.FC = () => {
           edges: [],
           tags: [],
         };
-        // If cachedFiles is empty, reconstruct from local notes in IndexedDB
-        if (!cachedFiles || cachedFiles.length === 0) {
-          const localNotes = await syncEngine.getLocalDb().getAllNotes();
-          cachedFiles = localNotes.map((n) => ({
-            path: n.path,
-            name: n.name,
-            basename: n.name.replace(/\.md$/, ''),
-            extension: 'md',
-          }));
-        }
+        // Always include newly created or offline notes in cachedFiles
+        const localNotes = await syncEngine.getLocalDb().getAllNotes();
+        const noteFiles = localNotes.map((n) => ({
+          path: n.path,
+          name: n.name,
+          basename: n.name.replace(/\.md$/, ''),
+          extension: 'md',
+        }));
+        const fileMap = new Map<string, any>();
+        for (const f of cachedFiles) fileMap.set(f.path, f);
+        for (const f of noteFiles) fileMap.set(f.path, f);
+        cachedFiles = Array.from(fileMap.values());
+
         setTree(cachedTree);
         setAllFiles(cachedFiles);
         setGraphData(cachedGraph);
@@ -430,18 +424,13 @@ export const App: React.FC = () => {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingStructuralRef = useRef(false);
   const scheduleIndexRefresh = useCallback(
-    (structural: boolean, delay = 600) => {
-      pendingStructuralRef.current ||= structural;
+    (_structural: boolean, delay = 400) => {
+      pendingStructuralRef.current = true;
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = setTimeout(async () => {
-        const doTree = pendingStructuralRef.current;
         pendingStructuralRef.current = false;
         try {
-          if (doTree) {
-            await loadVaultIndex();
-          } else {
-            setGraphData(await api.getGraph());
-          }
+          await loadVaultIndex();
           await refreshBacklinks(activePathRef.current);
         } catch {
           // ignore
@@ -467,6 +456,23 @@ export const App: React.FC = () => {
     },
     [refreshBacklinks]
   );
+
+  useEffect(() => {
+    const unsubSync = syncEngine.subscribe((state) => {
+      setSyncState(state);
+      if (state === 'synced') {
+        loadVaultIndex().catch(() => {});
+        if (activePathRef.current) {
+          openNoteByPath(activePathRef.current).catch(() => {});
+        }
+      }
+    });
+    const unsubConflicts = syncEngine.subscribeConflicts(setConflicts);
+    return () => {
+      unsubSync();
+      unsubConflicts();
+    };
+  }, [loadVaultIndex, openNoteByPath]);
 
   // Memoized lookup maps for instant client-side [[Wiki-Link]] resolution
   const linkLookup = useMemo(() => {
@@ -673,9 +679,16 @@ export const App: React.FC = () => {
         ws.onmessage = (event) => {
           try {
             const msg = JSON.parse(event.data);
-            if (msg.type === 'vault:changed') {
+            if (
+              msg.type === 'vault:changed' ||
+              msg.type === 'add' ||
+              msg.type === 'unlink' ||
+              msg.type === 'addDir' ||
+              msg.type === 'unlinkDir'
+            ) {
               const paths: string[] = Array.isArray(msg.paths) ? msg.paths : [];
-              scheduleIndexRefresh(Boolean(msg.structural));
+              loadVaultIndex().catch(() => {});
+              scheduleIndexRefresh(true, 200);
               // If the currently open file was modified externally (not by our own save), reload it
               const currentPath = activePathRef.current;
               if (
@@ -706,6 +719,7 @@ export const App: React.FC = () => {
 
     const handleOnline = () => {
       connectWs();
+      syncEngine.checkConnectionAndSync();
     };
     window.addEventListener('online', handleOnline);
 
@@ -909,7 +923,7 @@ export const App: React.FC = () => {
       }
       const cleanName = decodedName.split('#')[0].replace(/\.md$/i, '').trim();
       const newPath = `${cleanName}.md`;
-      const created = await api.saveNote({
+      const created = await syncEngine.saveNote({
         path: newPath,
         properties: [
           { key: 'tags', type: 'list', value: ['notiz'] },
@@ -941,7 +955,7 @@ export const App: React.FC = () => {
         const relPath = dialog.parentFolder
           ? `${dialog.parentFolder}/${cleanTitle}.md`
           : `${cleanTitle}.md`;
-        const created = await api.saveNote({
+        const created = await syncEngine.saveNote({
           path: relPath,
           properties: [
             { key: 'tags', type: 'list', value: [] },
@@ -959,14 +973,14 @@ export const App: React.FC = () => {
       } else if (dialog.type === 'create-folder') {
         if (!val) return;
         const relPath = dialog.parentFolder ? `${dialog.parentFolder}/${val}` : val;
-        await api.createFolder(relPath);
+        await syncEngine.createFolder(relPath);
         await loadVaultIndex();
       } else if (dialog.type === 'rename' && dialog.targetPath) {
         if (!val) return;
         const parts = dialog.targetPath.split('/');
         parts[parts.length - 1] = val;
         const newRelPath = parts.join('/');
-        const res = await api.renameEntry(dialog.targetPath, newRelPath);
+        const res = await syncEngine.renameEntry(dialog.targetPath, newRelPath);
         await loadVaultIndex();
         if (activeNote?.path === dialog.targetPath) {
           await openNoteByPath(res.newPath);

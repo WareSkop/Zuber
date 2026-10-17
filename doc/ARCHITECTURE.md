@@ -167,6 +167,17 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
   ```
 - Sendet der Client `forceOverwrite: true`, wird die Datei unabhängig von `baseMtime` überschrieben.
 
+### Outbox-Verarbeitung & Reconnect (`flushOutbox()`)
+- Alle im Offline-Modus durchgeführten Datei- und Ordneroperationen (`save_note`, `create_folder`, `rename`, `delete`) werden in der lokalen IndexedDB-Outbox (`localDb.ts`) persistiert.
+- Bei Reconnect (`online`-Event oder Polling) verarbeitet `syncEngine.flushOutbox()` die Warteschlange:
+  - Bei `save_note` holt der Sync-Engine stets das aktuellste Notizen-Objekt (`localDb.getNote(path)`), sodass alle offline getätigten Eingaben (`body`, `properties`, `rawContent`) vollständig übertragen werden.
+  - Mutationen werden erst nach erfolgreichem Server-HTTP 200 aus der Outbox gelöscht.
+  - Nach Abschluss der Outbox-Flutung erfolgt ein Delta-Manifest-Abgleich und das Frontend aktualisiert den Verzeichnisbaum (`loadVaultIndex()`).
+
+### WebSocket Live-Tree Events
+- Der WebSocket-Server sendet bei jeder Dateiänderung im Vault Nachrichten vom Typ `vault:changed` (sowie chokidar-Events wie `add`, `unlink`, `addDir`, `unlinkDir`).
+- Der Client reagiert darauf mit einem sofortigen und debouncten Reload des Vault-Index (`loadVaultIndex()`), wodurch die Dateibaum-Ansicht (`FileSidebar`) für alle verbundenen Clients konsistent und aktuell bleibt.
+
 ---
 
 ## 8. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)

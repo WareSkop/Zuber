@@ -393,6 +393,26 @@ Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufge
   - **Umbenennen:** Öffnet den Umbenennen-Dialog und passt WikiLinks vault-weit automatisch an.
   - **Löschen:** Öffnet eine Sicherheitsabfrage. Bricht vor dem Löschen alle ausstehenden Autosave-Timer ab und entfernt den Eintrag sofort konsistent aus Dateisystem, Backend-Index und lokalem IndexedDB-Cache.
 
+---
+
+## 15. Offline-Dateierstellung, Outbox-Sync & Responsives Einstellungs-Modal
+
+### 15.1 Reaktiv aktualisierter Dateibaum via WebSocket
+- Der WebSocket-Listener in [`src/App.tsx`](../src/App.tsx) lauscht auf alle File-Events (`vault:changed`, `add`, `unlink`, `addDir`, `unlinkDir`).
+- Sobald ein solches Event empfangen wird, lädt `App.tsx` den Verzeichnisbaum (`loadVaultIndex()`) sofort und strukturell neu, wodurch neu erstellte oder extern veränderte Dateien umgehend in [`FileSidebar.tsx`](../src/components/FileSidebar.tsx) erscheinen, ohne dass ein manueller Refresh erforderlich ist.
+
+### 15.2 Responsives Einstellungs-Modal auf mobilen Geräten (`SettingsModal.tsx`)
+- **Overlay & Viewport-Anpassung:** Zentriertes Vollbild-Overlay (`.settings-modal-overlay`) mit Touch-Optimierung und Backdrop-Filter.
+- **Mobile Ansicht (`@media (max-width: 768px)`):**
+  - Tabs ordnen sich horizontal als scrollbare Navigationsleiste (`.settings-nav-items-wrapper`) oben an.
+  - Das Modal nutzt die volle Viewport-Breite (`100vw`, `100vh`) ohne Abschneiden nach rechts.
+  - Der Schließen-Button (×) ist im Header oben rechts immer fest sichtbar und bietet ein berührungsfreundliches Touch-Target (mindestens 44×44 px).
+
+### 15.3 Offline-Dateierstellung & Outbox-Synchronisation
+- Beim Erstellen von Notizen oder Ordnern bzw. beim Umbenennen im Offline-Modus ruft `App.tsx` die Methoden `syncEngine.saveNote()`, `syncEngine.createFolder()` und `syncEngine.renameEntry()` auf.
+- [`LocalDb`](../src/sync/localDb.ts) aktualisiert sofort den lokalen Baum (`meta.tree`) und die Notizenliste (`meta.allNotes`), sodass neue Notizen sofort im Dateibaum sichtbar sind und geöffnet werden können.
+- Beim Reconnect (`window.ononline` und `syncEngine.checkConnectionAndSync()`) verarbeitet `flushOutbox()` alle ausstehenden Mutationen. Für `save_note` wird stets der frischeste Stand aus `localDb.getNote()` (`body`, `properties`, `rawContent`) an den Server gesendet, sodass offline erstellte Inhalte niemals leer überschrieben werden. Nach erfolgreichem HTTP 200 wird die Mutation aus der Outbox entfernt und die App aktualisiert den Index via `loadVaultIndex()`.
+
 
 
 
