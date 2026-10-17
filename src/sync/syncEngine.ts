@@ -99,6 +99,21 @@ class SyncEngine {
     return this.syncState;
   }
 
+  public getLocalDb(): LocalDb {
+    return this.localDb;
+  }
+
+  public async hasLocalData(): Promise<boolean> {
+    try {
+      const notes = await this.localDb.getAllNotes();
+      if (notes.length > 0) return true;
+      const cachedTree = await this.localDb.getMeta('tree');
+      return Boolean(cachedTree);
+    } catch {
+      return false;
+    }
+  }
+
   public getActiveConflicts(): ConflictItem[] {
     return [...this.activeConflicts];
   }

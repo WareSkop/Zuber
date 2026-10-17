@@ -20,7 +20,7 @@ Dieses Dokument richtet sich direkt an **LLM-Coding-Agenten**, die diese Softwar
 ## 2. Playbooks für häufige Erweiterungen
 
 ### Playbook A: Eine neue Live-Preview-Syntax im Editor hinzufügen
-*(Beispiel: Du sollst Obsidian Callouts `> [!NOTE]` oder Inline-Mathematik `$...$` unterstützen)*
+*(Beispiel: Du sollst Callouts `> [!NOTE]` oder Inline-Mathematik `$...$` unterstützen)*
 
 1. **Quellcode prüfen:** Öffne [`src/components/LivePreviewEditor.tsx`](../src/components/LivePreviewEditor.tsx).
 2. **Widget-Klasse anlegen:**
@@ -32,7 +32,7 @@ Dieses Dokument richtet sich direkt an **LLM-Coding-Agenten**, die diese Softwar
    - **Für zeilenbasierte oder mehrzeilige Syntax:** Füge die Erkennung in die `while (pos <= vpTo)`-Zeilenschleife ein. Prüfe mit `selectionTouches(view, line.from, line.to)`, ob der Cursor sich in der Zeile (bzw. im mehrzeiligen Block) befindet. Nur wenn `selectionTouches === false` ist, füge die `Decoration` zum Array `decos` hinzu.
    - **Für Inline-Syntax (innerhalb einer Zeile):** Definiere einen regulären Ausdruck und scanne `slice = docText.slice(vpFrom, vpTo)`. Prüfe mit `inCodeFenceOrInlineCode(lineText, indexInLine)`, dass der Treffer nicht in einem Codeblock liegt, und mit `!selectionTouches(view, absFrom, absTo)`, dass der Cursor nicht im Bereich steht.
 4. **Lese-Modus (`mode === 'reading'`) synchron halten:**
-   Erweitere [`preprocessObsidianMarkdown`](../src/components/LivePreviewEditor.tsx), damit die neue Syntax auch in der HTML-Leseansicht identisch gerendert wird.
+   Erweitere die Markdown-Vorverarbeitung (`renderedHtml`) in [`src/components/LivePreviewEditor.tsx`](../src/components/LivePreviewEditor.tsx), damit die neue Syntax auch in der HTML-Leseansicht identisch gerendert wird.
 5. **Styling ergänzen:** Füge die CSS-Klassen in [`src/styles.css`](../src/styles.css) hinzu.
 
 ---

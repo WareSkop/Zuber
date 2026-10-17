@@ -180,14 +180,14 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 
 | Methode | Pfad | Beschreibung | Parameter / Body | Response |
 | :--- | :--- | :--- | :--- | :--- |
-| `GET` | `/api/vault/attachment` | Streamt eine Datei aus dem Vault. Unterstützt direkte Pfade, URL-kodierte Pfade (`%20`), ordnerrelative Pfade (wenn `from` angegeben ist) und Obsidian-Kurznamen (`![[bild.png]]`). | Query: `?path=...&from=Quell/Notiz.md` | Binärer Datei-Stream (`res.sendFile`) mit `Cache-Control: private, max-age=3600` und `ETag` |
-| `POST` | `/api/vault/upload` | Lädt eine neue Binärdatei per `multipart/form-data` (Feldname `file`) in den angegebenen Zielordner hoch (bei Namenskonflikt wird `name-<timestamp>.ext` erzeugt). Erkennt Dateitypen auch bei Clipboard-Blobs ohne Dateiendung automatisch und liefert den fertigen Obsidian-WikiEmbed-Tag (`![[attachments/...]]`) zurück. | Query: `?folder=attachments`<br>Form-Data: `file` | `UploadResponse` (`{ ok: boolean, path: string, name: string, originalName: string, size: number, wikiEmbed: string }`) |
+| `GET` | `/api/vault/attachment` | Streamt eine Datei aus dem Vault. Unterstützt direkte Pfade, URL-kodierte Pfade (`%20`), ordnerrelative Pfade (wenn `from` angegeben ist) und Wiki-Embed-Kurznamen (`![[bild.png]]`). | Query: `?path=...&from=Quell/Notiz.md` | Binärer Datei-Stream (`res.sendFile`) mit `Cache-Control: private, max-age=3600` und `ETag` |
+| `POST` | `/api/vault/upload` | Lädt eine neue Binärdatei per `multipart/form-data` (Feldname `file`) in den angegebenen Zielordner hoch (bei Namenskonflikt wird `name-<timestamp>.ext` erzeugt). Erkennt Dateitypen auch bei Clipboard-Blobs ohne Dateiendung automatisch und liefert den fertigen Wiki-Embed-Tag (`![[attachments/...]]`) zurück. | Query: `?folder=attachments`<br>Form-Data: `file` | `UploadResponse` (`{ ok: boolean, path: string, name: string, originalName: string, size: number, wikiEmbed: string }`) |
 
 ---
 
 ## 3. WebSocket-Protokoll (`/ws`)
 
-Der WebSocket-Server (`ws` Paket) teilt sich denselben HTTPS-Port wie Express und validiert beim `upgrade`-Handshake das Cookie `obsidian_web_session` über [`verifyRequestAuth`](../server/auth.ts).
+Der WebSocket-Server (`ws` Paket) teilt sich denselben HTTPS-Port wie Express und validiert beim `upgrade`-Handshake das Cookie `knowmesh_session` (bzw. Query-Token `?token=...`) über [`verifyRequestAuth`](../server/auth.ts).
 
 ### Nachrichten vom Server an den Client
 

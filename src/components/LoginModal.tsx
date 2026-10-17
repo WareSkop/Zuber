@@ -45,7 +45,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         <div className="security-badge-row">
           <span className={`security-badge ${httpsActive ? 'secure' : 'standard'}`}>
             <ShieldCheck size={15} />
-            {httpsActive ? 'TLS / HTTPS Verschlüsselt' : 'Lokale Verbindung'}
+            {typeof navigator !== 'undefined' && !navigator.onLine
+              ? 'Offline-Modus'
+              : httpsActive
+              ? 'TLS / HTTPS Verschlüsselt'
+              : 'Lokale Verbindung'}
           </span>
           {vaultPath && (
             <span className="vault-path-badge" title={vaultPath}>
@@ -66,7 +70,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Passwort eingeben (Standard: obsidian)"
+              placeholder="Passwort eingeben (Standard: knowmesh)"
               autoFocus
               required
             />
@@ -79,7 +83,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </button>
 
           <p className="login-hint">
-            Standard-Passwort in <code>.env</code>: <code>obsidian</code>
+            Standard-Passwort in <code>.env</code>: <code>knowmesh</code>
           </p>
         </form>
       </div>

@@ -51,7 +51,13 @@ import {
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
 } from '../shared/markdownUtils';
-import { api, getStoredToken } from './api';
+import {
+  api,
+  getStoredToken,
+  setStoredToken,
+  hasOfflineAuthVerifier,
+  ApiHttpError,
+} from './api';
 import { LoginModal } from './components/LoginModal';
 import { FileSidebar } from './components/FileSidebar';
 import { PropertiesEditor } from './components/PropertiesEditor';
@@ -327,12 +333,30 @@ export const App: React.FC = () => {
   }, []);
 
   const loadVaultIndex = useCallback(async () => {
-    const [treeRes, graphRes] = await Promise.all([api.getTree(), api.getGraph()]);
-    setTree(treeRes.tree);
-    setAllFiles(treeRes.files);
-    setVaultPath(treeRes.vaultPath);
-    setGraphData(graphRes);
-    return { treeRes, graphRes };
+    try {
+      const [treeRes, graphRes] = await Promise.all([api.getTree(), api.getGraph()]);
+      setTree(treeRes.tree);
+      setAllFiles(treeRes.files);
+      setVaultPath(treeRes.vaultPath);
+      setGraphData(graphRes);
+      return { treeRes, graphRes };
+    } catch {
+      // Offline fallback: load from local IndexedDB
+      const cachedTree = (await syncEngine.getTree()) || [];
+      const cachedFiles = (await syncEngine.getLocalDb().getMeta<any[]>('files')) || [];
+      const cachedGraph = (await syncEngine.getLocalDb().getMeta<GraphData>('graph')) || {
+        nodes: [],
+        edges: [],
+        tags: [],
+      };
+      setTree(cachedTree);
+      setAllFiles(cachedFiles);
+      setGraphData(cachedGraph);
+      return {
+        treeRes: { tree: cachedTree, files: cachedFiles, vaultPath: 'Knowmesh Vault (Offline)' },
+        graphRes: cachedGraph,
+      };
+    }
   }, []);
 
   const refreshBacklinks = useCallback(async (relPath: string | null) => {
@@ -344,7 +368,30 @@ export const App: React.FC = () => {
       const res = await api.getBacklinks(relPath);
       if (activePathRef.current === relPath) setBacklinks(res);
     } catch {
-      // ignore
+      // Offline fallback: compute local backlinks from cached notes
+      try {
+        const localNotes = await syncEngine.getLocalDb().getAllNotes();
+        const targetClean = relPath.replace(/\.md$/, '').toLowerCase();
+        const linked: BacklinkItem[] = [];
+        for (const note of localNotes) {
+          if (note.path === relPath) continue;
+          const linksToTarget = note.links.some((l) => {
+            const cl = l.replace(/\.md$/, '').toLowerCase();
+            return cl === targetClean || cl.endsWith(`/${targetClean}`);
+          });
+          if (linksToTarget) {
+            linked.push({
+              sourcePath: note.path,
+              sourceTitle: note.name,
+              line: 1,
+              snippet: `${note.name} verlinkt auf diese Notiz`,
+            });
+          }
+        }
+        if (activePathRef.current === relPath) setBacklinks({ linked, unlinked: [] });
+      } catch {
+        // ignore
+      }
     }
   }, []);
 
@@ -378,7 +425,7 @@ export const App: React.FC = () => {
     async (relPath: string) => {
       const requestId = ++openRequestRef.current;
       try {
-        const note = await api.getNote(relPath);
+        const note = await syncEngine.getNote(relPath);
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
         setActiveNote(note);
         setSaveState('saved');
@@ -452,9 +499,45 @@ export const App: React.FC = () => {
 
   // Initial authentication check
   useEffect(() => {
-    api
-      .checkAuthStatus()
-      .then(async (status) => {
+    let cancelled = false;
+
+    const initAuth = async () => {
+      const storedToken = getStoredToken();
+      const hasLocalNotes = await syncEngine.hasLocalData();
+      const hasVerifier = hasOfflineAuthVerifier();
+      const canProceedOffline = Boolean(storedToken || hasLocalNotes || hasVerifier);
+
+      // If clearly offline right away
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (canProceedOffline) {
+          if (cancelled) return;
+          setAuthenticated(true);
+          setAuthChecked(true);
+          try {
+            const { treeRes } = await loadVaultIndex();
+            const welcome = treeRes.files.find(
+              (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
+            );
+            const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
+            if (firstMd && !cancelled) {
+              await openNoteByPath(firstMd.path);
+            }
+          } catch {
+            // ignore offline loading error
+          }
+          return;
+        } else {
+          if (cancelled) return;
+          setAuthenticated(false);
+          setAuthChecked(true);
+          return;
+        }
+      }
+
+      // Online or browser reports online: attempt checkAuthStatus
+      try {
+        const status = await api.checkAuthStatus();
+        if (cancelled) return;
         setHttpsActive(status.https);
         setVaultPath(status.vaultPath);
         setAuthenticated(status.authenticated);
@@ -466,14 +549,50 @@ export const App: React.FC = () => {
             (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
           );
           const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
-          if (firstMd) {
+          if (firstMd && !cancelled) {
             await openNoteByPath(firstMd.path);
           }
         }
-      })
-      .catch(() => {
-        setAuthChecked(true);
-      });
+      } catch (err: any) {
+        if (cancelled) return;
+        // Check if server actively rejected with HTTP 401 Unauthorized
+        if (err instanceof ApiHttpError && err.status === 401) {
+          // Token is invalid/revoked/expired on server -> discard token and open LoginModal
+          setStoredToken(null);
+          setAuthenticated(false);
+          setAuthChecked(true);
+          return;
+        }
+
+        // Otherwise: Network error (Failed to fetch, connection refused, DNS error, offline, timeout)
+        if (canProceedOffline) {
+          // User was previously logged in on this device -> start seamlessly offline!
+          setAuthenticated(true);
+          setAuthChecked(true);
+          try {
+            const { treeRes } = await loadVaultIndex();
+            const welcome = treeRes.files.find(
+              (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
+            );
+            const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
+            if (firstMd && !cancelled) {
+              await openNoteByPath(firstMd.path);
+            }
+          } catch {
+            // ignore
+          }
+        } else {
+          // Device was never logged in online before
+          setAuthenticated(false);
+          setAuthChecked(true);
+        }
+      }
+    };
+
+    initAuth();
+    return () => {
+      cancelled = true;
+    };
   }, [loadVaultIndex, openNoteByPath]);
 
   // WebSocket live file-watcher connection
@@ -669,7 +788,7 @@ export const App: React.FC = () => {
     return linkLookup.byPath.get(clean) ?? linkLookup.byName.get(clean) ?? null;
   };
 
-  // Navigate to a [[Wiki-Link]] or Markdown [Link](target); if the note does not exist yet, create it just like Obsidian!
+  // Navigate to a [[Wiki-Link]] or Markdown [Link](target); if the note does not exist yet, create it automatically!
   const handleNavigateWikiLink = async (target: string) => {
     try {
       const trimmed = target.trim();
@@ -1237,11 +1356,11 @@ export const App: React.FC = () => {
       },
       {
         id: 'theme-light',
-        title: 'Darstellung: Theme „Obsidian Light“',
+        title: 'Darstellung: Theme „Knowmesh Hell“',
         category: 'Einstellungen',
         icon: <Palette size={16} />,
-        keywords: ['theme', 'light', 'hell', 'weiß'],
-        action: () => setTheme('theme-obsidian-light'),
+        keywords: ['theme', 'light', 'hell', 'weiß', 'knowmesh'],
+        action: () => setTheme('light-cold'),
       },
       {
         id: 'theme-amoled',
@@ -1302,7 +1421,7 @@ export const App: React.FC = () => {
     : 0;
 
   const renderRibbon = (extraClass = '') => (
-    <nav className={`obsidian-ribbon ${extraClass}`} aria-label="Hauptnavigation">
+    <nav className={`knowmesh-ribbon obsidian-ribbon ${extraClass}`} aria-label="Hauptnavigation">
       <div className="ribbon-top">
         <button
           type="button"
@@ -1396,7 +1515,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`obsidian-app-shell ${zenMode ? 'zen-mode-active zen-mode' : ''}`}
+      className={`knowmesh-app-shell obsidian-app-shell ${zenMode ? 'zen-mode-active zen-mode' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -1494,7 +1613,7 @@ export const App: React.FC = () => {
                   type="button"
                   className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
                   onClick={() => setEditorMode('live')}
-                  title="Obsidian Live-Preview (Syntax nur in aktiver Zeile)"
+                  title="Knowmesh Live-Preview (Syntax nur in aktiver Zeile)"
                 >
                   <Eye size={14} />
                   <span>Live-Preview</span>
@@ -1855,9 +1974,9 @@ export const App: React.FC = () => {
       </>
       )}
 
-      {/* Bottom Obsidian Status Bar */}
+      {/* Bottom Status Bar */}
       {!zenMode && (
-        <footer className="obsidian-statusbar">
+        <footer className="knowmesh-statusbar obsidian-statusbar">
           <div className="statusbar-left">
             <span className="status-item" title="Verschlüsselte Verbindung">
               <Lock size={12} />

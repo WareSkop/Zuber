@@ -49,7 +49,7 @@ export class ConfigService {
     }
 
     // Create initial config from environment or default password
-    const initialPassword = process.env.OBSIDIAN_WEB_PASSWORD || 'obsidian';
+    const initialPassword = process.env.KNOWMESH_PASSWORD || process.env.OBSIDIAN_WEB_PASSWORD || 'knowmesh';
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = this.hashPassword(initialPassword, salt);
     const initialConfig: ServerConfig = {

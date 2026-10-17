@@ -128,7 +128,7 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
 
 ### Dynamische Passwort- & Sicherheitskonfiguration (`server/configService.ts`)
 - Knowmesh speichert Sicherheitseinstellungen persistent in `server-config.json` im Projekt-Root (`{ authEnabled: boolean, passwordHash: string, salt: string, updatedAt: number }`).
-- Beim ersten Start ohne `server-config.json` wird das Initialpasswort aus `process.env.OBSIDIAN_WEB_PASSWORD || 'obsidian'` mit `crypto.scryptSync(password, salt, 64)` gehasht.
+- Beim ersten Start ohne `server-config.json` wird das Initialpasswort aus `process.env.KNOWMESH_PASSWORD || process.env.OBSIDIAN_WEB_PASSWORD || 'knowmesh'` mit `crypto.scryptSync(password, salt, 64)` gehasht.
 - Über `GET /api/settings/security` und `POST /api/settings/security` kann der Benutzer im UI das Passwort ändern oder den Passwortschutz komplett deaktivieren (`authEnabled: false`).
 - Ist `authEnabled === false`, lässt `authMiddleware` alle Requests ohne Token durch (`GET /api/auth/status` antwortet mit `{ authenticated: true, authRequired: false }`).
 
@@ -140,7 +140,7 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
 - Das Token wird als HTTP-Only-Cookie (`knowmesh_session`) gesetzt und im JSON-Response zurückgegeben (vom Frontend in `localStorage` unter `knowmesh_token` gespeichert).
 - `extractTokenFromRequest(req)` akzeptiert das Token aus:
   1. Header `Authorization: Bearer <token>` (bevorzugt für Cross-Origin PWA)
-  2. Cookie `knowmesh_session` (oder `basalt_session` / `obsidian_vault_session` als Fallback)
+  2. Cookie `knowmesh_session` (oder `basalt_session` / `obsidian_vault_session` als Legacy-Fallback)
   3. Query-Parameter `?token=<token>` (für `<img>`-Tags und WebSocket `/ws?token=...`)
 - Die Signaturprüfung in `verifySessionToken` nutzt `crypto.timingSafeEqual`, um Timing-Angriffe auszuschließen.
 

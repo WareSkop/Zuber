@@ -276,7 +276,8 @@ code {
   }
 }
 
-/* Main Obsidian App Grid */
+/* Main Knowmesh App Grid */
+.knowmesh-app-shell,
 .obsidian-app-shell {
   display: grid;
   grid-template-columns: 44px auto 1fr auto;
@@ -288,6 +289,7 @@ code {
 }
 
 /* Leftmost Icon Ribbon */
+.knowmesh-ribbon,
 .obsidian-ribbon {
   grid-row: 1 / 2;
   grid-column: 1 / 2;
@@ -1263,6 +1265,7 @@ code {
   margin: 4px 0;
 }
 
+.knowmesh-table,
 .obsidian-table,
 .reading-view-container table {
   border-collapse: collapse;
@@ -1891,6 +1894,7 @@ code {
 }
 
 /* Status Bar */
+.knowmesh-statusbar,
 .obsidian-statusbar {
   grid-row: 2 / 3;
   grid-column: 1 / 5;
@@ -3157,7 +3161,7 @@ input:checked + .slider:before {
 }
 
 /* ==========================================================================
-   Command Palette Modal (Obsidian-Style, Strg+P)
+   Command Palette Modal (Knowmesh, Strg+P)
    ========================================================================== */
 
 .command-palette-backdrop {
@@ -3570,6 +3574,7 @@ input:checked + .slider:before {
     animation: fadeIn 0.15s ease-out;
   }
 
+  .knowmesh-app-shell,
   .obsidian-app-shell {
     display: grid !important;
     grid-template-columns: 1fr !important;
@@ -3579,6 +3584,8 @@ input:checked + .slider:before {
     overflow: hidden !important;
   }
 
+  .knowmesh-app-shell > .knowmesh-ribbon,
+  .knowmesh-app-shell > .obsidian-ribbon,
   .obsidian-app-shell > .obsidian-ribbon {
     display: none !important;
   }
@@ -3604,6 +3611,7 @@ input:checked + .slider:before {
     animation: slideInLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .left-drawer-panel .knowmesh-ribbon,
   .left-drawer-panel .obsidian-ribbon {
     display: flex !important;
     width: 46px !important;
@@ -3657,6 +3665,7 @@ input:checked + .slider:before {
     font-size: 12px;
   }
 
+  .knowmesh-statusbar,
   .obsidian-statusbar {
     display: none;
   }
@@ -3683,6 +3692,8 @@ input:checked + .slider:before {
    Zen Mode (Distraction-Free Alt+Z)
    ========================================================================== */
 
+.knowmesh-app-shell.zen-mode-active,
+.knowmesh-app-shell.zen-mode,
 .obsidian-app-shell.zen-mode-active,
 .obsidian-app-shell.zen-mode {
   display: flex !important;
@@ -3697,12 +3708,16 @@ input:checked + .slider:before {
   overflow: hidden !important;
 }
 
+.zen-mode-active .knowmesh-ribbon,
 .zen-mode-active .obsidian-ribbon,
 .zen-mode-active .workspace-topbar,
+.zen-mode-active .knowmesh-statusbar,
 .zen-mode-active .obsidian-statusbar,
 .zen-mode-active .mobile-editor-toolbar,
+.zen-mode .knowmesh-ribbon,
 .zen-mode .obsidian-ribbon,
 .zen-mode .workspace-topbar,
+.zen-mode .knowmesh-statusbar,
 .zen-mode .obsidian-statusbar,
 .zen-mode .mobile-editor-toolbar {
   display: none !important;

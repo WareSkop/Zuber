@@ -152,7 +152,7 @@ class TableWidget extends WidgetType {
     wrapper.className = 'cm-lp-table-widget';
 
     const table = document.createElement('table');
-    table.className = 'obsidian-table';
+    table.className = 'knowmesh-table obsidian-table';
 
     const headerCells = splitTableCells(this.rawLines[0] || '');
     const alignments = parseAlignments(this.rawLines[1] || '');
@@ -720,7 +720,7 @@ function buildLivePreviewDecorations(
       });
     }
 
-    // 2. Obsidian Embeds ![[Target|Alt]] and WikiLinks [[Target|Alias]]
+    // 2. Embeds ![[Target|Alt]] and WikiLinks [[Target|Alias]]
     const wikiRegex = /(!?)\[\[([^\]|#\n]+)(?:#([^\]|\n]+))?(?:\|([^\]\n]+))?\]\]/g;
     let match: RegExpExecArray | null;
     while ((match = wikiRegex.exec(text)) !== null) {
@@ -1662,7 +1662,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
     let processed = body;
 
-    // 1. Transform Obsidian Callouts: > [!type] Title \n > content
+    // 1. Transform Callouts: > [!type] Title \n > content
     processed = processed.replace(
       /(?:^>\s*\[!([a-zA-Z]+)\]\s*(.*)\n)((?:^>.*\n?)*)/gm,
       (_match, typeStr, titleStr, contentBlock) => {
@@ -1677,7 +1677,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       }
     );
 
-    // 2. Transform Obsidian ![[Embeds]]
+    // 2. Transform Wiki-Embeds ![[Embeds]]
     processed = processed.replace(
       /!\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
       (_match, targetRaw, altRaw) => {

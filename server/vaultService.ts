@@ -100,7 +100,7 @@ export class VaultService {
     const welcomeNote = `---
 tags:
   - willkommen
-  - obsidian
+  - knowmesh
   - dashboard
 aliases:
   - Startseite
@@ -116,7 +116,7 @@ priorität: 1
 Dies ist deine selbstgehostete **Knowmesh Web-Applikation** mit verschlüsselter HTTPS-Verbindung, Echtzeit-Dateisystem-Synchronisation, visuellem **Frontmatter-Manager (Eigenschaften)** und interaktiver **Graph-Ansicht**.
 
 > [!tip] Live-Preview Editor
-> Klicke in eine beliebige Zeile, um den Markdown-Quellcode direkt zu bearbeiten. Sobald der Cursor die Zeile verlässt, werden Überschriften, **Fettdruck**, *Kursivschrift*, ==Markierungen==, \`Inline-Code\`, Aufgabenlisten und \`[[Wiki-Links]]\` wie in Obsidian gerendert!
+> Klicke in eine beliebige Zeile, um den Markdown-Quellcode direkt zu bearbeiten. Sobald der Cursor die Zeile verlässt, werden Überschriften, **Fettdruck**, *Kursivschrift*, ==Markierungen==, \`Inline-Code\`, Aufgabenlisten und \`[[Wiki-Links]]\` interaktiv gerendert!
 
 ## Vernetzte Notizen im Vault
 
@@ -126,7 +126,7 @@ Dies ist deine selbstgehostete **Knowmesh Web-Applikation** mit verschlüsselter
 
 ## Eingebettetes Architektur-Diagramm
 
-Über die Obsidian-Syntax \`![[architektur-diagramm.svg]]\` werden Bilder und Anhänge direkt eingebettet:
+Über die Wiki-Embed-Syntax \`![[architektur-diagramm.svg]]\` werden Bilder und Anhänge direkt eingebettet:
 
 ![[architektur-diagramm.svg]]
 
@@ -144,7 +144,7 @@ Probiere auch Inline-Tags wie #produktivität oder #wissen aus – ein Klick dar
 tags:
   - architektur
   - sicherheit
-  - obsidian
+  - knowmesh
 autor: Ingo
 status: Abgeschlossen
 erstellt: 2026-10-16
@@ -156,7 +156,7 @@ verschlüsselt: true
 Diese Notiz beschreibt den Aufbau der Web-Applikation, die auf der [[Willkommen in Knowmesh|Startseite]] vorgestellt wird.
 
 > [!info] Echtzeit-Synchronisation (Chokidar + WebSockets)
-> Alle Dateien liegen als reguläre \`.md\`-Dateien auf dem Server. Wenn du Dateien parallel mit Obsidian Desktop, Git oder Syncthing bearbeitest, erkennt der Server die Änderung sofort und aktualisiert den Browser live.
+> Alle Dateien liegen als reguläre \`.md\`-Dateien auf dem Server. Wenn du Dateien parallel mit externen Editoren, Git oder Syncthing bearbeitest, erkennt der Server die Änderung sofort und aktualisiert den Browser live.
 
 ## Kernkomponenten
 
@@ -194,7 +194,7 @@ Die **Zettelkasten Methode** lebt von atomaren Notizen und bidirektionalen Verkn
 
 - **Atomarität**: Ein Gedanke pro Notiz.
 - **Vernetzung**: Verlinke verwandte Konzepte mit \`[[Wiki-Links]]\`, z. B. zur [[Projekt-Architektur]].
-- **Graph-Exploration**: Nutze die Graph-Ansicht, um Wissenscluster über #wissen und #obsidian sichtbar zu machen.
+- **Graph-Exploration**: Nutze die Graph-Ansicht, um Wissenscluster über #wissen und #knowmesh sichtbar zu machen.
 `;
 
     const dailyNote = `---

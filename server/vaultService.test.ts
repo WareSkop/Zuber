@@ -206,7 +206,7 @@ describe('ConfigService & Dynamic Security Settings', () => {
   it('creates initial server-config.json and verifies default password', () => {
     const cfg = new ConfigService(configPath);
     expect(cfg.isAuthRequired()).toBe(true);
-    expect(cfg.verifyPassword('obsidian')).toBe(true);
+    expect(cfg.verifyPassword('knowmesh')).toBe(true);
     expect(cfg.verifyPassword('wrong-password')).toBe(false);
   });
 
@@ -215,12 +215,40 @@ describe('ConfigService & Dynamic Security Settings', () => {
     cfg.updateSecurity(true, 'neues-sicheres-passwort-123');
 
     expect(cfg.verifyPassword('neues-sicheres-passwort-123')).toBe(true);
-    expect(cfg.verifyPassword('obsidian')).toBe(false);
+    expect(cfg.verifyPassword('knowmesh')).toBe(false);
 
     // Disable auth
     cfg.updateSecurity(false);
     expect(cfg.isAuthRequired()).toBe(false);
     expect(cfg.verifyPassword('beliebig')).toBe(true);
+  });
+
+  it('respects KNOWMESH_PASSWORD and falls back to OBSIDIAN_WEB_PASSWORD', () => {
+    const origKnowmesh = process.env.KNOWMESH_PASSWORD;
+    const origObsidian = process.env.OBSIDIAN_WEB_PASSWORD;
+
+    try {
+      // 1. Both set -> KNOWMESH_PASSWORD takes priority
+      process.env.KNOWMESH_PASSWORD = 'super-secret-knowmesh';
+      process.env.OBSIDIAN_WEB_PASSWORD = 'old-obsidian-pw';
+      const testPath1 = path.join(tmpConfigDir, 'config1.json');
+      const cfg1 = new ConfigService(testPath1);
+      expect(cfg1.verifyPassword('super-secret-knowmesh')).toBe(true);
+      expect(cfg1.verifyPassword('old-obsidian-pw')).toBe(false);
+
+      // 2. Only OBSIDIAN_WEB_PASSWORD set -> fallback succeeds
+      delete process.env.KNOWMESH_PASSWORD;
+      const testPath2 = path.join(tmpConfigDir, 'config2.json');
+      const cfg2 = new ConfigService(testPath2);
+      expect(cfg2.verifyPassword('old-obsidian-pw')).toBe(true);
+      expect(cfg2.verifyPassword('knowmesh')).toBe(false);
+    } finally {
+      if (origKnowmesh !== undefined) process.env.KNOWMESH_PASSWORD = origKnowmesh;
+      else delete process.env.KNOWMESH_PASSWORD;
+
+      if (origObsidian !== undefined) process.env.OBSIDIAN_WEB_PASSWORD = origObsidian;
+      else delete process.env.OBSIDIAN_WEB_PASSWORD;
+    }
   });
 });
 
@@ -650,6 +678,37 @@ describe('Knowmesh - XSS Sanitization with DOMPurify', () => {
     expect(cleanHtml).toContain('<h1>Überschrift</h1>');
   });
 });
+
+describe('Knowmesh - Offline Auth Verifier & Password Hashing', () => {
+  it('correctly hashes password with salt using Web Crypto SHA-256 and verifies match', async () => {
+    const cryptoMod = await import('node:crypto');
+    const webcrypto = (globalThis.crypto || cryptoMod.webcrypto) as Crypto;
+    const subtle = webcrypto.subtle;
+
+    const saltBytes = new Uint8Array(16);
+    webcrypto.getRandomValues(saltBytes);
+    const saltHex = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const password = 'mein-sicheres-passwort';
+    const enc = new TextEncoder();
+    const data = enc.encode(`${saltHex}:${password}`);
+    const hashBuf = await subtle.digest('SHA-256', data);
+    const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Verification with same password
+    const verifyData = enc.encode(`${saltHex}:${password}`);
+    const verifyBuf = await subtle.digest('SHA-256', verifyData);
+    const verifyHex = Array.from(new Uint8Array(verifyBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    expect(verifyHex).toBe(hashHex);
+
+    // Verification with wrong password
+    const wrongData = enc.encode(`${saltHex}:falsches-passwort`);
+    const wrongBuf = await subtle.digest('SHA-256', wrongData);
+    const wrongHex = Array.from(new Uint8Array(wrongBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    expect(wrongHex).not.toBe(hashHex);
+  });
+});
+
 
 
 

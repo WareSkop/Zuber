@@ -1,6 +1,6 @@
 # Knowmesh – Technische Dokumentation & LLM-Handbuch
 
-Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Knowmesh** (ehemals „Basalt“ / „Obsidian Web Vault“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
+Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Knowmesh** (ehemals „Basalt“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
 
 ---
 
@@ -21,19 +21,19 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 
 ## 1. Projektziel & Kernfunktionen
 
-**Knowmesh** stellt einen lokalen Obsidian-kompatiblen Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx`) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
+**Knowmesh** stellt einen lokalen Markdown-Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx` – kompatibel zur Wiki-Link- und YAML-Frontmatter-Syntax) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
 
 ### Hauptmerkmale
 - **Progressive Web App (PWA) & Offline-App-Shell:**
   - Service Worker (`public/sw.js`) und Web-Manifest (`public/manifest.webmanifest`) ermöglichen Standalone-Installation und sofortigen Start selbst bei getrennter Netzwerkverbindung.
-- **Obsidian-artiger Editor mit 3 Modi (`live`, `reading`, `source`):**
+- **Knowmesh Markdown-Editor mit 3 Modi (`live`, `reading`, `source`):**
   - **Live-Preview (Standard):** CodeMirror 6 Editor, der Markdown-Syntax (`# Überschriften`, `**Fett**`, `==Highlight==`, `` `Code` ``, `- [ ] Aufgaben`, `[[Wiki-Links]]`, `[Links](pfad)`, `![[Einbettungen]]`, `![Bilder](pfad)`, `> [!callouts]`, `#tags` und `| Markdown | Tabellen |`) visuell rendert, sobald sich der Cursor außerhalb der betreffenden Zeile bzw. Tabelle befindet.
   - **Lese-Modus (`reading`):** Vollständig gerenderte HTML-Ansicht (GFM inkl. Tabellen, Callouts, Bildern, klickbaren Wiki-Links und Tags).
   - **Quellcode-Modus (`source`):** Direkte Bearbeitung des kompletten Roh-Markdown-Dokuments inklusive `---` YAML-Frontmatter-Block.
 - **Interaktive Bildanpassung (Größenänderung per Maus & Ausrichtung):**
   - Bilder können im Editor markiert, an den Drag-Handles mit der Maus in der Größe skaliert und über eine Toolbar links, zentriert, rechts oder inline ausgerichtet werden.
   - Gespeichert wird standardkonform als `<img src="..." width="..." align="..." />` für maximale Kompatibilität mit Markdown und Webviewern.
-- **Obsidian-Befehlspalette (`Ctrl+P` / `Cmd+P`):**
+- **Befehlspalette (`Ctrl+P` / `Cmd+P`):**
   - Globaler Schnellzugriff auf alle Befehle (Formatierung, Tabellen, Aufgaben, Codeblöcke, Ansichtsumschaltung, Themes, Sync) mit Tastaturnavigation und Shortcut-Anzeige.
 - **Responsive Oberfläche & ein-/ausblendbare Seitenleisten:**
   - Linke und rechte Leiste können über Header-Buttons oder Shortcuts (`Ctrl+\` bzw. `Ctrl+Alt+\`) eingeklappt werden, ideal für kleine Bildschirme und Smartphones.
@@ -145,7 +145,8 @@ services:
       - TRUST_PROXY=true          # Echte Client-IP für Rate-Limiting & X-Forwarded-Proto
       - FORCE_AUTH=true           # Deaktivieren des Passwortschutzes über Web-UI sperren
       - MAX_UPLOAD_MB=100         # Maximales Upload-Limit für Anhänge
-      - OBSIDIAN_WEB_PASSWORD=    # Optionales Initialpasswort (Standard: obsidian)
+      - KNOWMESH_PASSWORD=        # Optionales Initialpasswort (Standard: knowmesh)
+      # - OBSIDIAN_WEB_PASSWORD=  # Legacy-Fallback
     volumes:
       - ./vault:/data/vault       # Markdown-Notizen und Anhänge
       - ./config:/data/config     # Server-Konfiguration & Session-Epoch

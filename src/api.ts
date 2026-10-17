@@ -86,6 +86,100 @@ export class ApiConflictError extends Error {
   }
 }
 
+export class ApiHttpError extends Error {
+  public status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiHttpError';
+    this.status = status;
+  }
+}
+
+const OFFLINE_AUTH_VERIFIER_KEY = 'knowmesh_offline_auth_verifier';
+
+export async function storeOfflinePasswordHash(password: string): Promise<void> {
+  if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) return;
+  try {
+    const saltBytes = new Uint8Array(16);
+    window.crypto.getRandomValues(saltBytes);
+    const saltHex = Array.from(saltBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    const enc = new TextEncoder();
+    const data = enc.encode(`${saltHex}:${password}`);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    const hashBytes = new Uint8Array(hashBuffer);
+    const hashHex = Array.from(hashBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    const record = { salt: saltHex, hash: hashHex, timestamp: Date.now() };
+    localStorage.setItem(OFFLINE_AUTH_VERIFIER_KEY, JSON.stringify(record));
+  } catch (err) {
+    console.warn('[Knowmesh Auth] Could not store offline password verifier', err);
+  }
+}
+
+export async function verifyOfflinePassword(password: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) return false;
+  try {
+    const raw = localStorage.getItem(OFFLINE_AUTH_VERIFIER_KEY);
+    if (!raw) return false;
+    const { salt, hash } = JSON.parse(raw);
+    if (!salt || !hash) return false;
+
+    const enc = new TextEncoder();
+    const data = enc.encode(`${salt}:${password}`);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    const hashBytes = new Uint8Array(hashBuffer);
+    const hashHex = Array.from(hashBytes)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    return hashHex === hash;
+  } catch {
+    return false;
+  }
+}
+
+export function hasOfflineAuthVerifier(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  return Boolean(localStorage.getItem(OFFLINE_AUTH_VERIFIER_KEY));
+}
+
+export function migrateLegacyStorageKeys(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      const oldToken = localStorage.getItem('basalt_token') || localStorage.getItem('obsidian_web_vault_token');
+      if (oldToken) localStorage.setItem(TOKEN_STORAGE_KEY, oldToken);
+    }
+    if (!localStorage.getItem(ACTIVE_PROFILE_KEY)) {
+      const oldActive = localStorage.getItem('basalt_active_profile_id') || localStorage.getItem('obsidian_active_profile_id');
+      if (oldActive) localStorage.setItem(ACTIVE_PROFILE_KEY, oldActive);
+    }
+    if (!localStorage.getItem(PROFILES_STORAGE_KEY)) {
+      const oldProfiles = localStorage.getItem('basalt_vault_profiles') || localStorage.getItem('obsidian_vault_profiles');
+      if (oldProfiles) localStorage.setItem(PROFILES_STORAGE_KEY, oldProfiles);
+    }
+    if (!localStorage.getItem('knowmesh_open_tabs')) {
+      const oldTabs = localStorage.getItem('obsidian_web_open_tabs') || localStorage.getItem('basalt_open_tabs');
+      if (oldTabs) localStorage.setItem('knowmesh_open_tabs', oldTabs);
+    }
+    if (!localStorage.getItem('knowmesh_theme')) {
+      const oldTheme = localStorage.getItem('basalt_theme') || localStorage.getItem('obsidian_theme');
+      if (oldTheme) localStorage.setItem('knowmesh_theme', oldTheme);
+    }
+  } catch (err) {
+    console.warn('[Knowmesh] Legacy storage key migration error:', err);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  migrateLegacyStorageKeys();
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const headers = new Headers(options.headers || {});
@@ -119,7 +213,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     if (res.status === 409 && serverNote) {
       throw new ApiConflictError(errMsg || 'Konflikt beim Speichern', serverNote);
     }
-    throw new Error(errMsg);
+    throw new ApiHttpError(errMsg, res.status);
   }
 
   return res.json() as Promise<T>;
@@ -130,27 +224,47 @@ export const api = {
     return apiFetch('/api/auth/status');
   },
 
-  async login(password: string): Promise<{ authenticated: boolean; token: string }> {
-    const res = await apiFetch<{ authenticated: boolean; token: string }>('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    });
-    if (res.token) {
-      setStoredToken(res.token);
-      const active = getActiveProfile();
-      if (active) {
-        const profiles = getStoredProfiles().map((p) =>
-          p.id === active.id ? { ...p, token: res.token } : p
-        );
-        saveStoredProfiles(profiles);
+  async login(password: string): Promise<{ authenticated: boolean; token: string; offline?: boolean }> {
+    try {
+      const res = await apiFetch<{ authenticated: boolean; token: string }>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      });
+      if (res.token) {
+        setStoredToken(res.token);
+        const active = getActiveProfile();
+        if (active) {
+          const profiles = getStoredProfiles().map((p) =>
+            p.id === active.id ? { ...p, token: res.token } : p
+          );
+          saveStoredProfiles(profiles);
+        }
       }
+      await storeOfflinePasswordHash(password);
+      return res;
+    } catch (err: any) {
+      if (err instanceof ApiHttpError || (err.status && err.status >= 400 && err.status < 500)) {
+        throw err;
+      }
+      // Network error or offline
+      const isValid = await verifyOfflinePassword(password);
+      if (isValid) {
+        const token = getStoredToken() || 'knowmesh_offline_session_token';
+        setStoredToken(token);
+        return { authenticated: true, token, offline: true };
+      }
+      if (!hasOfflineAuthVerifier()) {
+        throw new Error('Keine Verbindung zum Knowmesh-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.');
+      }
+      throw new Error('Ungültiges Passwort (Offline-Prüfung).');
     }
-    return res;
   },
 
   async logout(): Promise<void> {
     try {
-      await apiFetch('/api/auth/logout', { method: 'POST' });
+      await apiFetch('/api/auth/logout', { method: 'POST', body: JSON.stringify({ revokeAll: false }) });
+    } catch {
+      // Offline logout succeeds locally
     } finally {
       setStoredToken(null);
     }
