@@ -1,4 +1,4 @@
-import { api } from './api';
+import { syncEngine } from './sync/syncEngine';
 
 export type StartupBehavior = 'last' | 'daily' | 'specific';
 
@@ -74,7 +74,7 @@ export async function resolveStartupNotePath(
 
     // Auto-create today's note if it does not exist
     try {
-      const created = await api.saveNote({
+      const created = await syncEngine.saveNote({
         path: dailyPath,
         body: `# ${dateStr}\n\n`,
         properties: [

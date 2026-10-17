@@ -1,5 +1,5 @@
 // Knowmesh Service Worker - App Shell & Attachment Offline Support
-const CACHE_NAME = 'knowmesh-app-shell-v3';
+const CACHE_NAME = 'knowmesh-app-shell-v4';
 const ATTACHMENT_CACHE_NAME = 'knowmesh-attachments-v1';
 
 const APP_SHELL_ASSETS = [
@@ -20,8 +20,12 @@ const APP_SHELL_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      // 1. Cache explicit core shell assets
-      await cache.addAll(APP_SHELL_ASSETS);
+      // 1. Cache core shell assets gracefully (never let one 404 abort installation)
+      await Promise.allSettled(
+        APP_SHELL_ASSETS.map((asset) =>
+          cache.add(asset).catch((err) => console.warn('[Knowmesh SW] Pre-cache asset warning:', asset, err))
+        )
+      );
 
       // 2. Proactively parse index.html for hashed JS & CSS build bundles
       try {
@@ -41,7 +45,11 @@ self.addEventListener('install', (event) => {
           }
 
           if (dynamicAssets.size > 0) {
-            await cache.addAll(Array.from(dynamicAssets));
+            await Promise.allSettled(
+              Array.from(dynamicAssets).map((asset) =>
+                cache.add(asset).catch((err) => console.warn('[Knowmesh SW] Pre-cache bundle warning:', asset, err))
+              )
+            );
           }
         }
       } catch (err) {
@@ -107,20 +115,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigation requests (HTML document): Network-first with cache fallback
+  // Navigation requests (HTML document): Network-first with instant cache fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
           if (response && response.status === 200) {
             const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+              cache.put('/index.html', clone.clone());
+            });
           }
           return response;
         })
         .catch(async () => {
           const cached = (await caches.match('/index.html')) || (await caches.match('/'));
-          return cached || new Response('Knowmesh Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
+          if (cached) return cached;
+          const cache = await caches.open(CACHE_NAME);
+          return (await cache.match('/index.html')) || (await cache.match('/'));
         })
     );
     return;

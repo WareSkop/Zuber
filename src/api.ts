@@ -195,33 +195,52 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     ? path
     : `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
 
-  const res = await fetch(fullUrl, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
-
-  if (!res.ok) {
-    let errMsg = `HTTP ${res.status}`;
-    let serverNote: NoteData | undefined;
-    try {
-      const data = await res.json();
-      if (data.error) errMsg = data.error;
-      if (data.serverNote) serverNote = data.serverNote;
-    } catch {}
-
-    if (res.status === 409 && serverNote) {
-      throw new ApiConflictError(errMsg || 'Konflikt beim Speichern', serverNote);
-    }
-    throw new ApiHttpError(errMsg, res.status);
+  // Default timeout of 6s to avoid hanging indefinitely on dead connections
+  let timeoutId: any;
+  let signal = options.signal;
+  if (!signal) {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), 6000);
+    signal = controller.signal;
   }
 
-  return res.json() as Promise<T>;
+  try {
+    const res = await fetch(fullUrl, {
+      ...options,
+      headers,
+      credentials: 'include',
+      signal,
+    });
+
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      let serverNote: NoteData | undefined;
+      try {
+        const data = await res.json();
+        if (data.error) errMsg = data.error;
+        if (data.serverNote) serverNote = data.serverNote;
+      } catch {}
+
+      if (res.status === 409 && serverNote) {
+        throw new ApiConflictError(errMsg || 'Konflikt beim Speichern', serverNote);
+      }
+      throw new ApiHttpError(errMsg, res.status);
+    }
+
+    return (await res.json()) as T;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 export const api = {
-  checkAuthStatus(): Promise<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }> {
-    return apiFetch('/api/auth/status');
+  checkAuthStatus(timeoutMs = 3000): Promise<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    return apiFetch<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }>(
+      '/api/auth/status',
+      { signal: controller.signal }
+    ).finally(() => clearTimeout(timeoutId));
   },
 
   async login(password: string): Promise<{ authenticated: boolean; token: string; offline?: boolean }> {

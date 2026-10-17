@@ -345,22 +345,47 @@ export const App: React.FC = () => {
       setVaultPath(treeRes.vaultPath);
       setGraphData(graphRes);
       return { treeRes, graphRes };
-    } catch {
+    } catch (err) {
+      console.warn('Offline mode active, falling back to local cache:', err);
       // Offline fallback: load from local IndexedDB
-      const cachedTree = (await syncEngine.getTree()) || [];
-      const cachedFiles = (await syncEngine.getLocalDb().getMeta<any[]>('files')) || [];
-      const cachedGraph = (await syncEngine.getLocalDb().getMeta<GraphData>('graph')) || {
-        nodes: [],
-        edges: [],
-        tags: [],
-      };
-      setTree(cachedTree);
-      setAllFiles(cachedFiles);
-      setGraphData(cachedGraph);
-      return {
-        treeRes: { tree: cachedTree, files: cachedFiles, vaultPath: 'Knowmesh Vault (Offline)' },
-        graphRes: cachedGraph,
-      };
+      try {
+        const cachedTree = (await syncEngine.getTree()) || [];
+        let cachedFiles = (await syncEngine.getLocalDb().getMeta<any[]>('files')) || [];
+        const cachedGraph = (await syncEngine.getLocalDb().getMeta<GraphData>('graph')) || {
+          nodes: [],
+          edges: [],
+          tags: [],
+        };
+        // If cachedFiles is empty, reconstruct from local notes in IndexedDB
+        if (!cachedFiles || cachedFiles.length === 0) {
+          const localNotes = await syncEngine.getLocalDb().getAllNotes();
+          cachedFiles = localNotes.map((n) => ({
+            path: n.path,
+            name: n.name,
+            basename: n.name.replace(/\.md$/, ''),
+            extension: 'md',
+          }));
+        }
+        setTree(cachedTree);
+        setAllFiles(cachedFiles);
+        setGraphData(cachedGraph);
+        return {
+          treeRes: { tree: cachedTree, files: cachedFiles, vaultPath: 'Knowmesh Vault (Offline)' },
+          graphRes: cachedGraph,
+        };
+      } catch (innerErr) {
+        console.warn('Could not load from IndexedDB cache:', innerErr);
+        const emptyTree: FileTreeNode[] = [];
+        const emptyFiles: any[] = [];
+        const emptyGraph: GraphData = { nodes: [], edges: [], tags: [] };
+        setTree(emptyTree);
+        setAllFiles(emptyFiles);
+        setGraphData(emptyGraph);
+        return {
+          treeRes: { tree: emptyTree, files: emptyFiles, vaultPath: 'Knowmesh Vault (Offline)' },
+          graphRes: emptyGraph,
+        };
+      }
     }
   }, []);
 
@@ -518,38 +543,51 @@ export const App: React.FC = () => {
     let cancelled = false;
 
     const initAuth = async () => {
-      const storedToken = getStoredToken();
-      const hasLocalNotes = await syncEngine.hasLocalData();
-      const hasVerifier = hasOfflineAuthVerifier();
+      let storedToken: string | null = null;
+      let hasLocalNotes = false;
+      let hasVerifier = false;
+
+      try {
+        storedToken = getStoredToken();
+        hasLocalNotes = await syncEngine.hasLocalData();
+        hasVerifier = hasOfflineAuthVerifier();
+      } catch (e) {
+        console.warn('Offline mode active, falling back to local cache: Could not read local auth metadata:', e);
+      }
+
       const canProceedOffline = Boolean(storedToken || hasLocalNotes || hasVerifier);
 
-      // If clearly offline right away
+      const activateOfflineMode = async () => {
+        if (cancelled) return;
+        setAuthenticated(true);
+        setAuthChecked(true);
+        setSyncState('offline');
+        try {
+          const { treeRes } = await loadVaultIndex();
+          const startupPath = await resolveStartupNotePath(treeRes.files);
+          if (startupPath && !cancelled) {
+            await openNoteByPath(startupPath);
+          }
+        } catch (offlineErr) {
+          console.warn('Offline mode active, falling back to local cache:', offlineErr);
+        }
+      };
+
+      // 1. Clearly offline according to navigator
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         if (canProceedOffline) {
-          if (cancelled) return;
-          setAuthenticated(true);
-          setAuthChecked(true);
-          try {
-            const { treeRes } = await loadVaultIndex();
-            const startupPath = await resolveStartupNotePath(treeRes.files);
-            if (startupPath && !cancelled) {
-              await openNoteByPath(startupPath);
-            }
-          } catch {
-            // ignore offline loading error
-          }
-          return;
+          await activateOfflineMode();
         } else {
           if (cancelled) return;
           setAuthenticated(false);
           setAuthChecked(true);
-          return;
         }
+        return;
       }
 
-      // Online or browser reports online: attempt checkAuthStatus
+      // 2. Online or browser reports online: attempt checkAuthStatus with fast 2500ms timeout
       try {
-        const status = await api.checkAuthStatus();
+        const status = await api.checkAuthStatus(2500);
         if (cancelled) return;
         setHttpsActive(status.https);
         setVaultPath(status.vaultPath);
@@ -557,17 +595,22 @@ export const App: React.FC = () => {
         setAuthChecked(true);
 
         if (status.authenticated) {
-          const { treeRes } = await loadVaultIndex();
-          const startupPath = await resolveStartupNotePath(treeRes.files);
-          if (startupPath && !cancelled) {
-            await openNoteByPath(startupPath);
+          try {
+            const { treeRes } = await loadVaultIndex();
+            const startupPath = await resolveStartupNotePath(treeRes.files);
+            if (startupPath && !cancelled) {
+              await openNoteByPath(startupPath);
+            }
+          } catch (loadErr) {
+            console.warn('Offline mode active, falling back to local cache:', loadErr);
           }
         }
       } catch (err: any) {
         if (cancelled) return;
+        console.warn('Offline mode active, falling back to local cache:', err);
+
         // Check if server actively rejected with HTTP 401 Unauthorized
         if (err instanceof ApiHttpError && err.status === 401) {
-          // Token is invalid/revoked/expired on server -> discard token and open LoginModal
           setStoredToken(null);
           setAuthenticated(false);
           setAuthChecked(true);
@@ -576,27 +619,23 @@ export const App: React.FC = () => {
 
         // Otherwise: Network error (Failed to fetch, connection refused, DNS error, offline, timeout)
         if (canProceedOffline) {
-          // User was previously logged in on this device -> start seamlessly offline!
-          setAuthenticated(true);
-          setAuthChecked(true);
-          try {
-            const { treeRes } = await loadVaultIndex();
-            const startupPath = await resolveStartupNotePath(treeRes.files);
-            if (startupPath && !cancelled) {
-              await openNoteByPath(startupPath);
-            }
-          } catch {
-            // ignore
-          }
+          await activateOfflineMode();
         } else {
-          // Device was never logged in online before
           setAuthenticated(false);
           setAuthChecked(true);
         }
       }
     };
 
-    initAuth();
+    initAuth().catch((err) => {
+      console.warn('Offline mode active, falling back to local cache:', err);
+      if (!cancelled) {
+        setAuthenticated(true);
+        setAuthChecked(true);
+        setSyncState('offline');
+      }
+    });
+
     return () => {
       cancelled = true;
     };
@@ -612,50 +651,73 @@ export const App: React.FC = () => {
 
     const connectWs = () => {
       if (disposed) return;
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const token = getStoredToken();
-      const wsUrl = `${proto}//${window.location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        setWsConnected(true);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'vault:changed') {
-            const paths: string[] = Array.isArray(msg.paths) ? msg.paths : [];
-            scheduleIndexRefresh(Boolean(msg.structural));
-            // If the currently open file was modified externally (not by our own save), reload it
-            const currentPath = activePathRef.current;
-            if (
-              currentPath &&
-              paths.includes(currentPath) &&
-              Date.now() - lastLocalSaveTimeRef.current > 1500
-            ) {
-              openNoteByPath(currentPath);
-            }
-          }
-        } catch {
-          // ignore
-        }
-      };
-
-      ws.onclose = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setWsConnected(false);
-        if (!disposed) {
-          reconnectTimer = setTimeout(connectWs, 2500);
-        }
-      };
+        return;
+      }
+
+      try {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const token = getStoredToken();
+        const wsUrl = `${proto}//${window.location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          setWsConnected(true);
+        };
+
+        ws.onerror = () => {
+          // Suppress unhandled error log when offline / server unreachable
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'vault:changed') {
+              const paths: string[] = Array.isArray(msg.paths) ? msg.paths : [];
+              scheduleIndexRefresh(Boolean(msg.structural));
+              // If the currently open file was modified externally (not by our own save), reload it
+              const currentPath = activePathRef.current;
+              if (
+                currentPath &&
+                paths.includes(currentPath) &&
+                Date.now() - lastLocalSaveTimeRef.current > 1500
+              ) {
+                openNoteByPath(currentPath);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        ws.onclose = () => {
+          setWsConnected(false);
+          if (!disposed && (typeof navigator === 'undefined' || navigator.onLine)) {
+            reconnectTimer = setTimeout(connectWs, 3500);
+          }
+        };
+      } catch {
+        setWsConnected(false);
+      }
     };
 
     connectWs();
 
+    const handleOnline = () => {
+      connectWs();
+    };
+    window.addEventListener('online', handleOnline);
+
     return () => {
       disposed = true;
+      window.removeEventListener('online', handleOnline);
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (ws) ws.close();
+      if (ws) {
+        try {
+          ws.close();
+        } catch {}
+      }
     };
   }, [authenticated, scheduleIndexRefresh, openNoteByPath]);
 
