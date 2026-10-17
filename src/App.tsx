@@ -53,6 +53,7 @@ import {
 } from '../shared/markdownUtils';
 import {
   api,
+  rawApi,
   getStoredToken,
   setStoredToken,
   hasOfflineAuthVerifier,
@@ -239,12 +240,84 @@ export const App: React.FC = () => {
   const [dialogInput, setDialogInput] = useState('');
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveTaskRef = useRef<(() => Promise<void>) | null>(null);
   const lastLocalSaveTimeRef = useRef<number>(0);
+  const activeNoteRef = useRef<NoteData | null>(null);
+  activeNoteRef.current = activeNote;
   const activePathRef = useRef<string | null>(null);
   activePathRef.current = activeNote?.path ?? null;
   const workspaceViewRef = useRef<MainWorkspaceView>('editor');
   workspaceViewRef.current = workspaceView;
   const openRequestRef = useRef(0);
+
+  const flushPendingSave = useCallback(async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const task = pendingSaveTaskRef.current;
+    pendingSaveTaskRef.current = null;
+    if (task) {
+      await task();
+    }
+  }, []);
+
+  const collectExistingPaths = useCallback((): Set<string> => {
+    const existing = new Set<string>();
+    for (const f of allFiles) {
+      if (f?.path) existing.add(f.path.toLowerCase());
+    }
+    const walk = (nodes: FileTreeNode[]) => {
+      for (const n of nodes) {
+        if (n.path) existing.add(n.path.toLowerCase());
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(tree);
+    return existing;
+  }, [allFiles, tree]);
+
+  const getUniqueDefaultName = useCallback(
+    (baseName: string, type: 'file' | 'folder', parentFolder?: string): string => {
+      const existing = collectExistingPaths();
+      const buildPath = (name: string) => {
+        const leaf = type === 'file' ? `${name}.md` : name;
+        return (parentFolder ? `${parentFolder}/${leaf}` : leaf).toLowerCase();
+      };
+      if (!existing.has(buildPath(baseName))) {
+        return baseName;
+      }
+      let counter = 2;
+      while (existing.has(buildPath(`${baseName} ${counter}`))) {
+        counter++;
+      }
+      return `${baseName} ${counter}`;
+    },
+    [collectExistingPaths]
+  );
+
+  const openCreateNoteDialog = useCallback(
+    (parentFolder?: string) => {
+      const baseName = language === 'de' ? 'Neue Notiz' : 'New Note';
+      const defaultName = getUniqueDefaultName(baseName, 'file', parentFolder);
+      setDialog({ type: 'create-note', parentFolder, initialValue: defaultName });
+      setDialogInput(defaultName);
+    },
+    [language, getUniqueDefaultName]
+  );
+
+  const openCreateFolderDialog = useCallback(
+    (parentFolder?: string) => {
+      const baseName = language === 'de' ? 'Neuer Ordner' : 'New Folder';
+      const defaultName = getUniqueDefaultName(baseName, 'folder', parentFolder);
+      setDialog({ type: 'create-folder', parentFolder, initialValue: defaultName });
+      setDialogInput(defaultName);
+    },
+    [language, getUniqueDefaultName]
+  );
+
+  const openCreateNoteDialogRef = useRef(openCreateNoteDialog);
+  openCreateNoteDialogRef.current = openCreateNoteDialog;
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -299,7 +372,7 @@ export const App: React.FC = () => {
       // Quick New Note (Ctrl+N)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
         e.preventDefault();
-        setDialog({ type: 'create-note', initialValue: '' });
+        openCreateNoteDialogRef.current();
         return;
       }
 
@@ -336,76 +409,82 @@ export const App: React.FC = () => {
     if (!isOffline) {
       try {
         const outbox = await syncEngine.getLocalDb().getOutbox();
-        const hasOutbox = outbox.length > 0;
-
-        if (!hasOutbox) {
-          const [treeRes, graphRes] = await Promise.all([api.getTree(), api.getGraph()]);
-          setTree(treeRes.tree);
-          setAllFiles(treeRes.files);
-          setVaultPath(treeRes.vaultPath);
-          setGraphData(graphRes);
-          await syncEngine.getLocalDb().setMeta('tree', treeRes.tree);
-          await syncEngine.getLocalDb().setMeta('files', treeRes.files);
-          return { treeRes, graphRes };
-        } else {
-          // Pending offline outbox mutations: trigger flush in background
-          syncEngine.flushOutbox().catch(() => {});
+        if (outbox.length > 0) {
+          await syncEngine.flushOutbox();
         }
+
+        const [treeRes, graphRes] = await Promise.all([rawApi.getTree(), api.getGraph()]);
+        await syncEngine.getLocalDb().setMeta('tree', treeRes.tree);
+        await syncEngine.getLocalDb().setMeta('files', treeRes.files);
+        await syncEngine.getLocalDb().setMeta('graph', graphRes);
+
+        const remainingOutbox = await syncEngine.getLocalDb().getOutbox();
+        let finalTree = treeRes.tree;
+        let finalFiles = treeRes.files;
+        if (remainingOutbox.length > 0) {
+          const reconciled = await syncEngine.getLocalDb().reconcileTreeWithLocalState();
+          finalTree = reconciled.tree;
+          finalFiles = reconciled.files;
+        }
+
+        setTree(finalTree);
+        setAllFiles(finalFiles);
+        setVaultPath(treeRes.vaultPath);
+        setGraphData(graphRes);
+        return {
+          treeRes: { ...treeRes, tree: finalTree, files: finalFiles },
+          graphRes,
+        };
       } catch (err) {
         console.warn('Offline mode active, falling back to local cache:', err);
       }
     }
 
-    // Offline / pending outbox fallback: load from local IndexedDB
+    // Offline / pending outbox fallback: load and reconcile from local IndexedDB
     try {
-      const cachedTree = (await syncEngine.getTree()) || [];
-        let cachedFiles = (await syncEngine.getLocalDb().getMeta<any[]>('files')) || [];
-        const cachedGraph = (await syncEngine.getLocalDb().getMeta<GraphData>('graph')) || {
-          nodes: [],
-          edges: [],
-          tags: [],
-        };
-        // Always include newly created or offline notes in cachedFiles
-        const localNotes = await syncEngine.getLocalDb().getAllNotes();
-        const noteFiles = localNotes.map((n) => ({
-          path: n.path,
-          name: n.name,
-          basename: n.name.replace(/\.md$/, ''),
-          extension: 'md',
-        }));
-        const fileMap = new Map<string, any>();
-        for (const f of cachedFiles) fileMap.set(f.path, f);
-        for (const f of noteFiles) fileMap.set(f.path, f);
-        cachedFiles = Array.from(fileMap.values());
+      const reconciled = await syncEngine.getLocalDb().reconcileTreeWithLocalState();
+      const cachedGraph = (await syncEngine.getLocalDb().getMeta<GraphData>('graph')) || {
+        nodes: [],
+        edges: [],
+        tags: [],
+      };
 
-        setTree(cachedTree);
-        setAllFiles(cachedFiles);
-        setGraphData(cachedGraph);
-        return {
-          treeRes: { tree: cachedTree, files: cachedFiles, vaultPath: 'Knowmesh Vault (Offline)' },
-          graphRes: cachedGraph,
-        };
-      } catch (innerErr) {
-        console.warn('Could not load from IndexedDB cache:', innerErr);
-        const emptyTree: FileTreeNode[] = [];
-        const emptyFiles: any[] = [];
-        const emptyGraph: GraphData = { nodes: [], edges: [], tags: [] };
-        setTree(emptyTree);
-        setAllFiles(emptyFiles);
-        setGraphData(emptyGraph);
-        return {
-          treeRes: { tree: emptyTree, files: emptyFiles, vaultPath: 'Knowmesh Vault (Offline)' },
-          graphRes: emptyGraph,
-        };
-      }
-    }, []);
+      setTree(reconciled.tree);
+      setAllFiles(reconciled.files);
+      setGraphData(cachedGraph);
+      return {
+        treeRes: {
+          tree: reconciled.tree,
+          files: reconciled.files,
+          vaultPath: 'Knowmesh Vault (Offline)',
+        },
+        graphRes: cachedGraph,
+      };
+    } catch (innerErr) {
+      console.warn('Could not load from IndexedDB cache:', innerErr);
+      const emptyTree: FileTreeNode[] = [];
+      const emptyFiles: { path: string; name: string; basename: string; extension: string }[] = [];
+      const emptyGraph: GraphData = { nodes: [], edges: [], tags: [] };
+      setTree(emptyTree);
+      setAllFiles(emptyFiles);
+      setGraphData(emptyGraph);
+      return {
+        treeRes: { tree: emptyTree, files: emptyFiles, vaultPath: 'Knowmesh Vault (Offline)' },
+        graphRes: emptyGraph,
+      };
+    }
+  }, []);
 
   const refreshBacklinks = useCallback(async (relPath: string | null) => {
     if (!relPath) {
       setBacklinks({ linked: [], unlinked: [] });
       return;
     }
+    const isOffline =
+      syncEngine.getSyncState() === 'offline' ||
+      (typeof navigator !== 'undefined' && !navigator.onLine);
     try {
+      if (isOffline) throw new Error('offline');
       const res = await api.getBacklinks(relPath);
       if (activePathRef.current === relPath) setBacklinks(res);
     } catch {
@@ -459,6 +538,7 @@ export const App: React.FC = () => {
 
   const openNoteByPath = useCallback(
     async (relPath: string) => {
+      await flushPendingSave();
       const requestId = ++openRequestRef.current;
       try {
         const note = await syncEngine.getNote(relPath);
@@ -471,7 +551,7 @@ export const App: React.FC = () => {
         console.error('Fehler beim Laden der Notiz:', err);
       }
     },
-    [refreshBacklinks]
+    [flushPendingSave, refreshBacklinks]
   );
 
   useEffect(() => {
@@ -529,14 +609,10 @@ export const App: React.FC = () => {
         }
       },
       onCreateNote: (parentFolder?: string) => {
-        const defaultName = language === 'de' ? 'Neue Notiz' : 'New Note';
-        setDialog({ type: 'create-note', parentFolder, initialValue: defaultName });
-        setDialogInput(defaultName);
+        openCreateNoteDialog(parentFolder);
       },
       onCreateFolder: (parentFolder?: string) => {
-        const defaultName = language === 'de' ? 'Neuer Ordner' : 'New Folder';
-        setDialog({ type: 'create-folder', parentFolder, initialValue: defaultName });
-        setDialogInput(defaultName);
+        openCreateFolderDialog(parentFolder);
       },
       onRenameEntry: (oldPath: string, currentName: string) => {
         setDialog({ type: 'rename', targetPath: oldPath, initialValue: currentName });
@@ -558,7 +634,15 @@ export const App: React.FC = () => {
       },
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
     }),
-    [openNoteByPath, loadVaultIndex, isMobile, language, t, tree]
+    [
+      openNoteByPath,
+      openCreateNoteDialog,
+      openCreateFolderDialog,
+      loadVaultIndex,
+      isMobile,
+      t,
+      tree,
+    ]
   );
 
   // Initial authentication check
@@ -618,6 +702,8 @@ export const App: React.FC = () => {
         setAuthChecked(true);
 
         if (status.authenticated) {
+          // Ensure syncEngine immediately transitions to online & starts delta sync
+          syncEngine.notifyAuthenticatedOnline();
           try {
             const { treeRes } = await loadVaultIndex();
             const startupPath = await resolveStartupNotePath(treeRes.files);
@@ -687,6 +773,9 @@ export const App: React.FC = () => {
 
         ws.onopen = () => {
           setWsConnected(true);
+          if (syncEngine.getSyncState() === 'offline') {
+            syncEngine.checkConnectionAndSync().catch(() => {});
+          }
         };
 
         ws.onerror = () => {
@@ -750,11 +839,14 @@ export const App: React.FC = () => {
         } catch {}
       }
     };
-  }, [authenticated, scheduleIndexRefresh, openNoteByPath]);
+  }, [authenticated, loadVaultIndex, scheduleIndexRefresh, openNoteByPath]);
 
   const handleLogin = async (password: string) => {
-    await api.login(password);
+    const loginRes = await api.login(password);
     setAuthenticated(true);
+    if (!loginRes.offline) {
+      syncEngine.notifyAuthenticatedOnline();
+    }
     const { treeRes } = await loadVaultIndex();
     const targetPath = await resolveStartupNotePath(treeRes.files);
     if (targetPath) {
@@ -763,6 +855,7 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    await flushPendingSave();
     await api.logout();
     setAuthenticated(false);
     setActiveNote(null);
@@ -783,14 +876,18 @@ export const App: React.FC = () => {
         clearTimeout(saveTimerRef.current);
       }
 
-      saveTimerRef.current = setTimeout(async () => {
+      const baseMtime =
+        activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : undefined;
+
+      const executeSave = async () => {
+        pendingSaveTaskRef.current = null;
         setSaveState('saving');
         lastLocalSaveTimeRef.current = Date.now();
         try {
           const saved = await syncEngine.saveNote({
             path,
             ...payload,
-            baseMtime: activeNote?.updatedAt,
+            baseMtime,
           });
           lastLocalSaveTimeRef.current = Date.now();
           // Only merge derived metadata – never overwrite text the user typed while saving
@@ -811,6 +908,12 @@ export const App: React.FC = () => {
         } catch (err) {
           console.error('Speicherfehler:', err);
         }
+      };
+
+      pendingSaveTaskRef.current = executeSave;
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        executeSave();
       }, 500);
     },
     [scheduleIndexRefresh]
@@ -932,6 +1035,7 @@ export const App: React.FC = () => {
       }
 
       // Create new note for unresolved Wiki-Link
+      await flushPendingSave();
       let decodedName = trimmed;
       try {
         decodedName = decodeURIComponent(trimmed);
@@ -963,14 +1067,21 @@ export const App: React.FC = () => {
   const handleDialogConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dialog) return;
+    const currentDialog = dialog;
     const val = dialogInput.trim();
 
+    setDialog(null);
+    setDialogInput('');
+
     try {
-      if (dialog.type === 'create-note') {
+      if (currentDialog.type === 'create-note') {
         if (!val) return;
-        const cleanTitle = val.replace(/\.md$/i, '');
-        const relPath = dialog.parentFolder
-          ? `${dialog.parentFolder}/${cleanTitle}.md`
+        await flushPendingSave();
+        const rawTitle = val.replace(/\.md$/i, '').trim();
+        if (!rawTitle) return;
+        const cleanTitle = getUniqueDefaultName(rawTitle, 'file', currentDialog.parentFolder);
+        const relPath = currentDialog.parentFolder
+          ? `${currentDialog.parentFolder}/${cleanTitle}.md`
           : `${cleanTitle}.md`;
         const created = await syncEngine.saveNote({
           path: relPath,
@@ -986,30 +1097,38 @@ export const App: React.FC = () => {
         });
         await loadVaultIndex();
         setActiveNote(created);
+        setSaveState('saved');
+        recordLastActiveNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
-      } else if (dialog.type === 'create-folder') {
+        if (isMobile) setLeftSidebarOpen(false);
+      } else if (currentDialog.type === 'create-folder') {
         if (!val) return;
-        const relPath = dialog.parentFolder ? `${dialog.parentFolder}/${val}` : val;
+        const cleanFolder = getUniqueDefaultName(val, 'folder', currentDialog.parentFolder);
+        const relPath = currentDialog.parentFolder
+          ? `${currentDialog.parentFolder}/${cleanFolder}`
+          : cleanFolder;
         await syncEngine.createFolder(relPath);
         await loadVaultIndex();
-      } else if (dialog.type === 'rename' && dialog.targetPath) {
+      } else if (currentDialog.type === 'rename' && currentDialog.targetPath) {
         if (!val) return;
-        const parts = dialog.targetPath.split('/');
+        await flushPendingSave();
+        const parts = currentDialog.targetPath.split('/');
         parts[parts.length - 1] = val;
         const newRelPath = parts.join('/');
-        const res = await syncEngine.renameEntry(dialog.targetPath, newRelPath);
+        const res = await syncEngine.renameEntry(currentDialog.targetPath, newRelPath);
         await loadVaultIndex();
-        if (activeNote?.path === dialog.targetPath) {
+        if (activeNote?.path === currentDialog.targetPath) {
           await openNoteByPath(res.newPath);
         }
-      } else if (dialog.type === 'delete' && dialog.targetPath) {
+      } else if (currentDialog.type === 'delete' && currentDialog.targetPath) {
         if (saveTimerRef.current) {
           clearTimeout(saveTimerRef.current);
           saveTimerRef.current = null;
         }
+        pendingSaveTaskRef.current = null;
         setSaveState('saved');
 
-        const deletedPath = dialog.targetPath;
+        const deletedPath = currentDialog.targetPath;
         const isActiveOrChild =
           activeNote &&
           (activeNote.path === deletedPath ||
@@ -1026,9 +1145,8 @@ export const App: React.FC = () => {
           }
         }
       }
-    } finally {
-      setDialog(null);
-      setDialogInput('');
+    } catch (err) {
+      console.error('Dialog-Aktion fehlgeschlagen:', err);
     }
   };
 
@@ -1387,7 +1505,7 @@ export const App: React.FC = () => {
         shortcut: 'Strg+N',
         icon: <FilePlus size={16} />,
         keywords: ['neu', 'notiz', 'anlegen', 'erstellen'],
-        action: () => setDialog({ type: 'create-note', initialValue: '' }),
+        action: () => openCreateNoteDialog(),
       },
       {
         id: 'vault-save-note',
@@ -1406,11 +1524,13 @@ export const App: React.FC = () => {
         keywords: ['umbenennen', 'rename', 'titel'],
         action: () => {
           if (!activeNote) return;
+          const cleanName = activeNote.name.replace(/\.md$/i, '');
           setDialog({
             type: 'rename',
             targetPath: activeNote.path,
-            initialValue: activeNote.name.replace(/\.md$/i, ''),
+            initialValue: cleanName,
           });
+          setDialogInput(cleanName);
         },
       },
       {
@@ -1424,7 +1544,7 @@ export const App: React.FC = () => {
           setDialog({
             type: 'delete',
             targetPath: activeNote.path,
-            initialValue: '',
+            initialValue: activeNote.name,
           });
         },
       },
@@ -1499,6 +1619,7 @@ export const App: React.FC = () => {
   }, [
     editorMode,
     activeNote,
+    openCreateNoteDialog,
     handleUploadImageClick,
     handleManualSave,
     handleDownloadNote,
@@ -1535,13 +1656,7 @@ export const App: React.FC = () => {
         <button
           type="button"
           className="ribbon-btn"
-          onClick={() => {
-            setDialog({
-              type: 'create-note',
-              initialValue: 'Untitled',
-            });
-            setDialogInput('Untitled');
-          }}
+          onClick={() => openCreateNoteDialog()}
           title={t('nav.newNote')}
         >
           <FilePlus size={19} />
@@ -1887,13 +2002,7 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       className="btn-primary"
-                      onClick={() => {
-                        setDialog({
-                          type: 'create-note',
-                          initialValue: 'Neue Notiz',
-                        });
-                        setDialogInput('Neue Notiz');
-                      }}
+                      onClick={() => openCreateNoteDialog()}
                     >
                       + Neue Notiz erstellen
                     </button>
@@ -2133,7 +2242,7 @@ export const App: React.FC = () => {
             <form onSubmit={handleDialogConfirm}>
               {dialog.type === 'delete' ? (
                 <p className="modal-confirm-text">
-                  {t('dialogs.deleteNotePrompt', { name: dialog.initialValue })}
+                  {dialog.prompt || t('dialogs.deleteNotePrompt', { name: dialog.initialValue })}
                 </p>
               ) : (
                 <>
@@ -2147,6 +2256,7 @@ export const App: React.FC = () => {
                     className="modal-input"
                     value={dialogInput}
                     onChange={(e) => setDialogInput(e.target.value)}
+                    onFocus={(e) => e.currentTarget.select()}
                     autoFocus
                     required
                   />

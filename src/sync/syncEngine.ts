@@ -50,6 +50,7 @@ class SyncEngine {
   private isSyncing = false;
   private syncedAttachmentFolders: string[] = ['attachments'];
   private blobUrls = new Map<string, string>();
+  private reconnectTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.currentProfile = getActiveProfile();
@@ -62,10 +63,12 @@ class SyncEngine {
     if (typeof window === 'undefined') return;
 
     // Load user's chosen offline attachment folders from local DB
-    const savedFolders = await this.localDb.getMeta<string[]>('syncedAttachmentFolders');
-    if (savedFolders && Array.isArray(savedFolders)) {
-      this.syncedAttachmentFolders = savedFolders;
-    }
+    try {
+      const savedFolders = await this.localDb.getMeta<string[]>('syncedAttachmentFolders');
+      if (savedFolders && Array.isArray(savedFolders)) {
+        this.syncedAttachmentFolders = savedFolders;
+      }
+    } catch {}
 
     // Monitor browser online/offline events
     window.addEventListener('online', () => {
@@ -74,6 +77,18 @@ class SyncEngine {
     window.addEventListener('offline', () => {
       this.setSyncState('offline');
     });
+
+    // Periodic reconnect probe when browser reports online but syncState fell back to offline
+    this.reconnectTimer = setInterval(() => {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine &&
+        this.syncState === 'offline' &&
+        !this.isSyncing
+      ) {
+        this.checkConnectionAndSync().catch(() => {});
+      }
+    }, 15000);
 
     // Initial check
     this.checkConnectionAndSync();
@@ -111,8 +126,8 @@ class SyncEngine {
     try {
       const notes = await this.localDb.getAllNotes();
       if (notes.length > 0) return true;
-      const cachedTree = await this.localDb.getMeta('tree');
-      return Boolean(cachedTree);
+      const cachedTree = await this.localDb.getMeta<FileTreeNode[]>('tree');
+      return Boolean(cachedTree && cachedTree.length > 0);
     } catch {
       return false;
     }
@@ -144,6 +159,23 @@ class SyncEngine {
     await this.localDb.setMeta('syncedAttachmentFolders', folders);
   }
 
+  /**
+   * Immediately marks the engine as online after a successful server authentication/login
+   * and triggers a background delta sync (including flushing any offline outbox items).
+   */
+  public notifyAuthenticatedOnline(): void {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.setSyncState('offline');
+      return;
+    }
+    if (this.syncState === 'offline') {
+      this.setSyncState('online');
+    }
+    this.syncNow().catch((err) => {
+      console.warn('[Knowmesh Sync] Post-auth sync error:', err);
+    });
+  }
+
   public async checkConnectionAndSync(): Promise<boolean> {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       this.setSyncState('offline');
@@ -151,7 +183,7 @@ class SyncEngine {
     }
 
     try {
-      const status = await api.checkAuthStatus();
+      const status = await api.checkAuthStatus(3000);
       if (status.authenticated || status.authRequired === false) {
         if (this.syncState === 'offline') {
           this.setSyncState('online');
@@ -184,7 +216,7 @@ class SyncEngine {
           const propsToSend = latestLocalNote ? latestLocalNote.properties : (m.properties ?? []);
           const rawToSend = latestLocalNote?.rawContent;
 
-          await rawApi.saveNote({
+          const saved = await rawApi.saveNote({
             path: m.path,
             body: bodyToSend,
             properties: propsToSend,
@@ -192,6 +224,7 @@ class SyncEngine {
             baseMtime: m.baseMtime ?? 0,
             forceOverwrite: false,
           });
+          await this.localDb.putNote(saved);
         } else if (m.type === 'create_folder') {
           await rawApi.createFolder(m.path);
         } else if (m.type === 'rename' && m.newPath) {
@@ -218,6 +251,10 @@ class SyncEngine {
             this.setSyncState('conflict');
             this.notifyConflictListeners();
           }
+        } else if (err instanceof ApiHttpError && err.status >= 400 && err.status < 500 && err.status !== 401 && err.status !== 408) {
+          // Permanent client-side validation error (e.g., invalid path): remove invalid mutation so it doesn't block queue forever
+          console.warn(`[Knowmesh Sync] Dropping non-retryable mutation ${m.id} (HTTP ${err.status}):`, err);
+          await this.localDb.removeOutboxMutation(m.id);
         } else {
           console.warn(`[Knowmesh Sync] Failed to replay mutation ${m.id}:`, err);
           // If offline or network issue, abort outbox flushing for now
@@ -237,6 +274,13 @@ class SyncEngine {
       // Step 1: Flush local pending edits first
       await this.flushOutbox();
 
+      const remainingOutbox = await this.localDb.getOutbox();
+      const pendingLocalPaths = new Set<string>();
+      for (const m of remainingOutbox) {
+        if (m.type === 'save_note' && m.path) pendingLocalPaths.add(m.path);
+        if (m.type === 'rename' && m.newPath) pendingLocalPaths.add(m.newPath);
+      }
+
       // Step 2: Fetch server sync manifest
       const manifest = await api.getSyncManifest();
       const serverFileMap = new Map<string, SyncManifestEntry>();
@@ -253,7 +297,7 @@ class SyncEngine {
 
       const pathsToDownload: string[] = [];
       for (const [path, sEntry] of serverFileMap) {
-        if (sEntry.type === 'markdown') {
+        if (sEntry.type === 'markdown' && !pendingLocalPaths.has(path)) {
           const lNote = localNoteMap.get(path);
           if (!lNote || sEntry.mtime > lNote.updatedAt) {
             pathsToDownload.push(path);
@@ -261,9 +305,9 @@ class SyncEngine {
         }
       }
 
-      // Detect locally deleted notes that no longer exist on server
+      // Detect locally cached notes that were deleted on the server (preserve pending local creations!)
       for (const [lPath] of localNoteMap) {
-        if (!serverFileMap.has(lPath)) {
+        if (!serverFileMap.has(lPath) && !pendingLocalPaths.has(lPath)) {
           await this.localDb.deleteNote(lPath);
         }
       }
@@ -278,9 +322,12 @@ class SyncEngine {
 
       // Step 5: Refresh tree & graph caches
       try {
-        const treeData = await api.getTree();
+        const treeData = await rawApi.getTree();
         await this.localDb.setMeta('tree', treeData.tree);
         await this.localDb.setMeta('files', treeData.files);
+        if (remainingOutbox.length > 0) {
+          await this.localDb.reconcileTreeWithLocalState();
+        }
       } catch {}
 
       try {
@@ -346,10 +393,12 @@ class SyncEngine {
         await this.localDb.setMeta('tree', res.tree);
         await this.localDb.setMeta('files', res.files);
         return res.tree;
-      } catch {}
+      } catch {
+        this.setSyncState('offline');
+      }
     }
-    const cached = await this.localDb.getMeta<FileTreeNode[]>('tree');
-    return cached || [];
+    const reconciled = await this.localDb.reconcileTreeWithLocalState();
+    return reconciled.tree;
   }
 
   public async getTreeData(): Promise<{
@@ -357,11 +406,24 @@ class SyncEngine {
     files: { path: string; name: string; basename: string; extension: string }[];
     vaultPath: string;
   }> {
-    const tree = await this.getTree();
-    const files = (await this.localDb.getMeta<any[]>('files')) || [];
+    const outbox = await this.localDb.getOutbox();
+    const hasOutbox = outbox.length > 0;
+
+    if (!hasOutbox && navigator.onLine && this.syncState !== 'offline') {
+      try {
+        const res = await rawApi.getTree();
+        await this.localDb.setMeta('tree', res.tree);
+        await this.localDb.setMeta('files', res.files);
+        return res;
+      } catch {
+        this.setSyncState('offline');
+      }
+    }
+
+    const reconciled = await this.localDb.reconcileTreeWithLocalState();
     return {
-      tree,
-      files,
+      tree: reconciled.tree,
+      files: reconciled.files,
       vaultPath: 'Knowmesh Vault (Offline)',
     };
   }
@@ -383,7 +445,9 @@ class SyncEngine {
           await this.localDb.putNote(serverNote);
           return serverNote;
         }
-      } catch {}
+      } catch {
+        this.setSyncState('offline');
+      }
     }
 
     if (localNote) return localNote;
@@ -447,7 +511,8 @@ class SyncEngine {
           this.notifyConflictListeners();
           throw err;
         }
-        console.warn(`[Knowmesh Sync] Server unreachable during save, queueing in outbox:`, err);
+        console.warn(`[Knowmesh Sync] Server unreachable during save, switching to offline outbox:`, err);
+        this.setSyncState('offline');
       }
     }
 
@@ -487,10 +552,8 @@ class SyncEngine {
         const res = await rawApi.createFolder(relPath);
         return res;
       } catch (err: any) {
-        if (err instanceof ApiHttpError && err.status < 500) {
-          throw err;
-        }
         console.warn(`[Knowmesh Sync] Server unreachable during createFolder, queueing in outbox:`, err);
+        this.setSyncState('offline');
       }
     }
 
@@ -515,10 +578,8 @@ class SyncEngine {
         const res = await rawApi.renameEntry(oldPath, newPath);
         return res;
       } catch (err: any) {
-        if (err instanceof ApiHttpError && err.status < 500) {
-          throw err;
-        }
         console.warn(`[Knowmesh Sync] Server unreachable during renameEntry, queueing in outbox:`, err);
+        this.setSyncState('offline');
       }
     }
 
@@ -540,9 +601,7 @@ class SyncEngine {
         const res = await rawApi.copyEntry(sourcePath, targetPath);
         return res;
       } catch (err: any) {
-        if (err instanceof ApiHttpError && err.status < 500) {
-          throw err;
-        }
+        this.setSyncState('offline');
       }
     }
 
@@ -577,10 +636,8 @@ class SyncEngine {
         await rawApi.deleteEntry(relPath);
         return;
       } catch (err: any) {
-        if (err instanceof ApiHttpError && err.status < 500) {
-          throw err;
-        }
         console.warn(`[Knowmesh Sync] Server unreachable during deleteEntry, queueing in outbox:`, err);
+        this.setSyncState('offline');
       }
     }
 

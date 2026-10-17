@@ -1935,7 +1935,7 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 1300;
 }
 
 .login-card {

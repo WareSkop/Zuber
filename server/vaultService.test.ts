@@ -13,6 +13,7 @@ import { ensureTlsCredentials } from './tls';
 import { ConfigService } from './configService';
 import { createSessionToken, verifySessionToken } from './auth';
 import { rateLimiter } from './rateLimiter';
+import { insertNodeIntoTree, generateMutationId } from '../src/sync/localDb';
 
 describe('Knowmesh - Markdown & Frontmatter Utils', () => {
   it('parses frontmatter into visual properties and separates body from YAML', () => {
@@ -795,7 +796,43 @@ describe('Knowmesh - Vault Entry Operations (copyEntry & deleteEntry)', () => {
     expect(fs.existsSync(path.join(tmpDir, 'Sub'))).toBe(false);
     expect(() => service.getNote('Sub/Deep/File.md')).toThrow('Notiz nicht gefunden');
   });
+
+  it('supports creating multiple offline files and folders sequentially in local tree without collisions', () => {
+    let tree = insertNodeIntoTree([], ['Neue Notiz.md'], 'Neue Notiz.md', 'file');
+    expect(tree).toHaveLength(1);
+    expect(tree[0].path).toBe('Neue Notiz.md');
+
+    // Second note with disambiguated name
+    tree = insertNodeIntoTree(tree, ['Neue Notiz 2.md'], 'Neue Notiz 2.md', 'file');
+    expect(tree).toHaveLength(2);
+
+    // Offline folder creation at root and nested folder + nested note
+    tree = insertNodeIntoTree(tree, ['Neuer Ordner'], 'Neuer Ordner', 'folder');
+    tree = insertNodeIntoTree(tree, ['Neuer Ordner 2'], 'Neuer Ordner 2', 'folder');
+    tree = insertNodeIntoTree(
+      tree,
+      ['Neuer Ordner', 'SubNotiz.md'],
+      'Neuer Ordner/SubNotiz.md',
+      'file'
+    );
+
+    const folders = tree.filter((n) => n.type === 'folder');
+    const files = tree.filter((n) => n.type === 'file');
+    expect(folders).toHaveLength(2);
+    expect(files).toHaveLength(2);
+
+    const firstFolder = folders.find((f) => f.path === 'Neuer Ordner');
+    expect(firstFolder?.children).toHaveLength(1);
+    expect(firstFolder?.children?.[0].path).toBe('Neuer Ordner/SubNotiz.md');
+
+    const id1 = generateMutationId('save', 'Neue Notiz.md');
+    const id2 = generateMutationId('save', 'Neue Notiz 2.md');
+    const id3 = generateMutationId('folder', 'Neuer Ordner');
+    expect(id1).not.toBe(id2);
+    expect(id2).not.toBe(id3);
+  });
 });
+
 
 
 

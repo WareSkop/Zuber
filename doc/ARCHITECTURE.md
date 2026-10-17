@@ -167,9 +167,10 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
   ```
 - Sendet der Client `forceOverwrite: true`, wird die Datei unabhängig von `baseMtime` überschrieben.
 
-### Outbox-Verarbeitung & Reconnect (`flushOutbox()`)
-- Alle im Offline-Modus durchgeführten Datei- und Ordneroperationen (`save_note`, `create_folder`, `rename`, `delete`) werden in der lokalen IndexedDB-Outbox (`localDb.ts`) persistiert.
-- Bei Reconnect (`online`-Event oder Polling) verarbeitet `syncEngine.flushOutbox()` die Warteschlange:
+### Outbox-Verarbeitung, Post-Login-Sync & Reconnect (`flushOutbox()`, `notifyAuthenticatedOnline()`)
+- Nach erfolgreichem Login (`handleLogin`) oder positivem Auth-Check beim Start (`initAuth`) ruft das Frontend sofort `syncEngine.notifyAuthenticatedOnline()` auf, damit `SyncEngine` unmittelbar aus dem initialen `offline`-Zustand in den Online-Sync wechselt und auf neuen Geräten (z. B. neu verbundenes Chromebook) sofort den Server-Vault lädt.
+- Alle im Offline-Modus durchgeführten Datei- und Ordneroperationen (`save_note`, `create_folder`, `rename`, `delete`) werden in der lokalen IndexedDB-Outbox (`localDb.ts`) persistiert und über `localDb.reconcileTreeWithLocalState()` verlustfrei mit dem lokalen Dateibaum abgeglichen.
+- Bei Reconnect (`online`-Event, WebSocket-Open oder periodischer Reconnect-Probe) verarbeitet `syncEngine.flushOutbox()` die Warteschlange:
   - Bei `save_note` holt der Sync-Engine stets das aktuellste Notizen-Objekt (`localDb.getNote(path)`), sodass alle offline getätigten Eingaben (`body`, `properties`, `rawContent`) vollständig übertragen werden.
   - Mutationen werden erst nach erfolgreichem Server-HTTP 200 aus der Outbox gelöscht.
   - Nach Abschluss der Outbox-Flutung erfolgt ein Delta-Manifest-Abgleich und das Frontend aktualisiert den Verzeichnisbaum (`loadVaultIndex()`).

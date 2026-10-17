@@ -483,6 +483,95 @@ export class LocalDb {
     };
   }
 
+  public async reconcileTreeWithLocalState(): Promise<{
+    tree: FileTreeNode[];
+    files: { path: string; name: string; basename: string; extension: string }[];
+  }> {
+    const rawTree = (await this.getMeta<FileTreeNode[]>('tree')) || [];
+    const rawFiles =
+      (await this.getMeta<{ path: string; name: string; basename: string; extension: string }[]>(
+        'files'
+      )) || [];
+    const rawFolders = (await this.getMeta<string[]>('folders')) || [];
+    const localNotes = await this.getAllNotes();
+    const outbox = await this.getOutbox();
+
+    const deletedPaths = new Set<string>();
+    for (const m of outbox) {
+      if (m.type === 'delete' && m.path) {
+        deletedPaths.add(m.path);
+      }
+    }
+
+    const isDeleted = (p: string): boolean => {
+      if (deletedPaths.has(p)) return true;
+      for (const del of deletedPaths) {
+        if (p.startsWith(`${del}/`)) return true;
+      }
+      return false;
+    };
+
+    const filterDeleted = (nodes: FileTreeNode[]): FileTreeNode[] =>
+      nodes
+        .filter((n) => !isDeleted(n.path))
+        .map((n) => (n.children ? { ...n, children: filterDeleted(n.children) } : n));
+
+    let currentTree = filterDeleted(rawTree);
+
+    // Ensure all local folders and outbox create_folder mutations are in the tree
+    const folderSet = new Set<string>(rawFolders);
+    for (const m of outbox) {
+      if (m.type === 'create_folder' && m.path) {
+        folderSet.add(m.path);
+      }
+    }
+    for (const folderPath of folderSet) {
+      if (!folderPath || isDeleted(folderPath)) continue;
+      const parts = folderPath.split('/').filter(Boolean);
+      currentTree = insertNodeIntoTree(currentTree, parts, folderPath, 'folder');
+    }
+
+    // Ensure all local notes and outbox save_note mutations are in the tree and files list
+    const fileMap = new Map<
+      string,
+      { path: string; name: string; basename: string; extension: string }
+    >();
+    for (const f of rawFiles) {
+      if (f?.path && !isDeleted(f.path)) {
+        fileMap.set(f.path, f);
+      }
+    }
+
+    const notePaths = new Set<string>();
+    for (const n of localNotes) {
+      if (n.path && !isDeleted(n.path)) {
+        notePaths.add(n.path);
+      }
+    }
+    for (const m of outbox) {
+      if (m.type === 'save_note' && m.path && !isDeleted(m.path)) {
+        notePaths.add(m.path);
+      }
+    }
+
+    for (const filePath of notePaths) {
+      const parts = filePath.split('/').filter(Boolean);
+      currentTree = insertNodeIntoTree(currentTree, parts, filePath, 'file');
+      const fileName = filePath.split('/').pop() || filePath;
+      const basename = fileName.replace(/\.[^/.]+$/, '');
+      const extension = fileName.includes('.') ? fileName.split('.').pop() || 'md' : 'md';
+      if (!fileMap.has(filePath)) {
+        fileMap.set(filePath, { path: filePath, name: fileName, basename, extension });
+      }
+    }
+
+    const updatedFiles = Array.from(fileMap.values());
+    await this.setMeta('tree', currentTree);
+    await this.setMeta('files', updatedFiles);
+
+    return { tree: currentTree, files: updatedFiles };
+  }
+
   public async clearCache(): Promise<void> {
     const db = await this.openDb();
     return new Promise((resolve, reject) => {
@@ -496,7 +585,7 @@ export class LocalDb {
   }
 }
 
-function insertNodeIntoTree(
+export function insertNodeIntoTree(
   nodes: FileTreeNode[],
   parts: string[],
   fullPath: string,
@@ -506,10 +595,11 @@ function insertNodeIntoTree(
   const [currentPart, ...remaining] = parts;
   const isLeaf = remaining.length === 0;
 
-  let existingIndex = nodes.findIndex((n) => n.name === currentPart);
-
   if (isLeaf) {
-    if (existingIndex >= 0) {
+    const existingLeafIdx = nodes.findIndex(
+      (n) => n.path === fullPath || (n.name === currentPart && n.type === type)
+    );
+    if (existingLeafIdx >= 0) {
       return nodes;
     }
     const newNode: FileTreeNode = {
@@ -525,14 +615,18 @@ function insertNodeIntoTree(
   }
 
   // Intermediate directory
+  let existingFolderIdx = nodes.findIndex(
+    (n) => n.name === currentPart && n.type === 'folder'
+  );
   let targetFolder: FileTreeNode;
   let nextNodes: FileTreeNode[];
 
-  if (existingIndex >= 0 && nodes[existingIndex].type === 'folder') {
-    targetFolder = nodes[existingIndex];
+  if (existingFolderIdx >= 0) {
+    targetFolder = nodes[existingFolderIdx];
     nextNodes = [...nodes];
   } else {
-    const folderPath = fullPath.split('/').slice(0, fullPath.split('/').length - remaining.length).join('/');
+    const allParts = fullPath.split('/').filter(Boolean);
+    const folderPath = allParts.slice(0, allParts.length - remaining.length).join('/');
     targetFolder = {
       name: currentPart,
       path: folderPath,
@@ -541,7 +635,7 @@ function insertNodeIntoTree(
       updatedAt: Date.now(),
     };
     nextNodes = [...nodes, targetFolder];
-    existingIndex = nextNodes.length - 1;
+    existingFolderIdx = nextNodes.length - 1;
   }
 
   const updatedChildren = insertNodeIntoTree(
@@ -551,7 +645,7 @@ function insertNodeIntoTree(
     type
   );
 
-  nextNodes[existingIndex] = {
+  nextNodes[existingFolderIdx] = {
     ...targetFolder,
     children: updatedChildren,
   };
@@ -573,4 +667,5 @@ export function generateMutationId(type: string, path: string): string {
   const rand = Math.random().toString(36).substring(2, 9);
   return `${type}_${safe}_${Date.now()}_${rand}`;
 }
+
 

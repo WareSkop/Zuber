@@ -118,6 +118,27 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   }, [selectedTagFilter]);
 
+  // Automatically expand ancestor folders when activePath changes
+  useEffect(() => {
+    if (!activePath || !activePath.includes('/')) return;
+    const parts = activePath.split('/');
+    parts.pop(); // remove filename
+    if (parts.length === 0) return;
+    setExpandedFolders((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      let current = '';
+      for (const p of parts) {
+        current = current ? `${current}/${p}` : p;
+        if (!next[current]) {
+          next[current] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [activePath]);
+
   useEffect(() => {
     if (activeTab !== 'search' && !selectedTagFilter) return;
 
