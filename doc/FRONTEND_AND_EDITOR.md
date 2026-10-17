@@ -103,9 +103,9 @@ Die Funktion [`wikiLinkCompletion`](../src/components/LivePreviewEditor.tsx) ist
 - Tippt der Benutzer `[[` gefolgt von beliebigen Zeichen, durchsucht die Funktion `allNotesRef.current` nach passenden Notiznamen und Pfaden (bis zu 30 Vorschläge) und vervollständigt beim Bestätigen automatisch zu `[[Notizname]]`.
 - Tippt der Benutzer `#` nach einem Leerzeichen oder am Zeilenanfang, schlägt die Funktion existierende Tags aus `allTagsRef.current` vor.
 
-### 2.4 Drag & Drop, Zwischenablage-Upload und Bild-Einfügen-Button
+### 2.4 Drag & Drop, Zwischenablage-Upload und Bild-Einfügen in EditorToolbar
 
-Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zusätzlich steht in der Topbar der Button **Bild einfügen** zur Verfügung:
+Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zusätzlich steht in der Formatierungs-Toolbar (`EditorToolbar`) der Button **Bild einfügen** (Dateiauswahl oder Kamera-Foto) zur Verfügung:
 - Sowohl Clipboard-Items (`event.clipboardData.items`), Clipboard-Dateien (`event.clipboardData.files`), Drag & Drop-Dateien (`event.dataTransfer.files`) als auch die Dateiauswahl per Button unterstützen Einzel- und Mehrfach-Uploads.
 - Bei Blobs aus der Zwischenablage ohne Dateiendung wird der MIME-Typ analysiert (`image/png`, `image/jpeg` etc.), sodass auf dem Server stets eine gültige Dateiendung vergeben wird.
 - Die Datei wird nach `/api/vault/upload?folder=attachments` hochgeladen und an der aktuellen Cursorposition bzw. am Ende der Notiz automatisch als fertiger Obsidian-Tag `![[attachments/dateiname.png]]` eingefügt.
@@ -229,7 +229,7 @@ Basalt bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-
 
 ## 7. Obsidian-Befehlspalette (`Ctrl+P` / `Cmd+P`) & Shortcuts ([`src/components/CommandPalette.tsx`](../src/components/CommandPalette.tsx))
 
-Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie über den Button **„Befehle“** (`Terminal`-Icon) in der Top-Toolbar aufgerufen werden kann:
+Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie `Ctrl+O` aufgerufen werden kann:
 
 - **Eigenschaften & Bedienung:**
   - **Fuzzy-/Volltextsuche:** Durchsucht Titel, Beschreibungen, Kategorien und Synonyme (z. B. „fett“, „table“, „theme“, „sync“).
@@ -323,6 +323,22 @@ Direkt oberhalb des scrollenden Editor-Bereichs steht eine feste **Sticky-Format
 - **Dokumenten-Layout & Überschriften:**
   - Die separate statische H1-Titelzeile oberhalb des Editors wurde entfernt. Markdown-Dokumente mit Überschriften wie `# Mein Titel` werden nun ohne Dopplung direkt im CodeMirror-Editor angezeigt und bearbeitet.
   - Das Frontmatter-Eigenschaften-Panel (`PropertiesEditor`) ist beim Öffnen der App sowie beim Wechseln von Notizen **standardmäßig eingeklappt** (`collapsed: true`) und zeigt nur die schmale Kopfzeile `> Eigenschaften [Anzahl]`.
+
+---
+
+## 11. Verschlankte Benutzeroberfläche (Header- & Ribbon-Bereinigung)
+
+Zur Beseitigung redundanter Bedienelemente und Schaffung maximalen Freiraums für den Notizinhalt:
+- **Linke Ribbon-Leiste:** Beginnt direkt mit dem Button „Neue Notiz“ (`+`-Datei-Icon), gefolgt von Editor-Ansicht, Graph-Ansicht und Split-View. Der frühere doppelte Sidebar-Toggle-Button am Kopf des Ribbons wurde entfernt, da die Leiste primär über den linken Button der Haupt-Toolbar gesteuert wird.
+- **Obere Haupt-Toolbar (Links):** Der frühere Branding-Block (`Basalt`-Logo, Text, `vault`-Badge und Trennstrich) wurde vollständig entfernt. Unmittelbar neben dem linken Sidebar-Toggle-Button folgt nahtlos der Breadcrumb-Pfad der geöffneten Notiz inklusive des Speicherstatus-Badges.
+- **Obere Haupt-Toolbar (Rechts):**
+  - Entfernung redundanter Buttons: „Bild einfügen“ (befindet sich in der `EditorToolbar`), „Graph-Ansicht“ (befindet sich im Ribbon) und „>_ Befehle“ (wird über den Obsidian-Shortcut `Ctrl+P` / `Cmd+P` bedient).
+  - Die verbleibende Menüleiste rechts enthält sauber strukturiert:
+    1. **Modus-Umschalter:** `Live-Preview` | `Lesen` | `Quellcode`
+    2. **Zen-Button:** Umschalten in den Vollbild-Zen-Modus (`Alt+Z`)
+    3. **Sync-Status:** `● Synchronisiert` (mit Dropdown für Server-Details)
+    4. **Einstellungen:** Zahnrad (`⚙`) für Themes, Profile und Sicherheit
+    5. **Rechte Seitenleiste:** Toggle-Button für Backlinks, Gliederung und lokalen Graphen
 
 
 

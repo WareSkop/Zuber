@@ -32,7 +32,6 @@ import {
   Heading2,
   Heading3,
   Minus,
-  Terminal,
   Palette,
   RefreshCw,
   Trash2,
@@ -1272,15 +1271,6 @@ export const App: React.FC = () => {
       <div className="ribbon-top">
         <button
           type="button"
-          className={`ribbon-btn ${leftSidebarOpen ? 'active' : ''}`}
-          onClick={() => setLeftSidebarOpen((o) => !o)}
-          title="Dateibaum & Suche ein-/ausblenden"
-        >
-          <PanelLeft size={19} />
-        </button>
-
-        <button
-          type="button"
           className="ribbon-btn"
           onClick={() => {
             setDialog({
@@ -1438,11 +1428,6 @@ export const App: React.FC = () => {
             >
               <PanelLeft size={16} />
             </button>
-            <div className="topbar-brand">
-              <img src="/basalt-logo.svg" alt="Basalt" style={{ width: 20, height: 20 }} />
-              <span className="topbar-brand-title">Basalt</span>
-              <span className="topbar-vault-badge">{vaultPath ? vaultPath.split('/').filter(Boolean).pop() : 'Vault'}</span>
-            </div>
           </div>
           <div className="topbar-breadcrumbs">
             {workspaceView === 'graph' ? (
@@ -1469,78 +1454,45 @@ export const App: React.FC = () => {
 
           <div className="topbar-controls">
             {workspaceView !== 'graph' && activeNote && (
-              <>
+              <div className="editor-mode-switcher" role="group" aria-label="Editor-Modus">
                 <button
                   type="button"
-                  className="topbar-action-btn"
-                  onClick={handleUploadImageClick}
-                  title="Bild oder Anhang in den Vault hochladen & einbetten"
+                  className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('live')}
+                  title="Obsidian Live-Preview (Syntax nur in aktiver Zeile)"
                 >
-                  <ImagePlus size={15} />
-                  <span>Bild einfügen</span>
+                  <Eye size={14} />
+                  <span>Live-Preview</span>
                 </button>
-
-                <div className="editor-mode-switcher" role="group" aria-label="Editor-Modus">
-                  <button
-                    type="button"
-                    className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
-                    onClick={() => setEditorMode('live')}
-                    title="Obsidian Live-Preview (Syntax nur in aktiver Zeile)"
-                  >
-                    <Eye size={14} />
-                    <span>Live-Preview</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`mode-btn ${editorMode === 'reading' ? 'active' : ''}`}
-                    onClick={() => setEditorMode('reading')}
-                    title="Lese-Ansicht (Komplett gerendert)"
-                  >
-                    <BookOpen size={14} />
-                    <span>Lesen</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`mode-btn ${editorMode === 'source' ? 'active' : ''}`}
-                    onClick={() => {
-                      if (editorMode !== 'source') {
-                        setActiveNote((prev) =>
-                          prev
-                            ? { ...prev, rawContent: serializeMarkdownWithFrontmatter(prev.properties, prev.body) }
-                            : prev
-                        );
-                      }
-                      setEditorMode('source');
-                    }}
-                    title="Quellcode-Modus (Inkl. Roh-Markdown/YAML)"
-                  >
-                    <Code2 size={14} />
-                    <span>Quellcode</span>
-                  </button>
-                </div>
-              </>
+                <button
+                  type="button"
+                  className={`mode-btn ${editorMode === 'reading' ? 'active' : ''}`}
+                  onClick={() => setEditorMode('reading')}
+                  title="Lese-Ansicht (Komplett gerendert)"
+                >
+                  <BookOpen size={14} />
+                  <span>Lesen</span>
+                </button>
+                <button
+                  type="button"
+                  className={`mode-btn ${editorMode === 'source' ? 'active' : ''}`}
+                  onClick={() => {
+                    if (editorMode !== 'source') {
+                      setActiveNote((prev) =>
+                        prev
+                          ? { ...prev, rawContent: serializeMarkdownWithFrontmatter(prev.properties, prev.body) }
+                          : prev
+                      );
+                    }
+                    setEditorMode('source');
+                  }}
+                  title="Quellcode-Modus (Inkl. Roh-Markdown/YAML)"
+                >
+                  <Code2 size={14} />
+                  <span>Quellcode</span>
+                </button>
+              </div>
             )}
-
-            <button
-              type="button"
-              className={`topbar-graph-toggle ${workspaceView === 'graph' ? 'active' : ''}`}
-              onClick={() =>
-                setWorkspaceView((v) => (v === 'graph' ? 'editor' : 'graph'))
-              }
-            >
-              <GitFork size={15} />
-              <span>{workspaceView === 'graph' ? 'Zurück zur Notiz' : 'Graph-Ansicht'}</span>
-            </button>
-
-            <button
-              type="button"
-              className="topbar-action-btn"
-              onClick={() => setCommandPaletteOpen(true)}
-              title="Befehlspalette öffnen (Strg+P)"
-            >
-              <Terminal size={15} />
-              <span>Befehle</span>
-            </button>
 
             <button
               type="button"
