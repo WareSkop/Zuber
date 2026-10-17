@@ -709,6 +709,94 @@ describe('Knowmesh - Offline Auth Verifier & Password Hashing', () => {
   });
 });
 
+describe('Knowmesh - Vault Entry Operations (copyEntry & deleteEntry)', () => {
+  let tmpDir: string;
+  let service: VaultService;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowmesh-entry-test-'));
+    service = new VaultService(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('copies an existing note with auto-generated (Copy) name', () => {
+    const original = service.saveNote('Notiz.md', {
+      body: '# Original Content\n\nSome text.',
+      properties: [{ key: 'tags', type: 'list', value: ['test'] }],
+    });
+    expect(original.path).toBe('Notiz.md');
+
+    // Copy to same directory without explicit target -> creates "Notiz (Copy).md"
+    const copied1 = service.copyEntry('Notiz.md');
+    expect(copied1.newPath).toBe('Notiz (Copy).md');
+    expect(fs.existsSync(path.join(tmpDir, 'Notiz (Copy).md'))).toBe(true);
+    const readCopy1 = service.getNote('Notiz (Copy).md');
+    expect(readCopy1?.body).toContain('# Original Content');
+
+    // Copy again -> creates "Notiz (Copy 2).md"
+    const copied2 = service.copyEntry('Notiz.md');
+    expect(copied2.newPath).toBe('Notiz (Copy 2).md');
+    expect(fs.existsSync(path.join(tmpDir, 'Notiz (Copy 2).md'))).toBe(true);
+  });
+
+  it('copies a note into a specific folder', () => {
+    service.saveNote('Idea.md', {
+      body: '# My Idea',
+    });
+    service.createFolder('Archive');
+
+    const copied = service.copyEntry('Idea.md', 'Archive');
+    expect(copied.newPath).toBe('Archive/Idea.md');
+    expect(fs.existsSync(path.join(tmpDir, 'Archive', 'Idea.md'))).toBe(true);
+
+    // Copy again into the same folder -> adds (Copy)
+    const copiedAgain = service.copyEntry('Idea.md', 'Archive');
+    expect(copiedAgain.newPath).toBe('Archive/Idea (Copy).md');
+    expect(fs.existsSync(path.join(tmpDir, 'Archive', 'Idea (Copy).md'))).toBe(true);
+  });
+
+  it('copies an entire directory recursively', () => {
+    service.createFolder('Project/Docs');
+    service.saveNote('Project/Docs/Spec.md', {
+      body: '# Specs',
+    });
+
+    const copiedDir = service.copyEntry('Project');
+    expect(copiedDir.newPath).toBe('Project (Copy)');
+    expect(fs.existsSync(path.join(tmpDir, 'Project (Copy)', 'Docs', 'Spec.md'))).toBe(true);
+    const readNested = service.getNote('Project (Copy)/Docs/Spec.md');
+    expect(readNested?.body).toContain('# Specs');
+  });
+
+  it('deletes a note and removes it from index', () => {
+    service.saveNote('ToDelete.md', {
+      body: '# Delete me',
+    });
+    expect(service.getNote('ToDelete.md')).toBeDefined();
+
+    const result = service.deleteEntry('ToDelete.md');
+    expect(result.deleted).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'ToDelete.md'))).toBe(false);
+    expect(() => service.getNote('ToDelete.md')).toThrow('Notiz nicht gefunden');
+  });
+
+  it('deletes a folder and all its contents recursively', () => {
+    service.createFolder('Sub/Deep');
+    service.saveNote('Sub/Deep/File.md', {
+      body: '# Deep file',
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'Sub', 'Deep', 'File.md'))).toBe(true);
+
+    const result = service.deleteEntry('Sub');
+    expect(result.deleted).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, 'Sub'))).toBe(false);
+    expect(() => service.getNote('Sub/Deep/File.md')).toThrow('Notiz nicht gefunden');
+  });
+});
+
 
 
 

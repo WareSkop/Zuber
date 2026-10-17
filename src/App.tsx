@@ -72,18 +72,23 @@ import { ConflictModal } from './components/ConflictModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
+import { useTranslation } from './i18n';
+import { recordLastActiveNote, resolveStartupNotePath } from './startupConfig';
 
 type MainWorkspaceView = 'editor' | 'graph' | 'split';
 type RightSidebarTab = 'backlinks' | 'outline' | 'local-graph';
 
 interface DialogState {
   type: 'create-note' | 'create-folder' | 'rename' | 'delete';
+  title?: string;
+  prompt?: string;
   parentFolder?: string;
   targetPath?: string;
   initialValue: string;
 }
 
 export const App: React.FC = () => {
+  const { t, language } = useTranslation();
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [httpsActive, setHttpsActive] = useState(true);
@@ -429,6 +434,7 @@ export const App: React.FC = () => {
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
         setActiveNote(note);
         setSaveState('saved');
+        recordLastActiveNote(relPath);
         refreshBacklinks(relPath);
       } catch (err) {
         console.error('Fehler beim Laden der Notiz:', err);
@@ -475,26 +481,36 @@ export const App: React.FC = () => {
         }
       },
       onCreateNote: (parentFolder?: string) => {
-        setDialog({ type: 'create-note', parentFolder, initialValue: 'Neue Notiz' });
-        setDialogInput('Neue Notiz');
+        const defaultName = language === 'de' ? 'Neue Notiz' : 'New Note';
+        setDialog({ type: 'create-note', parentFolder, initialValue: defaultName });
+        setDialogInput(defaultName);
       },
       onCreateFolder: (parentFolder?: string) => {
-        setDialog({ type: 'create-folder', parentFolder, initialValue: 'Neuer Ordner' });
-        setDialogInput('Neuer Ordner');
+        const defaultName = language === 'de' ? 'Neuer Ordner' : 'New Folder';
+        setDialog({ type: 'create-folder', parentFolder, initialValue: defaultName });
+        setDialogInput(defaultName);
       },
       onRenameEntry: (oldPath: string, currentName: string) => {
         setDialog({ type: 'rename', targetPath: oldPath, initialValue: currentName });
         setDialogInput(currentName);
       },
       onDeleteEntry: (path: string, name: string) => {
-        setDialog({ type: 'delete', targetPath: path, initialValue: name });
+        const isFolder = tree.some((n) => n.path === path && n.type === 'folder');
+        setDialog({
+          type: 'delete',
+          targetPath: path,
+          initialValue: name,
+          prompt: isFolder
+            ? t('dialogs.deleteFolderPrompt', { name })
+            : t('dialogs.deleteNotePrompt', { name }),
+        });
       },
       onRefresh: () => {
         loadVaultIndex();
       },
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
     }),
-    [openNoteByPath, loadVaultIndex, isMobile]
+    [openNoteByPath, loadVaultIndex, isMobile, language, t, tree]
   );
 
   // Initial authentication check
@@ -515,12 +531,9 @@ export const App: React.FC = () => {
           setAuthChecked(true);
           try {
             const { treeRes } = await loadVaultIndex();
-            const welcome = treeRes.files.find(
-              (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
-            );
-            const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
-            if (firstMd && !cancelled) {
-              await openNoteByPath(firstMd.path);
+            const startupPath = await resolveStartupNotePath(treeRes.files);
+            if (startupPath && !cancelled) {
+              await openNoteByPath(startupPath);
             }
           } catch {
             // ignore offline loading error
@@ -545,12 +558,9 @@ export const App: React.FC = () => {
 
         if (status.authenticated) {
           const { treeRes } = await loadVaultIndex();
-          const welcome = treeRes.files.find(
-            (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
-          );
-          const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
-          if (firstMd && !cancelled) {
-            await openNoteByPath(firstMd.path);
+          const startupPath = await resolveStartupNotePath(treeRes.files);
+          if (startupPath && !cancelled) {
+            await openNoteByPath(startupPath);
           }
         }
       } catch (err: any) {
@@ -571,12 +581,9 @@ export const App: React.FC = () => {
           setAuthChecked(true);
           try {
             const { treeRes } = await loadVaultIndex();
-            const welcome = treeRes.files.find(
-              (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
-            );
-            const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
-            if (firstMd && !cancelled) {
-              await openNoteByPath(firstMd.path);
+            const startupPath = await resolveStartupNotePath(treeRes.files);
+            if (startupPath && !cancelled) {
+              await openNoteByPath(startupPath);
             }
           } catch {
             // ignore
@@ -656,12 +663,9 @@ export const App: React.FC = () => {
     await api.login(password);
     setAuthenticated(true);
     const { treeRes } = await loadVaultIndex();
-    const welcome = treeRes.files.find(
-      (f) => f.extension === 'md' && f.basename.toLowerCase().includes('willkommen')
-    );
-    const firstMd = welcome || treeRes.files.find((f) => f.extension === 'md');
-    if (firstMd) {
-      await openNoteByPath(firstMd.path);
+    const targetPath = await resolveStartupNotePath(treeRes.files);
+    if (targetPath) {
+      await openNoteByPath(targetPath);
     }
   };
 
@@ -906,9 +910,21 @@ export const App: React.FC = () => {
           await openNoteByPath(res.newPath);
         }
       } else if (dialog.type === 'delete' && dialog.targetPath) {
-        await api.deleteEntry(dialog.targetPath);
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        setSaveState('saved');
+
+        const deletedPath = dialog.targetPath;
+        const isActiveOrChild =
+          activeNote &&
+          (activeNote.path === deletedPath ||
+            activeNote.path.startsWith(deletedPath + '/'));
+
+        await syncEngine.deleteEntry(deletedPath);
         const { treeRes } = await loadVaultIndex();
-        if (activeNote?.path === dialog.targetPath) {
+        if (isActiveOrChild) {
           const nextMd = treeRes.files.find((f) => f.extension === 'md');
           if (nextMd) {
             await openNoteByPath(nextMd.path);
@@ -1421,7 +1437,7 @@ export const App: React.FC = () => {
     : 0;
 
   const renderRibbon = (extraClass = '') => (
-    <nav className={`knowmesh-ribbon obsidian-ribbon ${extraClass}`} aria-label="Hauptnavigation">
+    <nav className={`knowmesh-ribbon obsidian-ribbon ${extraClass}`} aria-label={t('nav.mainNavAria')}>
       <div className="ribbon-top">
         <button
           type="button"
@@ -1429,11 +1445,11 @@ export const App: React.FC = () => {
           onClick={() => {
             setDialog({
               type: 'create-note',
-              initialValue: 'Unbenannte Notiz',
+              initialValue: 'Untitled',
             });
-            setDialogInput('Unbenannte Notiz');
+            setDialogInput('Untitled');
           }}
-          title="Neue Notiz erstellen"
+          title={t('nav.newNote')}
         >
           <FilePlus size={19} />
         </button>
@@ -1445,7 +1461,7 @@ export const App: React.FC = () => {
             setWorkspaceView('editor');
             if (isMobile) setLeftSidebarOpen(false);
           }}
-          title="Editor-Ansicht"
+          title={t('nav.editor')}
         >
           <FileText size={19} />
         </button>
@@ -1457,7 +1473,7 @@ export const App: React.FC = () => {
             setWorkspaceView('graph');
             if (isMobile) setLeftSidebarOpen(false);
           }}
-          title="Globale Graph-Ansicht öffnen"
+          title={t('nav.graph')}
         >
           <GitFork size={19} />
         </button>
@@ -1469,7 +1485,7 @@ export const App: React.FC = () => {
             setWorkspaceView((v) => (v === 'split' ? 'editor' : 'split'));
             if (isMobile) setLeftSidebarOpen(false);
           }}
-          title="Split-Screen: Editor + Graph nebeneinander"
+          title={t('nav.split')}
         >
           <Columns size={19} />
         </button>
@@ -1482,8 +1498,8 @@ export const App: React.FC = () => {
           onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
           title={
             theme === 'dark'
-              ? 'Zum hellen Design wechseln'
-              : 'Zum dunklen Design wechseln'
+              ? 'Light Theme'
+              : 'Dark Theme'
           }
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -1496,7 +1512,7 @@ export const App: React.FC = () => {
             setRightSidebarOpen((o) => !o);
             if (isMobile) setLeftSidebarOpen(false);
           }}
-          title="Rechte Seitenleiste (Backlinks, Gliederung & Lokaler Graph)"
+          title={t('nav.rightSidebar')}
         >
           <PanelRight size={19} />
         </button>
@@ -1505,7 +1521,7 @@ export const App: React.FC = () => {
           type="button"
           className="ribbon-btn logout-btn"
           onClick={handleLogout}
-          title="Abmelden / Vault sperren"
+          title={t('nav.logout')}
         >
           <LogOut size={18} />
         </button>
@@ -1564,11 +1580,11 @@ export const App: React.FC = () => {
             type="button"
             className="zen-mode-exit-btn"
             onClick={() => setZenMode(false)}
-            title="Zen-Modus beenden (Alt+Z oder Esc)"
-            aria-label="Zen-Modus beenden"
+            title={t('header.exitZen')}
+            aria-label={t('header.exitZen')}
           >
             <Minimize2 size={16} />
-            <span>Zen beenden (Alt+Z)</span>
+            <span>{t('header.exitZen')}</span>
           </button>
         ) : (
           <header className="workspace-topbar">
@@ -1577,8 +1593,8 @@ export const App: React.FC = () => {
               type="button"
               className={`topbar-sidebar-toggle ${leftSidebarOpen ? 'active' : ''}`}
               onClick={() => setLeftSidebarOpen((o) => !o)}
-              title="Linke Leiste (Dateibaum & Suche) ein-/ausblenden (Ctrl+B)"
-              aria-label="Linke Leiste umschalten"
+              title={t('header.toggleLeftSidebar')}
+              aria-label={t('header.toggleLeftSidebar')}
             >
               <PanelLeft size={16} />
             </button>
@@ -1586,7 +1602,7 @@ export const App: React.FC = () => {
           <div className="topbar-breadcrumbs">
             {workspaceView === 'graph' ? (
               <span className="breadcrumb-active">
-                <GitFork size={15} /> Wissensgraph (Alle Verknüpfungen)
+                <GitFork size={15} /> {t('graph.title')}
               </span>
             ) : activeNote ? (
               <>
@@ -1594,38 +1610,38 @@ export const App: React.FC = () => {
                 <span className={`save-indicator ${saveState}`}>
                   {saveState === 'saved' && (
                     <>
-                      <Check size={12} /> Gespeichert
+                      <Check size={12} /> {t('editor.saved')}
                     </>
                   )}
-                  {saveState === 'saving' && 'Speichere...'}
-                  {saveState === 'dirty' && 'Ungespeichert'}
+                  {saveState === 'saving' && t('editor.saving')}
+                  {saveState === 'dirty' && t('editor.unsaved')}
                 </span>
               </>
             ) : (
-              <span>Keine Notiz ausgewählt</span>
+              <span>{t('header.noNoteSelected')}</span>
             )}
           </div>
 
           <div className="topbar-controls">
             {workspaceView !== 'graph' && activeNote && (
-              <div className="editor-mode-switcher" role="group" aria-label="Editor-Modus">
+              <div className="editor-mode-switcher" role="group" aria-label={t('header.modeGroupAria')}>
                 <button
                   type="button"
                   className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
                   onClick={() => setEditorMode('live')}
-                  title="Knowmesh Live-Preview (Syntax nur in aktiver Zeile)"
+                  title={t('header.livePreviewTitle')}
                 >
                   <Eye size={14} />
-                  <span>Live-Preview</span>
+                  <span>{t('header.livePreview')}</span>
                 </button>
                 <button
                   type="button"
                   className={`mode-btn ${editorMode === 'reading' ? 'active' : ''}`}
                   onClick={() => setEditorMode('reading')}
-                  title="Lese-Ansicht (Komplett gerendert)"
+                  title={t('header.readingTitle')}
                 >
                   <BookOpen size={14} />
-                  <span>Lesen</span>
+                  <span>{t('header.reading')}</span>
                 </button>
                 <button
                   type="button"
@@ -1640,10 +1656,10 @@ export const App: React.FC = () => {
                     }
                     setEditorMode('source');
                   }}
-                  title="Quellcode-Modus (Inkl. Roh-Markdown/YAML)"
+                  title={t('header.sourceTitle')}
                 >
                   <Code2 size={14} />
-                  <span>Quellcode</span>
+                  <span>{t('header.source')}</span>
                 </button>
               </div>
             )}
@@ -1652,11 +1668,11 @@ export const App: React.FC = () => {
               type="button"
               className="topbar-action-btn"
               onClick={() => setZenMode(true)}
-              title="Ablenkungsfreier Zen-Modus (Alt+Z)"
-              aria-label="Zen-Modus aktivieren"
+              title={t('header.zenTitle')}
+              aria-label={t('header.zenTitle')}
             >
               <Maximize2 size={15} />
-              <span>Zen</span>
+              <span>{t('header.zen')}</span>
             </button>
 
             {/* Sync & Settings */}
@@ -1666,35 +1682,35 @@ export const App: React.FC = () => {
                   type="button"
                   className="topbar-action-btn pwa-topbar-install-btn"
                   onClick={handleInstallApp}
-                  title="📲 Knowmesh als native App installieren"
+                  title={t('header.installAppTitle')}
                 >
                   <Download size={14} />
-                  <span>App</span>
+                  <span>{t('header.installApp')}</span>
                 </button>
               )}
               <button
                 type="button"
                 className={`topbar-sync-indicator status-${syncState}`}
                 onClick={() => setSettingsOpen(true)}
-                title={`Verbindungs- und Sync-Status: ${
+                title={
                   syncState === 'synced'
-                    ? 'Synchronisiert'
+                    ? t('statusbar.synced')
                     : syncState === 'offline'
-                    ? 'Offline-Modus'
+                    ? t('statusbar.offline')
                     : syncState === 'syncing'
-                    ? 'Synchronisiere...'
+                    ? t('statusbar.syncing')
                     : syncState === 'conflict'
-                    ? 'Konflikt vorhanden'
-                    : 'Online'
-                }`}
+                    ? t('statusbar.conflict')
+                    : t('common.online')
+                }
               >
                 <span className={`sync-status-dot ${syncState}`} />
                 <span className="sync-status-text">
-                  {syncState === 'synced' && 'Synchronisiert'}
-                  {syncState === 'syncing' && 'Sync...'}
-                  {syncState === 'offline' && 'Offline'}
-                  {syncState === 'conflict' && 'Konflikt'}
-                  {syncState === 'online' && 'Online'}
+                  {syncState === 'synced' && t('statusbar.synced')}
+                  {syncState === 'syncing' && t('common.syncing')}
+                  {syncState === 'offline' && t('common.offline')}
+                  {syncState === 'conflict' && t('statusbar.conflict')}
+                  {syncState === 'online' && t('common.online')}
                 </span>
               </button>
 
@@ -1702,7 +1718,7 @@ export const App: React.FC = () => {
                 type="button"
                 className="topbar-settings-btn"
                 onClick={() => setSettingsOpen(true)}
-                title="Einstellungen & Farb-Themes (Zahnrad)"
+                title={t('nav.settings')}
               >
                 <Settings size={16} />
               </button>
@@ -1711,8 +1727,8 @@ export const App: React.FC = () => {
                 type="button"
                 className={`topbar-sidebar-toggle ${rightSidebarOpen ? 'active' : ''}`}
                 onClick={() => setRightSidebarOpen((o) => !o)}
-                title="Rechte Leiste (Backlinks, Gliederung & Graph) ein-/ausblenden (Ctrl+J)"
-                aria-label="Rechte Leiste umschalten"
+                title={t('header.toggleRightSidebar')}
+                aria-label={t('header.toggleRightSidebar')}
               >
                 <PanelRight size={16} />
               </button>
@@ -1820,7 +1836,7 @@ export const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Right Sidebar: Backlinks, Outline (Gliederung), and Local Graph */}
+      {/* Right Sidebar: Backlinks, Outline, and Local Graph */}
       {!zenMode && rightSidebarOpen && (
         <>
           {isMobile && (
@@ -1836,35 +1852,35 @@ export const App: React.FC = () => {
               type="button"
               className={`sidebar-tab-btn ${rightTab === 'backlinks' ? 'active' : ''}`}
               onClick={() => setRightTab('backlinks')}
-              title="Backlinks & Erwähnungen"
+              title={t('rightSidebar.backlinks')}
             >
               <Link2 size={15} />
-              <span>Backlinks ({linkedMentions.length})</span>
+              <span>{t('rightSidebar.backlinks')} ({linkedMentions.length})</span>
             </button>
             <button
               type="button"
               className={`sidebar-tab-btn ${rightTab === 'outline' ? 'active' : ''}`}
               onClick={() => setRightTab('outline')}
-              title="Gliederung der Notiz"
+              title={t('rightSidebar.outline')}
             >
               <ListTree size={15} />
-              <span>Gliederung</span>
+              <span>{t('rightSidebar.outline')}</span>
             </button>
             <button
               type="button"
               className={`sidebar-tab-btn ${rightTab === 'local-graph' ? 'active' : ''}`}
               onClick={() => setRightTab('local-graph')}
-              title="Lokaler Graph"
+              title={t('rightSidebar.localGraph')}
             >
               <GitFork size={15} />
-              <span>Graph</span>
+              <span>{t('rightSidebar.localGraph')}</span>
             </button>
             <button
               type="button"
               className="sidebar-tab-btn close-sidebar-btn"
               onClick={() => setRightSidebarOpen(false)}
-              title="Rechte Leiste schließen"
-              aria-label="Rechte Leiste schließen"
+              title={t('rightSidebar.close')}
+              aria-label={t('rightSidebar.close')}
             >
               <X size={15} />
             </button>
@@ -1874,11 +1890,11 @@ export const App: React.FC = () => {
             <div className="right-sidebar-content scroller">
               <div className="backlinks-section">
                 <h3 className="right-section-title">
-                  Verlinkte Erwähnungen ({linkedMentions.length})
+                  {t('rightSidebar.linkedMentions')} ({linkedMentions.length})
                 </h3>
                 {linkedMentions.length === 0 ? (
                   <p className="sidebar-empty-hint">
-                    Keine anderen Notizen verlinken direkt auf diese Notiz.
+                    {t('rightSidebar.noLinkedMentions')}
                   </p>
                 ) : (
                   linkedMentions.map((item, idx) => (
@@ -1899,11 +1915,11 @@ export const App: React.FC = () => {
 
               <div className="backlinks-section">
                 <h3 className="right-section-title">
-                  Unverlinkte Erwähnungen ({unlinkedMentions.length})
+                  {t('rightSidebar.unlinkedMentions')} ({unlinkedMentions.length})
                 </h3>
                 {unlinkedMentions.length === 0 ? (
                   <p className="sidebar-empty-hint">
-                    Keine unverlinkten Text-Erwähnungen gefunden.
+                    {t('rightSidebar.noUnlinkedMentions')}
                   </p>
                 ) : (
                   unlinkedMentions.map((item, idx) => (
@@ -1926,10 +1942,10 @@ export const App: React.FC = () => {
 
           {rightTab === 'outline' && (
             <div className="right-sidebar-content scroller">
-              <h3 className="right-section-title">Gliederung</h3>
+              <h3 className="right-section-title">{t('rightSidebar.outline')}</h3>
               {!activeNote || activeNote.headings.length === 0 ? (
                 <p className="sidebar-empty-hint">
-                  Keine Überschriften (# H1–H6) in dieser Notiz.
+                  {t('rightSidebar.noOutline')}
                 </p>
               ) : (
                 <div className="outline-list">
@@ -1978,16 +1994,16 @@ export const App: React.FC = () => {
       {!zenMode && (
         <footer className="knowmesh-statusbar obsidian-statusbar">
           <div className="statusbar-left">
-            <span className="status-item" title="Verschlüsselte Verbindung">
+            <span className="status-item" title="HTTPS / TLS">
               <Lock size={12} />
-              {httpsActive ? 'HTTPS / TLS aktiv' : 'HTTP'}
+              {httpsActive ? 'HTTPS / TLS' : 'HTTP'}
             </span>
             <span
               className={`status-item ${wsConnected ? 'sync-online' : 'sync-offline'}`}
-              title="Live File-Watcher (Chokidar + WebSockets)"
+              title="Live Watcher"
             >
               <Radio size={12} />
-              {wsConnected ? 'Live-Vault-Sync aktiv' : 'Verbinde Watcher...'}
+              {wsConnected ? t('statusbar.synced') : t('statusbar.syncing')}
             </span>
           </div>
 
@@ -1995,16 +2011,16 @@ export const App: React.FC = () => {
             {activeNote && (
               <>
                 <span className="status-item">
-                  { currentBacklinks.length } Backlinks
+                  { currentBacklinks.length } {t('rightSidebar.backlinks')}
                 </span>
-                <span className="status-item">{wordCount} Wörter</span>
+                <span className="status-item">{wordCount} {t('statusbar.words')}</span>
                 <span className="status-item">
-                  {activeNote.body.length} Zeichen
+                  {activeNote.body.length} {t('statusbar.characters')}
                 </span>
               </>
             )}
             <span className="status-item">
-              {allNotesForEditor.length} Notizen im Vault
+              {allNotesForEditor.length} {t('sidebar.files')}
             </span>
           </div>
         </footer>
@@ -2015,23 +2031,22 @@ export const App: React.FC = () => {
         <div className="modal-backdrop" onClick={() => setDialog(null)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <h3>
-              {dialog.type === 'create-note' && 'Neue Notiz erstellen'}
-              {dialog.type === 'create-folder' && 'Neuen Ordner erstellen'}
-              {dialog.type === 'rename' && 'Eintrag umbenennen'}
-              {dialog.type === 'delete' && 'Eintrag löschen'}
+              {dialog.type === 'create-note' && t('dialogs.newNoteTitle')}
+              {dialog.type === 'create-folder' && t('dialogs.newFolderTitle')}
+              {dialog.type === 'rename' && t('dialogs.renameTitle')}
+              {dialog.type === 'delete' && t('dialogs.deleteTitle')}
             </h3>
 
             <form onSubmit={handleDialogConfirm}>
               {dialog.type === 'delete' ? (
                 <p className="modal-confirm-text">
-                  Möchtest du <strong>{dialog.initialValue}</strong> wirklich unwiderruflich aus
-                  dem Vault löschen?
+                  {t('dialogs.deleteNotePrompt', { name: dialog.initialValue })}
                 </p>
               ) : (
                 <>
                   {dialog.parentFolder && (
                     <p className="modal-subfolder-hint">
-                      Ordner: <code>{dialog.parentFolder}/</code>
+                      {t('dialogs.moveTargetFolder')} <code>{dialog.parentFolder}/</code>
                     </p>
                   )}
                   <input
@@ -2051,13 +2066,13 @@ export const App: React.FC = () => {
                   className="btn-secondary"
                   onClick={() => setDialog(null)}
                 >
-                  Abbrechen
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className={dialog.type === 'delete' ? 'btn-danger' : 'btn-primary'}
                 >
-                  {dialog.type === 'delete' ? 'Löschen' : 'Bestätigen'}
+                  {dialog.type === 'delete' ? t('common.delete') : t('common.confirm')}
                 </button>
               </div>
             </form>

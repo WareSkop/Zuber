@@ -785,12 +785,75 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     }
   }
 
-  public deleteEntry(relPath: string): void {
+  public copyEntry(sourcePath: string, targetPath?: string): { newPath: string } {
+    const srcAbs = this.resolveSafePath(sourcePath);
+    if (!fs.existsSync(srcAbs)) {
+      throw new Error(`Quelle existiert nicht: ${sourcePath}`);
+    }
+    const stat = fs.statSync(srcAbs);
+
+    let destRel = (targetPath || sourcePath).replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    let destAbs = this.resolveSafePath(destRel);
+
+    // If destination is an existing directory and source is being copied into it:
+    if (fs.existsSync(destAbs) && fs.statSync(destAbs).isDirectory() && destRel !== sourcePath) {
+      destRel = path.posix.join(destRel, path.posix.basename(sourcePath));
+      destAbs = this.resolveSafePath(destRel);
+    } else if (stat.isFile() && sourcePath.endsWith('.md') && !destRel.endsWith('.md')) {
+      destRel += '.md';
+      destAbs = this.resolveSafePath(destRel);
+    }
+
+    // If source and target are identical or dest already exists, generate a copy name: e.g. "Name (Copy).md" or "Name (Copy 2).md"
+    if (fs.existsSync(destAbs) || destRel === sourcePath) {
+      const dir = path.posix.dirname(destRel);
+      const ext = stat.isDirectory() ? '' : path.posix.extname(destRel);
+      const base = stat.isDirectory() ? path.posix.basename(destRel) : path.posix.basename(destRel, ext);
+
+      let counter = 1;
+      let candidateRel = '';
+      while (true) {
+        const suffix = counter === 1 ? ' (Copy)' : ` (Copy ${counter})`;
+        const newName = `${base}${suffix}${ext}`;
+        candidateRel = dir === '.' || !dir ? newName : `${dir}/${newName}`;
+        const candidateAbs = this.resolveSafePath(candidateRel);
+        if (!fs.existsSync(candidateAbs)) {
+          destRel = candidateRel;
+          destAbs = candidateAbs;
+          break;
+        }
+        counter++;
+      }
+    }
+
+    fs.mkdirSync(path.dirname(destAbs), { recursive: true });
+
+    if (stat.isDirectory()) {
+      fs.cpSync(srcAbs, destAbs, { recursive: true });
+      this.indexDirectory(destRel);
+    } else {
+      fs.copyFileSync(srcAbs, destAbs);
+      this.indexFile(destRel);
+    }
+
+    return { newPath: destRel };
+  }
+
+  public deleteEntry(relPath: string): { deleted: boolean; path: string } {
     const absPath = this.resolveSafePath(relPath);
     if (fs.existsSync(absPath)) {
       fs.rmSync(absPath, { recursive: true, force: true });
     }
     this.removeFromIndex(relPath);
+    return { deleted: true, path: relPath };
+  }
+
+  public removeEntryFromIndex(relPath: string): void {
+    this.removeFromIndex(relPath);
+  }
+
+  public invalidateCaches(structural = true): void {
+    this.invalidate(structural);
   }
 
   public deleteFile(relPath: string): void {

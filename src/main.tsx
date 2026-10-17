@@ -12,8 +12,12 @@ if ('serviceWorker' in navigator && process.env.NODE_ENV !== 'test') {
   });
 }
 
+import { I18nProvider } from './i18n';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </React.StrictMode>
 );

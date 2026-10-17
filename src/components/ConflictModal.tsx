@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import {
   AlertTriangle,
-  ArrowRight,
-  Check,
   Copy,
   Download,
   Upload,
   X,
 } from 'lucide-react';
 import { syncEngine, type ConflictItem, type ConflictResolution } from '../sync/syncEngine';
+import { useTranslation } from '../i18n';
 
 interface ConflictModalProps {
   conflicts: ConflictItem[];
@@ -16,6 +15,7 @@ interface ConflictModalProps {
 }
 
 export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose }) => {
+  const { t, language } = useTranslation();
   const [applyToAll, setApplyToAll] = useState(false);
   const [resolving, setResolving] = useState(false);
 
@@ -25,7 +25,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
   const remainingCount = conflicts.length - 1;
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString('de-DE', {
+    return new Date(timestamp).toLocaleString(language === 'de' ? 'de-DE' : 'en-US', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -55,18 +55,17 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
           <div className="conflict-header-title">
             <AlertTriangle size={20} className="conflict-warning-icon" />
             <div>
-              <h3>Versionskonflikt entdeckt</h3>
+              <h3>{t('conflict.title')}</h3>
               <span className="conflict-path-label">{currentConflict.path}</span>
             </div>
           </div>
-          <button type="button" className="settings-close-btn" onClick={onClose} title="Später lösen">
+          <button type="button" className="settings-close-btn" onClick={onClose} title={t('conflict.resolveLater')}>
             <X size={18} />
           </button>
         </div>
 
         <p className="conflict-explanation">
-          Diese Notiz wurde während einer Offline-Phase lokal bearbeitet, aber inzwischen auch auf dem Server verändert.
-          Wähle, wie der Konflikt aufgelöst werden soll:
+          {t('conflict.explanation')}
         </p>
 
         <div className="conflict-comparison-grid">
@@ -74,7 +73,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
           <div className="conflict-pane local-pane">
             <div className="pane-header">
               <Upload size={15} />
-              <span>Lokale Version (Offline)</span>
+              <span>{t('conflict.localVersion')}</span>
               <span className="pane-time">{formatDate(currentConflict.localTimestamp)}</span>
             </div>
             <pre className="pane-content scroller">{currentConflict.localBody}</pre>
@@ -84,7 +83,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
           <div className="conflict-pane server-pane">
             <div className="pane-header">
               <Download size={15} />
-              <span>Server-Version (Aktuell)</span>
+              <span>{t('conflict.serverVersion')}</span>
               <span className="pane-time">{formatDate(currentConflict.serverNote.updatedAt)}</span>
             </div>
             <pre className="pane-content scroller">{currentConflict.serverNote.body}</pre>
@@ -99,7 +98,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
                 checked={applyToAll}
                 onChange={(e) => setApplyToAll(e.target.checked)}
               />
-              <span>Diese Auswahl auf alle weiteren {remainingCount} Konflikte anwenden</span>
+              <span>{t('conflict.applyToAll', { count: remainingCount })}</span>
             </label>
           </div>
         )}
@@ -112,7 +111,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
             disabled={resolving}
           >
             <Download size={15} />
-            <span>Server-Version behalten (Lokal verwerfen)</span>
+            <span>{t('conflict.keepServer')}</span>
           </button>
 
           <button
@@ -122,7 +121,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
             disabled={resolving}
           >
             <Copy size={15} />
-            <span>Beide behalten (Konflikt-Kopie anlegen)</span>
+            <span>{t('conflict.keepBoth')}</span>
           </button>
 
           <button
@@ -132,7 +131,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
             disabled={resolving}
           >
             <Upload size={15} />
-            <span>Lokale Version behalten (Server überschreiben)</span>
+            <span>{t('conflict.keepLocal')}</span>
           </button>
         </div>
       </div>

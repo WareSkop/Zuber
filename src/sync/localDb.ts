@@ -155,6 +155,83 @@ export class LocalDb {
     });
   }
 
+  public async deleteAttachment(path: string): Promise<void> {
+    const db = await this.openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('attachments', 'readwrite');
+      const store = tx.objectStore('attachments');
+      const req = store.delete(path);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  public async deleteEntry(relPath: string): Promise<void> {
+    const db = await this.openDb();
+    const prefix = `${relPath}/`;
+
+    // 1. Delete matching notes (exact match or children)
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('notes', 'readwrite');
+      const store = tx.objectStore('notes');
+      store.delete(relPath);
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          if (typeof cursor.key === 'string' && cursor.key.startsWith(prefix)) {
+            cursor.delete();
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+
+    // 2. Delete matching attachments
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('attachments', 'readwrite');
+      const store = tx.objectStore('attachments');
+      store.delete(relPath);
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          if (typeof cursor.key === 'string' && cursor.key.startsWith(prefix)) {
+            cursor.delete();
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+
+    // 3. Update cached tree and allNotes in meta store
+    try {
+      const tree = await this.getMeta<FileTreeNode[]>('tree');
+      if (tree) {
+        const filterTree = (nodes: FileTreeNode[]): FileTreeNode[] => {
+          return nodes
+            .filter((n) => n.path !== relPath && !n.path.startsWith(prefix))
+            .map((n) => (n.children ? { ...n, children: filterTree(n.children) } : n));
+        };
+        await this.setMeta('tree', filterTree(tree));
+      }
+
+      const allNotes = await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes');
+      if (allNotes) {
+        await this.setMeta(
+          'allNotes',
+          allNotes.filter((n) => n.path !== relPath && !n.path.startsWith(prefix))
+        );
+      }
+    } catch {}
+  }
+
   // --- Attachments Store ---
   public async getAttachment(path: string): Promise<CachedAttachment | null> {
     const db = await this.openDb();

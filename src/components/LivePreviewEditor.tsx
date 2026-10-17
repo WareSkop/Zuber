@@ -1597,7 +1597,11 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         ]),
         markdown(),
         EditorView.lineWrapping,
-        placeholder('Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)'),
+        placeholder(
+          (typeof localStorage !== 'undefined' && localStorage.getItem('knowmesh_language') === 'de')
+            ? 'Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)'
+            : 'Start writing your note... (Type [[ for wiki links or # for tags)'
+        ),
         autocompletion({ override: [wikiCompletion] }),
         livePluginCompartment.current.of(createLivePreviewPlugin(mode === 'live')),
         uploadHandler,

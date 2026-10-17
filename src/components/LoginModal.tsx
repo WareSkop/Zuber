@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Lock, ShieldCheck, KeyRound, Sparkles } from 'lucide-react';
+import { Lock, ShieldCheck, KeyRound } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface LoginModalProps {
   httpsActive: boolean;
@@ -12,6 +13,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   vaultPath,
   onLogin,
 }) => {
+  const { t } = useTranslation();
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,11 +25,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     try {
       await onLogin(password);
     } catch (err) {
-      setError((err as Error).message || 'Anmeldung fehlgeschlagen');
+      setError((err as Error).message || t('login.loginFailed'));
     } finally {
       setLoading(false);
     }
   };
+
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
   return (
     <div className="login-overlay">
@@ -38,18 +42,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           </div>
           <h1>Knowmesh</h1>
           <p className="login-subtitle">
-            Offline-First Wissensbasis & Markdown-Editor
+            {t('login.subtitle')}
           </p>
         </div>
 
         <div className="security-badge-row">
           <span className={`security-badge ${httpsActive ? 'secure' : 'standard'}`}>
             <ShieldCheck size={15} />
-            {typeof navigator !== 'undefined' && !navigator.onLine
-              ? 'Offline-Modus'
+            {isOffline
+              ? t('login.offlineMode')
               : httpsActive
-              ? 'TLS / HTTPS Verschlüsselt'
-              : 'Lokale Verbindung'}
+              ? t('login.secureTls')
+              : t('login.localConnection')}
           </span>
           {vaultPath && (
             <span className="vault-path-badge" title={vaultPath}>
@@ -61,7 +65,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         <form onSubmit={handleSubmit} className="login-form">
           <label htmlFor="vault-password" className="login-label">
             <KeyRound size={15} />
-            <span>Vault-Passwort</span>
+            <span>{t('login.vaultPassword')}</span>
           </label>
           <div className="login-input-wrapper">
             <Lock size={16} className="login-input-icon" />
@@ -70,7 +74,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Passwort eingeben (Standard: knowmesh)"
+              placeholder={t('login.passwordPlaceholder')}
               autoFocus
               required
             />
@@ -79,11 +83,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           {error && <div className="login-error">{error}</div>}
 
           <button type="submit" className="btn-primary login-submit" disabled={loading}>
-            {loading ? 'Verbinde mit Vault...' : 'Vault entsperren'}
+            {loading ? t('login.connecting') : t('login.unlock')}
           </button>
 
           <p className="login-hint">
-            Standard-Passwort in <code>.env</code>: <code>knowmesh</code>
+            {t('login.envHint')}
           </p>
         </form>
       </div>

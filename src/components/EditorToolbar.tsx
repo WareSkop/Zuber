@@ -34,6 +34,7 @@ import {
   Flame,
 } from 'lucide-react';
 import type { LivePreviewEditorRef } from './LivePreviewEditor';
+import { useTranslation } from '../i18n';
 
 interface EditorToolbarProps {
   editorRef: React.RefObject<LivePreviewEditorRef | null>;
@@ -48,6 +49,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onUploadImage,
   visible = true,
 }) => {
+  const { t } = useTranslation();
   const [openMenu, setOpenMenu] = useState<OpenMenuType>(null);
   const [menuCoords, setMenuCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
@@ -215,7 +217,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleFormat('bold')}
-          title="Fett (Strg+B)"
+          title={t('toolbar.bold')}
         >
           <Bold size={16} />
         </button>
@@ -224,7 +226,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleFormat('italic')}
-          title="Kursiv (Strg+I)"
+          title={t('toolbar.italic')}
         >
           <Italic size={16} />
         </button>
@@ -233,7 +235,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleFormat('strikethrough')}
-          title="Durchgestrichen (~~Text~~)"
+          title={t('toolbar.strikethrough')}
         >
           <Strikethrough size={16} />
         </button>
@@ -242,7 +244,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleFormat('highlight')}
-          title="Textmarker / Highlight (==Text==)"
+          title={t('toolbar.highlight')}
         >
           <Highlighter size={16} />
         </button>
@@ -251,7 +253,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleFormat('code')}
-          title="Inline-Code (`Code`)"
+          title={t('toolbar.code')}
         >
           <Code size={16} />
         </button>
@@ -264,7 +266,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertList('bullet')}
-          title="Aufzählungsliste (- Liste)"
+          title={t('toolbar.bulletList')}
         >
           <List size={16} />
         </button>
@@ -273,7 +275,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertList('number')}
-          title="Nummerierte Liste (1. Liste)"
+          title={t('toolbar.numberList')}
         >
           <ListOrdered size={16} />
         </button>
@@ -282,7 +284,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertTask()}
-          title="Aufgabenliste (- [ ] Aufgabe)"
+          title={t('toolbar.taskList')}
         >
           <CheckSquare size={16} />
         </button>
@@ -291,7 +293,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.indent()}
-          title="Einrücken (+2 Leerzeichen)"
+          title={t('toolbar.indent')}
         >
           <Indent size={16} />
         </button>
@@ -300,7 +302,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.outdent()}
-          title="Ausrücken (-2 Leerzeichen)"
+          title={t('toolbar.outdent')}
         >
           <Outdent size={16} />
         </button>
@@ -313,7 +315,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertWikiLink(true)}
-          title="Wiki-Link ([[Notiz]])"
+          title={t('toolbar.wikilink')}
         >
           <Link2 size={16} />
           <span className="toolbar-btn-text">[[ ]]</span>
@@ -323,7 +325,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertTag(true)}
-          title="Tag einfügen (#tag)"
+          title={t('toolbar.tag')}
         >
           <Hash size={16} />
         </button>
@@ -337,7 +339,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             className={`toolbar-btn ${openMenu === 'table' ? 'active' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => toggleMenu('table', e.currentTarget)}
-            title="Markdown-Tabelle"
+            title={t('toolbar.table')}
             aria-haspopup="true"
             aria-expanded={openMenu === 'table'}
           >
@@ -351,7 +353,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertQuote()}
-          title="Zitatblock (> Zitat)"
+          title={t('toolbar.quote')}
         >
           <Quote size={16} />
         </button>
@@ -363,7 +365,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             className={`toolbar-btn ${openMenu === 'callout' ? 'active' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => toggleMenu('callout', e.currentTarget)}
-            title="Obsidian Callout (> [!NOTE])"
+            title={t('toolbar.callout')}
             aria-haspopup="true"
             aria-expanded={openMenu === 'callout'}
           >
@@ -377,7 +379,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertCodeBlock()}
-          title="Codeblock (```lang)"
+          title={t('toolbar.codeblock')}
         >
           <Terminal size={16} />
         </button>
@@ -386,7 +388,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           className="toolbar-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => editorRef.current?.insertHorizontalRule()}
-          title="Trennlinie (---)"
+          title={t('toolbar.horizontalRule')}
         >
           <Minus size={16} />
         </button>
@@ -400,7 +402,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             className={`toolbar-btn ${openMenu === 'image' ? 'active' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => toggleMenu('image', e.currentTarget)}
-            title="Bild einfügen oder Foto aufnehmen"
+            title={t('toolbar.image')}
             aria-haspopup="true"
             aria-expanded={openMenu === 'image'}
           >
@@ -436,7 +438,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(0)}
                   className="popover-item"
                 >
-                  <Type size={15} /> <span>Normaler Text (Absatz)</span>
+                  <Type size={15} /> <span>{t('toolbar.paragraph')}</span>
                 </button>
                 <button
                   type="button"
@@ -444,7 +446,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(1)}
                   className="popover-item"
                 >
-                  <Heading1 size={15} /> <span>Titel 1 (H1)</span>
+                  <Heading1 size={15} /> <span>{t('toolbar.h1')}</span>
                 </button>
                 <button
                   type="button"
@@ -452,7 +454,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(2)}
                   className="popover-item"
                 >
-                  <Heading2 size={15} /> <span>Titel 2 (H2)</span>
+                  <Heading2 size={15} /> <span>{t('toolbar.h2')}</span>
                 </button>
                 <button
                   type="button"
@@ -460,7 +462,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(3)}
                   className="popover-item"
                 >
-                  <Heading3 size={15} /> <span>Titel 3 (H3)</span>
+                  <Heading3 size={15} /> <span>{t('toolbar.h3')}</span>
                 </button>
                 <button
                   type="button"
@@ -468,7 +470,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(4)}
                   className="popover-item"
                 >
-                  <span className="popover-heading-badge">H4</span> <span>Überschrift 4</span>
+                  <span className="popover-heading-badge">H4</span> <span>H4</span>
                 </button>
                 <button
                   type="button"
@@ -476,7 +478,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(5)}
                   className="popover-item"
                 >
-                  <span className="popover-heading-badge">H5</span> <span>Überschrift 5</span>
+                  <span className="popover-heading-badge">H5</span> <span>H5</span>
                 </button>
                 <button
                   type="button"
@@ -484,14 +486,14 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleHeading(6)}
                   className="popover-item"
                 >
-                  <span className="popover-heading-badge">H6</span> <span>Überschrift 6</span>
+                  <span className="popover-heading-badge">H6</span> <span>H6</span>
                 </button>
               </>
             )}
 
             {openMenu === 'table' && (
               <div className="table-popover-content">
-                <div className="table-popover-title">Tabelle einfügen</div>
+                <div className="table-popover-title">{t('toolbar.table')}</div>
                 <div className="table-quick-presets">
                   <button
                     type="button"
@@ -520,7 +522,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                 </div>
                 <div className="table-custom-row">
                   <label>
-                    <span>Spalten:</span>
+                    <span>{t('toolbar.tableCols')}:</span>
                     <input
                       type="number"
                       min={1}
@@ -530,7 +532,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                     />
                   </label>
                   <label>
-                    <span>Zeilen:</span>
+                    <span>{t('toolbar.tableRows')}:</span>
                     <input
                       type="number"
                       min={1}
@@ -546,19 +548,19 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleInsertTable()}
                 >
-                  + Tabelle erstellen
+                  {t('toolbar.insertTableBtn')}
                 </button>
 
                 {inTable && (
                   <div className="table-inside-actions">
-                    <div className="table-popover-subtitle">Aktive Tabelle</div>
+                    <div className="table-popover-subtitle">{t('toolbar.activeTable')}</div>
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={handleAddTableRow}
                       className="popover-item"
                     >
-                      <Rows size={14} /> <span>+ Zeile darunter</span>
+                      <Rows size={14} /> <span>{t('toolbar.addRowBelow')}</span>
                     </button>
                     <button
                       type="button"
@@ -566,7 +568,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                       onClick={handleAddTableCol}
                       className="popover-item"
                     >
-                      <Columns size={14} /> <span>+ Spalte rechts</span>
+                      <Columns size={14} /> <span>{t('toolbar.addColRight')}</span>
                     </button>
                   </div>
                 )}
@@ -581,7 +583,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleInsertCallout('note')}
                   className="popover-item"
                 >
-                  <span className="callout-pill note">NOTE</span> <span>Hinweis</span>
+                  <span className="callout-pill note">NOTE</span> <span>{t('toolbar.noteCallout')}</span>
                 </button>
                 <button
                   type="button"
@@ -589,7 +591,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleInsertCallout('info')}
                   className="popover-item"
                 >
-                  <span className="callout-pill info">INFO</span> <span>Information</span>
+                  <span className="callout-pill info">INFO</span> <span>{t('toolbar.infoCallout')}</span>
                 </button>
                 <button
                   type="button"
@@ -597,7 +599,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleInsertCallout('tip')}
                   className="popover-item"
                 >
-                  <span className="callout-pill tip">TIP</span> <span>Tipp</span>
+                  <span className="callout-pill tip">TIP</span> <span>{t('toolbar.tipCallout')}</span>
                 </button>
                 <button
                   type="button"
@@ -605,7 +607,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleInsertCallout('warning')}
                   className="popover-item"
                 >
-                  <span className="callout-pill warning">WARNING</span> <span>Warnung</span>
+                  <span className="callout-pill warning">WARNING</span> <span>{t('toolbar.warningCallout')}</span>
                 </button>
                 <button
                   type="button"
@@ -613,7 +615,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleInsertCallout('danger')}
                   className="popover-item"
                 >
-                  <span className="callout-pill danger">DANGER</span> <span>Gefahr</span>
+                  <span className="callout-pill danger">DANGER</span> <span>{t('toolbar.dangerCallout')}</span>
                 </button>
                 <button
                   type="button"
@@ -621,7 +623,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   onClick={() => handleInsertCallout('question')}
                   className="popover-item"
                 >
-                  <span className="callout-pill question">QUESTION</span> <span>Frage</span>
+                  <span className="callout-pill question">QUESTION</span> <span>{t('toolbar.questionCallout')}</span>
                 </button>
               </>
             )}
@@ -637,7 +639,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                     setOpenMenu(null);
                   }}
                 >
-                  <Image size={15} /> <span>Foto/Datei aus Galerie</span>
+                  <Image size={15} /> <span>{t('toolbar.uploadImage')}</span>
                 </button>
                 <button
                   type="button"
@@ -648,7 +650,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                     setOpenMenu(null);
                   }}
                 >
-                  <Camera size={15} /> <span>Foto mit Kamera aufnehmen</span>
+                  <Camera size={15} /> <span>{t('toolbar.takePhoto')}</span>
                 </button>
               </div>
             )}

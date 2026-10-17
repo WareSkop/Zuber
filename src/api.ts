@@ -332,6 +332,13 @@ export const api = {
     });
   },
 
+  copyEntry(sourcePath: string, targetPath?: string): Promise<{ newPath: string }> {
+    return apiFetch('/api/vault/copy', {
+      method: 'POST',
+      body: JSON.stringify({ sourcePath, targetPath }),
+    });
+  },
+
   deleteEntry(path: string): Promise<{ ok: boolean }> {
     return apiFetch(`/api/vault/entry?path=${encodeURIComponent(path)}`, {
       method: 'DELETE',

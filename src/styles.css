@@ -3855,5 +3855,92 @@ input:checked + .slider:before {
   }
 }
 
+/* --- File Tree Context Menu & Actions --- */
+.tree-context-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 210px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  user-select: none;
+  animation: fadeIn 0.12s ease-out;
+}
 
+.tree-context-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
 
+.tree-context-item:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.tree-context-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tree-context-item.danger {
+  color: #ef4444;
+}
+
+.tree-context-item.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.tree-context-separator {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 6px;
+}
+
+.tree-item-more-btn {
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin-left: auto;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.tree-item:hover .tree-item-more-btn,
+.tree-item.active .tree-item-more-btn {
+  opacity: 1;
+}
+
+.tree-item-more-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+@media (pointer: coarse) {
+  .tree-item-more-btn {
+    opacity: 0.7;
+  }
+}

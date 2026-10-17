@@ -340,6 +340,60 @@ Zur Beseitigung redundanter Bedienelemente und Schaffung maximalen Freiraums fü
     4. **Einstellungen:** Zahnrad (`⚙`) für Themes, Profile und Sicherheit
     5. **Rechte Seitenleiste:** Toggle-Button für Backlinks, Gliederung und lokalen Graphen
 
+---
+
+## 12. Mehrsprachigkeit & Internationalisierung (i18n)
+
+Knowmesh verfügt über eine schlanke, performante Internationalisierung direkt im Client-Bundle:
+- **Standardsprache (Default & Fallback):** **Englisch (`en`)**, sofern in `localStorage` (`knowmesh_language`) noch keine andere Sprache hinterlegt ist.
+- **Unterstützte Sprachen:**
+  - `en` – English (Default)
+  - `de` – Deutsch
+- **Architektur (`src/i18n/`, `src/locales/en.json`, `src/locales/de.json`):**
+  - Implementiert als typisierter React-Context `I18nProvider` mit dem Hook `useTranslation()`.
+  - Unterstützt verschachtelte Dot-Notation (`t('sidebar.newNote')`) sowie dynamische Platzhalter (`t('dialogs.deleteNotePrompt', { name })`).
+  - Fällt bei unbekannten Schlüsseln automatisch auf das englische Original zurück.
+- **Konfiguration:**
+  - Der Sprachwähler ist oben im Einstellungs-Tab **„Appearance & Themes“** (`SettingsModal.tsx`) platziert.
+  - Ein Sprachwechsel schaltet die gesamte Benutzeroberfläche reaktiv ohne Seiten-Reload um und persistiert die Wahl dauerhaft in `localStorage`.
+
+---
+
+## 13. Einstellungs-Rubrik „Editor & Files“ & Konfigurierbares Startverhalten
+
+In `SettingsModal.tsx` existiert der dedizierte Bereich **„Editor & Files“** mit konfigurierbarem Startverhalten:
+- **Konfiguration (`src/startupConfig.ts`, `localStorage: knowmesh_startup_config`):**
+  ```ts
+  export type StartupBehavior = 'last' | 'daily' | 'specific';
+  export interface StartupConfig {
+    behavior: StartupBehavior; // Standard: 'last'
+    specificNotePath?: string; // Relativer Pfad für 'specific'
+    dailyFolder?: string;      // Zielordner für 'daily' (z.B. "Tägliche Notizen")
+  }
+  ```
+- **Optionen:**
+  1. **Letzte geöffnete Notiz (`last` – Standard):** Speichert bei jedem Notizwechsel den relativen Pfad in `knowmesh_last_active_note` und stellt exakt diese Notiz beim nächsten Start wieder her.
+  2. **Heutige Tagesnotiz (`daily`):** Prüft, ob `YYYY-MM-DD.md` (z. B. `2026-10-17.md`) im konfigurierten Ordner existiert. Falls nicht, wird die Datei mit Standard-Header (`# YYYY-MM-DD`) und Tagesdatum automatisch erstellt und geöffnet.
+  3. **Bestimmte Notiz immer öffnen (`specific`):** Bietet ein Dropdown-Auswahlfeld aller Markdown-Dateien im Vault, um z. B. eine Startseite oder ein Dashboard als feste Startnotiz zu definieren.
+
+---
+
+## 14. Kontextmenü & Bereinigung im Dateibaum (`FileSidebar.tsx`)
+
+Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufgeräumte Optik:
+- **Bereinigte Zeilenansicht:** Alle dauerhaft sichtbaren Inline-Icons für Bearbeiten (Stift) und Löschen (Mülleimer) wurden entfernt.
+- **Kontextmenü-Auslösung:**
+  - **Desktop:** Rechtsklick (`onContextMenu`) auf jeden Datei- oder Ordner-Eintrag.
+  - **Touch/Mobile:** Langer Druck (~500 ms Long-Press) sowie ein berührungsfreundlicher `⋮`-Aktionsbutton (`.tree-item-more-btn`) am rechten Rand des aktiven Eintrags.
+  - **Leere Fläche:** Rechtsklick in den freien Bereich des Dateibaums öffnet das Root-Kontextmenü („Neue Notiz“, „Neuer Ordner“, „In Vault-Root einfügen“).
+- **Verfügbare Aktionen:**
+  - **Kopieren:** Merkt den Pfad in der Zwischenablage (`action: 'copy'`).
+  - **Verschieben / Ausschneiden:** Merkt den Pfad zum Verschieben (`action: 'cut'`).
+  - **Einfügen:** Fügt die gemerkte Notiz/den Ordner in den gewählten Zielordner oder ins Vault-Root ein. Bei Namensgleichheit wird automatisch ein Duplikat mit Suffix ` (Copy)` oder ` (Copy 2)` erstellt.
+  - **Umbenennen:** Öffnet den Umbenennen-Dialog und passt WikiLinks vault-weit automatisch an.
+  - **Löschen:** Öffnet eine Sicherheitsabfrage. Bricht vor dem Löschen alle ausstehenden Autosave-Timer ab und entfernt den Eintrag sofort konsistent aus Dateisystem, Backend-Index und lokalem IndexedDB-Cache.
+
+
 
 
 

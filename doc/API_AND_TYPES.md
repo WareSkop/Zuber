@@ -165,7 +165,8 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | `POST` | `/api/vault/note` | Speichert eine Notiz mit optionaler Konflikterkennung (`baseMtime`). Bei Konflikt -> HTTP `409 Conflict`. | Body: `NoteSaveRequest` | `NoteData` (oder `409` mit `{ error: 'Conflict', serverNote }`) |
 | `POST` | `/api/vault/folder` | Erstellt einen neuen Ordner (inkl. Zwischenordnern). | Body: `{ path: string }` | `{ ok: true, path: string }` |
 | `POST` | `/api/vault/rename` | Benennt eine Datei/Ordner um und passt `[[Links]]` vault-weit an. | Body: `{ oldPath: string, newPath: string }` | `{ ok: true, newPath: string }` |
-| `DELETE` | `/api/vault/entry` | Löscht eine Datei oder einen Ordner rekursiv. | Query: `?path=Ordner/Datei.md` | `{ ok: true }` |
+| `POST` | `/api/vault/copy` | Dupliziert eine Datei oder einen Ordner mit automatischer Namensgebung (` (Copy)`, ` (Copy 2)`) oder in einen Zielordner. | Body: `{ sourcePath: string, targetPath?: string }` | `{ ok: true, newPath: string }` |
+| `DELETE` | `/api/vault/entry` | Löscht eine Datei oder einen Ordner rekursiv aus Dateisystem und Index (Alias: `/api/vault/file`). | Query: `?path=Ordner/Datei.md` | `{ ok: true, path: string }` |
 
 ### 2.3 Graph, Backlinks, Suche & Link-Auflösung
 

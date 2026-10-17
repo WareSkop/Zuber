@@ -1,6 +1,7 @@
 import {
   api,
   ApiConflictError,
+  ApiHttpError,
   getActiveProfile,
   getBaseUrl,
   getStoredProfiles,
@@ -427,6 +428,32 @@ class SyncEngine {
     };
     await this.localDb.addOutboxMutation(mutation);
     return updatedNote;
+  }
+
+  public async deleteEntry(relPath: string): Promise<void> {
+    // 1. Purge from local IndexedDB immediately
+    await this.localDb.deleteEntry(relPath);
+
+    // 2. If online, call server API
+    if (navigator.onLine && this.syncState !== 'offline') {
+      try {
+        await api.deleteEntry(relPath);
+        return;
+      } catch (err: any) {
+        if (err instanceof ApiHttpError && err.status < 500) {
+          throw err;
+        }
+      }
+    }
+
+    // 3. If offline or network issue, queue in Outbox
+    const mutation: OutboxMutation = {
+      id: `delete-${relPath}-${Date.now()}`,
+      type: 'delete',
+      path: relPath,
+      timestamp: Date.now(),
+    };
+    await this.localDb.addOutboxMutation(mutation);
   }
 
   public async resolveAttachmentUrl(target: string, fromNotePath?: string): Promise<string> {

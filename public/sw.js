@@ -1,5 +1,5 @@
 // Knowmesh Service Worker - App Shell & Attachment Offline Support
-const CACHE_NAME = 'knowmesh-app-shell-v2';
+const CACHE_NAME = 'knowmesh-app-shell-v3';
 const ATTACHMENT_CACHE_NAME = 'knowmesh-attachments-v1';
 
 const APP_SHELL_ASSETS = [

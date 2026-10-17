@@ -269,15 +269,38 @@ export function createApp(vaultService: VaultService) {
     }
   });
 
-  app.delete('/api/vault/file', requireAuth, (req, res) => {
+  const handleDeleteEntry = (req: any, res: any) => {
     try {
-      const filePath = String(req.query.path || '');
-      if (!filePath) {
+      const rawPath = String(req.query.path || '');
+      if (!rawPath) {
         res.status(400).json({ error: 'Pfad fehlt.' });
         return;
       }
-      vaultService.deleteFile(filePath);
+      let filePath = rawPath;
+      try {
+        filePath = decodeURIComponent(rawPath);
+      } catch {
+        // keep raw
+      }
+      vaultService.deleteEntry(filePath);
       res.json({ ok: true, path: filePath });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  };
+
+  app.delete('/api/vault/entry', requireAuth, handleDeleteEntry);
+  app.delete('/api/vault/file', requireAuth, handleDeleteEntry);
+
+  app.post('/api/vault/copy', requireAuth, (req, res) => {
+    try {
+      const { sourcePath, targetPath } = req.body as { sourcePath?: string; targetPath?: string };
+      if (!sourcePath) {
+        res.status(400).json({ error: 'sourcePath ist erforderlich.' });
+        return;
+      }
+      const result = vaultService.copyEntry(sourcePath, targetPath);
+      res.json(result);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

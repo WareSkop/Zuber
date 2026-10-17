@@ -18,6 +18,7 @@ import {
   Radio,
 } from 'lucide-react';
 import type { GraphData, GraphNode } from '../../shared/types';
+import { useTranslation } from '../i18n';
 
 export interface GraphGroup {
   id: string;
@@ -136,6 +137,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
   onSelectNote,
   onSelectTag,
 }) => {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [settings, setSettings] = useState<GraphSettings>(() => {
     const init = loadGraphSettings();
@@ -930,7 +932,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             type="button"
             className={`graph-pill-btn ${!localMode ? 'active' : ''}`}
             onClick={() => setLocalMode(false)}
-            title="Alle Notizen im Vault anzeigen"
+            title="Global"
           >
             <Compass size={14} />
             <span>Global</span>
@@ -940,7 +942,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             className={`graph-pill-btn ${localMode ? 'active' : ''}`}
             onClick={() => setLocalMode(true)}
             disabled={!activeNotePath}
-            title="Nur Nachbarn der aktuellen Notiz anzeigen"
+            title="Lokal"
           >
             <Maximize2 size={14} />
             <span>Lokal</span>
@@ -951,7 +953,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             onClick={() =>
               updateSettings((s) => ({ ...s, showTags: !s.showTags }))
             }
-            title="#Tag-Knoten ein-/ausblenden"
+            title={t('graph.showTags')}
           >
             <Hash size={14} />
             <span>Tags</span>
@@ -969,7 +971,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
               );
               wakeUpRef.current();
             }}
-            title="Vergrößern"
+            title={t('graph.zoomIn')}
           >
             <ZoomIn size={15} />
           </button>
@@ -983,7 +985,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
               );
               wakeUpRef.current();
             }}
-            title="Verkleinern"
+            title={t('graph.zoomOut')}
           >
             <ZoomOut size={15} />
           </button>
@@ -991,7 +993,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             type="button"
             className="graph-icon-btn"
             onClick={resetCamera}
-            title="Ansicht zentrieren"
+            title={t('graph.resetZoom')}
           >
             <RotateCcw size={15} />
           </button>
@@ -999,7 +1001,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             type="button"
             className={`graph-icon-btn ${showControls ? 'active' : ''}`}
             onClick={() => setShowControls((s) => !s)}
-            title="Graph-Einstellungen (Filter, Farbgruppen & Physik)"
+            title={t('graph.filters')}
           >
             <Sliders size={15} />
           </button>
@@ -1015,21 +1017,21 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
               className={`graph-tab-btn ${controlsTab === 'filter' ? 'active' : ''}`}
               onClick={() => setControlsTab('filter')}
             >
-              Filter
+              {t('common.search')} / Filter
             </button>
             <button
               type="button"
               className={`graph-tab-btn ${controlsTab === 'groups' ? 'active' : ''}`}
               onClick={() => setControlsTab('groups')}
             >
-              Gruppen ({settings.groups.length})
+              {t('graph.groups')} ({settings.groups.length})
             </button>
             <button
               type="button"
               className={`graph-tab-btn ${controlsTab === 'physics' ? 'active' : ''}`}
               onClick={() => setControlsTab('physics')}
             >
-              Kräfte
+              {t('graph.physics')}
             </button>
             <button
               type="button"
@@ -1047,7 +1049,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                   <Search size={13} />
                   <input
                     type="text"
-                    placeholder="Suchen (Text, path:..., #tag)..."
+                    placeholder={t('graph.searchPlaceholder')}
                     value={settings.filterQuery}
                     onChange={(e) =>
                       updateSettings((s) => ({ ...s, filterQuery: e.target.value }))
@@ -1078,7 +1080,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                       }))
                     }
                   />
-                  <span>Verwaiste Notizen (Orphans) anzeigen</span>
+                  <span>{t('graph.showOrphans')}</span>
                 </label>
 
                 <label className="graph-control-checkbox">
@@ -1093,7 +1095,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                       }))
                     }
                   />
-                  <span>#Tag-Knoten anzeigen</span>
+                  <span>{t('graph.showTags')}</span>
                 </label>
 
                 <label className="graph-control-checkbox">
@@ -1108,7 +1110,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                       }))
                     }
                   />
-                  <span>Noch nicht erstellte Links anzeigen</span>
+                  <span>{t('graph.showUnresolved')}</span>
                 </label>
               </div>
             )}

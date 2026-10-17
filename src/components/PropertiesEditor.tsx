@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { FrontmatterProperty, PropertyType } from '../../shared/types';
 import { normalizePropertyValue } from '../../shared/markdownUtils';
+import { useTranslation } from '../i18n';
 
 interface PropertiesEditorProps {
   properties: FrontmatterProperty[];
@@ -43,6 +44,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
   onChange,
   onTagClick,
 }) => {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(true);
 
   React.useEffect(() => {
@@ -157,10 +159,11 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
           type="button"
           className="properties-toggle-btn"
           onClick={() => setCollapsed((c) => !c)}
+          title={collapsed ? t('properties.expand') : t('properties.collapse')}
         >
           {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
           <SlidersHorizontal size={14} />
-          <span>Eigenschaften</span>
+          <span>{t('properties.title')}</span>
           <span className="properties-count-badge">{properties.length}</span>
         </button>
 
@@ -168,10 +171,10 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
           type="button"
           className="properties-add-inline-btn"
           onClick={addProperty}
-          title="Neue Frontmatter-Eigenschaft hinzufügen"
+          title={t('properties.addProperty')}
         >
           <Plus size={14} />
-          <span>Eigenschaft hinzufügen</span>
+          <span>{t('properties.addProperty')}</span>
         </button>
       </div>
 
@@ -179,9 +182,9 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
         <div className="properties-list">
           {properties.length === 0 ? (
             <div className="properties-empty">
-              <span>Keine Eigenschaften vorhanden.</span>
+              <span>{t('properties.empty')}</span>
               <button type="button" className="btn-link" onClick={addProperty}>
-                + Erste Eigenschaft anlegen
+                {t('properties.addFirst')}
               </button>
             </div>
           ) : (
@@ -197,22 +200,22 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
               return (
                 <div key={index} className="property-row">
                   <div className="property-key-cell">
-                    <div className="property-type-selector" title="Eigenschafts-Typ ändern">
+                    <div className="property-type-selector" title={t('properties.typeChangeTitle')}>
                       <span className="property-type-icon">
                         {renderTypeIcon(prop.key, prop.type)}
                       </span>
                       <select
-                        aria-label="Eigenschafts-Typ"
+                        aria-label={t('properties.typeAria')}
                         value={prop.type}
                         onChange={(e) =>
                           updateProperty(index, { type: e.target.value as PropertyType })
                         }
                       >
-                        <option value="text">Text</option>
-                        <option value="list">Liste / Tags</option>
-                        <option value="date">Datum</option>
-                        <option value="checkbox">Checkbox</option>
-                        <option value="number">Zahl</option>
+                        <option value="text">{t('properties.typeText')}</option>
+                        <option value="list">{t('properties.typeList')}</option>
+                        <option value="date">{t('properties.typeDate')}</option>
+                        <option value="checkbox">{t('properties.typeCheckbox')}</option>
+                        <option value="number">{t('properties.typeNumber')}</option>
                       </select>
                     </div>
 
@@ -221,7 +224,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
                       className="property-key-input"
                       value={prop.key}
                       list="property-key-suggestions"
-                      placeholder="Name"
+                      placeholder={t('properties.namePlaceholder')}
                       onChange={(e) => updateProperty(index, { key: e.target.value })}
                     />
                   </div>
@@ -320,7 +323,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
                       <input
                         type="text"
                         className="property-text-input"
-                        placeholder="Leer"
+                        placeholder={t('properties.emptyPlaceholder')}
                         value={String(prop.value ?? '')}
                         onChange={(e) => updateProperty(index, { value: e.target.value })}
                       />
@@ -330,7 +333,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
                   <button
                     type="button"
                     className="property-delete-btn"
-                    title="Eigenschaft löschen"
+                    title={t('properties.deleteTitle')}
                     onClick={() => removeProperty(index)}
                   >
                     <Trash2 size={14} />
