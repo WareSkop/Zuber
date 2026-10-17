@@ -329,18 +329,36 @@ export const App: React.FC = () => {
   }, []);
 
   const loadVaultIndex = useCallback(async () => {
-    try {
-      const [treeRes, graphRes] = await Promise.all([api.getTree(), api.getGraph()]);
-      setTree(treeRes.tree);
-      setAllFiles(treeRes.files);
-      setVaultPath(treeRes.vaultPath);
-      setGraphData(graphRes);
-      return { treeRes, graphRes };
-    } catch (err) {
-      console.warn('Offline mode active, falling back to local cache:', err);
-      // Offline fallback: load from local IndexedDB
+    const isOffline =
+      syncEngine.getSyncState() === 'offline' ||
+      (typeof navigator !== 'undefined' && !navigator.onLine);
+
+    if (!isOffline) {
       try {
-        const cachedTree = (await syncEngine.getTree()) || [];
+        const outbox = await syncEngine.getLocalDb().getOutbox();
+        const hasOutbox = outbox.length > 0;
+
+        if (!hasOutbox) {
+          const [treeRes, graphRes] = await Promise.all([api.getTree(), api.getGraph()]);
+          setTree(treeRes.tree);
+          setAllFiles(treeRes.files);
+          setVaultPath(treeRes.vaultPath);
+          setGraphData(graphRes);
+          await syncEngine.getLocalDb().setMeta('tree', treeRes.tree);
+          await syncEngine.getLocalDb().setMeta('files', treeRes.files);
+          return { treeRes, graphRes };
+        } else {
+          // Pending offline outbox mutations: trigger flush in background
+          syncEngine.flushOutbox().catch(() => {});
+        }
+      } catch (err) {
+        console.warn('Offline mode active, falling back to local cache:', err);
+      }
+    }
+
+    // Offline / pending outbox fallback: load from local IndexedDB
+    try {
+      const cachedTree = (await syncEngine.getTree()) || [];
         let cachedFiles = (await syncEngine.getLocalDb().getMeta<any[]>('files')) || [];
         const cachedGraph = (await syncEngine.getLocalDb().getMeta<GraphData>('graph')) || {
           nodes: [],
@@ -380,8 +398,7 @@ export const App: React.FC = () => {
           graphRes: emptyGraph,
         };
       }
-    }
-  }, []);
+    }, []);
 
   const refreshBacklinks = useCallback(async (relPath: string | null) => {
     if (!relPath) {

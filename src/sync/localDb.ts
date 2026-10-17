@@ -229,6 +229,22 @@ export class LocalDb {
           allNotes.filter((n) => n.path !== relPath && !n.path.startsWith(prefix))
         );
       }
+
+      const files = await this.getMeta<any[]>('files');
+      if (files) {
+        await this.setMeta(
+          'files',
+          files.filter((n) => n.path !== relPath && !n.path.startsWith(prefix))
+        );
+      }
+
+      const folders = await this.getMeta<string[]>('folders');
+      if (folders) {
+        await this.setMeta(
+          'folders',
+          folders.filter((p) => p !== relPath && !p.startsWith(prefix))
+        );
+      }
     } catch {}
   }
 
@@ -240,12 +256,26 @@ export class LocalDb {
       await this.setMeta('tree', updatedTree);
 
       if (type === 'file') {
-        const allNotes = (await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes')) || [];
         const fileName = relPath.split('/').pop() || relPath;
         const basename = fileName.replace(/\.[^/.]+$/, '');
+        const extension = fileName.includes('.') ? fileName.split('.').pop() : 'md';
+
+        const allNotes = (await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes')) || [];
         if (!allNotes.some((n) => n.path === relPath)) {
           allNotes.push({ path: relPath, name: fileName, basename });
           await this.setMeta('allNotes', allNotes);
+        }
+
+        const files = (await this.getMeta<any[]>('files')) || [];
+        if (!files.some((f) => f.path === relPath)) {
+          files.push({ path: relPath, name: fileName, basename, extension });
+          await this.setMeta('files', files);
+        }
+      } else if (type === 'folder') {
+        const folders = (await this.getMeta<string[]>('folders')) || [];
+        if (!folders.includes(relPath)) {
+          folders.push(relPath);
+          await this.setMeta('folders', folders);
         }
       }
     } catch {}
@@ -326,6 +356,36 @@ export class LocalDb {
         });
         await this.setMeta('allNotes', updatedNotes);
       }
+
+      // 4. Update files in meta
+      const files = await this.getMeta<any[]>('files');
+      if (files) {
+        const updatedFiles = files.map((f) => {
+          if (f.path === oldPath) {
+            const name = newPath.split('/').pop() || newPath;
+            const extension = name.includes('.') ? name.split('.').pop() : 'md';
+            return { path: newPath, name, basename: name.replace(/\.[^/.]+$/, ''), extension };
+          } else if (f.path.startsWith(oldPrefix)) {
+            const subPath = newPrefix + f.path.slice(oldPrefix.length);
+            const name = subPath.split('/').pop() || subPath;
+            const extension = name.includes('.') ? name.split('.').pop() : f.extension;
+            return { path: subPath, name, basename: name.replace(/\.[^/.]+$/, ''), extension };
+          }
+          return f;
+        });
+        await this.setMeta('files', updatedFiles);
+      }
+
+      // 5. Update folders in meta
+      const folders = await this.getMeta<string[]>('folders');
+      if (folders) {
+        const updatedFolders = folders.map((p) => {
+          if (p === oldPath) return newPath;
+          if (p.startsWith(oldPrefix)) return newPrefix + p.slice(oldPrefix.length);
+          return p;
+        });
+        await this.setMeta('folders', updatedFolders);
+      }
     } catch {}
   }
 
@@ -383,7 +443,7 @@ export class LocalDb {
     const db = await this.openDb();
     const existing = await this.getOutbox();
     const duplicate = existing.find(
-      (m) => m.type === mutation.type && m.path === mutation.path && m.type === 'save_note'
+      (m) => m.type === mutation.type && m.path === mutation.path
     );
     return new Promise((resolve, reject) => {
       const tx = db.transaction('outbox', 'readwrite');
@@ -506,5 +566,11 @@ function sortTreeNodes(nodes: FileTreeNode[]): FileTreeNode[] {
     }
     return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
   });
+}
+
+export function generateMutationId(type: string, path: string): string {
+  const safe = path.replace(/[^\w-]/g, '_');
+  const rand = Math.random().toString(36).substring(2, 9);
+  return `${type}_${safe}_${Date.now()}_${rand}`;
 }
 

@@ -408,10 +408,47 @@ Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufge
   - Das Modal nutzt die volle Viewport-Breite (`100vw`, `100vh`) ohne Abschneiden nach rechts.
   - Der Schließen-Button (×) ist im Header oben rechts immer fest sichtbar und bietet ein berührungsfreundliches Touch-Target (mindestens 44×44 px).
 
-### 15.3 Offline-Dateierstellung & Outbox-Synchronisation
-- Beim Erstellen von Notizen oder Ordnern bzw. beim Umbenennen im Offline-Modus ruft `App.tsx` die Methoden `syncEngine.saveNote()`, `syncEngine.createFolder()` und `syncEngine.renameEntry()` auf.
-- [`LocalDb`](../src/sync/localDb.ts) aktualisiert sofort den lokalen Baum (`meta.tree`) und die Notizenliste (`meta.allNotes`), sodass neue Notizen sofort im Dateibaum sichtbar sind und geöffnet werden können.
-- Beim Reconnect (`window.ononline` und `syncEngine.checkConnectionAndSync()`) verarbeitet `flushOutbox()` alle ausstehenden Mutationen. Für `save_note` wird stets der frischeste Stand aus `localDb.getNote()` (`body`, `properties`, `rawContent`) an den Server gesendet, sodass offline erstellte Inhalte niemals leer überschrieben werden. Nach erfolgreichem HTTP 200 wird die Mutation aus der Outbox entfernt und die App aktualisiert den Index via `loadVaultIndex()`.
+### 15.3 Offline-Erstellung von Dateien & Ordnern (IndexedDB & Outbox)
+
+1. **Architektur auf API- & Data-Layer-Ebene (`src/api.ts` & `src/sync/syncEngine.ts`):**
+   - Knowmesh verwendet das **OfflineSyncDelegate**-Pattern: `api.ts` delegiert Aufrufe von `saveNote`, `createFolder`, `renameEntry`, `copyEntry` und `deleteEntry` an die `SyncEngine`.
+   - Bei bestehender Online-Verbindung versucht die App, Mutationen direkt über `rawApi` an den Server zu senden.
+   - Ist das Gerät offline (`navigator.onLine === false`) oder schlägt die Server-Anfrage fehl (Netzwerkfehler, Server nicht erreichbar), schaltet die App nahtlos auf die lokale IndexedDB um:
+     - **Ordner (`createFolder`):**
+       - Der neue Ordnerpfad wird sofort in die bekannten Ordner (`meta.folders`) und in die Baum-Struktur (`meta.tree`) in IndexedDB eingefügt.
+       - Es wird ein chronologischer Outbox-Eintrag generiert:
+         ```ts
+         {
+           id: generateMutationId('folder', path),
+           type: 'create_folder',
+           path: path,
+           timestamp: Date.now()
+         }
+         ```
+       - `loadVaultIndex()` lädt den Baum direkt aus IndexedDB, sodass der neue Ordner in der `FileSidebar` sofort sichtbar und nutzbar ist.
+     - **Dateien / Notizen (`saveNote` / `createNote`):**
+       - Erstellt das vollständige `NoteData`-Objekt (`path`, `name`, `body`, `properties`, `frontmatter`, `links`, `embeds`, `tags`, `headings`) lokal im `notes`-Store.
+       - Aktualisiert synchron `meta.tree`, `meta.allNotes` und `meta.files` in IndexedDB, wodurch die Notiz sofort im Vault-Index existiert, per `[[Wiki-Link]]` auflösbar ist und in der Schnellsuche gefunden wird.
+       - Erstellt einen Outbox-Eintrag:
+         ```ts
+         {
+           id: generateMutationId('save', path),
+           type: 'save_note',
+           path: path,
+           body: updatedNote.body,
+           properties: updatedNote.properties,
+           baseMtime: 0,
+           timestamp: Date.now()
+         }
+         ```
+       - Die Notiz wird sofort als `activeNote` im Editor geöffnet, sodass ohne Unterbrechung weitergeschrieben werden kann.
+
+2. **Chronologische Outbox-Abarbeitung bei Reconnect (`flushOutbox()`):**
+   - Sobald die Verbindung wiederhergestellt ist (`online`-Event oder Polling-Check in `checkConnectionAndSync()`), arbeitet die `SyncEngine` alle Outbox-Einträge streng nach Zeitstempel (FIFO) ab:
+     - Für `create_folder`: Sendet `POST /api/vault/folder` an den Server.
+     - Für `save_note`: Liest den frischesten Stand aus `localDb.getNote(path)` und sendet `POST /api/vault/note` mit vollem Payload.
+   - Erst nach erfolgreicher Server-Bestätigung (HTTP 200) wird der jeweilige Eintrag aus der `outbox` gelöscht.
+   - Nach vollständigem Abarbeiten der Outbox erfolgt ein Delta-Manifest-Sync (`getSyncManifest()`) und das UI synchronisiert seinen Zustand.
 
 
 

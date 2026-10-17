@@ -233,6 +233,88 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   }
 }
 
+export interface OfflineSyncDelegate {
+  getTreeData?(): Promise<{
+    tree: FileTreeNode[];
+    files: { path: string; name: string; basename: string; extension: string }[];
+    vaultPath: string;
+  }>;
+  getNote?(path: string): Promise<NoteData>;
+  saveNote(payload: {
+    path: string;
+    rawContent?: string;
+    body?: string;
+    properties?: FrontmatterProperty[];
+    baseMtime?: number;
+    forceOverwrite?: boolean;
+  }): Promise<NoteData>;
+  createFolder(path: string): Promise<{ ok: boolean; path: string }>;
+  renameEntry?(oldPath: string, newPath: string): Promise<{ newPath: string }>;
+  deleteEntry?(path: string): Promise<{ ok: boolean } | void>;
+  copyEntry?(sourcePath: string, targetPath?: string): Promise<{ newPath: string }>;
+}
+
+let offlineSyncDelegate: OfflineSyncDelegate | null = null;
+
+export function registerOfflineSyncDelegate(delegate: OfflineSyncDelegate | null) {
+  offlineSyncDelegate = delegate;
+}
+
+export const rawApi = {
+  getTree(): Promise<{
+    tree: FileTreeNode[];
+    files: { path: string; name: string; basename: string; extension: string }[];
+    vaultPath: string;
+  }> {
+    return apiFetch('/api/vault/tree');
+  },
+
+  getNote(path: string): Promise<NoteData> {
+    return apiFetch(`/api/vault/note?path=${encodeURIComponent(path)}`);
+  },
+
+  saveNote(payload: {
+    path: string;
+    rawContent?: string;
+    body?: string;
+    properties?: FrontmatterProperty[];
+    baseMtime?: number;
+    forceOverwrite?: boolean;
+  }): Promise<NoteData> {
+    return apiFetch('/api/vault/note', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  createFolder(path: string): Promise<{ ok: boolean; path: string }> {
+    return apiFetch('/api/vault/folder', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    });
+  },
+
+  renameEntry(oldPath: string, newPath: string): Promise<{ newPath: string }> {
+    return apiFetch('/api/vault/rename', {
+      method: 'POST',
+      body: JSON.stringify({ oldPath, newPath }),
+    });
+  },
+
+  copyEntry(sourcePath: string, targetPath?: string): Promise<{ newPath: string }> {
+    return apiFetch('/api/vault/copy', {
+      method: 'POST',
+      body: JSON.stringify({ sourcePath, targetPath }),
+    });
+  },
+
+  deleteEntry(path: string): Promise<{ ok: boolean }> {
+    return apiFetch(`/api/vault/entry?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export const api = {
   checkAuthStatus(timeoutMs = 3000): Promise<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }> {
     const controller = new AbortController();
@@ -316,11 +398,17 @@ export const api = {
     files: { path: string; name: string; basename: string; extension: string }[];
     vaultPath: string;
   }> {
-    return apiFetch('/api/vault/tree');
+    if (offlineSyncDelegate?.getTreeData && typeof navigator !== 'undefined' && !navigator.onLine) {
+      return offlineSyncDelegate.getTreeData();
+    }
+    return rawApi.getTree();
   },
 
   getNote(path: string): Promise<NoteData> {
-    return apiFetch(`/api/vault/note?path=${encodeURIComponent(path)}`);
+    if (offlineSyncDelegate?.getNote) {
+      return offlineSyncDelegate.getNote(path);
+    }
+    return rawApi.getNote(path);
   },
 
   saveNote(payload: {
@@ -331,37 +419,39 @@ export const api = {
     baseMtime?: number;
     forceOverwrite?: boolean;
   }): Promise<NoteData> {
-    return apiFetch('/api/vault/note', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    if (offlineSyncDelegate) {
+      return offlineSyncDelegate.saveNote(payload);
+    }
+    return rawApi.saveNote(payload);
   },
 
   createFolder(path: string): Promise<{ ok: boolean; path: string }> {
-    return apiFetch('/api/vault/folder', {
-      method: 'POST',
-      body: JSON.stringify({ path }),
-    });
+    if (offlineSyncDelegate) {
+      return offlineSyncDelegate.createFolder(path);
+    }
+    return rawApi.createFolder(path);
   },
 
   renameEntry(oldPath: string, newPath: string): Promise<{ newPath: string }> {
-    return apiFetch('/api/vault/rename', {
-      method: 'POST',
-      body: JSON.stringify({ oldPath, newPath }),
-    });
+    if (offlineSyncDelegate?.renameEntry) {
+      return offlineSyncDelegate.renameEntry(oldPath, newPath);
+    }
+    return rawApi.renameEntry(oldPath, newPath);
   },
 
   copyEntry(sourcePath: string, targetPath?: string): Promise<{ newPath: string }> {
-    return apiFetch('/api/vault/copy', {
-      method: 'POST',
-      body: JSON.stringify({ sourcePath, targetPath }),
-    });
+    if (offlineSyncDelegate?.copyEntry) {
+      return offlineSyncDelegate.copyEntry(sourcePath, targetPath);
+    }
+    return rawApi.copyEntry(sourcePath, targetPath);
   },
 
-  deleteEntry(path: string): Promise<{ ok: boolean }> {
-    return apiFetch(`/api/vault/entry?path=${encodeURIComponent(path)}`, {
-      method: 'DELETE',
-    });
+  async deleteEntry(path: string): Promise<{ ok: boolean }> {
+    if (offlineSyncDelegate?.deleteEntry) {
+      await offlineSyncDelegate.deleteEntry(path);
+      return { ok: true };
+    }
+    return rawApi.deleteEntry(path);
   },
 
   getGraph(): Promise<GraphData> {

@@ -1,5 +1,7 @@
 import {
   api,
+  rawApi,
+  registerOfflineSyncDelegate,
   ApiConflictError,
   ApiHttpError,
   getActiveProfile,
@@ -7,7 +9,7 @@ import {
   getStoredProfiles,
   saveStoredProfiles,
 } from '../api';
-import { LocalDb, type OutboxMutation, type CachedAttachment } from './localDb';
+import { LocalDb, type OutboxMutation, type CachedAttachment, generateMutationId } from './localDb';
 import type {
   BacklinkItem,
   FileTreeNode,
@@ -52,6 +54,7 @@ class SyncEngine {
   constructor() {
     this.currentProfile = getActiveProfile();
     this.localDb = new LocalDb(this.currentProfile.id);
+    registerOfflineSyncDelegate(this);
     this.init();
   }
 
@@ -181,20 +184,20 @@ class SyncEngine {
           const propsToSend = latestLocalNote ? latestLocalNote.properties : (m.properties ?? []);
           const rawToSend = latestLocalNote?.rawContent;
 
-          await api.saveNote({
+          await rawApi.saveNote({
             path: m.path,
             body: bodyToSend,
             properties: propsToSend,
             rawContent: rawToSend,
-            baseMtime: m.baseMtime,
+            baseMtime: m.baseMtime ?? 0,
             forceOverwrite: false,
           });
         } else if (m.type === 'create_folder') {
-          await api.createFolder(m.path);
+          await rawApi.createFolder(m.path);
         } else if (m.type === 'rename' && m.newPath) {
-          await api.renameEntry(m.path, m.newPath);
+          await rawApi.renameEntry(m.path, m.newPath);
         } else if (m.type === 'delete') {
-          await api.deleteEntry(m.path);
+          await rawApi.deleteEntry(m.path);
         }
 
         // Mutation succeeded on server, remove from outbox
@@ -334,10 +337,14 @@ class SyncEngine {
 
   // --- Offline-First Data Access Methods ---
   public async getTree(): Promise<FileTreeNode[]> {
-    if (navigator.onLine && this.syncState !== 'offline') {
+    const outbox = await this.localDb.getOutbox();
+    const hasOutbox = outbox.length > 0;
+
+    if (!hasOutbox && navigator.onLine && this.syncState !== 'offline') {
       try {
-        const res = await api.getTree();
+        const res = await rawApi.getTree();
         await this.localDb.setMeta('tree', res.tree);
+        await this.localDb.setMeta('files', res.files);
         return res.tree;
       } catch {}
     }
@@ -345,16 +352,33 @@ class SyncEngine {
     return cached || [];
   }
 
+  public async getTreeData(): Promise<{
+    tree: FileTreeNode[];
+    files: { path: string; name: string; basename: string; extension: string }[];
+    vaultPath: string;
+  }> {
+    const tree = await this.getTree();
+    const files = (await this.localDb.getMeta<any[]>('files')) || [];
+    return {
+      tree,
+      files,
+      vaultPath: 'Knowmesh Vault (Offline)',
+    };
+  }
+
   public async getNote(path: string): Promise<NoteData> {
     // Check local database first if we have local uncommitted changes
     const localNote = await this.localDb.getNote(path);
+    const outbox = await this.localDb.getOutbox();
+    const hasOutbox = outbox.some((m) => m.path === path);
+
+    if (hasOutbox && localNote) {
+      return localNote;
+    }
 
     if (navigator.onLine && this.syncState !== 'offline') {
       try {
-        const serverNote = await api.getNote(path);
-        // Only overwrite local cache if local doesn't have an uncommitted outbox mutation
-        const outbox = await this.localDb.getOutbox();
-        const hasOutbox = outbox.some((m) => m.path === path);
+        const serverNote = await rawApi.getNote(path);
         if (!hasOutbox) {
           await this.localDb.putNote(serverNote);
           return serverNote;
@@ -405,7 +429,7 @@ class SyncEngine {
     // If online, try to persist to server directly
     if (navigator.onLine && this.syncState !== 'offline') {
       try {
-        const saved = await api.saveNote(payload);
+        const saved = await rawApi.saveNote(payload);
         await this.localDb.putNote(saved);
         return saved;
       } catch (err: any) {
@@ -423,17 +447,18 @@ class SyncEngine {
           this.notifyConflictListeners();
           throw err;
         }
+        console.warn(`[Knowmesh Sync] Server unreachable during save, queueing in outbox:`, err);
       }
     }
 
     // If offline or save failed without 409, queue in Outbox
     const mutation: OutboxMutation = {
-      id: `save-${payload.path}-${Date.now()}`,
+      id: generateMutationId('save', payload.path),
       type: 'save_note',
       path: payload.path,
       body: updatedNote.body,
       properties: updatedNote.properties,
-      baseMtime: payload.baseMtime,
+      baseMtime: payload.baseMtime ?? 0,
       timestamp: Date.now(),
     };
     await this.localDb.addOutboxMutation(mutation);
@@ -452,30 +477,32 @@ class SyncEngine {
     });
   }
 
-  public async createFolder(relPath: string): Promise<void> {
+  public async createFolder(relPath: string): Promise<{ ok: boolean; path: string }> {
     // 1. Locally insert into tree
     await this.localDb.addEntryToTree(relPath, 'folder');
 
     // 2. If online, call server API
     if (navigator.onLine && this.syncState !== 'offline') {
       try {
-        await api.createFolder(relPath);
-        return;
+        const res = await rawApi.createFolder(relPath);
+        return res;
       } catch (err: any) {
         if (err instanceof ApiHttpError && err.status < 500) {
           throw err;
         }
+        console.warn(`[Knowmesh Sync] Server unreachable during createFolder, queueing in outbox:`, err);
       }
     }
 
     // 3. Queue in outbox if offline or server unreachable
     const mutation: OutboxMutation = {
-      id: `folder-${relPath}-${Date.now()}`,
+      id: generateMutationId('folder', relPath),
       type: 'create_folder',
       path: relPath,
       timestamp: Date.now(),
     };
     await this.localDb.addOutboxMutation(mutation);
+    return { ok: true, path: relPath };
   }
 
   public async renameEntry(oldPath: string, newPath: string): Promise<{ newPath: string }> {
@@ -485,18 +512,19 @@ class SyncEngine {
     // 2. If online, call server API
     if (navigator.onLine && this.syncState !== 'offline') {
       try {
-        const res = await api.renameEntry(oldPath, newPath);
+        const res = await rawApi.renameEntry(oldPath, newPath);
         return res;
       } catch (err: any) {
         if (err instanceof ApiHttpError && err.status < 500) {
           throw err;
         }
+        console.warn(`[Knowmesh Sync] Server unreachable during renameEntry, queueing in outbox:`, err);
       }
     }
 
     // 3. Queue in outbox
     const mutation: OutboxMutation = {
-      id: `rename-${oldPath}-${Date.now()}`,
+      id: generateMutationId('rename', oldPath),
       type: 'rename',
       path: oldPath,
       newPath,
@@ -506,15 +534,11 @@ class SyncEngine {
     return { newPath };
   }
 
-  public async deleteEntry(relPath: string): Promise<void> {
-    // 1. Purge from local IndexedDB immediately
-    await this.localDb.deleteEntry(relPath);
-
-    // 2. If online, call server API
+  public async copyEntry(sourcePath: string, targetPath?: string): Promise<{ newPath: string }> {
     if (navigator.onLine && this.syncState !== 'offline') {
       try {
-        await api.deleteEntry(relPath);
-        return;
+        const res = await rawApi.copyEntry(sourcePath, targetPath);
+        return res;
       } catch (err: any) {
         if (err instanceof ApiHttpError && err.status < 500) {
           throw err;
@@ -522,9 +546,47 @@ class SyncEngine {
       }
     }
 
+    const note = await this.localDb.getNote(sourcePath);
+    if (note) {
+      const parts = sourcePath.split('/');
+      const originalFileName = parts.pop() || '';
+      const originalBaseName = originalFileName.replace(/\.md$/, '');
+      const folder = targetPath ?? parts.join('/');
+      const newName = `${originalBaseName} (Copy).md`;
+      const newPath = folder ? `${folder}/${newName}` : newName;
+
+      const saved = await this.saveNote({
+        path: newPath,
+        rawContent: note.rawContent,
+        body: note.body,
+        properties: note.properties,
+        baseMtime: 0,
+      });
+      return { newPath: saved.path };
+    }
+    throw new Error(`Quelle nicht gefunden: ${sourcePath}`);
+  }
+
+  public async deleteEntry(relPath: string): Promise<void> {
+    // 1. Purge from local IndexedDB immediately
+    await this.localDb.deleteEntry(relPath);
+
+    // 2. If online, call server API
+    if (navigator.onLine && this.syncState !== 'offline') {
+      try {
+        await rawApi.deleteEntry(relPath);
+        return;
+      } catch (err: any) {
+        if (err instanceof ApiHttpError && err.status < 500) {
+          throw err;
+        }
+        console.warn(`[Knowmesh Sync] Server unreachable during deleteEntry, queueing in outbox:`, err);
+      }
+    }
+
     // 3. If offline or network issue, queue in Outbox
     const mutation: OutboxMutation = {
-      id: `delete-${relPath}-${Date.now()}`,
+      id: generateMutationId('delete', relPath),
       type: 'delete',
       path: relPath,
       timestamp: Date.now(),
