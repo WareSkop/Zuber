@@ -15,7 +15,9 @@ import {
   Folder,
   FileText,
   Globe,
+  Info,
 } from 'lucide-react';
+import { version as appVersion } from '../../package.json';
 import {
   api,
   getActiveProfile,
@@ -376,6 +378,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>{t('settings.tabSync')}</span>
             </button>
           </div>
+
+          <div className="settings-nav-version">
+            <Info size={13} style={{ flexShrink: 0 }} />
+            <span>Knowmesh v{appVersion}</span>
+          </div>
         </aside>
 
         {/* Right Content Area */}
@@ -482,6 +489,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* About Knowmesh Section */}
+              <div
+                style={{
+                  marginTop: '28px',
+                  padding: '16px',
+                  background: 'var(--bg-secondary)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Info size={16} style={{ color: 'var(--accent-primary)' }} />
+                    <span>{t('settings.aboutTitle')}</span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        background: 'var(--accent-primary)',
+                        color: '#fff',
+                        fontWeight: 700,
+                      }}
+                    >
+                      v{appVersion}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    {t('settings.aboutDesc')}
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 {
   "name": "knowmesh",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Knowmesh – Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine",
   "type": "module",

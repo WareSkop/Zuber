@@ -273,7 +273,9 @@
     "notesCached": "Notes cached locally",
     "attachmentsCached": "Attachments cached",
     "storageUsed": "Local storage used",
-    "syncedFolders": "Attachment folders to cache offline:"
+    "syncedFolders": "Attachment folders to cache offline:",
+    "aboutTitle": "About Knowmesh",
+    "aboutDesc": "Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine"
   },
   "graph": {
     "title": "Interactive Knowledge Graph",

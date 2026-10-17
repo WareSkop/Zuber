@@ -2305,6 +2305,18 @@ code {
   color: var(--text-primary);
 }
 
+.settings-nav-version {
+  margin-top: auto;
+  padding: 12px 14px 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
 .settings-nav-item.active {
   background: var(--bg-active);
   color: var(--accent-color);
@@ -2404,6 +2416,10 @@ code {
   }
 
   .settings-close-btn.desktop-only {
+    display: none;
+  }
+
+  .settings-nav-version {
     display: none;
   }
 

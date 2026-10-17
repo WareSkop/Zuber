@@ -273,7 +273,9 @@
     "notesCached": "Lokal zwischengespeicherte Notizen",
     "attachmentsCached": "Zwischengespeicherte Anhänge",
     "storageUsed": "Lokaler Speicherbedarf",
-    "syncedFolders": "Ordner für Offline-Synchronisation:"
+    "syncedFolders": "Ordner für Offline-Synchronisation:",
+    "aboutTitle": "Über Knowmesh",
+    "aboutDesc": "Offline-First persönliche Wissensdatenbank, Live-Preview Markdown-Editor & Sync-Engine"
   },
   "graph": {
     "title": "Interaktiver Wissensgraph",
