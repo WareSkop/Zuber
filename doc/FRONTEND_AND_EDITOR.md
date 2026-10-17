@@ -113,7 +113,7 @@ Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zus
 
 ### 2.5 Interaktive Bildanpassung (Größenänderung per Maus & Ausrichtung via HTML-Attribute)
 
-Für maximale Kompatibilität mit Obsidian, GitHub Flavored Markdown und Standard-Webviewern speichert Basalt Bildgrößen und -ausrichtungen nicht über proprietäre Syntax, sondern über Standard-HTML-Attribute:
+Für maximale Kompatibilität mit Obsidian, GitHub Flavored Markdown und Standard-Webviewern speichert Knowmesh Bildgrößen und -ausrichtungen nicht über proprietäre Syntax, sondern über Standard-HTML-Attribute:
 `<img src="attachments/beispiel.png" alt="Bildbeschreibung" width="450" align="center" />`
 
 - **Interaktiver Auswahl-Rahmen:** Ein Klick auf ein gerendertes Bild im Live-Preview-Modus selektiert das Bild (`selected = true`) und blendet eine schwebende Schnellzugriffs-Toolbar sowie Größenanfasser (Drag-Handles) ein.
@@ -178,7 +178,7 @@ Die Graph-Ansicht nutzt ein performantes HTML5 `<canvas>` mit screen-space Rende
   - **Initiales Layout:** Gleichmäßige Vogel-Spirale (Golden-Angle Sunflower-Verteilung $\approx 137.5^\circ$) um das Zentrum.
   - **Spatial Hashing für Coulomb-Abstoßung:** Der Raum wird in ein Grid (Zellgröße `180px`) unterteilt. Jeder Knoten berechnet die Abstoßung nur gegen seine 9 Nachbarzellen $\rightarrow$ Skalierung in $O(N)$ statt $O(N^2)$ für flüssige 60 FPS auch bei 1.800+ Notizen.
   - **Degree-gewichtete Federkräfte:** Blatt-Knoten (`degree === 1`) werden nah an ihren Themen-Hub gezogen (`targetDist = linkDist * 0.55`), während Kanten zwischen zwei großen Hubs (`degree > 5`) mehr Abstand halten (`targetDist = linkDist * 1.8`), um klare, sternförmige Cluster zu bilden.
-- **Einklappbares Einstellungs-Panel (`basalt_graph_settings` in `localStorage`):**
+- **Einklappbares Einstellungs-Panel (`knowmesh_graph_settings` in `localStorage`):**
   - **Filter:** Volltext- und Prefix-Filter (`path:Ordner`, `#tag`), Toggles für Orphans (verwaiste Knoten), Tags und ungelöste Links.
   - **Farb-Gruppen:** Benutzerdefinierte Farb-Regeln (`{ id, query, color }`) nach Pfad, Tag oder Titel mit Farbwähler.
   - **Anzeige & Kräfte:** Schieberegler für Knotengröße, Textschwelle, Zentripetalkraft, Abstoßung und Link-Abstand.
@@ -192,13 +192,13 @@ Die Graph-Ansicht nutzt ein performantes HTML5 `<canvas>` mit screen-space Rende
 
 ## 5. Einstellungs-Modal & Theme-System ([`src/components/SettingsModal.tsx`](../src/components/SettingsModal.tsx))
 
-Basalt bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-Toolbar und im Ribbon erreichbar):
+Knowmesh bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-Toolbar und im Ribbon erreichbar):
 
 - **Menü 1: „Darstellung & Themes“:**
   - Steuert über `data-theme` auf `document.documentElement` alle Farben im Editor, in Sidebars, Tabellen und im Canvas-Graphen.
-  - Das Theme wird persistent in `localStorage` unter `basalt_theme` gesichert.
+  - Das Theme wird persistent in `localStorage` unter `knowmesh_theme` gesichert.
   - **Die 5 Themes:**
-    1. `basalt`: Dunkles Basalt (#0d1117/#161c24), Kristall-Gold (`#d4af37`) & Facetten-Türkis (`#29b6c8`).
+    1. `knowmesh`: Dunkles Knowmesh (#0d1117/#161c24), Kristall-Gold (`#d4af37`) & Facetten-Türkis (`#29b6c8`).
     2. `dark-cold`: Mitternachtsblau (#0f172a/#1e293b) & Eisblau-Akzent (`#38bdf8`).
     3. `dark-warm`: Espresso-Anthrazit (#1c1917/#292524) & Bernstein-Akzent (`#f59e0b`).
     4. `light-cold`: Eisweiß (#f8fafc/#f1f5f9) & Kobaltblau-Akzent (`#2563eb`).
@@ -215,7 +215,7 @@ Basalt bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-
 ## 6. Offline-First Sync & Konfliktlösung ([`src/sync/`](../src/sync/) & [`src/components/ConflictModal.tsx`](../src/components/ConflictModal.tsx))
 
 - **IndexedDB (`src/sync/localDb.ts`):**
-  - Getrennte Datenbank pro Server-Profil (`basalt_cache_<profileId>`).
+  - Getrennte Datenbank pro Server-Profil (`knowmesh_cache_<profileId>`).
   - Stores: `meta` (Baum, Tags, Graph), `notes` (alle `.md`-Notizen vollständig lokal), `attachments` (gecachte Binär-Blobs) und `outbox` (Offline-Änderungen).
 - **SyncEngine (`src/sync/syncEngine.ts`):**
   - Online: Flusht die `outbox`, vergleicht `GET /api/vault/sync-manifest`, lädt Deltas per `POST /api/vault/notes-batch` und aktualisiert ausgewählte Offline-Anhänge im Hintergrund.
@@ -229,7 +229,7 @@ Basalt bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-
 
 ## 7. Obsidian-Befehlspalette (`Ctrl+P` / `Cmd+P`) & Shortcuts ([`src/components/CommandPalette.tsx`](../src/components/CommandPalette.tsx))
 
-Basalt implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie `Ctrl+O` aufgerufen werden kann:
+Knowmesh implementiert eine vollwertige, an Obsidian angelehnte **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie `Ctrl+O` aufgerufen werden kann:
 
 - **Eigenschaften & Bedienung:**
   - **Fuzzy-/Volltextsuche:** Durchsucht Titel, Beschreibungen, Kategorien und Synonyme (z. B. „fett“, „table“, „theme“, „sync“).
@@ -330,7 +330,7 @@ Direkt oberhalb des scrollenden Editor-Bereichs steht eine feste **Sticky-Format
 
 Zur Beseitigung redundanter Bedienelemente und Schaffung maximalen Freiraums für den Notizinhalt:
 - **Linke Ribbon-Leiste:** Beginnt direkt mit dem Button „Neue Notiz“ (`+`-Datei-Icon), gefolgt von Editor-Ansicht, Graph-Ansicht und Split-View. Der frühere doppelte Sidebar-Toggle-Button am Kopf des Ribbons wurde entfernt, da die Leiste primär über den linken Button der Haupt-Toolbar gesteuert wird.
-- **Obere Haupt-Toolbar (Links):** Der frühere Branding-Block (`Basalt`-Logo, Text, `vault`-Badge und Trennstrich) wurde vollständig entfernt. Unmittelbar neben dem linken Sidebar-Toggle-Button folgt nahtlos der Breadcrumb-Pfad der geöffneten Notiz inklusive des Speicherstatus-Badges.
+- **Obere Haupt-Toolbar (Links):** Der frühere Branding-Block (`Knowmesh`-Logo, Text, `vault`-Badge und Trennstrich) wurde vollständig entfernt. Unmittelbar neben dem linken Sidebar-Toggle-Button folgt nahtlos der Breadcrumb-Pfad der geöffneten Notiz inklusive des Speicherstatus-Badges.
 - **Obere Haupt-Toolbar (Rechts):**
   - Entfernung redundanter Buttons: „Bild einfügen“ (befindet sich in der `EditorToolbar`), „Graph-Ansicht“ (befindet sich im Ribbon) und „>_ Befehle“ (wird über den Obsidian-Shortcut `Ctrl+P` / `Cmd+P` bedient).
   - Die verbleibende Menüleiste rechts enthält sauber strukturiert:

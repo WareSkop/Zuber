@@ -1,11 +1,15 @@
-// Basalt Service Worker - App Shell & Attachment Offline Support
-const CACHE_NAME = 'basalt-app-shell-v1';
-const ATTACHMENT_CACHE_NAME = 'basalt-attachments-v1';
+// Knowmesh Service Worker - App Shell & Attachment Offline Support
+const CACHE_NAME = 'knowmesh-app-shell-v1';
+const ATTACHMENT_CACHE_NAME = 'knowmesh-attachments-v1';
 const APP_SHELL_ASSETS = [
   '/',
   '/index.html',
-  '/basalt-logo.svg',
-  '/favicon.svg',
+  '/favicon.png',
+  '/Knowmesh_icon32.png',
+  '/Knowmesh_icon64.png',
+  '/Knowmesh_icon128.png',
+  '/Knowmesh_icon256.png',
+  '/knowmesh_icon.svg',
   '/manifest.webmanifest'
 ];
 

@@ -428,7 +428,7 @@ if (process.env.NODE_ENV !== 'test') {
   });
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Basalt Server läuft auf:`);
+    console.log(`🚀 Knowmesh Server läuft auf:`);
     console.log(`   - Lokal:    ${protocolLabel}://localhost:${PORT}`);
     const localIps = getLocalIpAddresses().filter((ip) => ip !== '127.0.0.1');
     for (const ip of localIps) {

@@ -1,6 +1,6 @@
 {
-  "name": "Basalt",
-  "short_name": "Basalt",
+  "name": "Knowmesh",
+  "short_name": "Knowmesh",
   "description": "Offline-First Personal Knowledge Base & Markdown Editor",
   "start_url": "/",
   "display": "standalone",
@@ -9,10 +9,25 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/basalt-logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/Knowmesh_icon64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/Knowmesh_icon128.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    },
+    {
+      "src": "/Knowmesh_icon256.png",
+      "sizes": "256x256",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/knowmesh_icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }

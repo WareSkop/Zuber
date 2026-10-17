@@ -142,7 +142,7 @@ export interface GraphData {
 
 ## 2. REST-API Endpunkte ([`server/index.ts`](../server/index.ts))
 
-Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../server/auth.ts) geschützt (Header `Authorization: Bearer <token>` oder Cookie `basalt_session`). Ist `authEnabled === false`, werden alle Anfragen automatisch autorisiert.
+Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../server/auth.ts) geschützt (Header `Authorization: Bearer <token>` oder Cookie `knowmesh_session` / `basalt_session`). Ist `authEnabled === false`, werden alle Anfragen automatisch autorisiert.
 
 ### 2.1 Authentifizierung & Sicherheit
 

@@ -53,11 +53,11 @@ const DEFAULT_GRAPH_SETTINGS: GraphSettings = {
   linkDistance: 110,
 };
 
-const STORAGE_KEY = 'basalt_graph_settings';
+const STORAGE_KEY = 'knowmesh_graph_settings';
 
 function loadGraphSettings(): GraphSettings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('basalt_graph_settings');
     if (raw) {
       const parsed = JSON.parse(raw);
       return { ...DEFAULT_GRAPH_SETTINGS, ...parsed };

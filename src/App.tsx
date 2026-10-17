@@ -114,7 +114,7 @@ export const App: React.FC = () => {
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [wsConnected, setWsConnected] = useState(false);
-  const [theme, setTheme] = useState<string>(() => localStorage.getItem('basalt_theme') || 'basalt');
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem('knowmesh_theme') || localStorage.getItem('basalt_theme') || 'knowmesh');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('offline');
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
@@ -203,7 +203,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.style.colorScheme = theme.startsWith('light') ? 'light' : 'dark';
-    localStorage.setItem('basalt_theme', theme);
+    localStorage.setItem('knowmesh_theme', theme);
   }, [theme]);
 
   useEffect(() => {
@@ -1194,11 +1194,11 @@ export const App: React.FC = () => {
       },
       {
         id: 'theme-dark',
-        title: 'Darstellung: Theme „Basalt Dark“ (Standard)',
+        title: 'Darstellung: Theme „Knowmesh Dark“ (Standard)',
         category: 'Einstellungen',
         icon: <Palette size={16} />,
-        keywords: ['theme', 'dark', 'dunkel', 'basalt'],
-        action: () => setTheme('basalt'),
+        keywords: ['theme', 'dark', 'dunkel', 'knowmesh', 'basalt'],
+        action: () => setTheme('knowmesh'),
       },
       {
         id: 'theme-light',
@@ -1242,7 +1242,7 @@ export const App: React.FC = () => {
   ]);
 
   if (!authChecked) {
-    return <div className="loading-screen">Lade Basalt...</div>;
+    return <div className="loading-screen">Lade Knowmesh...</div>;
   }
 
   if (!authenticated) {

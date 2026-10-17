@@ -97,9 +97,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const themes = [
     {
-      id: 'basalt',
-      name: 'Basalt (Standard)',
-      desc: 'Dunkler Basalt, Kristall-Gold (#d4af37) & Facetten-Türkis (#29b6c8)',
+      id: 'knowmesh',
+      name: 'Knowmesh (Standard)',
+      desc: 'Dunkles Knowmesh, Kristall-Gold (#d4af37) & Facetten-Türkis (#29b6c8)',
       bg: '#0d1117',
       sidebar: '#161c24',
       accent: '#d4af37',
@@ -329,13 +329,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'appearance' && (
             <div className="settings-section">
               <p className="settings-desc">
-                Wähle das passende Farbschema für Basalt. Alle Oberflächenelemente, der Editor, der Graph und Icons passen sich sofort an.
+                Wähle das passende Farbschema für Knowmesh. Alle Oberflächenelemente, der Editor, der Graph und Icons passen sich sofort an.
               </p>
               <div className="theme-grid">
                 {themes.map((t) => (
                   <div
                     key={t.id}
-                    className={`theme-card ${currentTheme === t.id ? 'active' : ''}`}
+                    className={`theme-card ${currentTheme === t.id || (t.id === 'knowmesh' && currentTheme === 'basalt') ? 'active' : ''}`}
                     onClick={() => onThemeChange(t.id)}
                   >
                     <div className="theme-card-preview" style={{ background: t.bg }}>
@@ -350,7 +350,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="theme-card-info">
                       <div className="theme-card-header">
                         <strong>{t.name}</strong>
-                        {currentTheme === t.id && <Check size={15} className="theme-check-icon" />}
+                        {(currentTheme === t.id || (t.id === 'knowmesh' && currentTheme === 'basalt')) && <Check size={15} className="theme-check-icon" />}
                       </div>
                       <span className="theme-card-desc">{t.desc}</span>
                     </div>
@@ -364,7 +364,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'security' && (
             <div className="settings-section">
               <p className="settings-desc">
-                Konfiguriere den Passwortschutz für den Basalt-Server. Die Einstellungen werden in <code>server-config.json</code> persistent gespeichert.
+                Konfiguriere den Passwortschutz für den Knowmesh-Server. Die Einstellungen werden in <code>server-config.json</code> persistent gespeichert.
               </p>
               <form onSubmit={handleSaveSecurity} className="settings-form">
                 <div className="form-toggle-row">
@@ -423,7 +423,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'servers' && (
             <div className="settings-section">
               <p className="settings-desc">
-                Verwalte Verbindungen zu unterschiedlichen Basalt-Servern. Auf Chromebooks oder Smartphones kannst du dich direkt mit deinem Heimserver verbinden.
+                Verwalte Verbindungen zu unterschiedlichen Knowmesh-Servern. Auf Chromebooks oder Smartphones kannst du dich direkt mit deinem Heimserver verbinden.
               </p>
 
               <div className="profile-list">
@@ -529,7 +529,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'sync' && (
             <div className="settings-section">
               <p className="settings-desc">
-                Basalt speichert alle Markdown-Notizen und ausgewählte Binärdateien lokal in deiner IndexedDB. Dadurch kannst du unterwegs auch komplett ohne Internetverbindung Notizen lesen, bearbeiten und suchen.
+                Knowmesh speichert alle Markdown-Notizen und ausgewählte Binärdateien lokal in deiner IndexedDB. Dadurch kannst du unterwegs auch komplett ohne Internetverbindung Notizen lesen, bearbeiten und suchen.
               </p>
 
               <div className="sync-stats-grid">

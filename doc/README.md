@@ -1,6 +1,6 @@
-# Basalt – Technische Dokumentation & LLM-Handbuch
+# Knowmesh – Technische Dokumentation & LLM-Handbuch
 
-Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Basalt** (ehemals „Obsidian Web Vault“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
+Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Knowmesh** (ehemals „Basalt“ / „Obsidian Web Vault“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
 
 ---
 
@@ -21,7 +21,7 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 
 ## 1. Projektziel & Kernfunktionen
 
-**Basalt** stellt einen lokalen Obsidian-kompatiblen Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx`) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
+**Knowmesh** stellt einen lokalen Obsidian-kompatiblen Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx`) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
 
 ### Hauptmerkmale
 - **Progressive Web App (PWA) & Offline-App-Shell:**
@@ -52,7 +52,7 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 ## 2. Verzeichnis- und Dateistruktur
 
 ```text
-/home/ingo/Downloads/MarkdownEdit/
+/home/ingo/Developement/Knowmesh/
 ├── .env                          # Laufzeit-Konfiguration (Port, Passwort, Vault-Pfad, TLS)
 ├── index.html                    # Vite HTML-Einstiegspunkt
 ├── package.json                  # Abhängigkeiten & NPM-Skripte

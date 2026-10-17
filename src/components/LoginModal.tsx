@@ -34,9 +34,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       <div className="login-card">
         <div className="login-header">
           <div className="login-logo">
-            <img src="/basalt-logo.svg" alt="Basalt" style={{ width: 44, height: 44 }} />
+            <img src="/knowmesh_icon.svg" alt="Knowmesh" style={{ width: 44, height: 44 }} />
           </div>
-          <h1>Basalt</h1>
+          <h1>Knowmesh</h1>
           <p className="login-subtitle">
             Offline-First Wissensbasis & Markdown-Editor
           </p>

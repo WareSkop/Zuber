@@ -62,7 +62,7 @@ export function ensureTlsCredentials(rootDir: string): TlsCredentials {
         '-days',
         '3650',
         '-subj',
-        '/CN=localhost/O=Basalt',
+        '/CN=localhost/O=Knowmesh',
         '-addext',
         `subjectAltName=${sanList}`,
         '-keyout',

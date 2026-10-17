@@ -34,7 +34,7 @@ export class ConfigService {
         }
       }
     } catch (err) {
-      console.warn(`[Basalt] Failed to read ${this.configPath}, creating fresh config:`, err);
+      console.warn(`[Knowmesh] Failed to read ${this.configPath}, creating fresh config:`, err);
     }
 
     // Create initial config from environment or default password
@@ -51,7 +51,7 @@ export class ConfigService {
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(initialConfig, null, 2), 'utf-8');
     } catch (err) {
-      console.error(`[Basalt] Failed to write initial ${this.configPath}:`, err);
+      console.error(`[Knowmesh] Failed to write initial ${this.configPath}:`, err);
     }
 
     return initialConfig;

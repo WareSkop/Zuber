@@ -139,7 +139,7 @@ class SyncEngine {
         }
         // Trigger background sync
         this.syncNow().catch((err) => {
-          console.warn('[Basalt Sync] Sync error:', err);
+          console.warn('[Knowmesh Sync] Sync error:', err);
         });
         return true;
       }
@@ -191,7 +191,7 @@ class SyncEngine {
             this.notifyConflictListeners();
           }
         } else {
-          console.warn(`[Basalt Sync] Failed to replay mutation ${m.id}:`, err);
+          console.warn(`[Knowmesh Sync] Failed to replay mutation ${m.id}:`, err);
           // If offline or network issue, abort outbox flushing for now
           break;
         }
@@ -262,7 +262,7 @@ class SyncEngine {
 
       // Step 6: Background sync of binary attachments for selected offline folders
       this.syncAttachmentsBackground(manifest).catch((err) => {
-        console.warn('[Basalt Sync] Attachment sync warning:', err);
+        console.warn('[Knowmesh Sync] Attachment sync warning:', err);
       });
 
       if (this.activeConflicts.length > 0) {
@@ -271,7 +271,7 @@ class SyncEngine {
         this.setSyncState('synced');
       }
     } catch (err) {
-      console.warn('[Basalt Sync] Sync failed:', err);
+      console.warn('[Knowmesh Sync] Sync failed:', err);
       this.setSyncState('offline');
     } finally {
       this.isSyncing = false;

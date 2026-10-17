@@ -11,12 +11,12 @@ import type {
   VaultProfile,
 } from '../shared/types';
 
-const TOKEN_STORAGE_KEY = 'basalt_token';
-const ACTIVE_PROFILE_KEY = 'basalt_active_profile_id';
-const PROFILES_STORAGE_KEY = 'basalt_vault_profiles';
+const TOKEN_STORAGE_KEY = 'knowmesh_token';
+const ACTIVE_PROFILE_KEY = 'knowmesh_active_profile_id';
+const PROFILES_STORAGE_KEY = 'knowmesh_vault_profiles';
 
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem('obsidian_web_vault_token');
+  return localStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem('basalt_token') || localStorage.getItem('obsidian_web_vault_token');
 }
 
 export function setStoredToken(token: string | null): void {
@@ -24,13 +24,14 @@ export function setStoredToken(token: string | null): void {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem('basalt_token');
     localStorage.removeItem('obsidian_web_vault_token');
   }
 }
 
 export function getStoredProfiles(): VaultProfile[] {
   try {
-    const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+    const raw = localStorage.getItem(PROFILES_STORAGE_KEY) || localStorage.getItem('basalt_vault_profiles');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -52,7 +53,7 @@ export function saveStoredProfiles(profiles: VaultProfile[]): void {
 
 export function getActiveProfile(): VaultProfile {
   const profiles = getStoredProfiles();
-  const activeId = localStorage.getItem(ACTIVE_PROFILE_KEY);
+  const activeId = localStorage.getItem(ACTIVE_PROFILE_KEY) || localStorage.getItem('basalt_active_profile_id');
   const found = profiles.find((p) => p.id === activeId);
   return found || profiles[0];
 }

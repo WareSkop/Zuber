@@ -29,7 +29,7 @@ export class LocalDb {
   private initPromise: Promise<IDBDatabase> | null = null;
 
   constructor(profileId: string = 'default') {
-    this.dbName = `basalt_cache_${profileId.replace(/[^\w-]/g, '_')}`;
+    this.dbName = `knowmesh_cache_${profileId.replace(/[^\w-]/g, '_')}`;
   }
 
   private async openDb(): Promise<IDBDatabase> {

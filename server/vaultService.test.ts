@@ -12,7 +12,7 @@ import { VaultService } from './vaultService';
 import { ensureTlsCredentials } from './tls';
 import { ConfigService } from './configService';
 
-describe('Basalt - Markdown & Frontmatter Utils', () => {
+describe('Knowmesh - Markdown & Frontmatter Utils', () => {
   it('parses frontmatter into visual properties and separates body from YAML', () => {
     const raw = `---
 tags:
@@ -72,7 +72,7 @@ describe('VaultService & Sync Engine', () => {
   let service: VaultService;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'basalt-vault-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowmesh-vault-test-'));
     service = new VaultService(tmpDir);
   });
 
@@ -193,7 +193,7 @@ describe('ConfigService & Dynamic Security Settings', () => {
   let configPath: string;
 
   beforeEach(() => {
-    tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'basalt-config-test-'));
+    tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowmesh-config-test-'));
     configPath = path.join(tmpConfigDir, 'server-config.json');
   });
 
@@ -240,12 +240,12 @@ describe('Offline Sync Structures & Conflict Resolution Utilities', () => {
   it('generates predictable database names per profile id', () => {
     const db1 = new LocalDb('default');
     const db2 = new LocalDb('Heimserver:3443');
-    expect((db1 as any).dbName).toBe('basalt_cache_default');
-    expect((db2 as any).dbName).toBe('basalt_cache_Heimserver_3443');
+    expect((db1 as any).dbName).toBe('knowmesh_cache_default');
+    expect((db2 as any).dbName).toBe('knowmesh_cache_Heimserver_3443');
   });
 });
 
-describe('Basalt - Image HTML Attributes & Command Palette', () => {
+describe('Knowmesh - Image HTML Attributes & Command Palette', () => {
   it('formats HTML img tags with width and align attributes for maximum compatibility', () => {
     const src = 'attachments/diagramm-1729110000.png';
     const alt = 'Architektur Diagramm';
@@ -306,7 +306,7 @@ describe('Basalt - Image HTML Attributes & Command Palette', () => {
   });
 });
 
-describe('Basalt - Graph Semantic Zoom, Anti-Collision & Color Groups', () => {
+describe('Knowmesh - Graph Semantic Zoom, Anti-Collision & Color Groups', () => {
   it('correctly matches node color groups by path, tag, and label', async () => {
     const { matchNodeGroup } = await import('../src/components/GraphView');
 
@@ -395,7 +395,7 @@ describe('Basalt - Graph Semantic Zoom, Anti-Collision & Color Groups', () => {
   });
 });
 
-describe('Basalt - Editor Toolbar & Mobile Swipe Gestures', () => {
+describe('Knowmesh - Editor Toolbar & Mobile Swipe Gestures', () => {
   it('generates correct heading prefixes and replaces existing prefixes or strips for normal text (level 0)', () => {
     const applyHeadingPrefix = (lineText: string, level: number) => {
       const hashes = level > 0 ? '#'.repeat(level) + ' ' : '';
