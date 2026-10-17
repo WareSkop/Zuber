@@ -119,3 +119,63 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
    - `buildLivePreviewDecorations` darf nur den sichtbaren Bereich (`view.visibleRanges` ± 60 Zeilen Puffer) dekorieren, niemals blind alle Zeilen eines riesigen Dokuments bei jedem Tastendruck.
 4. **Kühlende Physik-Simulation im `GraphView.tsx`:**
    - Der Canvas-Graph nutzt einen `alpha`-Abkühlfaktor (`alphaRef.current`). Sobald `alpha <= 0.008` fällt, stoppt die `requestAnimationFrame`-Schleife komplett (0 % CPU-Last im Ruhezustand) und wacht erst bei Benutzerinteraktion (`wakeUpRef.current()`) wieder auf.
+
+---
+
+## 5. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)
+
+Knowmesh ist vollständig für den Betrieb als Docker-Container hinter einem Reverse Proxy wie dem **Nginx Proxy Manager (NPM)** gehärtet.
+
+### 5.1 Docker Compose Schnellstart
+
+Erstelle eine `docker-compose.yml` (bzw. nutze die im Repository enthaltene Datei):
+
+```yaml
+services:
+  knowmesh:
+    image: codeberg.org/waring/knowmesh:latest
+    container_name: knowmesh
+    restart: unless-stopped
+    ports:
+      - "3443:3443"
+    environment:
+      - NODE_ENV=production
+      - PORT=3443
+      - ENABLE_HTTPS=false        # TLS/Let's Encrypt wird von NPM übernommen
+      - TRUST_PROXY=true          # Echte Client-IP für Rate-Limiting & X-Forwarded-Proto
+      - FORCE_AUTH=true           # Deaktivieren des Passwortschutzes über Web-UI sperren
+      - MAX_UPLOAD_MB=100         # Maximales Upload-Limit für Anhänge
+      - OBSIDIAN_WEB_PASSWORD=    # Optionales Initialpasswort (Standard: obsidian)
+    volumes:
+      - ./vault:/data/vault       # Markdown-Notizen und Anhänge
+      - ./config:/data/config     # Server-Konfiguration & Session-Epoch
+```
+
+Starten des Containers:
+```bash
+docker compose up -d
+```
+
+### 5.2 Nginx Proxy Manager (NPM) Konfiguration
+
+Lege im Nginx Proxy Manager einen neuen **Proxy Host** an:
+
+- **Domain Names:** z. B. `knowmesh.deinedomain.de`
+- **Scheme:** `http` (da `ENABLE_HTTPS=false` im Docker-Container)
+- **Forward Hostname / IP:** `knowmesh` (bei gemeinsamem Docker-Netzwerk) oder IP des Docker-Hosts
+- **Forward Port:** `3443`
+- **Cache Assets:** Deaktiviert (oder nur für statische Assets; Service Worker regelt App-Shell-Caching)
+- **Block Common Exploits:** **Aktiviert**
+- **Websockets Support:** **Aktiviert** (Zwingend für `/ws` Live-Updates)
+- **SSL-Tab:**
+  - SSL Certificate: Neues Let's Encrypt Zertifikat anfordern
+  - Force SSL: **Aktiviert**
+  - HTTP/2 Support: **Aktiviert**
+  - HSTS Enabled: **Aktiviert**
+
+### 5.3 Codeberg Container Registry & CI/CD
+
+Das Image wird automatisiert über Forgejo / Codeberg Actions bei jedem Push auf `main` gebaut:
+- Registry: `codeberg.org/waring/knowmesh:latest`
+- Lokaler Build & Push: `./scripts/publish-codeberg.sh`
+

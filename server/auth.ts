@@ -11,6 +11,7 @@ function getSecret(): string {
 export function createSessionToken(): string {
   const payload = JSON.stringify({
     user: 'owner',
+    sessionEpoch: configService.getSessionEpoch(),
     iat: Date.now(),
     exp: Date.now() + 1000 * 60 * 60 * 24 * 30, // 30 days
   });
@@ -45,6 +46,13 @@ export function verifySessionToken(token?: string | null): boolean {
   try {
     const data = JSON.parse(Buffer.from(base64Payload, 'base64url').toString('utf-8'));
     if (typeof data.exp === 'number' && Date.now() > data.exp) {
+      return false;
+    }
+    // Check server sessionEpoch for token invalidation / revocation
+    if (typeof data.sessionEpoch === 'number' && data.sessionEpoch !== configService.getSessionEpoch()) {
+      return false;
+    }
+    if (typeof data.sessionEpoch !== 'number' && configService.getSessionEpoch() > 1) {
       return false;
     }
     return true;

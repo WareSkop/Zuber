@@ -30,6 +30,8 @@ interface SettingsModalProps {
   currentTheme: string;
   onThemeChange: (theme: string) => void;
   fileTree: FileTreeNode[];
+  onInstallApp?: () => void;
+  isInstalledApp?: boolean;
 }
 
 type SettingsTab = 'appearance' | 'security' | 'servers' | 'sync';
@@ -40,6 +42,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   currentTheme,
   onThemeChange,
   fileTree,
+  onInstallApp,
+  isInstalledApp = false,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
 
@@ -531,6 +535,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <p className="settings-desc">
                 Knowmesh speichert alle Markdown-Notizen und ausgewählte Binärdateien lokal in deiner IndexedDB. Dadurch kannst du unterwegs auch komplett ohne Internetverbindung Notizen lesen, bearbeiten und suchen.
               </p>
+
+              <div className="pwa-install-banner">
+                <div className="pwa-install-info">
+                  <div className="pwa-badge">{isInstalledApp ? '✅ App installiert' : '📲 WebAPK & Desktop PWA'}</div>
+                  <strong className="pwa-title">
+                    {isInstalledApp ? 'Knowmesh ist als eigenständige App eingerichtet' : 'Knowmesh als App installieren'}
+                  </strong>
+                  <p className="pwa-desc">
+                    {isInstalledApp
+                      ? 'Die App läuft im eigenständigen WebAPK-Fenster mit schnellem Zugriff und Offline-Cache.'
+                      : 'Installiere Knowmesh auf deinem Smartphone, Chromebook oder Desktop für sofortigen Start im Flugmodus.'}
+                  </p>
+                </div>
+                {!isInstalledApp && onInstallApp && (
+                  <button
+                    type="button"
+                    className="pwa-install-btn btn-primary"
+                    onClick={onInstallApp}
+                  >
+                    📲 Knowmesh als App installieren
+                  </button>
+                )}
+              </div>
 
               <div className="sync-stats-grid">
                 <div className="sync-stat-card">

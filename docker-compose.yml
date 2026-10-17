@@ -1,0 +1,27 @@
+services:
+  knowmesh:
+    image: codeberg.org/waring/knowmesh:latest
+    container_name: knowmesh
+    restart: unless-stopped
+    ports:
+      - "3443:3443"
+    environment:
+      - PORT=3443
+      - ENABLE_HTTPS=false
+      - TRUST_PROXY=true
+      - FORCE_AUTH=true
+      - CONFIG_PATH=/data/config/server-config.json
+      - VAULT_DIR=/data/vault
+      - MAX_UPLOAD_MB=100
+      # - SESSION_SECRET=your-random-32-byte-hex-string
+      # - OBSIDIAN_WEB_PASSWORD=your-initial-secure-vault-password
+      # - ALLOWED_ORIGINS=https://knowmesh.example.com
+    volumes:
+      - ./vault:/data/vault
+      - ./config:/data/config
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- http://127.0.0.1:3443/api/auth/status || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

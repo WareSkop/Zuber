@@ -1,0 +1,14 @@
+node_modules
+dist
+vault
+certs
+.env
+.env.*
+server-config.json
+.git
+.gitignore
+.dockerignore
+*.log
+.system_generated
+.gemini
+doc

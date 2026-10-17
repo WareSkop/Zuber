@@ -122,6 +122,41 @@ export const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isInstalledApp, setIsInstalledApp] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+  });
+
+  useEffect(() => {
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const handleAppInstalled = () => {
+      setInstallPrompt(null);
+      setIsInstalledApp(true);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = useCallback(async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice?.outcome === 'accepted') {
+        setInstallPrompt(null);
+        setIsInstalledApp(true);
+      }
+    } else {
+      alert('Tipp: Um Knowmesh als WebAPK auf Android/Chromebook oder Desktop zu installieren, tippe im Browser-Menü auf „App installieren“ oder „Zum Startbildschirm hinzufügen“.');
+    }
+  }, [installPrompt]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -1507,6 +1542,17 @@ export const App: React.FC = () => {
 
             {/* Sync & Settings */}
             <div className="topbar-sync-settings">
+              {installPrompt && !isInstalledApp && (
+                <button
+                  type="button"
+                  className="topbar-action-btn pwa-topbar-install-btn"
+                  onClick={handleInstallApp}
+                  title="📲 Knowmesh als native App installieren"
+                >
+                  <Download size={14} />
+                  <span>App</span>
+                </button>
+              )}
               <button
                 type="button"
                 className={`topbar-sync-indicator status-${syncState}`}
@@ -1908,6 +1954,8 @@ export const App: React.FC = () => {
         currentTheme={theme}
         onThemeChange={(newTheme) => setTheme(newTheme)}
         fileTree={tree}
+        onInstallApp={handleInstallApp}
+        isInstalledApp={isInstalledApp}
       />
 
       {/* Interactive Conflict Resolution Modal */}

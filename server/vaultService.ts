@@ -111,9 +111,9 @@ favorit: true
 priorität: 1
 ---
 
-# Willkommen im Obsidian Web Vault
+# Willkommen in Knowmesh
 
-Dies ist deine selbstgehostete **Obsidian Web-Applikation** mit verschlüsselter HTTPS-Verbindung, Echtzeit-Dateisystem-Synchronisation, visuellem **Frontmatter-Manager (Eigenschaften)** und interaktiver **Graph-Ansicht**.
+Dies ist deine selbstgehostete **Knowmesh Web-Applikation** mit verschlüsselter HTTPS-Verbindung, Echtzeit-Dateisystem-Synchronisation, visuellem **Frontmatter-Manager (Eigenschaften)** und interaktiver **Graph-Ansicht**.
 
 > [!tip] Live-Preview Editor
 > Klicke in eine beliebige Zeile, um den Markdown-Quellcode direkt zu bearbeiten. Sobald der Cursor die Zeile verlässt, werden Überschriften, **Fettdruck**, *Kursivschrift*, ==Markierungen==, \`Inline-Code\`, Aufgabenlisten und \`[[Wiki-Links]]\` wie in Obsidian gerendert!
@@ -153,7 +153,7 @@ verschlüsselt: true
 
 # Projekt-Architektur
 
-Diese Notiz beschreibt den Aufbau der Web-Applikation, die auf der [[Willkommen im Obsidian Web Vault|Startseite]] vorgestellt wird.
+Diese Notiz beschreibt den Aufbau der Web-Applikation, die auf der [[Willkommen in Knowmesh|Startseite]] vorgestellt wird.
 
 > [!info] Echtzeit-Synchronisation (Chokidar + WebSockets)
 > Alle Dateien liegen als reguläre \`.md\`-Dateien auf dem Server. Wenn du Dateien parallel mit Obsidian Desktop, Git oder Syncthing bearbeitest, erkennt der Server die Änderung sofort und aktualisiert den Browser live.
@@ -188,7 +188,7 @@ bewertung: 5
 Die **Zettelkasten Methode** lebt von atomaren Notizen und bidirektionalen Verknüpfungen.
 
 > [!important] Backlinks automatisch erkennen
-> In der rechten Seitenleiste siehst du unter **Backlinks** sofort alle Notizen, die auf diese Notiz verweisen – zum Beispiel [[Willkommen im Obsidian Web Vault]] und [[Projekt-Architektur]].
+> In der rechten Seitenleiste siehst du unter **Backlinks** sofort alle Notizen, die auf diese Notiz verweisen – zum Beispiel [[Willkommen in Knowmesh]] und [[Projekt-Architektur]].
 
 ## Prinzipien
 
@@ -208,7 +208,7 @@ erledigt: false
 
 # 2026-10-16
 
-Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web Vault|Startseite]].
+Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Startseite]].
 
 > [!warning] Erinnerung
 > Vergiss nicht, neue Erkenntnisse direkt mit der [[Zettelkasten Methode]] zu verknüpfen!
@@ -220,7 +220,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
 - [ ] Neue Ideen für das nächste Quartal sammeln
 `;
 
-    fs.writeFileSync(path.join(this.vaultDir, 'Willkommen im Obsidian Web Vault.md'), welcomeNote, 'utf-8');
+    fs.writeFileSync(path.join(this.vaultDir, 'Willkommen in Knowmesh.md'), welcomeNote, 'utf-8');
     fs.writeFileSync(path.join(this.vaultDir, 'Projekte', 'Projekt-Architektur.md'), archNote, 'utf-8');
     fs.writeFileSync(path.join(this.vaultDir, 'Wissensbasis', 'Zettelkasten Methode.md'), zettelkastenNote, 'utf-8');
     fs.writeFileSync(path.join(this.vaultDir, 'Tägliche Notizen', '2026-10-16.md'), dailyNote, 'utf-8');
@@ -545,6 +545,18 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
     return Array.from(this.files.values());
   }
 
+  public getAllFiles(): { path: string; name: string; basename: string; extension: string; mtimeMs: number }[] {
+    return this.listAllFiles();
+  }
+
+  public getNoteOrNull(relPath: string): NoteData | null {
+    try {
+      return this.getNote(relPath);
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Resolves an Obsidian [[Wiki-Link]], ![[Embed]], or Markdown link/image path to an existing vault relative path.
    */
@@ -674,6 +686,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
   public saveNote(
     relPath: string,
     payload: {
+      content?: string;
       rawContent?: string;
       body?: string;
       properties?: FrontmatterProperty[];
@@ -700,9 +713,10 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
     const absPath = this.resolveSafePath(normalizedRel);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
 
+    const raw = payload.rawContent ?? payload.content;
     const finalRawContent =
-      typeof payload.rawContent === 'string'
-        ? payload.rawContent
+      typeof raw === 'string'
+        ? raw
         : serializeMarkdownWithFrontmatter(payload.properties ?? [], payload.body ?? '');
 
     fs.writeFileSync(absPath, finalRawContent, 'utf-8');
@@ -777,6 +791,14 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen im Obsidian Web 
       fs.rmSync(absPath, { recursive: true, force: true });
     }
     this.removeFromIndex(relPath);
+  }
+
+  public deleteFile(relPath: string): void {
+    this.deleteEntry(relPath);
+  }
+
+  public renameFile(oldRelPath: string, newRelPath: string): { newPath: string } {
+    return this.renameOrMove(oldRelPath, newRelPath);
   }
 
   /** Alias kept for backwards compatibility */

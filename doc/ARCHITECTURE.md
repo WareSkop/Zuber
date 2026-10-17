@@ -166,3 +166,35 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
   }
   ```
 - Sendet der Client `forceOverwrite: true`, wird die Datei unabhängig von `baseMtime` überschrieben.
+
+---
+
+## 8. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)
+
+Knowmesh verfügt über eine vollständig gehärtete Architektur für das Hosting im öffentlichen Internet hinter einem Reverse Proxy.
+
+### 8.1 Sicherheits-Mechanismen im Internetbetrieb
+- **Reverse-Proxy Support (`trust proxy`):** Express wertet `X-Forwarded-For` für Client-IPs und `X-Forwarded-Proto` für HTTPS aus (aktiviert über `TRUST_PROXY=true`).
+- **In-Memory Rate Limiting (`server/rateLimiter.ts`):**
+  - Login-Route: max. 5 fehlgeschlagene Versuche pro 15 Minuten pro IP (HTTP 429).
+  - API-Routen: max. 600 Requests pro Minute pro IP.
+- **Server-seitige Session-Invalidierung & `sessionEpoch`:**
+  - Jedes HMAC-Token enthält die aktuelle `sessionEpoch`. Bei Passwortänderung oder Global Logout (`POST /api/auth/logout` mit `{ revokeAll: true }`) wird `sessionEpoch` inkrementiert, wodurch alle zuvor ausgestellten Tokens serverseitig mit sofortiger Wirkung ungültig werden.
+- **`FORCE_AUTH=true`:** Verhindert im Container-Betrieb, dass der Passwortschutz versehentlich über das Web-UI deaktiviert wird.
+- **XSS-Schutz mit DOMPurify:** Alle Markdown-HTML-Renderings (`LivePreviewEditor.tsx`) werden strikt bereinigt (`DOMPurify.sanitize`).
+- **HTTP Security Headers & Attachment-Sandboxing:**
+  - `Referrer-Policy: no-referrer` (Token-Schutz bei Klicks auf externe Links).
+  - `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`.
+  - Gefährliche Dateianhänge (z. B. `.html`, `.svg`) werden unter `Content-Security-Policy: sandbox` ausgeliefert.
+
+### 8.2 Docker & Nginx Proxy Manager (NPM) Setup
+- **Docker Compose:**
+  - Image: `codeberg.org/waring/knowmesh:latest`
+  - Volumes: `./vault:/data/vault`, `./config:/data/config`
+  - Umgebung: `ENABLE_HTTPS=false`, `TRUST_PROXY=true`, `FORCE_AUTH=true`, `PORT=3443`
+- **NPM Host Konfiguration:**
+  - Scheme: `http`, Hostname: `knowmesh`, Port: `3443`
+  - **Websockets Support:** Enabled
+  - **Block Common Exploits:** Enabled
+  - **SSL:** Let's Encrypt, Force SSL, HTTP/2, HSTS Enabled
+

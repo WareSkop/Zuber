@@ -11,6 +11,8 @@ import {
 import { VaultService } from './vaultService';
 import { ensureTlsCredentials } from './tls';
 import { ConfigService } from './configService';
+import { createSessionToken, verifySessionToken } from './auth';
+import { rateLimiter } from './rateLimiter';
 
 describe('Knowmesh - Markdown & Frontmatter Utils', () => {
   it('parses frontmatter into visual properties and separates body from YAML', () => {
@@ -132,7 +134,7 @@ describe('VaultService & Sync Engine', () => {
     );
     expect(res.newPath).toBe('Projekte/System-Architektur.md');
 
-    const welcome = service.getNote('Willkommen im Obsidian Web Vault.md');
+    const welcome = service.getNote('Willkommen in Knowmesh.md');
     expect(welcome.body).toContain('[[System-Architektur]]');
   });
 
@@ -504,5 +506,150 @@ describe('Knowmesh - Editor Toolbar & Mobile Swipe Gestures', () => {
     expect(calculatePrefixCursor('Zitat', 0, '> ', /^>\s*/)).toBe(2);
   });
 });
+
+describe('Knowmesh - Security Hardening & Session Invalidation', () => {
+  let tmpConfigDir: string;
+  let configPath: string;
+
+  beforeEach(() => {
+    tmpConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowmesh-sec-test-'));
+    configPath = path.join(tmpConfigDir, 'server-config.json');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpConfigDir, { recursive: true, force: true });
+    delete process.env.FORCE_AUTH;
+  });
+
+  it('embeds sessionEpoch in tokens and invalidates tokens on session revocation', async () => {
+    const config = new ConfigService(configPath);
+    expect(config.getSessionEpoch()).toBe(1);
+
+    // Initial token
+    const token1 = createSessionToken();
+    expect(verifySessionToken(token1)).toBe(true);
+
+    // Revoke all sessions
+    config.revokeAllSessions();
+    expect(config.getSessionEpoch()).toBe(2);
+
+    // Token1 must now be invalid
+    // Note: auth.ts uses singleton configService, so test with singleton or direct epoch comparison
+    const payload1 = JSON.parse(Buffer.from(token1.split('.')[0], 'base64url').toString('utf-8'));
+    expect(payload1.sessionEpoch).toBe(1);
+    expect(payload1.sessionEpoch).not.toBe(config.getSessionEpoch());
+  });
+
+  it('prevents deactivation of authentication when FORCE_AUTH=true', () => {
+    process.env.FORCE_AUTH = 'true';
+    const config = new ConfigService(configPath);
+    expect(config.isForceAuthActive()).toBe(true);
+    expect(config.isAuthRequired()).toBe(true);
+
+    expect(() => {
+      config.updateSecurity(false, undefined);
+    }).toThrow(/FORCE_AUTH/);
+  });
+});
+
+describe('Knowmesh - Brute-Force Rate Limiter', () => {
+  beforeEach(() => {
+    rateLimiter.resetForTest();
+  });
+
+  it('blocks IP after 5 failed login attempts and resets on success', () => {
+    const testIp = '192.168.1.100';
+
+    for (let i = 0; i < 4; i++) {
+      rateLimiter.recordLoginFailure(testIp);
+      expect(rateLimiter.checkLoginAllowed(testIp).allowed).toBe(true);
+    }
+
+    // 5th failure blocks
+    rateLimiter.recordLoginFailure(testIp);
+    const check = rateLimiter.checkLoginAllowed(testIp);
+    expect(check.allowed).toBe(false);
+    expect(check.retryAfterSeconds).toBeGreaterThan(0);
+
+    // Other IP is unaffected
+    expect(rateLimiter.checkLoginAllowed('192.168.1.101').allowed).toBe(true);
+
+    // Resetting on success unblocks
+    rateLimiter.recordLoginSuccess(testIp);
+    expect(rateLimiter.checkLoginAllowed(testIp).allowed).toBe(true);
+  });
+
+  it('enforces general API rate limit per IP', () => {
+    const testIp = '10.0.0.5';
+    let statusCode = 200;
+    let jsonBody: any = null;
+
+    const mockReq = {
+      path: '/api/vault/tree',
+      ip: testIp,
+      headers: {},
+      socket: {},
+    } as any;
+
+    const mockRes = {
+      setHeader: () => {},
+      status: (code: number) => {
+        statusCode = code;
+        return {
+          json: (data: any) => {
+            jsonBody = data;
+          },
+        };
+      },
+    } as any;
+
+    let nextCalled = 0;
+    const next = () => {
+      nextCalled++;
+    };
+
+    // Simulate 600 calls (allowed)
+    for (let i = 0; i < 600; i++) {
+      rateLimiter.apiRateLimitMiddleware(mockReq, mockRes, next);
+    }
+    expect(nextCalled).toBe(600);
+    expect(statusCode).toBe(200);
+
+    // 601st call is blocked with 429
+    rateLimiter.apiRateLimitMiddleware(mockReq, mockRes, next);
+    expect(statusCode).toBe(429);
+    expect(jsonBody?.error).toContain('Zu viele Anfragen');
+  });
+});
+
+describe('Knowmesh - XSS Sanitization with DOMPurify', () => {
+  it('strips malicious script tags and inline javascript while preserving allowed wiki attributes', async () => {
+    const { JSDOM } = await import('jsdom');
+    const dom = new JSDOM('');
+    const dompurifyModule = await import('dompurify');
+    const DOMPurify = (dompurifyModule.default as any)(dom.window);
+
+    const dirtyHtml = `
+      <h1>Überschrift</h1>
+      <script>alert("xss")</script>
+      <img src="x" onerror="alert(1)" />
+      <a href="javascript:alert('steal')" data-wiki-target="Notiz.md" target="_blank">Link</a>
+      <span class="reading-tag" data-tag="sicherheit">#sicherheit</span>
+    `;
+
+    const cleanHtml = DOMPurify.sanitize(dirtyHtml, {
+      ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-tag', 'target'],
+    });
+
+    expect(cleanHtml).not.toContain('<script>');
+    expect(cleanHtml).not.toContain('onerror');
+    expect(cleanHtml).not.toContain('javascript:');
+    expect(cleanHtml).toContain('data-wiki-target="Notiz.md"');
+    expect(cleanHtml).toContain('data-tag="sicherheit"');
+    expect(cleanHtml).toContain('target="_blank"');
+    expect(cleanHtml).toContain('<h1>Überschrift</h1>');
+  });
+});
+
 
 

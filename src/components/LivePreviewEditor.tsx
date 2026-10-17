@@ -23,6 +23,7 @@ import {
   type CompletionResult,
 } from '@codemirror/autocomplete';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { api } from '../api';
 
 export type EditorMode = 'live' | 'reading' | 'source';
@@ -88,7 +89,7 @@ function formatCellInlineHtml(cell: string, notePath: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  return escaped
+  const html = escaped
     // ![[image]]
     .replace(/!\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g, (_m, t, alt) => {
       const target = String(t).trim();
@@ -121,6 +122,10 @@ function formatCellInlineHtml(cell: string, notePath: string): string {
     .replace(/==([^=]+)==/g, '<mark class="cm-lp-highlight">$1</mark>')
     // `code`
     .replace(/`([^`]+)`/g, '<code class="cm-lp-inline-code">$1</code>');
+
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-tag', 'target', 'loading', 'decoding', 'align'],
+  });
 }
 
 class TableWidget extends WidgetType {
@@ -1740,7 +1745,10 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       '$1<span class="reading-tag" data-tag="$2">#$2</span>'
     );
 
-    return marked.parse(processed, { async: false, gfm: true }) as string;
+    const rawHtml = marked.parse(processed, { async: false, gfm: true }) as string;
+    return DOMPurify.sanitize(rawHtml, {
+      ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-tag', 'target', 'loading', 'decoding', 'align'],
+    });
   }, [body, mode, notePath]);
 
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {

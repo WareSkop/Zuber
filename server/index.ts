@@ -17,6 +17,7 @@ import {
   verifySessionToken,
 } from './auth';
 import { configService } from './configService';
+import { rateLimiter } from './rateLimiter';
 import { ensureTlsCredentials, getLocalIpAddresses } from './tls';
 import { VaultService } from './vaultService';
 
@@ -26,21 +27,68 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 
 const PORT = Number(process.env.PORT || 3443);
 const ENABLE_HTTPS = (process.env.ENABLE_HTTPS ?? 'true').toLowerCase() !== 'false';
-const VAULT_PATH = path.resolve(ROOT_DIR, process.env.VAULT_PATH || './vault');
+const TRUST_PROXY = (process.env.TRUST_PROXY ?? 'true').toLowerCase() !== 'false';
+const VAULT_PATH = path.resolve(ROOT_DIR, process.env.VAULT_DIR || process.env.VAULT_PATH || './vault');
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 100);
 
 export function createApp(vaultService: VaultService) {
   const app = express();
 
+  if (TRUST_PROXY) {
+    app.set('trust proxy', 1);
+  }
+
+  // --- HTTP Security Headers ---
+  app.use((_req, res, next) => {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(self)');
+    next();
+  });
+
+  // --- Configurable CORS ---
+  const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
+  const allowedOrigins = allowedOriginsEnv
+    ? allowedOriginsEnv.split(',').map((o) => o.trim()).filter(Boolean)
+    : null;
+
   app.use(
     cors({
-      origin: true,
+      origin: (origin, callback) => {
+        if (!origin || !allowedOrigins || allowedOrigins.length === 0) {
+          return callback(null, true);
+        }
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error('Nicht erlaubter CORS-Origin'));
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization'],
     })
   );
-  app.use(express.json({ limit: '25mb' }));
+
+  app.use(express.json({ limit: '15mb' }));
   app.use(cookieParser());
+
+  // --- General API Rate Limiting (600 requests/minute/IP) ---
+  app.use('/api', rateLimiter.apiRateLimitMiddleware);
+
+  // --- Public Static Files (PWA Manifest, Service Worker & Icons before Auth) ---
+  const publicDir = path.join(ROOT_DIR, 'public');
+  if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+  }
+  const distDir = path.join(ROOT_DIR, 'dist');
+  if (fs.existsSync(distDir)) {
+    app.use(express.static(distDir));
+  }
+
+  const isRequestSecure = (req: express.Request): boolean => {
+    return ENABLE_HTTPS || req.secure || req.headers['x-forwarded-proto'] === 'https';
+  };
 
   // --- Auth Endpoints ---
   app.get('/api/auth/status', (req, res) => {
@@ -50,24 +98,36 @@ export function createApp(vaultService: VaultService) {
     res.json({
       authenticated,
       authRequired,
-      https: ENABLE_HTTPS || req.secure || req.headers['x-forwarded-proto'] === 'https',
+      https: isRequestSecure(req),
       vaultPath: vaultService.getVaultDir(),
     });
   });
 
   app.post('/api/auth/login', (req, res) => {
+    const ip = rateLimiter.getClientIp(req);
+    const check = rateLimiter.checkLoginAllowed(ip);
+    if (!check.allowed) {
+      if (check.retryAfterSeconds) {
+        res.setHeader('Retry-After', String(check.retryAfterSeconds));
+      }
+      res.status(429).json({ error: 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.' });
+      return;
+    }
+
     const { password } = req.body as { password?: string };
 
     if (!configService.verifyPassword(password || '')) {
+      rateLimiter.recordLoginFailure(ip);
       res.status(401).json({ error: 'Ungültiges Passwort.' });
       return;
     }
 
+    rateLimiter.recordLoginSuccess(ip);
     const token = createSessionToken();
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: ENABLE_HTTPS,
+      secure: isRequestSecure(req),
       maxAge: 1000 * 60 * 60 * 24 * 30,
     });
 
@@ -77,14 +137,21 @@ export function createApp(vaultService: VaultService) {
     });
   });
 
-  app.post('/api/auth/logout', (_req, res) => {
+  app.post('/api/auth/logout', (req, res) => {
+    const { revokeAll } = req.body as { revokeAll?: boolean };
+    if (revokeAll) {
+      configService.revokeAllSessions();
+    }
     res.clearCookie(COOKIE_NAME);
-    res.json({ authenticated: false });
+    res.json({ authenticated: false, revokedAll: Boolean(revokeAll) });
   });
 
   // --- Security Settings Endpoints ---
   app.get('/api/settings/security', requireAuth, (_req, res) => {
-    res.json({ authEnabled: configService.isAuthRequired() });
+    res.json({
+      authEnabled: configService.isAuthRequired(),
+      forceAuth: configService.isForceAuthActive(),
+    });
   });
 
   app.post('/api/settings/security', requireAuth, (req, res) => {
@@ -104,15 +171,15 @@ export function createApp(vaultService: VaultService) {
 
       configService.updateSecurity(authEnabled, newPassword);
       const token = createSessionToken();
-      if (authEnabled) {
+      if (configService.isAuthRequired()) {
         res.cookie(COOKIE_NAME, token, {
           httpOnly: true,
           sameSite: 'lax',
-          secure: ENABLE_HTTPS,
+          secure: isRequestSecure(req),
           maxAge: 1000 * 60 * 60 * 24 * 30,
         });
       }
-      res.json({ ok: true, authEnabled, token });
+      res.json({ ok: true, authEnabled: configService.isAuthRequired(), token });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }
@@ -142,12 +209,12 @@ export function createApp(vaultService: VaultService) {
     }
   });
 
-  // --- Protected Vault API Endpoints ---
+  // --- Vault Endpoints ---
   app.get('/api/vault/tree', requireAuth, (_req, res) => {
     try {
       const tree = vaultService.getFileTree();
-      const files = vaultService.listAllFiles();
-      res.json({ tree, files, vaultPath: vaultService.getVaultDir() });
+      const files = vaultService.getAllFiles();
+      res.json({ tree, files });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -155,12 +222,12 @@ export function createApp(vaultService: VaultService) {
 
   app.get('/api/vault/note', requireAuth, (req, res) => {
     try {
-      const relPath = String(req.query.path || '');
-      if (!relPath) {
+      const notePath = String(req.query.path || '');
+      if (!notePath) {
         res.status(400).json({ error: 'Pfad fehlt.' });
         return;
       }
-      const note = vaultService.getNote(relPath);
+      const note = vaultService.getNote(notePath);
       res.json(note);
     } catch (err) {
       res.status(404).json({ error: (err as Error).message });
@@ -169,67 +236,78 @@ export function createApp(vaultService: VaultService) {
 
   app.post('/api/vault/note', requireAuth, (req, res) => {
     try {
-      const { path: relPath, rawContent, body, properties, baseMtime, forceOverwrite } = req.body;
-      if (!relPath || typeof relPath !== 'string') {
+      const { path: notePath, content, properties, body, baseMtime, forceOverwrite } = req.body as {
+        path?: string;
+        content?: string;
+        properties?: any[];
+        body?: string;
+        baseMtime?: number;
+        forceOverwrite?: boolean;
+      };
+      if (!notePath) {
         res.status(400).json({ error: 'Pfad fehlt.' });
         return;
       }
-      const saved = vaultService.saveNote(relPath, {
-        rawContent,
-        body,
-        properties,
-        baseMtime,
-        forceOverwrite,
-      });
-      res.json(saved);
-    } catch (err: any) {
-      if (err.statusCode === 409) {
-        res.status(409).json({ error: 'Conflict', serverNote: err.serverNote });
-        return;
+
+      // Conflict detection for offline sync
+      if (!forceOverwrite && typeof baseMtime === 'number') {
+        const existing = vaultService.getNoteOrNull(notePath);
+        if (existing && Math.abs(existing.updatedAt - baseMtime) > 50) {
+          res.status(409).json({
+            error: 'Conflict',
+            message: 'Die Notiz wurde zwischenzeitlich auf dem Server geändert.',
+            serverNote: existing,
+          });
+          return;
+        }
       }
-      res.status(400).json({ error: (err as Error).message });
+
+      const note = vaultService.saveNote(notePath, { content, properties, body });
+      res.json(note);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 
-  app.post('/api/vault/folder', requireAuth, (req, res) => {
+  app.delete('/api/vault/file', requireAuth, (req, res) => {
     try {
-      const { path: relPath } = req.body;
-      if (!relPath || typeof relPath !== 'string') {
-        res.status(400).json({ error: 'Ordnerpfad fehlt.' });
+      const filePath = String(req.query.path || '');
+      if (!filePath) {
+        res.status(400).json({ error: 'Pfad fehlt.' });
         return;
       }
-      vaultService.createFolder(relPath);
-      res.json({ ok: true, path: relPath });
+      vaultService.deleteFile(filePath);
+      res.json({ ok: true, path: filePath });
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 
   app.post('/api/vault/rename', requireAuth, (req, res) => {
     try {
-      const { oldPath, newPath } = req.body;
+      const { oldPath, newPath } = req.body as { oldPath?: string; newPath?: string };
       if (!oldPath || !newPath) {
-        res.status(400).json({ error: 'Alter und neuer Pfad erforderlich.' });
+        res.status(400).json({ error: 'oldPath und newPath sind erforderlich.' });
         return;
       }
-      const result = vaultService.renameOrMove(oldPath, newPath);
+      const result = vaultService.renameFile(oldPath, newPath);
       res.json(result);
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 
-  app.delete('/api/vault/entry', requireAuth, (req, res) => {
+  app.post('/api/vault/folder', requireAuth, (req, res) => {
     try {
-      const relPath = String(req.query.path || '');
-      if (!relPath) {
+      const { path: folderPath } = req.body as { path?: string };
+      if (!folderPath) {
         res.status(400).json({ error: 'Pfad fehlt.' });
         return;
       }
-      vaultService.deleteEntry(relPath);
-      res.json({ ok: true });
+      vaultService.createFolder(folderPath);
+      res.json({ ok: true, path: folderPath });
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      res.status(500).json({ error: (err as Error).message });
     }
   });
 
@@ -244,8 +322,13 @@ export function createApp(vaultService: VaultService) {
 
   app.get('/api/vault/backlinks', requireAuth, (req, res) => {
     try {
-      const relPath = String(req.query.path || '');
-      res.json(vaultService.getBacklinks(relPath));
+      const targetPath = String(req.query.path || '');
+      if (!targetPath) {
+        res.status(400).json({ error: 'path Query-Parameter fehlt.' });
+        return;
+      }
+      const backlinks = vaultService.getBacklinks(targetPath);
+      res.json(backlinks);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -262,10 +345,14 @@ export function createApp(vaultService: VaultService) {
     }
   });
 
-  app.get('/api/vault/resolve', requireAuth, (req, res) => {
+  app.get('/api/vault/resolve-wiki', requireAuth, (req, res) => {
     try {
       const target = String(req.query.target || '');
       const from = req.query.from ? String(req.query.from) : undefined;
+      if (!target) {
+        res.status(400).json({ error: 'target fehlt.' });
+        return;
+      }
       const resolved = vaultService.resolveWikiTarget(target, from);
       res.json({ target, resolvedPath: resolved });
     } catch (err) {
@@ -284,6 +371,22 @@ export function createApp(vaultService: VaultService) {
       }
       const resolvedRel = vaultService.resolveWikiTarget(target, from) || target;
       const absPath = vaultService.resolveSafePath(resolvedRel);
+      const ext = path.extname(absPath).toLowerCase();
+
+      const safeInlineTypes = new Set([
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico',
+        '.pdf',
+        '.mp3', '.ogg', '.wav', '.m4a',
+        '.mp4', '.webm', '.ogv',
+      ]);
+
+      if (ext === '.svg') {
+        res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+      } else if (!safeInlineTypes.has(ext)) {
+        res.setHeader('Content-Security-Policy', 'sandbox');
+        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(absPath)}"`);
+      }
+
       res.sendFile(
         absPath,
         {
@@ -306,8 +409,8 @@ export function createApp(vaultService: VaultService) {
   // Binary file uploads (e.g. pasted or dropped images)
   const upload = multer({
     storage: multer.diskStorage({
-      destination: (req, _file, cb) => {
-        const folder = String(req.query.folder || 'attachments');
+      destination: (_req, _file, cb) => {
+        const folder = String(_req.query.folder || 'attachments');
         const absFolder = vaultService.resolveSafePath(folder);
         fs.mkdirSync(absFolder, { recursive: true });
         cb(null, absFolder);
@@ -327,7 +430,7 @@ export function createApp(vaultService: VaultService) {
         cb(null, `${base}-${Date.now()}${ext || '.png'}`);
       },
     }),
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
   });
 
   app.post(
@@ -353,10 +456,8 @@ export function createApp(vaultService: VaultService) {
     }
   );
 
-  // Serve built static frontend in production
-  const distDir = path.join(ROOT_DIR, 'dist');
+  // Fallback to SPA index.html for client-side routing in production
   if (fs.existsSync(distDir)) {
-    app.use(express.static(distDir));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/ws')) {
         next();
@@ -385,6 +486,8 @@ if (process.env.NODE_ENV !== 'test') {
     );
   } else {
     server = http.createServer(app);
+    protocolLabel = 'http';
+    console.log(`🌐 HTTP Modus aktiv (TLS wird extern / via Reverse Proxy terminiert)`);
   }
 
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -396,7 +499,7 @@ if (process.env.NODE_ENV !== 'test') {
     const cookieMatch = cookieHeader
       .split(';')
       .map((c) => c.trim())
-      .find((c) => c.startsWith(`${COOKIE_NAME}=`) || c.startsWith('obsidian_vault_session='));
+      .find((c) => c.startsWith(`${COOKIE_NAME}=`) || c.startsWith('basalt_session=') || c.startsWith('obsidian_vault_session='));
     const cookieToken = cookieMatch ? decodeURIComponent(cookieMatch.split('=')[1]) : null;
 
     if (!verifySessionToken(queryToken || cookieToken)) {
