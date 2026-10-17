@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE_NAME="codeberg.org/waring/knowmesh:latest"
-
-echo "=========================================================="
-echo "🚀 Building Knowmesh Docker Image: ${IMAGE_NAME}"
-echo "=========================================================="
-
-# Ensure script is run from project root
 cd "$(dirname "$0")/.."
 
-# Build Docker Image
-docker build -t "${IMAGE_NAME}" .
+VERSION=$(node -p "require('./package.json').version")
+IMAGE_BASE="codeberg.org/waring/knowmesh"
+IMAGE_LATEST="${IMAGE_BASE}:latest"
+IMAGE_VERSION="${IMAGE_BASE}:v${VERSION}"
 
 echo "=========================================================="
-echo "📦 Pushing Docker Image to Codeberg Container Registry"
+echo "🚀 Building Knowmesh Docker Image: ${IMAGE_LATEST} & ${IMAGE_VERSION}"
 echo "=========================================================="
-docker push "${IMAGE_NAME}"
+
+docker build -t "${IMAGE_LATEST}" -t "${IMAGE_VERSION}" .
 
 echo "=========================================================="
-echo "✅ Successfully published ${IMAGE_NAME}"
+echo "📦 Pushing Docker Images to Codeberg Package Registry"
+echo "=========================================================="
+docker push "${IMAGE_LATEST}"
+docker push "${IMAGE_VERSION}"
+
+echo "=========================================================="
+echo "✅ Successfully published package:"
+echo "   - ${IMAGE_LATEST}"
+echo "   - ${IMAGE_VERSION}"
 echo "=========================================================="
