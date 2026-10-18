@@ -21,7 +21,7 @@ RUN npm run build
 # ==============================================================================
 FROM node:22-alpine AS runner
 
-RUN apk add --no-cache openssl wget
+RUN apk add --no-cache openssl wget git
 
 WORKDIR /app
 

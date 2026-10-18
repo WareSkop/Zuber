@@ -419,7 +419,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     if (this.watcher) return;
 
     this.watcher = chokidar.watch(this.vaultDir, {
-      ignored: /(^|[/\\])\../, // ignore hidden dot files/folders (.obsidian, .git, etc.)
+      ignored: [/(^|[/\\])\../, /(^|[/\\])\.git([/\\]|$)/], // ignore hidden dot files/folders (.git, .obsidian, etc.)
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: {
@@ -430,7 +430,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
 
     const handle = (event: string, fullPath: string) => {
       const relPath = this.toRelativePath(fullPath);
-      if (!relPath || relPath.startsWith('..')) return;
+      if (!relPath || relPath.startsWith('..') || relPath.startsWith('.git') || relPath.includes('/.git')) return;
       let structural = false;
       switch (event) {
         case 'add':

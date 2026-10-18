@@ -2,6 +2,9 @@ import type {
   BacklinkItem,
   FileTreeNode,
   FrontmatterProperty,
+  GitConfig,
+  GitRemoteConfig,
+  GitStatusInfo,
   GraphData,
   NoteData,
   SecuritySettingsResponse,
@@ -509,5 +512,40 @@ export const api = {
       ...res,
       wikiEmbed: res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`),
     };
+  },
+
+  getGitStatus(): Promise<GitStatusInfo> {
+    return apiFetch('/api/vault/git/status');
+  },
+
+  getGitConfig(): Promise<GitConfig> {
+    return apiFetch('/api/vault/git/config');
+  },
+
+  saveGitConfig(config: Partial<GitConfig>): Promise<GitConfig> {
+    return apiFetch('/api/vault/git/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
+
+  commitGit(payload?: { reason?: string }): Promise<{ committed: boolean; commitHash?: string; message?: string }> {
+    return apiFetch('/api/vault/git/commit', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
+  testGitRemote(remote?: Partial<GitRemoteConfig>): Promise<{ success: boolean; message: string }> {
+    return apiFetch('/api/vault/git/test-remote', {
+      method: 'POST',
+      body: JSON.stringify({ remote }),
+    });
+  },
+
+  pushGit(): Promise<{ success: boolean; message: string }> {
+    return apiFetch('/api/vault/git/push', {
+      method: 'POST',
+    });
   },
 };

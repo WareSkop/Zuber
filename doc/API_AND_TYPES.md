@@ -136,6 +136,42 @@ export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+
+export interface GitRemoteConfig {
+  enabled: boolean;
+  url: string;
+  username: string;
+  token?: string;       // In Client-Responses maskiert oder ausgelassen
+  hasToken?: boolean;
+  branch: string;       // Default: 'main'
+  lastPushTime?: number | null;
+  lastPushError?: string | null;
+}
+
+export interface GitConfig {
+  enabled: boolean;
+  userName: string;
+  userEmail: string;
+  autoCommitOnClose: boolean;
+  remote: GitRemoteConfig;
+}
+
+export interface GitStatusInfo {
+  isRepo: boolean;
+  enabled: boolean;
+  clean: boolean;
+  modifiedCount: number;
+  untrackedCount: number;
+  lastCommit?: {
+    hash: string;
+    message: string;
+    date: string;
+    author: string;
+  } | null;
+  remoteConfigured: boolean;
+  lastPushTime?: number | null;
+  lastPushError?: string | null;
+}
 ```
 
 ---
@@ -183,6 +219,17 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/vault/attachment` | Streamt eine Datei aus dem Vault. Unterstützt direkte Pfade, URL-kodierte Pfade (`%20`), ordnerrelative Pfade (wenn `from` angegeben ist) und Wiki-Embed-Kurznamen (`![[bild.png]]`). | Query: `?path=...&from=Quell/Notiz.md` | Binärer Datei-Stream (`res.sendFile`) mit `Cache-Control: private, max-age=3600` und `ETag` |
 | `POST` | `/api/vault/upload` | Lädt eine neue Binärdatei per `multipart/form-data` (Feldname `file`) in den angegebenen Zielordner hoch (bei Namenskonflikt wird `name-<timestamp>.ext` erzeugt). Erkennt Dateitypen auch bei Clipboard-Blobs ohne Dateiendung automatisch und liefert den fertigen Wiki-Embed-Tag (`![[attachments/...]]`) zurück. | Query: `?folder=attachments`<br>Form-Data: `file` | `UploadResponse` (`{ ok: boolean, path: string, name: string, originalName: string, size: number, wikiEmbed: string }`) |
+
+### 2.5 Git-Versionierung & Remote-Backup
+
+| Methode | Pfad | Beschreibung | Parameter / Body | Response (`200 OK`) |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/vault/git/status` | Liefert den aktuellen Git-Status des Vaults (Repo vorhanden, sauber, modified/untracked, letzter Commit, Push-Status). | — | `GitStatusInfo` |
+| `GET` | `/api/vault/git/config` | Liefert die gespeicherte Git-Konfiguration (Token maskiert/ausgelassen). | — | `GitConfig` |
+| `POST` | `/api/vault/git/config` | Speichert die Git-Einstellungen (Name, E-Mail, Auto-Commit, Remote HTTPS URL, Token, Branch). Leere Token-Eingabe belässt bestehenden Token. | Body: `Partial<GitConfig>` | Maskierte `GitConfig` |
+| `POST` | `/api/vault/git/commit` | Erstellt manuell oder automatisiert einen Git-Commit aller Änderungen. | Body: `{ reason?: string }` | `{ committed: boolean, commitHash?: string, message?: string }` |
+| `POST` | `/api/vault/git/test-remote` | Prüft die Remote-Verbindung via `git ls-remote` ohne Speichern. Credentials werden bei Fehlern maskiert. | Body: `{ remote?: Partial<GitRemoteConfig> }` | `{ success: boolean, message: string }` |
+| `POST` | `/api/vault/git/push` | Führt einen Pre-Push Auto-Commit durch und pusht auf den konfigurierten Remote-Branch. | — | `{ success: boolean, message: string }` |
 
 ---
 

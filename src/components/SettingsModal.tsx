@@ -16,6 +16,10 @@ import {
   FileText,
   Globe,
   Info,
+  GitBranch,
+  Eye,
+  EyeOff,
+  Upload,
 } from 'lucide-react';
 import { version as appVersion } from '../../package.json';
 import {
@@ -26,7 +30,7 @@ import {
   setActiveProfile,
 } from '../api';
 import { syncEngine, type SyncState } from '../sync/syncEngine';
-import type { FileTreeNode, VaultProfile } from '../../shared/types';
+import type { FileTreeNode, VaultProfile, GitConfig, GitRemoteConfig, GitStatusInfo } from '../../shared/types';
 import { useTranslation, type SupportedLanguage } from '../i18n';
 import {
   getStartupConfig,
@@ -45,7 +49,7 @@ interface SettingsModalProps {
   isInstalledApp?: boolean;
 }
 
-type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync';
+type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -91,6 +95,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [syncedFolders, setSyncedFolders] = useState<string[]>(['attachments']);
   const [syncInProgress, setSyncInProgress] = useState(false);
 
+  // Git state
+  const [gitConfig, setGitConfig] = useState<GitConfig>({
+    enabled: false,
+    userName: 'Knowmesh Server',
+    userEmail: 'knowmesh@local',
+    autoCommitOnClose: true,
+    remote: {
+      enabled: false,
+      url: '',
+      username: '',
+      token: '',
+      branch: 'main',
+    },
+  });
+  const [gitStatus, setGitStatus] = useState<GitStatusInfo | null>(null);
+  const [gitLoading, setGitLoading] = useState(false);
+  const [gitSaving, setGitSaving] = useState(false);
+  const [gitSaveMsg, setGitSaveMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [manualCommitMsg, setManualCommitMsg] = useState('');
+  const [manualCommitting, setManualCommitting] = useState(false);
+  const [commitFeedback, setCommitFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [testingRemote, setTestingRemote] = useState(false);
+  const [testRemoteFeedback, setTestRemoteFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [pushingGit, setPushingGit] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState<{ success: boolean; message: string } | null>(null);
+  const [showGitToken, setShowGitToken] = useState(false);
+
+  const loadGitInfo = async () => {
+    try {
+      setGitLoading(true);
+      const [cfg, status] = await Promise.all([
+        api.getGitConfig().catch(() => null),
+        api.getGitStatus().catch(() => null),
+      ]);
+      if (cfg) {
+        setGitConfig({
+          ...cfg,
+          remote: {
+            ...cfg.remote,
+            token: '',
+          },
+        });
+      }
+      if (status) {
+        setGitStatus(status);
+      }
+    } finally {
+      setGitLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -111,6 +166,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     syncEngine.getStats().then(setStats);
     syncEngine.getSyncedFolders().then(setSyncedFolders);
     const unsub = syncEngine.subscribe(setSyncState);
+
+    // Load Git configuration & status
+    loadGitInfo();
+
     return () => unsub();
   }, [isOpen]);
 
@@ -319,6 +378,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleSaveGitConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGitSaving(true);
+    setGitSaveMsg(null);
+    try {
+      const payload: Partial<GitConfig> = {
+        enabled: gitConfig.enabled,
+        userName: gitConfig.userName.trim(),
+        userEmail: gitConfig.userEmail.trim(),
+        autoCommitOnClose: gitConfig.autoCommitOnClose,
+        remote: {
+          enabled: gitConfig.remote.enabled,
+          url: gitConfig.remote.url.trim(),
+          username: gitConfig.remote.username.trim(),
+          branch: gitConfig.remote.branch.trim() || 'main',
+          ...(gitConfig.remote.token && gitConfig.remote.token.trim().length > 0
+            ? { token: gitConfig.remote.token.trim() }
+            : {}),
+        },
+      };
+      const updated = await api.saveGitConfig(payload);
+      setGitConfig({
+        ...updated,
+        remote: {
+          ...updated.remote,
+          token: '',
+        },
+      });
+      setGitSaveMsg({ type: 'ok', text: t('settings.gitConfigSaved') });
+      const newStatus = await api.getGitStatus().catch(() => null);
+      if (newStatus) setGitStatus(newStatus);
+    } catch (err: unknown) {
+      setGitSaveMsg({ type: 'err', text: (err as Error).message || 'Fehler beim Speichern der Git-Konfiguration' });
+    } finally {
+      setGitSaving(false);
+    }
+  };
+
+  const handleManualCommit = async () => {
+    setManualCommitting(true);
+    setCommitFeedback(null);
+    try {
+      const res = await api.commitGit({ reason: manualCommitMsg.trim() || undefined });
+      if (res.committed) {
+        setCommitFeedback({
+          type: 'ok',
+          text: t('settings.gitCommitSuccess', { hash: res.commitHash || 'HEAD' }),
+        });
+        setManualCommitMsg('');
+      } else {
+        setCommitFeedback({
+          type: 'err',
+          text: res.message || t('settings.gitNoChanges'),
+        });
+      }
+      const newStatus = await api.getGitStatus().catch(() => null);
+      if (newStatus) setGitStatus(newStatus);
+    } catch (err: unknown) {
+      setCommitFeedback({ type: 'err', text: (err as Error).message || 'Fehler beim Erstellen des Commits' });
+    } finally {
+      setManualCommitting(false);
+    }
+  };
+
+  const handleTestRemote = async () => {
+    setTestingRemote(true);
+    setTestRemoteFeedback(null);
+    try {
+      const remoteToTest: Partial<GitRemoteConfig> = {
+        url: gitConfig.remote.url.trim(),
+        username: gitConfig.remote.username.trim(),
+        token: gitConfig.remote.token?.trim() || undefined,
+        branch: gitConfig.remote.branch.trim() || 'main',
+      };
+      const res = await api.testGitRemote(remoteToTest);
+      setTestRemoteFeedback(res);
+    } catch (err: unknown) {
+      setTestRemoteFeedback({ success: false, message: (err as Error).message || 'Test fehlgeschlagen' });
+    } finally {
+      setTestingRemote(false);
+    }
+  };
+
+  const handlePush = async () => {
+    setPushingGit(true);
+    setPushFeedback(null);
+    try {
+      const res = await api.pushGit();
+      setPushFeedback(res);
+      const newStatus = await api.getGitStatus().catch(() => null);
+      if (newStatus) setGitStatus(newStatus);
+    } catch (err: unknown) {
+      setPushFeedback({ success: false, message: (err as Error).message || 'Push fehlgeschlagen' });
+    } finally {
+      setPushingGit(false);
+    }
+  };
+
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
       <div className="settings-modal-container settings-modal" onClick={(e) => e.stopPropagation()}>
@@ -377,6 +534,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <CloudDownload size={16} />
               <span>{t('settings.tabSync')}</span>
             </button>
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'git' ? 'active' : ''}`}
+              onClick={() => setActiveTab('git')}
+            >
+              <GitBranch size={16} />
+              <span>{t('settings.tabGit')}</span>
+            </button>
           </div>
 
           <div className="settings-nav-version">
@@ -394,6 +559,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {activeTab === 'security' && t('settings.securityTitle')}
               {activeTab === 'servers' && t('settings.serversTitle')}
               {activeTab === 'sync' && t('settings.syncTitle')}
+              {activeTab === 'git' && t('settings.gitTitle')}
             </h3>
             <button
               type="button"
@@ -915,6 +1081,303 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 6: Git & Remote Backup */}
+          {activeTab === 'git' && (
+            <div className="settings-section">
+              <p className="settings-desc">{t('settings.gitDesc')}</p>
+
+              <form onSubmit={handleSaveGitConfig} className="git-settings-form">
+                {/* 1. Local Git Settings */}
+                <div className="settings-subsection">
+                  <h4 className="settings-subsection-title">{t('settings.gitLocalHeading')}</h4>
+                  <p className="settings-subdesc" style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    {t('settings.gitEnabledDesc')}
+                  </p>
+
+                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '14px' }}>
+                    <input
+                      type="checkbox"
+                      checked={gitConfig.enabled}
+                      onChange={(e) => setGitConfig({ ...gitConfig, enabled: e.target.checked })}
+                    />
+                    <strong>{t('settings.gitEnabled')}</strong>
+                  </label>
+
+                  {gitConfig.enabled && (
+                    <>
+                      <div className="form-group-row" style={{ marginBottom: '12px' }}>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>{t('settings.gitUserName')}</label>
+                          <input
+                            type="text"
+                            value={gitConfig.userName}
+                            onChange={(e) => setGitConfig({ ...gitConfig, userName: e.target.value })}
+                            placeholder="Knowmesh User"
+                            required
+                          />
+                        </div>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>{t('settings.gitUserEmail')}</label>
+                          <input
+                            type="email"
+                            value={gitConfig.userEmail}
+                            onChange={(e) => setGitConfig({ ...gitConfig, userEmail: e.target.value })}
+                            placeholder="user@local"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '16px' }}>
+                        <input
+                          type="checkbox"
+                          checked={gitConfig.autoCommitOnClose}
+                          onChange={(e) => setGitConfig({ ...gitConfig, autoCommitOnClose: e.target.checked })}
+                        />
+                        <span>{t('settings.gitAutoCommitClose')}</span>
+                      </label>
+
+                      {/* Repository Status Card */}
+                      <div className="git-status-card">
+                        <div className="git-status-header">
+                          <strong>{t('settings.gitRepoStatus')}</strong>
+                          <span className={`status-pill ${gitStatus?.isRepo ? 'status-ok' : 'status-warn'}`}>
+                            {gitStatus?.isRepo ? t('settings.gitRepoInitialized') : t('settings.gitRepoNotInitialized')}
+                          </span>
+                        </div>
+
+                        {gitStatus && (
+                          <div className="git-status-details">
+                            <div className="git-status-row">
+                              <span className="stat-label">Working Tree:</span>
+                              <strong className={gitStatus.clean ? 'text-success' : 'text-warning'}>
+                                {gitStatus.clean
+                                  ? t('settings.gitWorkingTreeClean')
+                                  : t('settings.gitUncommittedChanges', { count: gitStatus.modifiedCount }) +
+                                    (gitStatus.untrackedCount > 0 ? `, ${t('settings.gitUntrackedFiles', { count: gitStatus.untrackedCount })}` : '')}
+                              </strong>
+                            </div>
+
+                            {gitStatus.lastCommit && (
+                              <div className="git-commit-info">
+                                <span className="stat-label">{t('settings.gitLastCommit')}:</span>
+                                <code className="git-hash">{gitStatus.lastCommit.hash}</code>
+                                <span className="git-commit-msg">"{gitStatus.lastCommit.message}"</span>
+                                <span className="git-commit-meta">({gitStatus.lastCommit.author}, {gitStatus.lastCommit.date})</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Manual Commit Action */}
+                        <div className="git-commit-action-row" style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                          <input
+                            type="text"
+                            placeholder={t('settings.gitCommitMessagePlaceholder')}
+                            value={manualCommitMsg}
+                            onChange={(e) => setManualCommitMsg(e.target.value)}
+                            style={{ flex: 1, padding: '7px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-secondary btn-sm"
+                            onClick={handleManualCommit}
+                            disabled={manualCommitting}
+                          >
+                            <Check size={14} />
+                            <span>{manualCommitting ? t('common.loading') : t('settings.gitCommitNow')}</span>
+                          </button>
+                        </div>
+
+                        {commitFeedback && (
+                          <div className={`form-status-banner ${commitFeedback.type}`} style={{ marginTop: '8px' }}>
+                            {commitFeedback.type === 'ok' ? <Check size={14} /> : <AlertCircle size={14} />}
+                            <span>{commitFeedback.text}</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* 2. Remote HTTPS Backup */}
+                <div className="settings-subsection" style={{ marginTop: '24px', paddingTop: '18px', borderTop: '1px solid var(--border-subtle)' }}>
+                  <h4 className="settings-subsection-title">{t('settings.gitRemoteHeading')}</h4>
+
+                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '14px' }}>
+                    <input
+                      type="checkbox"
+                      checked={gitConfig.remote.enabled}
+                      onChange={(e) =>
+                        setGitConfig({
+                          ...gitConfig,
+                          remote: { ...gitConfig.remote, enabled: e.target.checked },
+                        })
+                      }
+                    />
+                    <strong>{t('settings.gitRemoteEnabled')}</strong>
+                  </label>
+
+                  {gitConfig.remote.enabled && (
+                    <div className="git-remote-fields" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div className="form-group">
+                        <label>{t('settings.gitRemoteUrl')}</label>
+                        <input
+                          type="url"
+                          value={gitConfig.remote.url}
+                          onChange={(e) =>
+                            setGitConfig({
+                              ...gitConfig,
+                              remote: { ...gitConfig.remote, url: e.target.value },
+                            })
+                          }
+                          placeholder={t('settings.gitRemoteUrlPlaceholder')}
+                          required={gitConfig.remote.enabled}
+                        />
+                      </div>
+
+                      <div className="form-group-row">
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>{t('settings.gitRemoteUsername')}</label>
+                          <input
+                            type="text"
+                            value={gitConfig.remote.username}
+                            onChange={(e) =>
+                              setGitConfig({
+                                ...gitConfig,
+                                remote: { ...gitConfig.remote, username: e.target.value },
+                              })
+                            }
+                            placeholder="z. B. ingo oder git"
+                          />
+                        </div>
+
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>{t('settings.gitRemoteBranch')}</label>
+                          <input
+                            type="text"
+                            value={gitConfig.remote.branch}
+                            onChange={(e) =>
+                              setGitConfig({
+                                ...gitConfig,
+                                remote: { ...gitConfig.remote, branch: e.target.value },
+                              })
+                            }
+                            placeholder="main"
+                            required={gitConfig.remote.enabled}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group">
+                        <label>{t('settings.gitRemoteToken')}</label>
+                        <div className="input-with-button" style={{ display: 'flex', gap: '6px' }}>
+                          <input
+                            type={showGitToken ? 'text' : 'password'}
+                            value={gitConfig.remote.token || ''}
+                            onChange={(e) =>
+                              setGitConfig({
+                                ...gitConfig,
+                                remote: { ...gitConfig.remote, token: e.target.value },
+                              })
+                            }
+                            placeholder={
+                              gitConfig.remote.hasToken
+                                ? t('settings.gitRemoteTokenSaved')
+                                : t('settings.gitRemoteTokenPlaceholder')
+                            }
+                            style={{ flex: 1 }}
+                          />
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            onClick={() => setShowGitToken(!showGitToken)}
+                            title={showGitToken ? 'Token verbergen' : 'Token anzeigen'}
+                            style={{ padding: '6px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                          >
+                            {showGitToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                        {gitConfig.remote.hasToken && (
+                          <span className="form-hint" style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                            ✓ {t('settings.gitRemoteTokenSaved')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Test Connection and Push buttons */}
+                      <div className="git-remote-actions" style={{ display: 'flex', gap: '10px', marginTop: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={handleTestRemote}
+                          disabled={testingRemote || !gitConfig.remote.url}
+                        >
+                          <RefreshCw size={14} className={testingRemote ? 'spin' : ''} />
+                          <span>{testingRemote ? t('settings.gitTesting') : t('settings.gitTestConnection')}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={handlePush}
+                          disabled={pushingGit || !gitConfig.remote.url}
+                        >
+                          <Upload size={14} className={pushingGit ? 'spin' : ''} />
+                          <span>{pushingGit ? t('settings.gitPushing') : t('settings.gitPushNow')}</span>
+                        </button>
+                      </div>
+
+                      {testRemoteFeedback && (
+                        <div
+                          className={`form-status-banner ${testRemoteFeedback.success ? 'ok' : 'err'}`}
+                          style={{ marginTop: '8px' }}
+                        >
+                          {testRemoteFeedback.success ? <Check size={14} /> : <AlertCircle size={14} />}
+                          <span>{testRemoteFeedback.message}</span>
+                        </div>
+                      )}
+
+                      {pushFeedback && (
+                        <div
+                          className={`form-status-banner ${pushFeedback.success ? 'ok' : 'err'}`}
+                          style={{ marginTop: '8px' }}
+                        >
+                          {pushFeedback.success ? <Check size={14} /> : <AlertCircle size={14} />}
+                          <span>{pushFeedback.message}</span>
+                        </div>
+                      )}
+
+                      {gitStatus?.lastPushTime && (
+                        <div className="git-last-push-info" style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                          {t('settings.gitLastPush')}: {new Date(gitStatus.lastPushTime).toLocaleString()}
+                          {gitStatus.lastPushError && (
+                            <span style={{ color: 'var(--obsidian-red)', display: 'block', marginTop: '2px' }}>
+                              Fehler: {gitStatus.lastPushError}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {gitSaveMsg && (
+                  <div className={`form-status-banner ${gitSaveMsg.type}`} style={{ marginTop: '16px' }}>
+                    {gitSaveMsg.type === 'ok' ? <Check size={16} /> : <AlertCircle size={16} />}
+                    <span>{gitSaveMsg.text}</span>
+                  </div>
+                )}
+
+                <div style={{ marginTop: '20px' }}>
+                  <button type="submit" className="btn-primary" disabled={gitSaving}>
+                    {gitSaving ? t('common.loading') : t('settings.gitSaveConfig')}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
         </main>

@@ -20,6 +20,7 @@ import { configService } from './configService';
 import { rateLimiter } from './rateLimiter';
 import { ensureTlsCredentials, getLocalIpAddresses } from './tls';
 import { VaultService } from './vaultService';
+import { GitService } from './gitService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +32,8 @@ const TRUST_PROXY = (process.env.TRUST_PROXY ?? 'true').toLowerCase() !== 'false
 const VAULT_PATH = path.resolve(ROOT_DIR, process.env.VAULT_DIR || process.env.VAULT_PATH || './vault');
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 100);
 
-export function createApp(vaultService: VaultService) {
+export function createApp(vaultService: VaultService, gitService?: GitService) {
+  const actualGitService = gitService || new GitService(vaultService.getVaultDir(), configService);
   const app = express();
 
   if (TRUST_PROXY) {
@@ -479,6 +481,63 @@ export function createApp(vaultService: VaultService) {
     }
   );
 
+  // --- Git & Remote Backup Endpoints ---
+  app.get('/api/vault/git/status', requireAuth, async (_req, res) => {
+    try {
+      const status = await actualGitService.getStatus();
+      res.json(status);
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || 'Fehler beim Abrufen des Git-Status' });
+    }
+  });
+
+  app.get('/api/vault/git/config', requireAuth, (_req, res) => {
+    res.json(configService.getMaskedGitConfig());
+  });
+
+  app.post('/api/vault/git/config', requireAuth, async (req, res) => {
+    try {
+      const updated = configService.updateGitConfig(req.body || {});
+      await actualGitService.syncConfig();
+      res.json(updated);
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || 'Fehler beim Speichern der Git-Konfiguration' });
+    }
+  });
+
+  app.post('/api/vault/git/commit', requireAuth, async (req, res) => {
+    try {
+      const result = await actualGitService.commit(req.body?.reason);
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || 'Fehler beim Erstellen des Commits' });
+    }
+  });
+
+  app.post('/api/vault/git/test-remote', requireAuth, async (req, res) => {
+    try {
+      const remote = req.body?.remote || req.body || {};
+      const fullConfig = configService.getGitConfig();
+      const remoteToTest = { ...remote };
+      if (!remoteToTest.token && fullConfig.remote.token) {
+        remoteToTest.token = fullConfig.remote.token;
+      }
+      const result = await actualGitService.testRemote(remoteToTest);
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ success: false, message: (err as Error).message || 'Verbindungstest fehlgeschlagen' });
+    }
+  });
+
+  app.post('/api/vault/git/push', requireAuth, async (_req, res) => {
+    try {
+      const result = await actualGitService.push();
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ success: false, message: (err as Error).message || 'Git-Push fehlgeschlagen' });
+    }
+  });
+
   // Fallback to SPA index.html for client-side routing in production
   if (fs.existsSync(distDir)) {
     app.get('*', (req, res, next) => {
@@ -495,7 +554,14 @@ export function createApp(vaultService: VaultService) {
 
 if (process.env.NODE_ENV !== 'test') {
   const vaultService = new VaultService(VAULT_PATH);
-  const app = createApp(vaultService);
+  const gitService = new GitService(vaultService.getVaultDir(), configService);
+
+  // Initialize repository if enabled in config
+  gitService.initIfNeeded().catch((err) => {
+    console.warn('[Knowmesh Git] Auto-init error:', err);
+  });
+
+  const app = createApp(vaultService, gitService);
 
   let server: http.Server | https.Server;
   let protocolLabel = 'http';
@@ -514,6 +580,7 @@ if (process.env.NODE_ENV !== 'test') {
   }
 
   const wss = new WebSocketServer({ server, path: '/ws' });
+  let sessionCloseTimer: NodeJS.Timeout | null = null;
 
   wss.on('connection', (ws: WebSocket, req) => {
     const url = new URL(req.url || '/ws', 'http://localhost');
@@ -530,12 +597,41 @@ if (process.env.NODE_ENV !== 'test') {
       return;
     }
 
+    if (sessionCloseTimer) {
+      clearTimeout(sessionCloseTimer);
+      sessionCloseTimer = null;
+    }
+
     ws.send(
       JSON.stringify({
         type: 'connected',
         timestamp: Date.now(),
       })
     );
+
+    ws.on('close', () => {
+      // Check if all clients disconnected; if so, trigger debounced session-close auto-commit & push
+      const hasOpenClients = Array.from(wss.clients).some((c) => c !== ws && c.readyState === WebSocket.OPEN);
+      if (!hasOpenClients) {
+        if (sessionCloseTimer) clearTimeout(sessionCloseTimer);
+        sessionCloseTimer = setTimeout(async () => {
+          const stillOpen = Array.from(wss.clients).some((c) => c.readyState === WebSocket.OPEN);
+          if (!stillOpen) {
+            const gitCfg = configService.getGitConfig();
+            if (gitCfg.enabled && gitCfg.autoCommitOnClose) {
+              try {
+                const commitRes = await gitService.commit('auto: session closed');
+                if (commitRes.committed && gitCfg.remote?.enabled && gitCfg.remote?.url) {
+                  await gitService.push();
+                }
+              } catch (err) {
+                console.warn('[Knowmesh Git] Auto-commit on session end error:', err);
+              }
+            }
+          }
+        }, 5000);
+      }
+    });
   });
 
   // Broadcast batched file watcher events to all connected WebSocket clients
@@ -562,4 +658,5 @@ if (process.env.NODE_ENV !== 'test') {
     }
     console.log(`📁 Vault-Verzeichnis: ${vaultService.getVaultDir()}`);
   });
+
 }

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import type { GitConfig, GitRemoteConfig } from '../shared/types';
 
 export interface ServerConfig {
   authEnabled: boolean;
@@ -8,9 +9,26 @@ export interface ServerConfig {
   salt: string;
   sessionEpoch: number;
   updatedAt: number;
+  git?: GitConfig;
 }
 
 const DEFAULT_CONFIG_FILE = path.resolve(process.cwd(), 'server-config.json');
+
+export const DEFAULT_GIT_CONFIG: GitConfig = {
+  enabled: false,
+  userName: 'Knowmesh Server',
+  userEmail: 'knowmesh@local',
+  autoCommitOnClose: true,
+  remote: {
+    enabled: false,
+    url: '',
+    username: '',
+    token: '',
+    branch: 'main',
+    lastPushTime: null,
+    lastPushError: null,
+  },
+};
 
 export class ConfigService {
   private configPath: string;
@@ -41,6 +59,18 @@ export class ConfigService {
           if (typeof parsed.sessionEpoch !== 'number') {
             parsed.sessionEpoch = 1;
           }
+          if (!parsed.git) {
+            parsed.git = { ...DEFAULT_GIT_CONFIG, remote: { ...DEFAULT_GIT_CONFIG.remote } };
+          } else {
+            parsed.git = {
+              ...DEFAULT_GIT_CONFIG,
+              ...parsed.git,
+              remote: {
+                ...DEFAULT_GIT_CONFIG.remote,
+                ...(parsed.git.remote || {}),
+              },
+            };
+          }
           return parsed as ServerConfig;
         }
       }
@@ -58,6 +88,7 @@ export class ConfigService {
       salt,
       sessionEpoch: 1,
       updatedAt: Date.now(),
+      git: { ...DEFAULT_GIT_CONFIG, remote: { ...DEFAULT_GIT_CONFIG.remote } },
     };
 
     try {
@@ -127,6 +158,76 @@ export class ConfigService {
 
   public revokeAllSessions(): void {
     this.config.sessionEpoch = (this.config.sessionEpoch || 1) + 1;
+    this.config.updatedAt = Date.now();
+    this.saveConfig();
+  }
+
+  public getGitConfig(): GitConfig {
+    if (!this.config.git) {
+      this.config.git = { ...DEFAULT_GIT_CONFIG, remote: { ...DEFAULT_GIT_CONFIG.remote } };
+    }
+    return {
+      ...this.config.git,
+      remote: { ...this.config.git.remote },
+    };
+  }
+
+  public getMaskedGitConfig(): GitConfig {
+    const git = this.getGitConfig();
+    const hasToken = Boolean(git.remote.token && git.remote.token.trim().length > 0);
+    return {
+      ...git,
+      remote: {
+        ...git.remote,
+        token: undefined,
+        hasToken,
+      },
+    };
+  }
+
+  public updateGitConfig(
+    newConfig: Partial<Omit<GitConfig, 'remote'>> & { remote?: Partial<GitRemoteConfig> }
+  ): GitConfig {
+    const current = this.getGitConfig();
+    const remoteInput: Partial<GitRemoteConfig> = newConfig.remote || {};
+
+    let token = current.remote.token || '';
+    if (typeof remoteInput.token === 'string') {
+      if (remoteInput.token.trim().length > 0) {
+        token = remoteInput.token.trim();
+      } else if (remoteInput.token === '') {
+        token = '';
+      }
+    }
+
+    const updatedGit: GitConfig = {
+      enabled: typeof newConfig.enabled === 'boolean' ? newConfig.enabled : current.enabled,
+      userName: typeof newConfig.userName === 'string' ? newConfig.userName.trim() : current.userName,
+      userEmail: typeof newConfig.userEmail === 'string' ? newConfig.userEmail.trim() : current.userEmail,
+      autoCommitOnClose: typeof newConfig.autoCommitOnClose === 'boolean' ? newConfig.autoCommitOnClose : current.autoCommitOnClose,
+      remote: {
+        enabled: typeof remoteInput.enabled === 'boolean' ? remoteInput.enabled : current.remote.enabled,
+        url: typeof remoteInput.url === 'string' ? remoteInput.url.trim() : current.remote.url,
+        username: typeof remoteInput.username === 'string' ? remoteInput.username.trim() : current.remote.username,
+        token,
+        branch: typeof remoteInput.branch === 'string' && remoteInput.branch.trim() ? remoteInput.branch.trim() : (current.remote.branch || 'main'),
+        lastPushTime: current.remote.lastPushTime ?? null,
+        lastPushError: current.remote.lastPushError ?? null,
+      },
+    };
+
+    this.config.git = updatedGit;
+    this.config.updatedAt = Date.now();
+    this.saveConfig();
+
+    return this.getMaskedGitConfig();
+  }
+
+  public updateGitRemotePushStatus(lastPushTime: number | null, lastPushError: string | null): void {
+    const current = this.getGitConfig();
+    current.remote.lastPushTime = lastPushTime;
+    current.remote.lastPushError = lastPushError;
+    this.config.git = current;
     this.config.updatedAt = Date.now();
     this.saveConfig();
   }

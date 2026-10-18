@@ -246,6 +246,8 @@ export const App: React.FC = () => {
   activeNoteRef.current = activeNote;
   const activePathRef = useRef<string | null>(null);
   activePathRef.current = activeNote?.path ?? null;
+  const saveStateRef = useRef(saveState);
+  saveStateRef.current = saveState;
   const workspaceViewRef = useRef<MainWorkspaceView>('editor');
   workspaceViewRef.current = workspaceView;
   const openRequestRef = useRef(0);
@@ -538,7 +540,15 @@ export const App: React.FC = () => {
 
   const openNoteByPath = useCallback(
     async (relPath: string) => {
+      const prevPath = activePathRef.current;
+      const wasDirty = saveStateRef.current === 'dirty' || Boolean(pendingSaveTaskRef.current);
       await flushPendingSave();
+
+      // Auto-commit on note switch if previous note had pending modifications
+      if (prevPath && prevPath !== relPath && wasDirty && navigator.onLine) {
+        api.commitGit({ reason: `auto: update ${prevPath}` }).catch(() => {});
+      }
+
       const requestId = ++openRequestRef.current;
       try {
         const note = await syncEngine.getNote(relPath);
@@ -855,7 +865,12 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = async () => {
+    const prevPath = activePathRef.current;
+    const wasDirty = saveStateRef.current === 'dirty' || Boolean(pendingSaveTaskRef.current);
     await flushPendingSave();
+    if (prevPath && wasDirty && navigator.onLine) {
+      api.commitGit({ reason: `auto: close ${prevPath}` }).catch(() => {});
+    }
     await api.logout();
     setAuthenticated(false);
     setActiveNote(null);

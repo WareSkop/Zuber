@@ -116,3 +116,40 @@ export interface WsEventMessage {
   path?: string;
   timestamp: number;
 }
+
+export interface GitRemoteConfig {
+  enabled: boolean;
+  url: string;
+  username: string;
+  token?: string;       // In client response only masked or omitted
+  hasToken?: boolean;
+  branch: string;       // Default: 'main'
+  lastPushTime?: number | null;
+  lastPushError?: string | null;
+}
+
+export interface GitConfig {
+  enabled: boolean;
+  userName: string;
+  userEmail: string;
+  autoCommitOnClose: boolean;
+  remote: GitRemoteConfig;
+}
+
+export interface GitStatusInfo {
+  isRepo: boolean;
+  enabled: boolean;
+  clean: boolean;
+  modifiedCount: number;
+  untrackedCount: number;
+  lastCommit?: {
+    hash: string;
+    message: string;
+    date: string;
+    author: string;
+  } | null;
+  remoteConfigured: boolean;
+  lastPushTime?: number | null;
+  lastPushError?: string | null;
+}
+

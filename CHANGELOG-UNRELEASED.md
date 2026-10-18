@@ -1,3 +1,11 @@
+### Added
+- Containerized Git versioning & automated HTTPS remote backup:
+  - Added Git integration running directly inside the Knowmesh server container (`/data/vault`).
+  - Added Git settings in UI (`SettingsModal.tsx`) with author identity (name, email), repo status (modified/untracked counts, last commit), manual commit, and remote backup configuration (Codeberg, GitHub, GitLab via HTTPS).
+  - Added secure credential handling: credentials in remote URLs and tokens are masked across logs, error messages, and frontend status responses.
+  - Added auto-commit triggers on note change/leave and upon ending web sessions (debounced WebSocket disconnect).
+  - Added automated pre-push commits and remote connection testing (`git ls-remote`).
+
 ### Changed
 - Enhanced Docker publication script to automatically tag and push both `:latest` and `:v<version>` packages to Codeberg Container Registry.
 

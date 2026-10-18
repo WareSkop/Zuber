@@ -210,3 +210,28 @@ Knowmesh verfügt über eine vollständig gehärtete Architektur für das Hostin
   - **Block Common Exploits:** Enabled
   - **SSL:** Let's Encrypt, Force SSL, HTTP/2, HSTS Enabled
 
+---
+
+## 9. Vault Git-Versionierung & Remote-Backup (`server/gitService.ts`)
+
+Knowmesh enthält eine integrierte, containerisierte Git-Engine zur Versionierung des Vaults sowie verschlüsselte Remote-Backups auf Codeberg, GitHub oder GitLab via HTTPS.
+
+### 9.1 Containerisierte Git-Laufzeit
+- Das Knowmesh Docker-Image enthält das offizielle `git`-Paket (`RUN apk add --no-cache ... git`).
+- Alle Git-Befehle werden direkt im Vault-Verzeichnis (`/data/vault` bzw. `VAULT_DIR`) ausgeführt.
+- Auf dem Host-System muss kein Git installiert oder eingerichtet sein.
+- Der Chokidar-Dateiwatcher von `VaultService` ignoriert das `.git`-Verzeichnis strikt (`/(^|[/\\])\.git([/\\]|$)/`), um Endlosschleifen bei Git-Operationen auszuschließen.
+
+### 9.2 Sequentielle Queue & Kollisionsschutz (`runExclusive`)
+- Git erzeugt bei Index-Operationen temporär eine `.git/index.lock`-Datei. Gleichzeitige Aufrufe (z. B. gleichzeitiger Auto-Commit und Status-Check) würden zu Fehlern führen.
+- `GitService` serialisiert alle Git-Operationen über eine interne Promise-Queue (`runExclusive<T>()`).
+
+### 9.3 Sichere Zugangsdaten & Maskierung (`maskCredentials`)
+- **Keine Speicherung im Remote-URL auf der Platte:** Remote-URLs werden in der Konfiguration ohne eingebettetes Passwort gespeichert. Authentifizierte URLs werden nur flüchtig zur Laufzeit im Speicher konstruiert.
+- **Client-Schutz:** Personal Access Tokens (PATs) werden über die API maskiert (`hasToken: true`, Token-Feld weggelassen).
+- **Log- & Fehlerschutz:** Alle Konsolenausgaben, Exceptions und Fehlermeldungen durchlaufen `maskCredentials`, sodass Tokens und HTTPS-Credentials niemals in Logs oder UI-Meldungen erscheinen.
+
+### 9.4 Auto-Commit & Session-Ende
+- **Notizwechsel / Verlassen:** Wenn der Benutzer eine modifizierte Notiz verlässt (`openNoteByPath` in `src/App.tsx`), wird ein Auto-Commit (`auto: update <path>`) ausgelöst.
+- **Sitzungsende:** Trennen sich alle aktiven WebSocket-Verbindungen (Browser geschlossen / Tab beendet), löst der Server nach einem 5-Sekunden-Debounce automatisch einen Commit (`auto: session closed`) und bei aktivem Remote-Backup einen Push aus.
+
