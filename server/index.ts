@@ -34,6 +34,13 @@ const TRUST_PROXY = (process.env.TRUST_PROXY ?? 'true').toLowerCase() !== 'false
 const VAULT_PATH = path.resolve(ROOT_DIR, process.env.VAULT_DIR || process.env.VAULT_PATH || './vault');
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB || 100);
 
+function hasTraversalSegments(inputPath: string): boolean {
+  if (!inputPath) return false;
+  const normalized = inputPath.replace(/\\/g, '/');
+  const segments = normalized.split('/');
+  return segments.some((segment) => segment === '..');
+}
+
 export function createApp(vaultService: VaultService, gitService?: GitService) {
   const actualGitService = gitService || new GitService(vaultService.getVaultDir(), configService);
   const app = express();
@@ -511,7 +518,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
         }
 
         const targetFolder = String(req.body.targetFolder || '').trim().replace(/\\/g, '/');
-        if (targetFolder.includes('..') || path.isAbsolute(targetFolder) || targetFolder.startsWith('/')) {
+        if (hasTraversalSegments(targetFolder) || path.isAbsolute(targetFolder) || targetFolder.startsWith('/')) {
           for (const f of files) await fs.promises.unlink(f.path).catch(() => {});
           res.status(400).json({ error: 'Ungültiger Zielordner (Path Traversal nicht erlaubt).' });
           return;
@@ -537,7 +544,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
           const file = files[i];
           const rawRel = (relativePaths[i] || file.originalname || '').replace(/\\/g, '/');
 
-          if (rawRel.includes('..') || path.isAbsolute(rawRel) || rawRel.startsWith('/')) {
+          if (hasTraversalSegments(rawRel) || path.isAbsolute(rawRel) || rawRel.startsWith('/')) {
             for (const f of files) await fs.promises.unlink(f.path).catch(() => {});
             res.status(400).json({ error: `Ungültiger Dateipfad: "${rawRel}" enthält ungültige Segmente.` });
             return;
@@ -580,7 +587,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
   app.get('/api/vault/download', requireAuth, async (req, res) => {
     try {
       const rawPath = String(req.query.path || '').trim();
-      if (rawPath.includes('..')) {
+      if (hasTraversalSegments(rawPath) || path.isAbsolute(rawPath) || rawPath.startsWith('/')) {
         res.status(400).json({ error: 'Ungültiger Pfad (Path Traversal nicht erlaubt).' });
         return;
       }

@@ -129,6 +129,32 @@ describe('Knowmesh - Upload & Download Endpoints (Multi-file, Directory structur
     expect(resC.status).toBe(400);
   });
 
+  it('2b. successfully uploads and downloads files with double dots in filename (not traversal)', async () => {
+    const specialFilename = '2 Monster-Wachstumsaktien in der Entstehung  The ..md';
+    const specialRelPath = `Notizbuch/Schnelle Notizen/${specialFilename}`;
+    const fileContent = '# Monster-Wachstumsaktien\nNotizinhalt';
+
+    const formData = new FormData();
+    formData.append('targetFolder', '');
+    formData.append('files', new Blob([fileContent], { type: 'text/markdown' }), specialFilename);
+    formData.append('paths', JSON.stringify([specialRelPath]));
+
+    const uploadRes = await fetch(`${baseUrl}/api/vault/upload-entries`, {
+      method: 'POST',
+      body: formData,
+    });
+    expect(uploadRes.status).toBe(200);
+    const uploadData = await uploadRes.json();
+    expect(uploadData.success).toBe(true);
+    expect(uploadData.paths).toContain(specialRelPath);
+
+    // Verify downloaded content
+    const downloadRes = await fetch(`${baseUrl}/api/vault/download?path=${encodeURIComponent(specialRelPath)}`);
+    expect(downloadRes.status).toBe(200);
+    const text = await downloadRes.text();
+    expect(text).toBe(fileContent);
+  });
+
   it('3. downloads a single file with correct content and headers', async () => {
     const res = await fetch(`${baseUrl}/api/vault/download?path=ImportedProject/doc1.md`);
     expect(res.status).toBe(200);
