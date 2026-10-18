@@ -352,4 +352,90 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     });
     document.body.removeChild(container);
   });
+
+  it('5. renders interactive and styled WikiLinks in CanvasShapeNode and handles clicks', () => {
+    // Verify CSS for .canvas-wikilink
+    const cssPath = path.resolve(__dirname, '../../styles.css');
+    const css = fs.readFileSync(cssPath, 'utf-8');
+    expect(css).toContain('.canvas-wikilink');
+    expect(css).toMatch(/\.canvas-wikilink[\s\S]*?cursor:\s*pointer\s*!important/);
+    expect(css).toMatch(/\.canvas-wikilink[\s\S]*?text-decoration:\s*underline\s*!important/);
+
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    const onOpenNote = vi.fn();
+    const onSelectTag = vi.fn();
+
+    const nodeProps: any = {
+      id: 'wikilink-shape-node',
+      data: {
+        rawType: 'text',
+        text: 'Hier ist ein [[Zielnotiz|Verknüpfte Notiz]] und ein #projekt-tag.',
+        shape: 'rectangle',
+      },
+      selected: false,
+      width: 280,
+      height: 120,
+    };
+
+    act(() => {
+      root.render(
+        <ReactFlowProvider>
+          <CanvasContext.Provider
+            value={{
+              onOpenNote,
+              onSelectTag,
+              allNotes: [{ path: 'Zielnotiz.md', name: 'Zielnotiz', basename: 'Zielnotiz' }],
+              readOnly: false,
+            }}
+          >
+            <CanvasShapeNode {...nodeProps} />
+          </CanvasContext.Provider>
+        </ReactFlowProvider>
+      );
+    });
+
+    // Verify rendered link
+    const linkEl = container.querySelector('.canvas-wikilink') as HTMLAnchorElement;
+    expect(linkEl).not.toBeNull();
+    expect(linkEl.tagName.toLowerCase()).toBe('a');
+    expect(linkEl.textContent).toBe('Verknüpfte Notiz');
+    expect(linkEl.getAttribute('data-wiki-target')).toBe('Zielnotiz');
+    expect(linkEl.classList.contains('nodrag')).toBe(true);
+
+    // Verify rendered tag
+    const tagEl = container.querySelector('.canvas-tag') as HTMLElement;
+    expect(tagEl).not.toBeNull();
+    expect(tagEl.textContent).toBe('#projekt-tag');
+    expect(tagEl.getAttribute('data-tag')).toBe('projekt-tag');
+    expect(tagEl.classList.contains('nodrag')).toBe(true);
+
+    // Click on WikiLink
+    act(() => {
+      linkEl.click();
+    });
+    expect(onOpenNote).toHaveBeenCalledWith('Zielnotiz');
+
+    // Click on Tag
+    act(() => {
+      tagEl.click();
+    });
+    expect(onSelectTag).toHaveBeenCalledWith('projekt-tag');
+
+    // Test mouse down stopPropagation
+    const stopPropagation = vi.fn();
+    act(() => {
+      const mouseDownEvent = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      Object.defineProperty(mouseDownEvent, 'stopPropagation', { value: stopPropagation });
+      linkEl.dispatchEvent(mouseDownEvent);
+    });
+    expect(stopPropagation).toHaveBeenCalled();
+
+    act(() => {
+      root.unmount();
+    });
+    document.body.removeChild(container);
+  });
 });

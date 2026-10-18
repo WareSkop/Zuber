@@ -45,9 +45,37 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected, width,
 
   const renderedMarkdown = React.useMemo(() => {
     if (!noteContent) return '';
-    const raw = marked.parse(noteContent, { async: false, gfm: true }) as string;
-    return DOMPurify.sanitize(raw);
+    // Transform [[Wiki-Links]] in preview
+    const processed = noteContent.replace(
+      /\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
+      (_, target, alias) => {
+        const cleanTarget = (target || '').trim();
+        const displayLabel = (alias || target || '').trim();
+        return `<a href="#" class="cm-wikilink-widget canvas-wikilink nodrag" data-wiki-target="${encodeURIComponent(
+          cleanTarget
+        )}" title="Notiz öffnen: ${cleanTarget}">${displayLabel}</a>`;
+      }
+    );
+    const raw = marked.parse(processed, { async: false, gfm: true }) as string;
+    return DOMPurify.sanitize(raw, {
+      ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-tag', 'target', 'href'],
+    });
   }, [noteContent]);
+
+  const handleMarkdownClick = (e: React.MouseEvent) => {
+    const targetEl = (e.target as HTMLElement).closest('[data-wiki-target], [data-wikilink], a');
+    if (targetEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      const target =
+        targetEl.getAttribute('data-wiki-target') ||
+        targetEl.getAttribute('data-wikilink') ||
+        targetEl.getAttribute('href');
+      if (target && target !== '#') {
+        onOpenNote(decodeURIComponent(target));
+      }
+    }
+  };
 
   const strokeColor = customColor || (selected ? 'var(--accent-color, #7852ee)' : 'var(--border-color, #444)');
 
@@ -102,6 +130,12 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected, width,
           ) : (
             <div
               className="canvas-file-markdown markdown-rendered"
+              onClick={handleMarkdownClick}
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).closest('a, [data-wiki-target], [data-wikilink]')) {
+                  e.stopPropagation();
+                }
+              }}
               dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
             />
           )

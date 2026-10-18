@@ -94,27 +94,36 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       (_, target, alias) => {
         const cleanTarget = (target || '').trim();
         const displayLabel = (alias || target || '').trim();
-        return `<span class="cm-lp-wikilink canvas-wikilink" data-wiki-target="${encodeURIComponent(
+        return `<a href="#" class="cm-wikilink-widget canvas-wikilink nodrag" data-wiki-target="${encodeURIComponent(
           cleanTarget
-        )}" title="Notiz öffnen: ${cleanTarget}">${displayLabel}</span>`;
+        )}" title="Notiz öffnen: ${cleanTarget}">${displayLabel}</a>`;
       }
     );
 
     // Transform #tags
     processed = processed.replace(
       /(^|\s)#([a-zA-ZäöüÄÖÜß0-9/_-]+)(?=$|[\s.,;:!?)\]])/gm,
-      '$1<span class="reading-tag" data-tag="$2">#$2</span>'
+      '$1<span class="reading-tag canvas-tag nodrag" data-tag="$2">#$2</span>'
     );
 
     const rawParsed = marked.parse(processed, { async: false, gfm: true }) as string;
     return DOMPurify.sanitize(rawParsed, {
-      ADD_ATTR: ['data-wiki-target', 'data-tag', 'target'],
+      ADD_ATTR: ['data-wiki-target', 'data-tag', 'target', 'href'],
     });
   }, [data.text]);
 
-  const handleDisplayClick = (e: React.MouseEvent) => {
-    const targetEl = (e.target as HTMLElement).closest('[data-wiki-target], [data-tag]');
+  const handleDisplayMouseDown = (e: React.MouseEvent) => {
+    const targetEl = (e.target as HTMLElement).closest('[data-wiki-target], [data-tag], a');
     if (targetEl) {
+      // Prevent React Flow node drag listener from intercepting link clicks
+      e.stopPropagation();
+    }
+  };
+
+  const handleDisplayClick = (e: React.MouseEvent) => {
+    const targetEl = (e.target as HTMLElement).closest('[data-wiki-target], [data-tag], a');
+    if (targetEl) {
+      e.preventDefault();
       e.stopPropagation();
       const wiki = targetEl.getAttribute('data-wiki-target');
       if (wiki) {
@@ -124,6 +133,11 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       const tag = targetEl.getAttribute('data-tag');
       if (tag && onSelectTag) {
         onSelectTag(tag);
+        return;
+      }
+      const href = targetEl.getAttribute('href');
+      if (href && href !== '#') {
+        onOpenNote(href);
         return;
       }
     }
@@ -428,7 +442,8 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
           </div>
         ) : (
           <div
-            className="canvas-node-display-text markdown-rendered"
+            className="canvas-node-display-text canvas-shape-markdown markdown-rendered"
+            onMouseDown={handleDisplayMouseDown}
             onClick={handleDisplayClick}
             dangerouslySetInnerHTML={{
               __html: renderedHtml || '<span class="canvas-empty-hint">Doppelklick zum Bearbeiten...</span>',

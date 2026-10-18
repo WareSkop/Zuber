@@ -4960,24 +4960,80 @@ input:checked + .slider:before {
   box-sizing: border-box;
 }
 
+.canvas-node-display-text,
 .canvas-shape-markdown {
   max-width: 100%;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--text-primary);
+  word-break: break-word;
+  user-select: text;
 }
 
+.canvas-node-display-text p,
+.canvas-shape-markdown p {
+  margin: 0 0 4px;
+}
+
+.canvas-node-display-text p:last-child,
+.canvas-shape-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.canvas-wikilink,
 .canvas-shape-markdown a,
-.canvas-shape-markdown .cm-wikilink {
-  color: var(--accent-color);
-  text-decoration: underline;
-  cursor: pointer;
+.canvas-shape-markdown .cm-wikilink,
+.canvas-shape-markdown .cm-wikilink-widget,
+.canvas-node-display-text a,
+.canvas-node-display-text .canvas-wikilink,
+.canvas-node-display-text .cm-wikilink-widget,
+.canvas-file-markdown a {
+  color: var(--accent-color, #d4af37) !important;
+  text-decoration: underline !important;
+  text-decoration-color: rgba(212, 175, 55, 0.45) !important;
+  text-underline-offset: 3px;
+  cursor: pointer !important;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-weight: 600;
+  display: inline-block;
+  transition: all 0.15s ease;
+  pointer-events: auto !important;
 }
 
-.canvas-shape-markdown .cm-tag {
-  color: #38bdf8;
+.canvas-wikilink:hover,
+.canvas-shape-markdown a:hover,
+.canvas-shape-markdown .cm-wikilink:hover,
+.canvas-shape-markdown .cm-wikilink-widget:hover,
+.canvas-node-display-text a:hover,
+.canvas-node-display-text .canvas-wikilink:hover,
+.canvas-node-display-text .cm-wikilink-widget:hover,
+.canvas-file-markdown a:hover {
+  background-color: var(--accent-secondary-bg, rgba(212, 175, 55, 0.18)) !important;
+  text-decoration-color: var(--accent-color, #d4af37) !important;
+  color: var(--accent-color, #d4af37) !important;
+}
+
+.canvas-tag,
+.canvas-shape-markdown .reading-tag,
+.canvas-shape-markdown .cm-tag,
+.canvas-node-display-text .reading-tag,
+.canvas-node-display-text .cm-tag {
+  color: #38bdf8 !important;
   font-weight: 500;
-  cursor: pointer;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: background-color 0.15s ease;
+}
+
+.canvas-tag:hover,
+.canvas-shape-markdown .reading-tag:hover,
+.canvas-shape-markdown .cm-tag:hover,
+.canvas-node-display-text .reading-tag:hover,
+.canvas-node-display-text .cm-tag:hover {
+  background-color: rgba(56, 189, 248, 0.15);
 }
 
 .canvas-shape-node textarea.canvas-node-textarea {

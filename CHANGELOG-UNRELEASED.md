@@ -50,5 +50,10 @@
   - Updated `.canvas-floating-inspector` border-radius to a modern 12px dock with `box-sizing: border-box`, `padding: 6px 14px`, and `height: 44px`, preventing button corners and hover outlines from sticking out beyond circular pill caps.
   - Refined `.inspector-tool-btn` with `border-radius: 8px` and dedicated `.icon-only` styling (`32px x 32px`, `padding: 0`).
   - Ensured Node and Edge inspectors are strictly mutually exclusive so both rows cannot render simultaneously.
+- Fixed Wiki-Links inside Canvas objects not being clickable or visibly styled as links:
+  - Rendered `[[Wiki-Links]]` as `<a href="#" class="cm-wikilink-widget canvas-wikilink nodrag" ...>` and added `handleDisplayMouseDown` to stop propagation on mouse down, preventing React Flow node dragging from intercepting link clicks.
+  - Connected `onOpenNote` in `App.tsx` directly to `handleNavigateWikiLink(targetPath)` for instant local resolution, alias handling, and auto-creation of missing linked notes.
+  - Styled `.canvas-wikilink` in `styles.css` with gold accent color, underline, pointer cursor, and hover background highlights.
+  - Enabled Wiki-Link and anchor click navigation in embedded Markdown previews inside `CanvasFileNode`.
 - Fixed new devices (e.g., Chromebook) showing an empty offline Vault after login and failing to sync newly created notes to the server because `SyncEngine` remained in `offline` state after authentication.
 - Fixed offline mode file & folder creation where creating a second note or folder could collide with default names, get delayed by pending auto-save timers or network timeouts, or fail to reconcile into the local IndexedDB file tree.

@@ -2075,7 +2075,7 @@ export const App: React.FC = () => {
                       });
                     }}
                     onOpenNote={(targetPath) => {
-                      openNoteByPath(targetPath);
+                      handleNavigateWikiLink(targetPath);
                       if (isMobile) setLeftSidebarOpen(false);
                     }}
                     onSelectTag={(tag) => {
