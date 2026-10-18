@@ -1,4 +1,14 @@
 ### Added
+- Graphical Canvas, Workflow & Network Diagram Editor (`.canvas`):
+  - 100% Obsidian JSON Canvas 1.0 specification compatible with graceful degradation for extended shapes.
+  - Interactive diagramming powered by `@xyflow/react` with smooth zooming, panning, mini-map, background grid options (dots, lines, off), and touch/pinch support.
+  - Extended shapes: `rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`.
+  - Rich custom nodes: Markdown shape nodes with inline `[[Wiki-Link]]` and `#tag` navigation, embedded note/image preview nodes (`type: "file"`), group container nodes (`type: "group"`), and external URL link cards (`type: "link"`).
+  - Floating dock toolbar with shape drawers (Workflow & Network), quick note embedding picker, undo/redo history stack (Ctrl+Z / Ctrl+Y), fit-view, and grid snapping.
+  - Contextual floating inspector for selecting shapes, 6 Obsidian color presets, connection routing (straight, smooth bezier, step/orthogonal), arrow heads, labels, and deletion.
+  - Full backend indexing in `VaultService`: `.canvas` files appear in the file tree with `attachmentKind: 'canvas'` and `<Layout />` icon, integrate into the global knowledge graph with outgoing edges, backlink discovery, and sync manifest.
+  - Embedded canvas preview (`![[Workflow.canvas]]` or `![Canvas](Workflow.canvas)`) directly rendered inside Markdown notes in both Live-Preview and Reading views with one-click editor opening.
+  - Offline-first caching and outbox mutation persistence in IndexedDB (`localDb.ts`) and `SyncEngine`.
 - Containerized Git versioning & automated HTTPS remote backup:
   - Added Git integration running directly inside the Knowmesh server container (`/data/vault`).
   - Added Git settings in UI (`SettingsModal.tsx`) with author identity (name, email), repo status (modified/untracked counts, last commit), manual commit, and remote backup configuration (Codeberg, GitHub, GitLab via HTTPS).

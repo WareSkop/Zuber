@@ -15,6 +15,8 @@ import {
   extractHeadings,
   extractLinksAndEmbeds,
   extractTags,
+  extractCanvasLinksAndTags,
+  getAttachmentKind,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
 } from '../shared/markdownUtils';
@@ -297,6 +299,12 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
         const rawContent = fs.readFileSync(absPath, 'utf-8');
         this.notes.set(relPath, this.parseNote(relPath, rawContent, stat.mtimeMs));
       }
+    } else if (extension === 'canvas') {
+      const cached = this.notes.get(relPath);
+      if (!cached || cached.updatedAt !== stat.mtimeMs) {
+        const rawContent = fs.readFileSync(absPath, 'utf-8');
+        this.notes.set(relPath, this.parseCanvas(relPath, rawContent, stat.mtimeMs));
+      }
     }
 
     this.invalidate(isNew);
@@ -317,6 +325,23 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
       embeds,
       tags: extractTags(properties, body),
       headings: extractHeadings(body),
+      updatedAt: mtimeMs,
+    };
+  }
+
+  private parseCanvas(relPath: string, rawContent: string, mtimeMs: number): NoteData {
+    const { links, tags } = extractCanvasLinksAndTags(rawContent);
+    return {
+      path: relPath,
+      name: path.basename(relPath).replace(/\.canvas$/i, ''),
+      rawContent,
+      body: rawContent,
+      frontmatter: {},
+      properties: [],
+      links,
+      embeds: [],
+      tags,
+      headings: [],
       updatedAt: mtimeMs,
     };
   }
@@ -524,6 +549,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
         path: f.path,
         type: 'file',
         extension: f.extension,
+        attachmentKind: getAttachmentKind(f.path),
         updatedAt: f.mtimeMs,
       });
     }
@@ -633,22 +659,30 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
   }
 
   public getNote(relPath: string): NoteData {
-    const cached = this.notes.get(relPath);
+    let resolvedRel = relPath;
+    if (!this.notes.has(resolvedRel)) {
+      if (this.notes.has(`${relPath}.canvas`)) {
+        resolvedRel = `${relPath}.canvas`;
+      } else if (this.notes.has(`${relPath}.md`)) {
+        resolvedRel = `${relPath}.md`;
+      }
+    }
+    const cached = this.notes.get(resolvedRel);
     if (cached) {
       // Cheap freshness check (single stat) in case the watcher has not fired yet
       try {
-        const stat = fs.statSync(path.join(this.vaultDir, relPath));
+        const stat = fs.statSync(path.join(this.vaultDir, resolvedRel));
         if (stat.mtimeMs === cached.updatedAt) return cached;
       } catch {
-        this.removeFromIndex(relPath);
-        throw new Error(`Notiz nicht gefunden: ${relPath}`);
+        this.removeFromIndex(resolvedRel);
+        throw new Error(`Notiz nicht gefunden: ${resolvedRel}`);
       }
     }
-    this.resolveSafePath(relPath);
-    if (!this.indexFile(relPath) || !this.notes.has(relPath)) {
-      throw new Error(`Notiz nicht gefunden: ${relPath}`);
+    this.resolveSafePath(resolvedRel);
+    if (!this.indexFile(resolvedRel) || !this.notes.has(resolvedRel)) {
+      throw new Error(`Notiz nicht gefunden: ${resolvedRel}`);
     }
-    return this.notes.get(relPath)!;
+    return this.notes.get(resolvedRel)!;
   }
 
   public getSyncManifest(): SyncManifestEntry[] {
@@ -656,7 +690,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     for (const file of this.files.values()) {
       manifest.push({
         path: file.path,
-        type: file.extension === 'md' ? 'markdown' : 'attachment',
+        type: file.extension === 'md' || file.extension === 'canvas' ? 'markdown' : 'attachment',
         mtime: Math.round(file.mtimeMs),
         size: file.size || 0,
       });
@@ -667,7 +701,12 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
   public getNotesBatch(paths: string[]): NoteData[] {
     const result: NoteData[] = [];
     for (const p of paths) {
-      const normalized = p.endsWith('.md') ? p : `${p}.md`;
+      let normalized = p;
+      if (!this.notes.has(normalized)) {
+        if (this.notes.has(`${p}.canvas`)) normalized = `${p}.canvas`;
+        else if (this.notes.has(`${p}.md`)) normalized = `${p}.md`;
+        else if (!p.endsWith('.canvas') && !p.endsWith('.md')) normalized = `${p}.md`;
+      }
       const note = this.notes.get(normalized);
       if (note) {
         result.push(note);
@@ -694,7 +733,12 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
       forceOverwrite?: boolean;
     }
   ): NoteData {
-    const normalizedRel = relPath.endsWith('.md') ? relPath : `${relPath}.md`;
+    const isCanvas = relPath.endsWith('.canvas');
+    const normalizedRel = isCanvas
+      ? relPath
+      : relPath.endsWith('.md')
+        ? relPath
+        : `${relPath}.md`;
     const existing = this.notes.get(normalizedRel);
 
     if (existing && !payload.forceOverwrite && typeof payload.baseMtime === 'number') {
@@ -717,7 +761,9 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     const finalRawContent =
       typeof raw === 'string'
         ? raw
-        : serializeMarkdownWithFrontmatter(payload.properties ?? [], payload.body ?? '');
+        : isCanvas
+          ? (payload.body ?? '{}')
+          : serializeMarkdownWithFrontmatter(payload.properties ?? [], payload.body ?? '');
 
     fs.writeFileSync(absPath, finalRawContent, 'utf-8');
     this.indexFile(normalizedRel);
@@ -738,8 +784,12 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     }
     const stat = fs.statSync(oldAbs);
     let finalNewRel = newRelPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
-    if (stat.isFile() && oldRelPath.endsWith('.md') && !finalNewRel.endsWith('.md')) {
-      finalNewRel += '.md';
+    if (stat.isFile()) {
+      if (oldRelPath.endsWith('.canvas') && !finalNewRel.endsWith('.canvas')) {
+        finalNewRel += '.canvas';
+      } else if (oldRelPath.endsWith('.md') && !finalNewRel.endsWith('.md')) {
+        finalNewRel += '.md';
+      }
     }
 
     const newAbs = this.resolveSafePath(finalNewRel);
@@ -799,9 +849,14 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     if (fs.existsSync(destAbs) && fs.statSync(destAbs).isDirectory() && destRel !== sourcePath) {
       destRel = path.posix.join(destRel, path.posix.basename(sourcePath));
       destAbs = this.resolveSafePath(destRel);
-    } else if (stat.isFile() && sourcePath.endsWith('.md') && !destRel.endsWith('.md')) {
-      destRel += '.md';
-      destAbs = this.resolveSafePath(destRel);
+    } else if (stat.isFile()) {
+      if (sourcePath.endsWith('.canvas') && !destRel.endsWith('.canvas')) {
+        destRel += '.canvas';
+        destAbs = this.resolveSafePath(destRel);
+      } else if (sourcePath.endsWith('.md') && !destRel.endsWith('.md')) {
+        destRel += '.md';
+        destAbs = this.resolveSafePath(destRel);
+      }
     }
 
     // If source and target are identical or dest already exists, generate a copy name: e.g. "Name (Copy).md" or "Name (Copy 2).md"
@@ -879,11 +934,13 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
 
     for (const note of this.notes.values()) {
       const folder = path.posix.dirname(note.path);
+      const isCanvas = note.path.endsWith('.canvas');
       nodesMap.set(note.path, {
         id: note.path,
         label: note.name,
         path: note.path,
-        type: 'note',
+        type: isCanvas ? 'canvas' : 'note',
+        kind: isCanvas ? 'canvas' : 'markdown',
         folder: folder === '.' ? '' : folder,
         degree: 0,
         tags: note.tags,
@@ -955,6 +1012,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
       linkingSources.add(note.path);
       const needles = matchingRaw.map((l) => `[[${l.toLowerCase()}`);
       const lines = note.body.split(/\r?\n/);
+      let foundInLines = false;
       for (let i = 0; i < lines.length; i++) {
         const lower = lines[i].toLowerCase();
         if (needles.some((n) => lower.includes(n))) {
@@ -964,7 +1022,16 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
             line: i + 1,
             snippet: lines[i].trim().slice(0, 300),
           });
+          foundInLines = true;
         }
+      }
+      if (!foundInLines && note.path.endsWith('.canvas')) {
+        linked.push({
+          sourcePath: note.path,
+          sourceTitle: note.name,
+          line: 1,
+          snippet: `Canvas-Verknüpfung auf ${matchingRaw.join(', ')}`,
+        });
       }
     }
 

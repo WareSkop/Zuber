@@ -12,6 +12,7 @@ import {
   FolderPlus,
   Hash,
   Image as ImageIcon,
+  Layout,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -44,6 +45,7 @@ interface FileSidebarProps {
   selectedTagFilter: string | null;
   onSelectNote: (path: string) => void;
   onCreateNote: (parentFolder?: string) => void;
+  onCreateCanvas?: (parentFolder?: string) => void;
   onCreateFolder: (parentFolder?: string) => void;
   onRenameEntry: (oldPath: string, currentName: string) => void;
   onDeleteEntry: (path: string, name: string) => void;
@@ -59,6 +61,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   selectedTagFilter,
   onSelectNote,
   onCreateNote,
+  onCreateCanvas,
   onCreateFolder,
   onRenameEntry,
   onDeleteEntry,
@@ -189,7 +192,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const handleCopy = (node: FileTreeNode) => {
-    const displayName = node.type === 'file' && node.extension === 'md' ? node.name.replace(/\.md$/i, '') : node.name;
+    const displayName =
+      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
+        ? node.name.replace(/\.(md|canvas)$/i, '')
+        : node.name;
     setClipboard({
       path: node.path,
       name: displayName,
@@ -200,7 +206,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const handleCut = (node: FileTreeNode) => {
-    const displayName = node.type === 'file' && node.extension === 'md' ? node.name.replace(/\.md$/i, '') : node.name;
+    const displayName =
+      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
+        ? node.name.replace(/\.(md|canvas)$/i, '')
+        : node.name;
     setClipboard({
       path: node.path,
       name: displayName,
@@ -295,16 +304,24 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
 
     const isMd = node.extension === 'md';
+    const isCanvas =
+      node.extension === 'canvas' ||
+      node.path.endsWith('.canvas') ||
+      node.attachmentKind === 'canvas';
     const isActive = activePath === node.path;
-    const displayName = isMd ? node.name.replace(/\.md$/i, '') : node.name;
+    const displayName = isMd
+      ? node.name.replace(/\.md$/i, '')
+      : isCanvas
+      ? node.name.replace(/\.canvas$/i, '')
+      : node.name;
 
     return (
       <div
         key={node.path}
-        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${!isMd ? 'attachment-item' : ''}`}
+        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${!isMd && !isCanvas ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''}`}
         style={{ paddingLeft: `${26 + depth * 14}px` }}
         onClick={() => {
-          if (isMd) {
+          if (isMd || isCanvas) {
             onSelectNote(node.path);
           } else {
             window.open(api.getAttachmentUrl(node.path), '_blank');
@@ -320,12 +337,19 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         onTouchMove={handleTouchEnd}
       >
         <span className="tree-icon">
-          {isMd ? <FileText size={14} /> : <ImageIcon size={14} />}
+          {isCanvas ? (
+            <Layout size={14} className="tree-canvas-icon" />
+          ) : isMd ? (
+            <FileText size={14} />
+          ) : (
+            <ImageIcon size={14} />
+          )}
         </span>
         <span className="tree-label" title={node.path}>
           {displayName}
         </span>
-        {!isMd && <span className="file-ext-badge">{node.extension}</span>}
+        {isCanvas && <span className="file-ext-badge canvas-badge">CANVAS</span>}
+        {!isMd && !isCanvas && <span className="file-ext-badge">{node.extension}</span>}
         <button
           type="button"
           className="tree-item-more-btn"
@@ -398,6 +422,16 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
               <span>{t('sidebar.newNote')}</span>
             </button>
             <div className="sidebar-action-right">
+              {onCreateCanvas && (
+                <button
+                  type="button"
+                  className="sidebar-icon-btn icon-only"
+                  title={t('canvas.newCanvas')}
+                  onClick={() => onCreateCanvas()}
+                >
+                  <Layout size={15} />
+                </button>
+              )}
               <button
                 type="button"
                 className="sidebar-icon-btn icon-only"
@@ -541,6 +575,21 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <FilePlus size={15} />
                       <span>{t('sidebar.newNoteInFolder')}</span>
                     </button>
+                    {onCreateCanvas && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => {
+                          const path = contextMenu.node!.path;
+                          setExpandedFolders((prev) => ({ ...prev, [path]: true }));
+                          onCreateCanvas(path);
+                          setContextMenu(null);
+                        }}
+                      >
+                        <Layout size={15} />
+                        <span>{t('canvas.newCanvasInFolder')}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="tree-context-item"
@@ -601,8 +650,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   onClick={() => {
                     const node = contextMenu.node!;
                     const displayName =
-                      node.type === 'file' && node.extension === 'md'
-                        ? node.name.replace(/\.md$/i, '')
+                      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
+                        ? node.name.replace(/\.(md|canvas)$/i, '')
                         : node.name;
                     onRenameEntry(node.path, displayName);
                     setContextMenu(null);
@@ -621,8 +670,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   onClick={() => {
                     const node = contextMenu.node!;
                     const displayName =
-                      node.type === 'file' && node.extension === 'md'
-                        ? node.name.replace(/\.md$/i, '')
+                      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
+                        ? node.name.replace(/\.(md|canvas)$/i, '')
                         : node.name;
                     onDeleteEntry(node.path, displayName);
                     setContextMenu(null);
@@ -646,6 +695,19 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   <FilePlus size={15} />
                   <span>{t('sidebar.newNote')}</span>
                 </button>
+                {onCreateCanvas && (
+                  <button
+                    type="button"
+                    className="tree-context-item"
+                    onClick={() => {
+                      onCreateCanvas();
+                      setContextMenu(null);
+                    }}
+                  >
+                    <Layout size={15} />
+                    <span>{t('canvas.newCanvas')}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="tree-context-item"

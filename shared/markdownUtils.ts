@@ -1,5 +1,5 @@
 import YAML from 'yaml';
-import type { FrontmatterProperty, NoteHeading, PropertyType } from './types';
+import type { AttachmentKind, FrontmatterProperty, NoteHeading, PropertyType } from './types';
 
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
@@ -254,4 +254,80 @@ export function extractHeadings(body: string): NoteHeading[] {
   }
 
   return headings;
+}
+
+/**
+ * Returns attachment classification for a file path or extension.
+ */
+export function getAttachmentKind(filePath: string): AttachmentKind {
+  const ext = filePath.split('.').pop()?.toLowerCase() || '';
+  if (ext === 'md') return 'markdown';
+  if (ext === 'canvas') return 'canvas';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return 'image';
+  if (ext === 'pdf') return 'pdf';
+  if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) return 'audio';
+  if (['mp4', 'webm', 'ogv', 'mov', 'mkv'].includes(ext)) return 'video';
+  return 'other';
+}
+
+/**
+ * Parses JSON Canvas (.canvas) content and extracts all outbound file links,
+ * internal [[Wiki-Links]], and #tags from text, file, and group nodes.
+ */
+export function extractCanvasLinksAndTags(rawJson: string): {
+  links: string[];
+  tags: string[];
+} {
+  const linksSet = new Set<string>();
+  const tagsSet = new Set<string>();
+
+  try {
+    const doc = JSON.parse(rawJson);
+    if (doc && Array.isArray(doc.nodes)) {
+      for (const node of doc.nodes) {
+        if (!node || typeof node !== 'object') continue;
+
+        // 1. type === 'file': node.file
+        if (node.type === 'file' && typeof node.file === 'string' && node.file.trim()) {
+          const cleanFile = node.file.trim();
+          linksSet.add(cleanFile);
+        }
+
+        // 2. node.text
+        if (typeof node.text === 'string' && node.text.trim()) {
+          const { links } = extractLinksAndEmbeds(node.text);
+          for (const l of links) linksSet.add(l);
+          const tags = extractTags([], node.text);
+          for (const t of tags) tagsSet.add(t);
+        }
+
+        // 3. node.label
+        if (typeof node.label === 'string' && node.label.trim()) {
+          const { links } = extractLinksAndEmbeds(node.label);
+          for (const l of links) linksSet.add(l);
+          const tags = extractTags([], node.label);
+          for (const t of tags) tagsSet.add(t);
+        }
+      }
+    }
+
+    if (doc && Array.isArray(doc.edges)) {
+      for (const edge of doc.edges) {
+        if (!edge || typeof edge !== 'object') continue;
+        if (typeof edge.label === 'string' && edge.label.trim()) {
+          const { links } = extractLinksAndEmbeds(edge.label);
+          for (const l of links) linksSet.add(l);
+          const tags = extractTags([], edge.label);
+          for (const t of tags) tagsSet.add(t);
+        }
+      }
+    }
+  } catch {
+    // Ignore JSON parsing errors for corrupted or empty canvas files
+  }
+
+  return {
+    links: Array.from(linksSet),
+    tags: Array.from(tagsSet),
+  };
 }

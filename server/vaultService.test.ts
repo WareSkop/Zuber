@@ -831,6 +831,123 @@ describe('Knowmesh - Vault Entry Operations (copyEntry & deleteEntry)', () => {
     expect(id1).not.toBe(id2);
     expect(id2).not.toBe(id3);
   });
+
+  it('indexes .canvas documents, integrates with knowledge graph and backlinks, and maps bidirectionally', async () => {
+    const canvasDoc = {
+      nodes: [
+        {
+          id: 'node-1',
+          type: 'text',
+          text: 'Startknoten mit Verweis auf [[Wissensbasis/Obsidian-Kompatibilität.md]] und #workflow',
+          x: 0,
+          y: 0,
+          width: 250,
+          height: 100,
+          shape: 'rounded',
+          color: '1',
+        },
+        {
+          id: 'node-2',
+          type: 'file',
+          file: 'Projekte/Projekt-Architektur.md',
+          x: 350,
+          y: 50,
+          width: 300,
+          height: 200,
+        },
+        {
+          id: 'node-3',
+          type: 'text',
+          text: 'DB Server',
+          x: 750,
+          y: 50,
+          width: 150,
+          height: 80,
+          shape: 'cylinder',
+          color: '4',
+        },
+      ],
+      edges: [
+        {
+          id: 'edge-1',
+          fromNode: 'node-1',
+          toNode: 'node-2',
+          label: 'verwendet [[Tägliche Notizen/2026-10-16.md]]',
+          toEnd: 'arrow',
+          style: 'step',
+        },
+      ],
+    };
+
+    const rawJson = JSON.stringify(canvasDoc, null, 2);
+
+    // 1. Save .canvas file in VaultService
+    const saved = service.saveNote('Diagramme/Infrastruktur.canvas', {
+      rawContent: rawJson,
+      body: rawJson,
+    });
+
+    expect(saved.path).toBe('Diagramme/Infrastruktur.canvas');
+    expect(saved.rawContent).toBe(rawJson);
+    expect(saved.frontmatter).toEqual({});
+    expect(saved.properties).toEqual([]);
+
+    // Outgoing links extracted
+    expect(saved.links).toContain('Wissensbasis/Obsidian-Kompatibilität.md');
+    expect(saved.links).toContain('Projekte/Projekt-Architektur.md');
+    expect(saved.links).toContain('Tägliche Notizen/2026-10-16.md');
+    expect(saved.tags).toContain('workflow');
+
+    // 2. File tree indexing
+    const tree = service.getFileTree();
+    const diagramFolder = tree.find((n) => n.path === 'Diagramme');
+    expect(diagramFolder).toBeDefined();
+    const canvasFileNode = diagramFolder?.children?.find(
+      (c) => c.path === 'Diagramme/Infrastruktur.canvas'
+    );
+    expect(canvasFileNode).toBeDefined();
+    expect(canvasFileNode?.extension).toBe('canvas');
+    expect(canvasFileNode?.attachmentKind).toBe('canvas');
+
+    // 3. Knowledge Graph integration
+    const graph = service.buildGraph();
+    const canvasGraphNode = graph.nodes.find(
+      (n) => n.id === 'Diagramme/Infrastruktur.canvas'
+    );
+    expect(canvasGraphNode).toBeDefined();
+    expect(canvasGraphNode?.kind).toBe('canvas');
+
+    const edgesToArch = graph.edges.filter(
+      (e) =>
+        e.source === 'Diagramme/Infrastruktur.canvas' &&
+        e.target === 'Projekte/Projekt-Architektur.md'
+    );
+    expect(edgesToArch.length).toBeGreaterThan(0);
+
+    // 4. Backlinks query
+    const backlinks = service.getBacklinks('Projekte/Projekt-Architektur.md');
+    const canvasBacklink = backlinks.linked.find(
+      (b) => b.sourcePath === 'Diagramme/Infrastruktur.canvas'
+    );
+    expect(canvasBacklink).toBeDefined();
+    expect(canvasBacklink?.snippet).toContain('Canvas-Verknüpfung');
+
+    // 5. Sync manifest includes .canvas as markdown type
+    const manifest = service.getSyncManifest();
+    const manifestEntry = manifest.find((m) => m.path === 'Diagramme/Infrastruktur.canvas');
+    expect(manifestEntry).toBeDefined();
+    expect(manifestEntry?.type).toBe('markdown');
+
+    // 6. Rename and move preserves .canvas extension
+    const renamed = await service.renameOrMove(
+      'Diagramme/Infrastruktur.canvas',
+      'Diagramme/Netzwerk-Plan.canvas'
+    );
+    expect(renamed.newPath).toBe('Diagramme/Netzwerk-Plan.canvas');
+    const loadedRenamed = service.getNote('Diagramme/Netzwerk-Plan.canvas');
+    expect(loadedRenamed.path).toBe('Diagramme/Netzwerk-Plan.canvas');
+    expect(loadedRenamed.rawContent).toContain('DB Server');
+  });
 });
 
 

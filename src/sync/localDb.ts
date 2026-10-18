@@ -4,6 +4,7 @@ import type {
   GraphData,
   NoteData,
 } from '../../shared/types';
+import { getAttachmentKind } from '../../shared/markdownUtils';
 
 export interface OutboxMutation {
   id: string;
@@ -607,6 +608,7 @@ export function insertNodeIntoTree(
       path: fullPath,
       type,
       extension: type === 'file' && currentPart.includes('.') ? currentPart.split('.').pop() : undefined,
+      attachmentKind: type === 'file' ? getAttachmentKind(fullPath) : undefined,
       children: type === 'folder' ? [] : undefined,
       updatedAt: Date.now(),
     };

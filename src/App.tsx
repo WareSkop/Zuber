@@ -37,6 +37,7 @@ import {
   Trash2,
   Edit3,
   Download,
+  Layout,
   Maximize2,
   Minimize2,
 } from 'lucide-react';
@@ -67,6 +68,7 @@ import {
   type EditorMode,
   type LivePreviewEditorRef,
 } from './components/LivePreviewEditor';
+import { CanvasEditor } from './components/canvas/CanvasEditor';
 import { GraphView } from './components/GraphView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
@@ -85,7 +87,7 @@ type MainWorkspaceView = 'editor' | 'graph' | 'split';
 type RightSidebarTab = 'backlinks' | 'outline' | 'local-graph';
 
 interface DialogState {
-  type: 'create-note' | 'create-folder' | 'rename' | 'delete';
+  type: 'create-note' | 'create-folder' | 'rename' | 'delete' | 'create-canvas';
   title?: string;
   prompt?: string;
   parentFolder?: string;
@@ -305,10 +307,10 @@ export const App: React.FC = () => {
   }, [allFiles, tree]);
 
   const getUniqueDefaultName = useCallback(
-    (baseName: string, type: 'file' | 'folder', parentFolder?: string): string => {
+    (baseName: string, type: 'file' | 'folder' | 'canvas', parentFolder?: string): string => {
       const existing = collectExistingPaths();
       const buildPath = (name: string) => {
-        const leaf = type === 'file' ? `${name}.md` : name;
+        const leaf = type === 'canvas' ? `${name}.canvas` : type === 'file' ? `${name}.md` : name;
         return (parentFolder ? `${parentFolder}/${leaf}` : leaf).toLowerCase();
       };
       if (!existing.has(buildPath(baseName))) {
@@ -331,6 +333,22 @@ export const App: React.FC = () => {
       setDialogInput(defaultName);
     },
     [language, getUniqueDefaultName]
+  );
+
+  const openCreateCanvasDialog = useCallback(
+    (parentFolder?: string) => {
+      const baseName = language === 'de' ? 'Neues Canvas' : 'New Canvas';
+      const defaultName = getUniqueDefaultName(baseName, 'canvas', parentFolder);
+      setDialog({
+        type: 'create-canvas',
+        title: t('canvas.createDialogTitle'),
+        prompt: t('canvas.createDialogPrompt'),
+        parentFolder,
+        initialValue: defaultName,
+      });
+      setDialogInput(defaultName);
+    },
+    [language, getUniqueDefaultName, t]
   );
 
   const openCreateFolderDialog = useCallback(
@@ -611,14 +629,15 @@ export const App: React.FC = () => {
     const byPath = new Map<string, string>();
     const byName = new Map<string, string>();
     const sorted = [...allFiles].sort((a, b) => {
-      const am = a.extension === 'md' ? 0 : 1;
-      const bm = b.extension === 'md' ? 0 : 1;
+      const am = a.extension === 'md' || a.extension === 'canvas' ? 0 : 1;
+      const bm = b.extension === 'md' || b.extension === 'canvas' ? 0 : 1;
       return am - bm || a.path.length - b.path.length;
     });
     for (const f of sorted) {
       const lp = f.path.toLowerCase();
       byPath.set(lp, f.path);
       if (f.extension === 'md') byPath.set(lp.replace(/\.md$/, ''), f.path);
+      if (f.extension === 'canvas') byPath.set(lp.replace(/\.canvas$/, ''), f.path);
       if (!byName.has(f.name.toLowerCase())) byName.set(f.name.toLowerCase(), f.path);
       if (!byName.has(f.basename.toLowerCase())) byName.set(f.basename.toLowerCase(), f.path);
     }
@@ -628,7 +647,7 @@ export const App: React.FC = () => {
   const allNotesForEditor = useMemo(
     () =>
       allFiles
-        .filter((f) => f.extension === 'md')
+        .filter((f) => f.extension === 'md' || f.extension === 'canvas')
         .map((f) => ({ path: f.path, name: f.name, basename: f.basename })),
     [allFiles]
   );
@@ -645,6 +664,9 @@ export const App: React.FC = () => {
       },
       onCreateNote: (parentFolder?: string) => {
         openCreateNoteDialog(parentFolder);
+      },
+      onCreateCanvas: (parentFolder?: string) => {
+        openCreateCanvasDialog(parentFolder);
       },
       onCreateFolder: (parentFolder?: string) => {
         openCreateFolderDialog(parentFolder);
@@ -672,6 +694,7 @@ export const App: React.FC = () => {
     [
       openNoteByPath,
       openCreateNoteDialog,
+      openCreateCanvasDialog,
       openCreateFolderDialog,
       loadVaultIndex,
       isMobile,
@@ -1042,7 +1065,7 @@ export const App: React.FC = () => {
       // Fast path: resolve in the browser (no server round trip)
       const local = resolveLocally(trimmed, currentFrom);
       if (local) {
-        if (local.toLowerCase().endsWith('.md')) {
+        if (local.toLowerCase().endsWith('.md') || local.toLowerCase().endsWith('.canvas')) {
           if (workspaceViewRef.current === 'graph') {
             setWorkspaceView('editor');
           }
@@ -1066,7 +1089,7 @@ export const App: React.FC = () => {
       // Fallback (e.g. aliases): ask the server
       const res = await api.resolveWikiLink(trimmed, currentFrom || undefined);
       if (res.resolvedPath) {
-        if (res.resolvedPath.toLowerCase().endsWith('.md')) {
+        if (res.resolvedPath.toLowerCase().endsWith('.md') || res.resolvedPath.toLowerCase().endsWith('.canvas')) {
           await openNoteByPath(res.resolvedPath);
         } else {
           window.open(api.getAttachmentUrl(res.resolvedPath, currentFrom || undefined), '_blank');
@@ -1141,6 +1164,28 @@ export const App: React.FC = () => {
         recordLastActiveNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
         if (isMobile) setLeftSidebarOpen(false);
+      } else if (currentDialog.type === 'create-canvas') {
+        if (!val) return;
+        await flushPendingSave();
+        const rawTitle = val.replace(/\.canvas$/i, '').trim();
+        if (!rawTitle) return;
+        const cleanTitle = getUniqueDefaultName(rawTitle, 'canvas', currentDialog.parentFolder);
+        const relPath = currentDialog.parentFolder
+          ? `${currentDialog.parentFolder}/${cleanTitle}.canvas`
+          : `${cleanTitle}.canvas`;
+        const initialJson = JSON.stringify({ nodes: [], edges: [] }, null, 2);
+        const created = await syncEngine.saveNote({
+          path: relPath,
+          rawContent: initialJson,
+          body: initialJson,
+          properties: [],
+        });
+        await loadVaultIndex();
+        setActiveNote(created);
+        setSaveState('saved');
+        recordLastActiveNote(created.path);
+        if (workspaceView === 'graph') setWorkspaceView('editor');
+        if (isMobile) setLeftSidebarOpen(false);
       } else if (currentDialog.type === 'create-folder') {
         if (!val) return;
         const cleanFolder = getUniqueDefaultName(val, 'folder', currentDialog.parentFolder);
@@ -1177,9 +1222,9 @@ export const App: React.FC = () => {
         await syncEngine.deleteEntry(deletedPath);
         const { treeRes } = await loadVaultIndex();
         if (isActiveOrChild) {
-          const nextMd = treeRes.files.find((f) => f.extension === 'md');
-          if (nextMd) {
-            await openNoteByPath(nextMd.path);
+          const nextFile = treeRes.files.find((f) => f.extension === 'md' || f.extension === 'canvas');
+          if (nextFile) {
+            await openNoteByPath(nextFile.path);
           } else {
             setActiveNote(null);
           }
@@ -1263,16 +1308,23 @@ export const App: React.FC = () => {
 
   const handleDownloadNote = useCallback(() => {
     if (!activeNote) return;
+    const isCanvas = activeNote.path.endsWith('.canvas');
     const content =
       activeNote.rawContent ||
-      serializeMarkdownWithFrontmatter(activeNote.properties, activeNote.body);
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      (isCanvas
+        ? activeNote.body
+        : serializeMarkdownWithFrontmatter(activeNote.properties, activeNote.body));
+    const mimeType = isCanvas
+      ? 'application/json;charset=utf-8'
+      : 'text/markdown;charset=utf-8';
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = activeNote.name.endsWith('.md')
+    const defaultExt = isCanvas ? '.canvas' : '.md';
+    a.download = activeNote.name.endsWith(defaultExt)
       ? activeNote.name
-      : `${activeNote.name}.md`;
+      : `${activeNote.name}${defaultExt}`;
     a.click();
     URL.revokeObjectURL(url);
   }, [activeNote]);
@@ -1548,6 +1600,14 @@ export const App: React.FC = () => {
         action: () => openCreateNoteDialog(),
       },
       {
+        id: 'vault-new-canvas',
+        title: 'Vault: Neues Canvas erstellen (Workflow / Diagramm)',
+        category: 'Vault',
+        icon: <Layout size={16} />,
+        keywords: ['canvas', 'diagramm', 'flowchart', 'network', 'workflow', 'whiteboard'],
+        action: () => openCreateCanvasDialog(),
+      },
+      {
         id: 'vault-save-note',
         title: 'Vault: Notiz sofort speichern',
         category: 'Vault',
@@ -1564,7 +1624,7 @@ export const App: React.FC = () => {
         keywords: ['umbenennen', 'rename', 'titel'],
         action: () => {
           if (!activeNote) return;
-          const cleanName = activeNote.name.replace(/\.md$/i, '');
+          const cleanName = activeNote.name.replace(/\.(md|canvas)$/i, '');
           setDialog({
             type: 'rename',
             targetPath: activeNote.path,
@@ -1660,6 +1720,7 @@ export const App: React.FC = () => {
     editorMode,
     activeNote,
     openCreateNoteDialog,
+    openCreateCanvasDialog,
     handleUploadImageClick,
     handleManualSave,
     handleDownloadNote,
@@ -1682,6 +1743,7 @@ export const App: React.FC = () => {
   const linkedMentions = activeNote ? backlinks.linked : [];
   const unlinkedMentions = activeNote ? backlinks.unlinked : [];
   const currentBacklinks = linkedMentions;
+  const isCanvasNote = Boolean(activeNote?.path.endsWith('.canvas'));
 
   const wordCount = activeNote
     ? activeNote.body
@@ -1872,44 +1934,51 @@ export const App: React.FC = () => {
 
           <div className="topbar-controls">
             {workspaceView !== 'graph' && activeNote && (
-              <div className="editor-mode-switcher" role="group" aria-label={t('header.modeGroupAria')}>
-                <button
-                  type="button"
-                  className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
-                  onClick={() => setEditorMode('live')}
-                  title={t('header.livePreviewTitle')}
-                >
-                  <Eye size={14} />
-                  <span>{t('header.livePreview')}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${editorMode === 'reading' ? 'active' : ''}`}
-                  onClick={() => setEditorMode('reading')}
-                  title={t('header.readingTitle')}
-                >
-                  <BookOpen size={14} />
-                  <span>{t('header.reading')}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`mode-btn ${editorMode === 'source' ? 'active' : ''}`}
-                  onClick={() => {
-                    if (editorMode !== 'source') {
-                      setActiveNote((prev) =>
-                        prev
-                          ? { ...prev, rawContent: serializeMarkdownWithFrontmatter(prev.properties, prev.body) }
-                          : prev
-                      );
-                    }
-                    setEditorMode('source');
-                  }}
-                  title={t('header.sourceTitle')}
-                >
-                  <Code2 size={14} />
-                  <span>{t('header.source')}</span>
-                </button>
-              </div>
+              isCanvasNote ? (
+                <div className="canvas-mode-indicator" title="Canvas & Diagramm-Editor">
+                  <Layout size={14} />
+                  <span>Canvas</span>
+                </div>
+              ) : (
+                <div className="editor-mode-switcher" role="group" aria-label={t('header.modeGroupAria')}>
+                  <button
+                    type="button"
+                    className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
+                    onClick={() => setEditorMode('live')}
+                    title={t('header.livePreviewTitle')}
+                  >
+                    <Eye size={14} />
+                    <span>{t('header.livePreview')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-btn ${editorMode === 'reading' ? 'active' : ''}`}
+                    onClick={() => setEditorMode('reading')}
+                    title={t('header.readingTitle')}
+                  >
+                    <BookOpen size={14} />
+                    <span>{t('header.reading')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`mode-btn ${editorMode === 'source' ? 'active' : ''}`}
+                    onClick={() => {
+                      if (editorMode !== 'source') {
+                        setActiveNote((prev) =>
+                          prev
+                            ? { ...prev, rawContent: serializeMarkdownWithFrontmatter(prev.properties, prev.body) }
+                            : prev
+                        );
+                      }
+                      setEditorMode('source');
+                    }}
+                    title={t('header.sourceTitle')}
+                  >
+                    <Code2 size={14} />
+                    <span>{t('header.source')}</span>
+                  </button>
+                </div>
+              )
             )}
 
             <button
@@ -1988,67 +2057,108 @@ export const App: React.FC = () => {
         <div className={`workspace-panes view-${workspaceView}`}>
           {(workspaceView === 'editor' || workspaceView === 'split') && (
             <section className="editor-pane-container">
-              {/* Sticky Formatting Toolbar at the top */}
-              {activeNote && editorMode !== 'reading' && !zenMode && (
-                <EditorToolbar
-                  editorRef={editorRef}
-                  onUploadImage={handleUploadImageFile}
-                />
-              )}
-
-              <div className="editor-pane scroller">
-                {activeNote ? (
-                  <div className="note-document-container">
-                    {/* Visual Frontmatter Properties UI (No raw YAML shown!) */}
-                    {editorMode !== 'source' && !zenMode && (
-                      <PropertiesEditor
-                        notePath={activeNote.path}
-                        properties={activeNote.properties}
-                        allTags={allTagNames}
-                        onChange={handlePropertiesChange}
-                        onTagClick={(tag) => {
-                          setSelectedTagFilter(tag.replace(/^#+/, ''));
-                          setLeftSidebarOpen(true);
-                        }}
-                      />
-                    )}
-
-                    {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
-                    <LivePreviewEditor
-                      ref={editorRef}
-                      notePath={activeNote.path}
-                      body={activeNote.body}
-                      rawContent={activeNote.rawContent}
-                      mode={editorMode}
-                      allNotes={allNotesForEditor}
-                      allTags={allTagNames}
-                      scrollToLine={scrollToLine}
-                      onChangeBody={handleBodyChange}
-                      onChangeRaw={handleRawChange}
-                      onNavigateWikiLink={handleNavigateWikiLink}
-                      onSelectTag={(tag) => {
-                        setSelectedTagFilter(tag.replace(/^#+/, ''));
-                        setLeftSidebarOpen(true);
-                      }}
+              {isCanvasNote && activeNote ? (
+                <div className="canvas-workspace-pane">
+                  <CanvasEditor
+                    filePath={activeNote.path}
+                    rawContent={activeNote.rawContent || activeNote.body || '{}'}
+                    onChange={(newJson) => {
+                      if (!activeNote) return;
+                      setActiveNote({
+                        ...activeNote,
+                        rawContent: newJson,
+                        body: newJson,
+                      });
+                      scheduleSave(activeNote.path, {
+                        rawContent: newJson,
+                      });
+                    }}
+                    onOpenNote={(targetPath) => {
+                      openNoteByPath(targetPath);
+                      if (isMobile) setLeftSidebarOpen(false);
+                    }}
+                    onSelectTag={(tag) => {
+                      setSelectedTagFilter(tag.replace(/^#+/, ''));
+                      setLeftSidebarOpen(true);
+                    }}
+                    allNotes={allNotesForEditor}
+                  />
+                </div>
+              ) : (
+                <>
+                  {/* Sticky Formatting Toolbar at the top */}
+                  {activeNote && editorMode !== 'reading' && !zenMode && (
+                    <EditorToolbar
+                      editorRef={editorRef}
+                      onUploadImage={handleUploadImageFile}
                     />
+                  )}
+
+                  <div className="editor-pane scroller">
+                    {activeNote ? (
+                      <div className="note-document-container">
+                        {/* Visual Frontmatter Properties UI (No raw YAML shown!) */}
+                        {editorMode !== 'source' && !zenMode && (
+                          <PropertiesEditor
+                            notePath={activeNote.path}
+                            properties={activeNote.properties}
+                            allTags={allTagNames}
+                            onChange={handlePropertiesChange}
+                            onTagClick={(tag) => {
+                              setSelectedTagFilter(tag.replace(/^#+/, ''));
+                              setLeftSidebarOpen(true);
+                            }}
+                          />
+                        )}
+
+                        {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
+                        <LivePreviewEditor
+                          ref={editorRef}
+                          notePath={activeNote.path}
+                          body={activeNote.body}
+                          rawContent={activeNote.rawContent}
+                          mode={editorMode}
+                          allNotes={allNotesForEditor}
+                          allTags={allTagNames}
+                          scrollToLine={scrollToLine}
+                          onChangeBody={handleBodyChange}
+                          onChangeRaw={handleRawChange}
+                          onNavigateWikiLink={handleNavigateWikiLink}
+                          onSelectTag={(tag) => {
+                            setSelectedTagFilter(tag.replace(/^#+/, ''));
+                            setLeftSidebarOpen(true);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="empty-workspace-state">
+                        <FileText size={42} />
+                        <h2>Keine Notiz geöffnet</h2>
+                        <p>
+                          Wähle links im Dateibaum eine Notiz aus oder erstelle eine neue Notiz.
+                        </p>
+                        <div className="empty-state-btn-row">
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => openCreateNoteDialog()}
+                          >
+                            + Neue Notiz erstellen
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => openCreateCanvasDialog()}
+                          >
+                            <Layout size={15} />
+                            <span>+ Neues Canvas</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="empty-workspace-state">
-                    <FileText size={42} />
-                    <h2>Keine Notiz geöffnet</h2>
-                    <p>
-                      Wähle links im Dateibaum eine Notiz aus oder erstelle eine neue Notiz.
-                    </p>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => openCreateNoteDialog()}
-                    >
-                      + Neue Notiz erstellen
-                    </button>
-                  </div>
-                )}
-              </div>
+                </>
+              )}
             </section>
           )}
 

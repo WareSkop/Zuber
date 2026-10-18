@@ -10,13 +10,13 @@ Dieses Dokument beschreibt sämtliche REST-Endpunkte ([`server/index.ts`](../ser
 
 ```ts
 export type FileNodeType = 'file' | 'folder';
-export type AttachmentKind = 'markdown' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
+export type AttachmentKind = 'markdown' | 'canvas' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
 
 export interface FileNode {
   name: string;               // Dateiname mit Endung (z.B. "Notiz.md" oder "image.png")
   path: string;               // Relativer Pfad zum Vault-Root mit "/" (z.B. "Projekte/Notiz.md")
   type: FileNodeType;         // 'file' | 'folder'
-  extension?: string;         // Dateiendung ohne Punkt in Kleinbuchstaben (z.B. "md", "png")
+  extension?: string;         // Dateiendung ohne Punkt in Kleinbuchstaben (z.B. "md", "png", "canvas")
   attachmentKind?: AttachmentKind;
   size?: number;              // Dateigröße in Bytes
   mtime?: number;             // Letzte Änderung (Unix Timestamp in ms)
@@ -119,12 +119,14 @@ export interface VaultProfile {
 ```ts
 export interface GraphNode {
   id: string;                 // Relativer Pfad (z.B. "Projekte/Idee.md") oder "unresolved:Ziel"
-  label: string;              // Anzeigename ohne ".md"
+  label: string;              // Anzeigename ohne ".md" / ".canvas"
   path: string;               // Relativer Pfad (leer bei "unresolved:*")
-  exists: boolean;            // true = existierende .md Datei, false = noch nicht erstellte Zielnotiz
-  tags: string[];             // Tags der Notiz (für Filter & Farbgebung)
+  exists: boolean;            // true = existierende Datei, false = noch nicht erstellte Zielnotiz
+  tags: string[];             // Tags der Notiz/Canvas (für Filter & Farbgebung)
   degree: number;             // Anzahl verbundener Kanten (skaliert den Knotenradius)
   folder: string;             // Übergeordneter Ordnername oder "(Root)"
+  type?: 'note' | 'canvas' | 'attachment' | 'tag';
+  kind?: 'note' | 'canvas' | 'attachment' | 'tag';
 }
 
 export interface GraphEdge {
@@ -136,6 +138,68 @@ export interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+```
+
+### 1.5 JSON Canvas Spezifikation & Knowmesh-Erweiterungen ([`shared/canvasTypes.ts`](../shared/canvasTypes.ts))
+
+Knowmesh implementiert das offizielle **Obsidian JSON Canvas 1.0 Datenmodell** (`.canvas`), erweitert um optionale Attribute für Workflow- und Netzwerkdiagramme (Graceful Degradation):
+
+```ts
+export type CanvasNodeType = 'text' | 'file' | 'link' | 'group';
+
+export type CanvasShape =
+  | 'rectangle'      // Standard-Rechteck / Notizkarte
+  | 'rounded'        // Abgerundetes Prozess-Stadium
+  | 'circle'         // Start / Ende / Knotenpunkt
+  | 'diamond'        // Entscheidung / Bedingung (Workflow)
+  | 'parallelogram'  // Eingabe / Ausgabe (I/O)
+  | 'hexagon'        // Vorbereitung / Filter
+  | 'cylinder'       // Datenbank / Persistenter Speicher
+  | 'cloud'          // Cloud / Internet / Externes Netzwerk
+  | 'server'         // Server / Host / VM
+  | 'router'         // Router / Switch / Gateway / Firewall
+  | 'workstation';   // Client / Arbeitsplatz / Endgerät
+
+export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
+export type CanvasEdgeStyle = 'bezier' | 'straight' | 'step';
+
+export interface JsonCanvasNode {
+  id: string;
+  type: CanvasNodeType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;          // Obsidian Preset "1".."6" oder Hex "#..."
+  text?: string;           // Für type === 'text' (Markdown & [[Wiki-Links]])
+  file?: string;           // Für type === 'file' (Relativer Vault-Pfad)
+  subpath?: string;        // Optional #Heading oder #^block
+  url?: string;            // Für type === 'link'
+  label?: string;          // Für type === 'group'
+  shape?: CanvasShape;     // Knowmesh-Erweiterung (Default: 'rectangle')
+  icon?: string;           // Optionales Icon / Symbol
+  zIndex?: number;
+}
+
+export interface JsonCanvasEdge {
+  id: string;
+  fromNode: string;
+  fromSide?: CanvasSide;
+  fromEnd?: 'none' | 'arrow';
+  toNode: string;
+  toSide?: CanvasSide;
+  toEnd?: 'none' | 'arrow';
+  color?: string;
+  label?: string;
+  edgeStyle?: CanvasEdgeStyle; // 'bezier' (Default) | 'straight' | 'step'
+}
+
+export interface JsonCanvasDocument {
+  nodes: JsonCanvasNode[];
+  edges: JsonCanvasEdge[];
+  viewport?: { x: number; y: number; zoom: number };
+}
+```
 
 export interface GitRemoteConfig {
   enabled: boolean;
@@ -275,4 +339,5 @@ Dieses Modul wird sowohl vom Node.js-Backend als auch vom React-Frontend importi
 | `parseWikiTarget` | `(rawInner: string) => { target, subpath, alias }` | Zerlegt das Innere eines Wiki-Links wie `Ordner/Notiz#Abschnitt\|Anzeigename` in `{ target: "Ordner/Notiz", subpath: "Abschnitt", alias: "Anzeigename" }`. |
 | `extractInlineTags` | `(markdownBody: string) => string[]` | Extrahiert alle `#tags` (inkl. verschachtelter Tags wie `#projekt/aktiv`) außerhalb von Fenced-Codeblöcken und Inline-Code. |
 | `extractHeadings` | `(markdownBody: string) => NoteHeading[]` | Extrahiert alle ATX-Überschriften (`#` bis `######`) außerhalb von Codeblöcken samt 1-basierter Zeilennummer. |
-| `getAttachmentKind` | `(filePath: string) => AttachmentKind` | Ordnet eine Datei anhand ihrer Endung in `'markdown'`, `'image'`, `'pdf'`, `'audio'`, `'video'` oder `'other'` ein. |
+| `getAttachmentKind` | `(filePath: string) => AttachmentKind` | Ordnet eine Datei anhand ihrer Endung in `'markdown'`, `'canvas'`, `'image'`, `'pdf'`, `'audio'`, `'video'` oder `'other'` ein. |
+| `extractCanvasLinksAndTags` | `(rawJson: string) => { links: string[], embeds: string[], tags: string[] }` | Parst den JSON-Inhalt einer `.canvas`-Datei und extrahiert rekursiv alle Wiki-Links, Notiz-Einbettungen (`file`), Kanten-Labels und Inline-Tags aus allen enthaltenen Knoten. |

@@ -235,3 +235,34 @@ Knowmesh enthält eine integrierte, containerisierte Git-Engine zur Versionierun
 - **Notizwechsel / Verlassen:** Wenn der Benutzer eine modifizierte Notiz verlässt (`openNoteByPath` in `src/App.tsx`), wird ein Auto-Commit (`auto: update <path>`) ausgelöst.
 - **Sitzungsende:** Trennen sich alle aktiven WebSocket-Verbindungen (Browser geschlossen / Tab beendet), löst der Server nach einem 5-Sekunden-Debounce automatisch einen Commit (`auto: session closed`) und bei aktivem Remote-Backup einen Push aus.
 
+---
+
+## 10. Canvas-Architektur & Backend-Integration (`.canvas`)
+
+Knowmesh behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als erstklassige Bürger im Gesamtsystem – gleichwertig zu Standard-Markdown-Notizen:
+
+### 10.1 Reines JSON-Format ohne Frontmatter
+- Während Notizen (`.md`) mit YAML-Frontmatter (`--- ... ---`) serialisiert werden, bleiben `.canvas`-Dateien strikt reines JSON.
+- `VaultService.saveNote()` erkennt `.canvas` und speichert den Textkörper (`body`) direkt ohne Frontmatter-Header ab.
+
+### 10.2 Vollständige Indizierung (`extractCanvasLinksAndTags`)
+- `VaultService.indexFile()` parst `.canvas`-Dateien und nutzt `extractCanvasLinksAndTags(rawJson)` aus `shared/markdownUtils.ts`:
+  - **Knoten vom Typ `file`:** Der referenzierte relative Pfad wird als ausgehender Link (`links`) und Einbettung (`embeds`) registriert.
+  - **Knoten vom Typ `text`:** Roher Markdown-Text wird auf `[[Wiki-Links]]`, `[MD-Links](...)` und `#tags` untersucht.
+  - **Erweiterte Knowmesh-Shapes:** Auch benutzerdefinierte Formen mit `text` oder `label` werden nach Links durchsucht.
+  - **Kantenbeschriftungen (`label`):** Auch Beschriftungen von Verbindungslinien können Wiki-Links enthalten.
+
+### 10.3 Wissensgraph & Backlinks
+- **Graph-Knoten:** `.canvas`-Dateien erscheinen im globalen und lokalen Graph (`buildGraph()`) als Knoten mit `type: 'canvas'` und `kind: 'canvas'`.
+- **Kanten:** Alle aus dem Canvas extrahierten Wiki-Links werden zu regulären Kanten im Wissensgraph aufgelöst.
+- **Backlinks (`getBacklinks`):** Wenn ein Canvas auf eine Notiz oder ein Attachment verweist, erscheint der Canvas in der Backlink-Liste der Zielnotiz mit einem aussagekräftigen Kontext-Snippet (z. B. `[Canvas Node (file)]: ...` oder `[Canvas Link]: ...`).
+
+### 10.4 Refactoring & Pfadanpassung (`renameOrMove`)
+- Beim Umbenennen oder Verschieben von Dateien im Vault durchsucht `VaultService.renameOrMove()` auch alle `.canvas`-Dateien.
+- Datei-Referenzen (`node.file`) sowie Wiki-Links in Text-Knoten und Kanten-Labels werden atomar auf den neuen Pfad aktualisiert.
+
+### 10.5 Offline-Synchronisation (`getSyncManifest`)
+- Im Sync-Manifest (`GET /api/vault/sync-manifest`) werden `.canvas`-Dateien als `type: 'markdown'` klassifiziert.
+- Dadurch werden sie von der clientseitigen `SyncEngine` (`localDb.ts`) vollständig im Offline-Cache vorgehalten und über die Outbox synchronisiert.
+
+

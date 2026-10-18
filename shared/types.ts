@@ -1,4 +1,5 @@
 export type PropertyType = 'text' | 'list' | 'number' | 'checkbox' | 'date';
+export type AttachmentKind = 'markdown' | 'canvas' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
 
 export interface FrontmatterProperty {
   key: string;
@@ -11,6 +12,7 @@ export interface FileTreeNode {
   path: string; // relative path inside vault, e.g. "Projekte/Architektur.md"
   type: 'file' | 'folder';
   extension?: string;
+  attachmentKind?: AttachmentKind;
   children?: FileTreeNode[];
   updatedAt?: number;
 }
@@ -93,7 +95,8 @@ export interface GraphNode {
   id: string;
   label: string;
   path?: string;
-  type: 'note' | 'tag' | 'unresolved';
+  type: 'note' | 'tag' | 'unresolved' | 'canvas';
+  kind?: AttachmentKind;
   folder?: string;
   degree: number;
   tags?: string[];

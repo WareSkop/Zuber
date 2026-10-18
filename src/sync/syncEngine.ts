@@ -23,6 +23,7 @@ import {
   extractHeadings,
   extractLinksAndEmbeds,
   extractTags,
+  extractCanvasLinksAndTags,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
 } from '../../shared/markdownUtils';
@@ -462,29 +463,51 @@ class SyncEngine {
     baseMtime?: number;
     forceOverwrite?: boolean;
   }): Promise<NoteData> {
+    const isCanvas = payload.path.endsWith('.canvas');
     const raw =
       typeof payload.rawContent === 'string'
         ? payload.rawContent
-        : serializeMarkdownWithFrontmatter(payload.properties || [], payload.body || '');
+        : isCanvas
+          ? (payload.body || '{}')
+          : serializeMarkdownWithFrontmatter(payload.properties || [], payload.body || '');
 
-    const parsed = parseMarkdownWithFrontmatter(raw);
-    const { links, embeds } = extractLinksAndEmbeds(parsed.body);
-    const tags = extractTags(parsed.properties, parsed.body);
-    const headings = extractHeadings(parsed.body);
+    let updatedNote: NoteData;
 
-    const updatedNote: NoteData = {
-      path: payload.path,
-      name: payload.path.split('/').pop()?.replace(/\.md$/, '') || payload.path,
-      rawContent: raw,
-      body: parsed.body,
-      frontmatter: parsed.frontmatter,
-      properties: parsed.properties,
-      links,
-      embeds,
-      tags,
-      headings,
-      updatedAt: Date.now(),
-    };
+    if (isCanvas) {
+      const { links, tags } = extractCanvasLinksAndTags(raw);
+      updatedNote = {
+        path: payload.path,
+        name: payload.path.split('/').pop()?.replace(/\.canvas$/, '') || payload.path,
+        rawContent: raw,
+        body: raw,
+        frontmatter: {},
+        properties: [],
+        links,
+        embeds: [],
+        tags,
+        headings: [],
+        updatedAt: Date.now(),
+      };
+    } else {
+      const parsed = parseMarkdownWithFrontmatter(raw);
+      const { links, embeds } = extractLinksAndEmbeds(parsed.body);
+      const tags = extractTags(parsed.properties, parsed.body);
+      const headings = extractHeadings(parsed.body);
+
+      updatedNote = {
+        path: payload.path,
+        name: payload.path.split('/').pop()?.replace(/\.md$/, '') || payload.path,
+        rawContent: raw,
+        body: parsed.body,
+        frontmatter: parsed.frontmatter,
+        properties: parsed.properties,
+        links,
+        embeds,
+        tags,
+        headings,
+        updatedAt: Date.now(),
+      };
+    }
 
     // Optimistically update local database
     await this.localDb.putNote(updatedNote);

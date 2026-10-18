@@ -44,6 +44,11 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 - **Interaktive Graph-Ansicht (`GraphView.tsx`) & Backlinks:**
   - Force-Directed Canvas-Graph (sowohl als **Globaler Graph**, im **Split-Screen** neben dem Editor als auch als **Lokaler Graph** in der rechten Seitenleiste).
   - Rechte Seitenleiste mit **Verlinkten Erwähnungen (Backlinks)**, **Unverlinkten Erwähnungen** und **Gliederung (H1–H6)**.
+- **Grafischer Canvas-, Workflow- & Netzwerk-Editor (`.canvas`):**
+  - Vollwertiger visueller Canvas-Editor basierend auf `@xyflow/react`, 100 % abwärtskompatibel zur offiziellen Obsidian JSON Canvas Spec 1.0.
+  - Erweiterte Formen für Workflows und Netzwerkdiagramme (`rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`) mit Graceful Degradation in Obsidian.
+  - Nahtlose Vault-Integration: Notiz-Einbettungen mit Live-Vorschau, Wiki-Links (`[[...]]`) in Shapes/Kanten mit Schnellvervollständigung, Tag-Zählung, bidirektionale Graph- und Backlink-Aktualisierung sowie automatische Referenzanpassung beim Verschieben/Umbenennen.
+  - Interaktive Einbettung von Canvas-Dateien in Markdown-Dokumenten via `![[Workflow.canvas]]`.
 - **Echtzeit-Synchronisation (Chokidar + WebSockets):**
   - Externe Dateiänderungen im Vault (z. B. durch Obsidian Desktop, Syncthing oder Git) werden vom Server erkannt, inkrementell indiziert und gebündelt (batched) per WebSocket an den Browser gepusht.
 
@@ -60,7 +65,7 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 ├── vite.config.ts                # Vite-Konfiguration (inkl. Dev-Proxy für /api und /ws auf https://localhost:3443)
 ├── certs/                        # Automatisch generierte Self-Signed TLS-Zertifikate (server.crt, server.key)
 ├── dist/                         # Gebautes Produktions-Frontend (wird von Express in Produktion ausgeliefert)
-├── vault/                        # Standard-Vault-Verzeichnis (Markdown-Dateien & Attachments)
+├── vault/                        # Standard-Vault-Verzeichnis (Markdown-Dateien, .canvas & Attachments)
 ├── doc/                          # Diese Dokumentation für LLMs & Entwickler
 │   ├── README.md
 │   ├── ARCHITECTURE.md
@@ -69,7 +74,8 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 │   └── LLM_DEVELOPER_GUIDE.md
 ├── shared/                       # Geteilter Code zwischen Backend (Node.js) und Frontend (Browser)
 │   ├── types.ts                  # Zentrale TypeScript-Interfaces (NoteData, GraphData, FileTreeNode, ...)
-│   └── markdownUtils.ts          # Frontmatter-YAML-Parser/Serializer, Link-/Embed-/Tag-/Heading-Extraktoren
+│   ├── canvasTypes.ts            # JSON Canvas Spec 1.0 Typen + Knowmesh Workflow-/Netzwerk-Erweiterungen
+│   └── markdownUtils.ts          # Frontmatter-YAML-Parser/Serializer, Link-/Canvas-/Tag-Extraktoren
 ├── server/                       # Node.js + Express + WebSocket Backend
 │   ├── index.ts                  # Express-App, REST-Endpunkte, HTTPS-Server, WebSocket-Server
 │   ├── auth.ts                   # Single-User Passwort-Prüfung & HMAC-SHA256 Session-Token-Signierung
@@ -80,13 +86,23 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
     ├── main.tsx                  # React DOM Root
     ├── App.tsx                   # Haupt-State, Layout-Shell, WebSocket-Client, Auto-Save, Navigation
     ├── api.ts                    # Typisierter Fetch-Client für alle /api-Routen & Attachment-URLs
-    ├── styles.css                # Komplettes Styling (Dark/Light Theme, CodeMirror, Tabellen, Graph)
+    ├── styles.css                # Komplettes Styling (Dark/Light Theme, CodeMirror, Tabellen, Graph, Canvas)
     └── components/
         ├── LoginModal.tsx        # Passwort-Login-Dialog mit HTTPS-Statusanzeige
         ├── FileSidebar.tsx       # Linke Seitenleiste: Dateibaum, Volltextsuche, Tag-Liste (React.memo)
         ├── PropertiesEditor.tsx  # Visueller Frontmatter-Editor ohne YAML-Code
-        ├── LivePreviewEditor.tsx # CodeMirror 6 Live-Preview, Tabellen-Widget, Lese- & Quellcode-Modus
-        └── GraphView.tsx         # Interaktiver Force-Directed Canvas-Graph (React.memo)
+        ├── LivePreviewEditor.tsx # CodeMirror 6 Live-Preview, Tabellen-Widget, Canvas-Embeds, Lese-/Quellcode-Modus
+        ├── GraphView.tsx         # Interaktiver Force-Directed Canvas-Graph (React.memo)
+        └── canvas/               # Vollwertiger grafischer .canvas-Editor (@xyflow/react)
+            ├── CanvasEditor.tsx      # Haupt-Editor-Komponente mit React Flow, Undo/Redo & Auto-Save
+            ├── CanvasToolbar.tsx     # Dock-Toolbar mit Node-Erstellung, Workflow-/Netzwerk-Drawer
+            ├── CanvasInspector.tsx   # Schwebender Inspektor für Farben, Formen, Text & Kantenattribute
+            ├── CanvasShapeNode.tsx   # SVG-Geometrie für 11 Formen, 4 Handles, Inline-Markdown & [[Wiki-Autovervollständigung
+            ├── CanvasFileNode.tsx    # Notiz-Einbettungs-Node mit Live-Textvorschau und "Öffnen ↗"-Aktion
+            ├── CanvasGroupNode.tsx   # Visuelle Gruppen-Container mit Beschriftung
+            ├── CanvasLinkNode.tsx    # Externe Web-Link-Nodes mit Titel & Vorschau
+            ├── CanvasEmbedWidget.tsx # Leichtgewichtiger interaktiver Embed-Widget für ![[...canvas]] in Notizen
+            └── canvasMapper.ts       # Bidirektionale Konvertierung zwischen Obsidian JSON Canvas und React Flow
 ```
 
 ---

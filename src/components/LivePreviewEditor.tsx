@@ -24,7 +24,9 @@ import {
 } from '@codemirror/autocomplete';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { createRoot, type Root } from 'react-dom/client';
 import { api } from '../api';
+import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 
 export type EditorMode = 'live' | 'reading' | 'source';
 
@@ -328,6 +330,22 @@ class EmbedWidget extends WidgetType {
 
   toDOM() {
     const cleanTarget = this.target.split('#')[0].trim();
+    const isCanvas = cleanTarget.toLowerCase().endsWith('.canvas');
+
+    if (isCanvas) {
+      const container = document.createElement('div');
+      container.className = 'cm-embed-widget cm-canvas-embed-wrapper';
+      const root = createRoot(container);
+      (container as any)._reactRoot = root;
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath={cleanTarget}
+          onOpenNote={this.onNavigate}
+        />
+      );
+      return container;
+    }
+
     const isImage = IMAGE_EXT_REGEX.test(cleanTarget);
 
     if (!isImage) {
@@ -526,6 +544,17 @@ class EmbedWidget extends WidgetType {
     document.addEventListener('pointerdown', onDocClick);
 
     return wrapper;
+  }
+
+  override destroy(dom: HTMLElement) {
+    const root = (dom as any)._reactRoot as Root | undefined;
+    if (root) {
+      setTimeout(() => {
+        try {
+          root.unmount();
+        } catch {}
+      }, 0);
+    }
   }
 }
 
@@ -1687,6 +1716,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (_match, targetRaw, altRaw) => {
         const target = String(targetRaw).trim();
         const alt = altRaw ? String(altRaw).trim() : target;
+        if (target.toLowerCase().endsWith('.canvas')) {
+          return `<div class="reading-canvas-embed" data-canvas-path="${target}" data-wikilink="${target}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        }
         if (IMAGE_EXT_REGEX.test(target)) {
           const url = api.getAttachmentUrl(target, notePath);
           const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
@@ -1702,6 +1734,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (_match, altRaw, hrefRaw) => {
         const target = String(hrefRaw).trim();
         const alt = String(altRaw || target).trim();
+        if (target.toLowerCase().endsWith('.canvas')) {
+          return `<div class="reading-canvas-embed" data-canvas-path="${target}" data-wikilink="${target}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        }
         const url = /^(https?:|data:)/i.test(target)
           ? target
           : api.getAttachmentUrl(target, notePath);
@@ -1751,7 +1786,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
     const rawHtml = marked.parse(processed, { async: false, gfm: true }) as string;
     return DOMPurify.sanitize(rawHtml, {
-      ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-tag', 'target', 'loading', 'decoding', 'align'],
+      ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-canvas-path', 'data-tag', 'target', 'loading', 'decoding', 'align'],
     });
   }, [body, mode, notePath]);
 

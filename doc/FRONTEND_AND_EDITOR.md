@@ -485,6 +485,63 @@ Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufge
 - **Links-Seitenleiste öffnen:** Swipe nach rechts von der linken Kante (`startX <= 35`) oder starker Swipe (`deltaX > 65`), wenn beide Seitenleisten geschlossen sind.
 - **Vertikaler Scroll-Schutz:** Gesten werden ignoriert, wenn die vertikale Bewegung dominant oder gleichwertig ist (`Math.abs(deltaY) >= Math.abs(deltaX)` oder `Math.abs(deltaX) <= Math.abs(deltaY) * 1.4`). Normales Lesen und Scrollen durch die Notiz wird zu keinem Zeitpunkt versehentlich unterbrochen.
 
+---
+
+## 17. Grafischer Canvas-, Workflow- & Netzwerk-Editor (`.canvas` & `@xyflow/react`)
+
+Knowmesh integriert einen vollwertigen, grafischen Unendliche-Leinwand-Editor für `.canvas`-Dateien im zentralen Arbeitsbereich, basierend auf `@xyflow/react`.
+
+### 17.1 Komponenten-Architektur (`src/components/canvas/`)
+
+```mermaid
+flowchart TD
+    App["App.tsx"] -->|"activeNote (.canvas)"| CE["CanvasEditor.tsx (@xyflow/react)"]
+    CE --> Mapper["canvasMapper.ts (Obsidian JSON <-> React Flow)"]
+    CE --> Toolbar["CanvasToolbar.tsx (Dock-Toolbar)"]
+    CE --> Inspector["CanvasInspector.tsx (Schwebender Attribut-Inspektor)"]
+    CE --> Context["CanvasContext.tsx (Navigation & Interaktion)"]
+    CE --> NodeShape["CanvasShapeNode.tsx (11 SVG-Formen, Markdown, [[Wiki-Suggest)"]
+    CE --> NodeFile["CanvasFileNode.tsx (Notiz-Vorschau mit 'Öffnen ↗')"]
+    CE --> NodeGroup["CanvasGroupNode.tsx (Gruppencontainer)"]
+    CE --> NodeLink["CanvasLinkNode.tsx (Weblink-Karten)"]
+```
+
+### 17.2 Bidirektionales Daten-Mapping (`canvasMapper.ts`)
+- **JSON Canvas $\rightarrow$ React Flow:**
+  - Konvertiert `JsonCanvasNode` in getypte React Flow Nodes (`shape`, `file`, `group`, `link`).
+  - Rekonstruiert Obsidian-Farbpaletten (1 bis 6) oder Hex-Farbcodes via `resolveCanvasColor()`.
+  - Stellt den gespeicherten Ansichtsausschnitt (`viewport: { x, y, zoom }`) wieder her.
+- **React Flow $\rightarrow$ JSON Canvas:**
+  - Extrahiert saubere, minimal getypte Knoten und Kanten ohne interne React Flow Transient-States.
+  - Standardknoten (`rectangle` ohne Spezial-Shape) werden als reguläre Obsidian `text`- oder `file`-Nodes exportiert.
+  - Erweiterte Knowmesh-Formen behalten `shape: CanvasShape` bei (Graceful Degradation: Obsidian Desktop rendert sie als rechteckige Textkarten und ignoriert `shape`).
+
+### 17.3 Interaktion, Auto-Save & History
+- **Debounced Auto-Save (600 ms):** Jede Modifikation an Position, Größe, Text, Form oder Kantenverbindung löst nach 600 ms ein atomares Speichern über `api.saveNote()` aus.
+- **Undo / Redo:** Eigener Snapshot-basierter Verlaufsspeicher (Stack mit bis zu 50 Schritten), steuerbar über Tastenkürzel (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl/Cmd+Y`) und Toolbar-Buttons.
+- **Touch- & Gestenunterstützung:** Flüssiges Zwei-Finger-Pinching zum Zoomen und Schieben per Drag.
+
+### 17.4 Custom Node Types & Features
+1. **`CanvasShapeNode.tsx` (Workflow- & Netzwerk-Formen):**
+   - 11 Vektorformen mit dynamischer SVG-Geometrie: `rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`.
+   - 4 multidirektionale Verbindungspunkte (Handles: `top`, `right`, `bottom`, `left`) zum intuitiven Ziehen von Verbindungen.
+   - Doppelklick aktiviert den Inline-Markdown-Editor.
+   - Schnelle Wiki-Link-Vervollständigung: Beim Tippen von `[[` öffnet sich eine Vorschlagsliste aller Vault-Notizen.
+   - Integrierter `NodeResizer` zur freien Größenanpassung.
+2. **`CanvasFileNode.tsx` (Vault-Notiz-Einbettung):**
+   - Bindet beliebige Markdown-Notizen aus dem Vault direkt auf dem Canvas ein.
+   - Zeigt eine scrollbare Textvorschau des Notiz-Bodys und eine „Öffnen ↗“-Aktion zum direkten Wechsel in die Notiz.
+3. **`CanvasGroupNode.tsx` (Container):**
+   - Halbdurchsichtige visuelle Umrandung zur Strukturierung logischer Komponenten und Funktionsblöcke.
+4. **`CanvasLinkNode.tsx` (Externe Links):**
+   - Stellt Weblinks mit Domain, Titel und Klick-Weiterleitung dar.
+
+### 17.5 Einbettung in Markdown-Dokumenten (`![[Workflow.canvas]]`)
+- In `LivePreviewEditor.tsx` wird die Syntax `![[Dateiname.canvas]]` automatisch von `CanvasEmbedWidget.tsx` erfasst.
+- Der Widget lädt die Canvas-Datei und rendert eine interaktive, zoombare und verschiebbare Mini-Leinwand direkt innerhalb des Markdown-Textes.
+- Im Lese-Modus (`reading`) bereinigt DOMPurify das HTML unter Erhalt des `data-canvas-path`-Attributs.
+
+
 
 
 
