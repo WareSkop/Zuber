@@ -25,5 +25,11 @@
 - Enhanced Docker publication script to automatically tag and push both `:latest` and `:v<version>` packages to Codeberg Container Registry.
 
 ### Fixed
+- Fixed `.canvas` editor display and interaction issues:
+  - Repaired 0-height React Flow container chain (`.canvas-workspace-pane`, `.canvas-editor-wrapper`, `.canvas-reactflow-container`) so background grid and controls render properly across the entire workspace.
+  - Rebuilt floating toolbar as a clean horizontal bar with flex-row buttons, divider, and dropdown menus (`Workflow ⌄`, `Netzwerk ⌄`, `Notiz einbetten ⌄`).
+  - Fixed state-echo loop between `App.tsx` and `CanvasEditor.tsx` where saving state would overwrite and reset newly added nodes.
+  - Fixed node spawn coordinates using robust viewport and container bounding box calculations to ensure new shapes appear centered on the screen.
+  - Added `@xyflow/react/dist/style.css` imports to both `CanvasEditor.tsx` and `CanvasEmbedWidget.tsx`.
 - Fixed new devices (e.g., Chromebook) showing an empty offline Vault after login and failing to sync newly created notes to the server because `SyncEngine` remained in `offline` state after authentication.
 - Fixed offline mode file & folder creation where creating a second note or folder could collide with default names, get delayed by pending auto-save timers or network timeouts, or fail to reconcile into the local IndexedDB file tree.

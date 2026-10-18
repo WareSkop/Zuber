@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import '@xyflow/react/dist/style.css';
 import {
   ReactFlow,
   Background,
@@ -10,13 +11,13 @@ import {
   addEdge,
   useReactFlow,
   ReactFlowProvider,
+  ConnectionMode,
   type Connection,
   type Edge,
   type Node,
   type Viewport,
   MarkerType,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 
 import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../shared/canvasTypes';
@@ -44,6 +45,11 @@ const nodeTypes = {
   canvasFile: CanvasFileNode,
   canvasGroup: CanvasGroupNode,
   canvasLink: CanvasLinkNode,
+  shape: CanvasShapeNode,
+  file: CanvasFileNode,
+  group: CanvasGroupNode,
+  link: CanvasLinkNode,
+  text: CanvasShapeNode,
 };
 
 const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
@@ -55,7 +61,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   allNotes,
   readOnly = false,
 }) => {
-  const { fitView, screenToFlowPosition, getViewport, setViewport } = useReactFlow();
+  const { fitView, getViewport, setViewport } = useReactFlow();
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -68,12 +75,25 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
-  // Save debounce timer
+  // Save debounce timer and state echo prevention
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialLoadRef = useRef<boolean>(true);
+  const lastEmittedJsonRef = useRef<string>('');
+  const lastLoadedPathRef = useRef<string>('');
 
-  // Initial document parsing
+  // Initial document parsing and external update synchronization
   useEffect(() => {
+    const pathChanged = lastLoadedPathRef.current !== filePath;
+    const externalChange = rawContent !== lastEmittedJsonRef.current;
+
+    // Avoid state echo loop when rawContent bounces back from App.tsx after an internal edit
+    if (!pathChanged && !externalChange) {
+      return;
+    }
+
+    lastLoadedPathRef.current = filePath;
+    lastEmittedJsonRef.current = rawContent;
+
     const doc = parseCanvasJson(rawContent);
     const rf = jsonCanvasToReactFlow(doc);
     setNodes(rf.nodes);
@@ -86,11 +106,15 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
     if (rf.viewport && rf.viewport.zoom > 0) {
       setTimeout(() => {
-        setViewport(rf.viewport!);
+        try {
+          setViewport(rf.viewport!);
+        } catch {}
       }, 50);
     } else {
       setTimeout(() => {
-        fitView({ padding: 0.2 });
+        try {
+          fitView({ padding: 0.2 });
+        } catch {}
       }, 50);
     }
 
@@ -98,7 +122,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     setTimeout(() => {
       isInitialLoadRef.current = false;
     }, 300);
-  }, [filePath]);
+  }, [filePath, rawContent, setNodes, setEdges, setViewport, fitView]);
 
   // Push state to undo history
   const pushHistory = useCallback((newNodes: Node[], newEdges: Edge[]) => {
@@ -120,8 +144,14 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
       saveTimerRef.current = setTimeout(() => {
-        const vp = getViewport();
+        let vp: Viewport | undefined;
+        try {
+          vp = getViewport();
+        } catch {
+          // ignore
+        }
         const jsonStr = reactFlowToJsonCanvas(currentNodes, currentEdges, vp);
+        lastEmittedJsonRef.current = jsonStr;
         onChange(jsonStr);
       }, 600);
     },
@@ -220,32 +250,49 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     }
   }, [setNodes, setEdges, triggerAutoSave]);
 
-  // Center coordinate generator for new nodes
-  const getCenterSpawnPosition = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      const centerX = window.innerWidth / 2;
-      const centerY = window.innerHeight / 2;
-      return screenToFlowPosition({ x: centerX, y: centerY });
-    }
-    return { x: 100, y: 100 };
-  }, [screenToFlowPosition]);
+  // Robust center coordinate generator for new nodes
+  const getCenterSpawnPosition = useCallback(
+    (nodeWidth: number, nodeHeight: number, count: number) => {
+      let vp = { x: 0, y: 0, zoom: 1 };
+      try {
+        vp = getViewport();
+      } catch {
+        // fallback
+      }
+      const safeZoom = vp && vp.zoom > 0 ? vp.zoom : 1;
+      const rect = containerRef.current?.getBoundingClientRect();
+      const containerWidth = rect && rect.width > 0 ? rect.width : 800;
+      const containerHeight = rect && rect.height > 0 ? rect.height : 600;
+
+      const centerX = Math.round((-vp.x + containerWidth / 2) / safeZoom - nodeWidth / 2);
+      const centerY = Math.round((-vp.y + containerHeight / 2) / safeZoom - nodeHeight / 2);
+      const offset = (count % 8) * 24;
+
+      return {
+        x: isNaN(centerX) ? 100 + offset : centerX + offset,
+        y: isNaN(centerY) ? 100 + offset : centerY + offset,
+      };
+    },
+    [getViewport]
+  );
 
   // Add new nodes
   const handleAddTextNode = useCallback(
     (shape: CanvasShape = 'rectangle') => {
       if (readOnly) return;
-      const pos = getCenterSpawnPosition();
-      const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const width = shape === 'circle' ? 140 : shape === 'diamond' ? 180 : 260;
       const height = shape === 'circle' ? 140 : shape === 'diamond' ? 140 : 160;
+      const pos = getCenterSpawnPosition(width, height, nodes.length);
+      const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const newNode: Node = {
         id,
         type: 'canvasShape',
-        position: { x: pos.x - width / 2, y: pos.y - height / 2 },
+        position: { x: pos.x, y: pos.y },
         width,
         height,
         style: { width: `${width}px`, height: `${height}px`, zIndex: 1 },
+        selected: true,
         data: {
           rawType: 'text',
           text: '',
@@ -255,30 +302,32 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       };
 
       setNodes((current) => {
-        const next = [...current, newNode];
+        const unselected = current.map((n) => ({ ...n, selected: false }));
+        const next = [...unselected, newNode];
         pushHistory(next, edges);
         triggerAutoSave(next, edges);
         return next;
       });
     },
-    [readOnly, getCenterSpawnPosition, setNodes, pushHistory, triggerAutoSave, edges]
+    [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]
   );
 
   const handleAddFileNode = useCallback(
     (targetFilePath: string) => {
       if (readOnly) return;
-      const pos = getCenterSpawnPosition();
-      const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const width = 340;
       const height = 280;
+      const pos = getCenterSpawnPosition(width, height, nodes.length);
+      const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const newNode: Node = {
         id,
         type: 'canvasFile',
-        position: { x: pos.x - width / 2, y: pos.y - height / 2 },
+        position: { x: pos.x, y: pos.y },
         width,
         height,
         style: { width: `${width}px`, height: `${height}px`, zIndex: 1 },
+        selected: true,
         data: {
           rawType: 'file',
           file: targetFilePath,
@@ -287,29 +336,31 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       };
 
       setNodes((current) => {
-        const next = [...current, newNode];
+        const unselected = current.map((n) => ({ ...n, selected: false }));
+        const next = [...unselected, newNode];
         pushHistory(next, edges);
         triggerAutoSave(next, edges);
         return next;
       });
     },
-    [readOnly, getCenterSpawnPosition, setNodes, pushHistory, triggerAutoSave, edges]
+    [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]
   );
 
   const handleAddGroupNode = useCallback(() => {
     if (readOnly) return;
-    const pos = getCenterSpawnPosition();
-    const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const width = 420;
     const height = 320;
+    const pos = getCenterSpawnPosition(width, height, nodes.length);
+    const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
     const newNode: Node = {
       id,
       type: 'canvasGroup',
-      position: { x: pos.x - width / 2, y: pos.y - height / 2 },
+      position: { x: pos.x, y: pos.y },
       width,
       height,
       style: { width: `${width}px`, height: `${height}px`, zIndex: -1 },
+      selected: true,
       data: {
         rawType: 'group',
         label: 'Neue Gruppe',
@@ -318,12 +369,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     };
 
     setNodes((current) => {
-      const next = [...current, newNode];
+      const unselected = current.map((n) => ({ ...n, selected: false }));
+      const next = [...unselected, newNode];
       pushHistory(next, edges);
       triggerAutoSave(next, edges);
       return next;
     });
-  }, [readOnly, getCenterSpawnPosition, setNodes, pushHistory, triggerAutoSave, edges]);
+  }, [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]);
 
   // Selected item tracking for Floating Inspector
   const selectedNode = useMemo(() => nodes.find((n) => n.selected) || null, [nodes]);
@@ -489,7 +541,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
   return (
     <CanvasContext.Provider value={{ onOpenNote, onSelectTag, allNotes, readOnly }}>
-      <div className="knowmesh-canvas-workspace">
+      <div className="canvas-editor-wrapper" ref={containerRef}>
         {/* Top dock toolbar */}
         {!readOnly && (
           <CanvasToolbar
@@ -523,38 +575,43 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           />
         )}
 
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          panOnDrag={[1, 2]}
-          zoomOnPinch={true}
-          selectionOnDrag={false}
-          proOptions={{ hideAttribution: true }}
-          minZoom={0.15}
-          maxZoom={2.5}
-        >
-          {gridMode !== 'off' && (
-            <Background
-              variant={gridMode === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines}
-              gap={gridMode === 'dots' ? 24 : 32}
-              size={gridMode === 'dots' ? 1.5 : 1}
-              color="var(--border-subtle, rgba(255, 255, 255, 0.1))"
+        {/* Full-size ReactFlow Container */}
+        <div className="canvas-reactflow-container" style={{ width: '100%', height: '100%' }}>
+          <ReactFlow
+            style={{ width: '100%', height: '100%' }}
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
+            onConnect={onConnect}
+            nodeTypes={nodeTypes}
+            connectionMode={ConnectionMode.Loose}
+            panOnDrag={[1, 2]}
+            zoomOnPinch={true}
+            selectionOnDrag={false}
+            proOptions={{ hideAttribution: true }}
+            minZoom={0.15}
+            maxZoom={2.5}
+          >
+            {gridMode !== 'off' && (
+              <Background
+                variant={gridMode === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines}
+                gap={gridMode === 'dots' ? 24 : 32}
+                size={gridMode === 'dots' ? 1.5 : 1}
+                color="var(--border-subtle, rgba(255, 255, 255, 0.15))"
+              />
+            )}
+            <Controls showInteractive={false} className="canvas-rf-controls" />
+            <MiniMap
+              nodeColor={(n) => {
+                if (n.data?.color) return resolveCanvasColor(n.data.color as string) || '#888';
+                return '#444';
+              }}
+              maskColor="rgba(0, 0, 0, 0.55)"
+              className="canvas-rf-minimap"
             />
-          )}
-          <Controls showInteractive={false} className="canvas-rf-controls" />
-          <MiniMap
-            nodeColor={(n) => {
-              if (n.data?.color) return resolveCanvasColor(n.data.color as string) || '#888';
-              return '#444';
-            }}
-            maskColor="rgba(0, 0, 0, 0.55)"
-            className="canvas-rf-minimap"
-          />
-        </ReactFlow>
+          </ReactFlow>
+        </div>
       </div>
     </CanvasContext.Provider>
   );

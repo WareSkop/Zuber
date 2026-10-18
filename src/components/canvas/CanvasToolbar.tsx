@@ -48,25 +48,14 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onRedo,
   allNotes,
 }) => {
-  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | null>(null);
   const [fileSearch, setFileSearch] = useState('');
-  const [showWorkflowMenu, setShowWorkflowMenu] = useState(false);
-  const [showNetworkMenu, setShowNetworkMenu] = useState(false);
-
-  const filePickerRef = useRef<HTMLDivElement>(null);
-  const workflowMenuRef = useRef<HTMLDivElement>(null);
-  const networkMenuRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (filePickerRef.current && !filePickerRef.current.contains(e.target as Node)) {
-        setShowFilePicker(false);
-      }
-      if (workflowMenuRef.current && !workflowMenuRef.current.contains(e.target as Node)) {
-        setShowWorkflowMenu(false);
-      }
-      if (networkMenuRef.current && !networkMenuRef.current.contains(e.target as Node)) {
-        setShowNetworkMenu(false);
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -83,13 +72,16 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     .slice(0, 15);
 
   return (
-    <div className="canvas-dock-toolbar">
-      {/* Left items: Node creation */}
+    <div className="canvas-toolbar" ref={toolbarRef}>
+      {/* Node creation group */}
       <div className="canvas-toolbar-group">
         <button
           type="button"
-          className="canvas-tb-btn"
-          onClick={() => onAddTextNode('rectangle')}
+          className="canvas-toolbar-btn"
+          onClick={() => {
+            onAddTextNode('rectangle');
+            setOpenDropdown(null);
+          }}
           title="Text-Karte hinzufügen (+)"
         >
           <Plus size={15} />
@@ -97,19 +89,20 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
 
         {/* Embed note/file picker */}
-        <div className="canvas-tb-popover-container" ref={filePickerRef}>
+        <div className="canvas-toolbar-dropdown">
           <button
             type="button"
-            className={`canvas-tb-btn ${showFilePicker ? 'active' : ''}`}
-            onClick={() => setShowFilePicker((v) => !v)}
+            className={`canvas-toolbar-btn ${openDropdown === 'file' ? 'active' : ''}`}
+            onClick={() => setOpenDropdown((prev) => (prev === 'file' ? null : 'file'))}
             title="Notiz / Datei einbetten"
           >
             <FileText size={15} />
             <span>Notiz einbetten</span>
+            <ChevronDown size={12} />
           </button>
 
-          {showFilePicker && (
-            <div className="canvas-file-picker-popup">
+          {openDropdown === 'file' && (
+            <div className="canvas-dropdown-menu canvas-file-picker-menu">
               <div className="canvas-picker-search-row">
                 <Search size={14} />
                 <input
@@ -128,10 +121,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                     <button
                       key={note.path}
                       type="button"
-                      className="canvas-picker-item"
+                      className="canvas-dropdown-item"
                       onClick={() => {
                         onAddFileNode(note.path);
-                        setShowFilePicker(false);
+                        setOpenDropdown(null);
                       }}
                     >
                       <span className="picker-item-title">{note.basename || note.name}</span>
@@ -147,8 +140,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         {/* Group */}
         <button
           type="button"
-          className="canvas-tb-btn"
-          onClick={onAddGroupNode}
+          className="canvas-toolbar-btn"
+          onClick={() => {
+            onAddGroupNode();
+            setOpenDropdown(null);
+          }}
           title="Gruppe / Bereich hinzufügen"
         >
           <FolderPlus size={15} />
@@ -156,11 +152,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
 
         {/* Workflow Shapes Dropdown */}
-        <div className="canvas-tb-popover-container" ref={workflowMenuRef}>
+        <div className="canvas-toolbar-dropdown">
           <button
             type="button"
-            className={`canvas-tb-btn ${showWorkflowMenu ? 'active' : ''}`}
-            onClick={() => setShowWorkflowMenu((v) => !v)}
+            className={`canvas-toolbar-btn ${openDropdown === 'workflow' ? 'active' : ''}`}
+            onClick={() => setOpenDropdown((prev) => (prev === 'workflow' ? null : 'workflow'))}
             title="Workflow-Formen (Prozess, Entscheidung, Start/Ende)"
           >
             <GitBranch size={15} />
@@ -168,89 +164,89 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             <ChevronDown size={12} />
           </button>
 
-          {showWorkflowMenu && (
-            <div className="canvas-palette-dropdown">
-              <div className="canvas-palette-title">Workflow-Formen</div>
+          {openDropdown === 'workflow' && (
+            <div className="canvas-dropdown-menu">
+              <div className="canvas-dropdown-title">Workflow-Formen</div>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('rectangle');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Square size={16} /> <span>Prozesschritt (Rechteck)</span>
+                <Square size={15} /> <span>Prozessschritt (Rechteck)</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('rounded');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
                 <div className="palette-icon-rounded" /> <span>Start / Ende (Abgerundet)</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('circle');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Circle size={16} /> <span>Knotenpunkt / Status (Kreis)</span>
+                <Circle size={15} /> <span>Knotenpunkt / Status (Kreis)</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('diamond');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Diamond size={16} /> <span>Entscheidung / Verzweigung (Raute)</span>
+                <Diamond size={15} /> <span>Entscheidung (Raute)</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('parallelogram');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
                 <div className="palette-icon-parallel" /> <span>Ein- / Ausgabe (Parallelogramm)</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('hexagon');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
                 <div className="palette-icon-hexagon" /> <span>Bedingung / Filter (Hexagon)</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('cylinder');
-                  setShowWorkflowMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Database size={16} /> <span>Datenbank / Speicher (Zylinder)</span>
+                <Database size={15} /> <span>Datenbank / Speicher (Zylinder)</span>
               </button>
             </div>
           )}
         </div>
 
         {/* Network Elements Dropdown */}
-        <div className="canvas-tb-popover-container" ref={networkMenuRef}>
+        <div className="canvas-toolbar-dropdown">
           <button
             type="button"
-            className={`canvas-tb-btn ${showNetworkMenu ? 'active' : ''}`}
-            onClick={() => setShowNetworkMenu((v) => !v)}
+            className={`canvas-toolbar-btn ${openDropdown === 'network' ? 'active' : ''}`}
+            onClick={() => setOpenDropdown((prev) => (prev === 'network' ? null : 'network'))}
             title="Netzwerk-Elemente (Server, Router, Cloud, Workstation)"
           >
             <Network size={15} />
@@ -258,71 +254,71 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             <ChevronDown size={12} />
           </button>
 
-          {showNetworkMenu && (
-            <div className="canvas-palette-dropdown">
-              <div className="canvas-palette-title">Netzwerk-Elemente</div>
+          {openDropdown === 'network' && (
+            <div className="canvas-dropdown-menu">
+              <div className="canvas-dropdown-title">Netzwerk-Elemente</div>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('server');
-                  setShowNetworkMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Server size={16} /> <span>Server / Host</span>
+                <Server size={15} /> <span>Server / Host</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('router');
-                  setShowNetworkMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Network size={16} /> <span>Router / Gateway / Switch</span>
+                <Network size={15} /> <span>Router / Gateway / Switch</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('cloud');
-                  setShowNetworkMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Cloud size={16} /> <span>Cloud / Internet</span>
+                <Cloud size={15} /> <span>Cloud / Internet</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('workstation');
-                  setShowNetworkMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Monitor size={16} /> <span>Workstation / Client</span>
+                <Monitor size={15} /> <span>Workstation / Client</span>
               </button>
               <button
                 type="button"
-                className="canvas-palette-item"
+                className="canvas-dropdown-item"
                 onClick={() => {
                   onAddTextNode('cylinder');
-                  setShowNetworkMenu(false);
+                  setOpenDropdown(null);
                 }}
               >
-                <Database size={16} /> <span>Datenbank / Storage</span>
+                <Database size={15} /> <span>Datenbank / Storage</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="canvas-toolbar-spacer" />
+      <div className="canvas-toolbar-divider" />
 
-      {/* Right items: History & View Controls */}
+      {/* History & View Controls */}
       <div className="canvas-toolbar-group">
         <button
           type="button"
-          className="canvas-tb-btn icon-only"
+          className="canvas-toolbar-btn icon-only"
           onClick={onUndo}
           disabled={!canUndo}
           title="Rückgängig (Strg+Z)"
@@ -332,7 +328,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
         <button
           type="button"
-          className="canvas-tb-btn icon-only"
+          className="canvas-toolbar-btn icon-only"
           onClick={onRedo}
           disabled={!canRedo}
           title="Wiederholen (Strg+Y)"
@@ -342,7 +338,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
         <button
           type="button"
-          className="canvas-tb-btn icon-only"
+          className="canvas-toolbar-btn icon-only"
           onClick={onFitView}
           title="Ansicht einpassen (Fit View)"
           aria-label="Ansicht einpassen"
@@ -351,7 +347,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
         <button
           type="button"
-          className={`canvas-tb-btn icon-only ${gridMode !== 'off' ? 'active' : ''}`}
+          className={`canvas-toolbar-btn icon-only ${gridMode !== 'off' ? 'active' : ''}`}
           onClick={onToggleGrid}
           title={`Gitter: ${gridMode}`}
           aria-label="Gitter umschalten"

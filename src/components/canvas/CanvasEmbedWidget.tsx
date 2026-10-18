@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import '@xyflow/react/dist/style.css';
 import { ExternalLink, Layout } from 'lucide-react';
 import { api } from '../../api';
 import { CanvasEditor } from './CanvasEditor';

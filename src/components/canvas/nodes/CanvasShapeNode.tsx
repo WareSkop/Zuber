@@ -126,11 +126,11 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
   };
 
   // Shape SVG Geometry & Theme adaptation
-  const strokeColor = customColor || (selected ? 'var(--accent-color, #7852ee)' : 'var(--border-color, #444)');
-  const strokeWidth = selected ? '2.5' : '1.5';
+  const strokeColor = customColor || (selected ? 'var(--accent-color, #d4af37)' : 'var(--border-strong, #64748b)');
+  const strokeWidth = selected ? '2.5' : '2';
   const fillColor = customColor
-    ? `${customColor}1f` // ~12% opacity tint
-    : 'var(--bg-secondary, #25262b)';
+    ? `${customColor}26` // ~15% opacity tint
+    : 'var(--bg-secondary, #1e293b)';
 
   const renderShapeSvg = () => {
     switch (shape) {
@@ -309,7 +309,12 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       style={{
         width: '100%',
         height: '100%',
+        minWidth: '120px',
+        minHeight: '60px',
         position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
       onDoubleClick={() => !readOnly && setIsEditing(true)}
     >
@@ -322,27 +327,48 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       />
 
       {/* 4 Multi-directional handles (Obsidian-compatible top, right, bottom, left) */}
-      <Handle type="target" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
       <Handle type="source" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
-      <Handle type="target" position={Position.Right} id="right" className="canvas-node-handle handle-right" />
+      <Handle type="target" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
       <Handle type="source" position={Position.Right} id="right" className="canvas-node-handle handle-right" />
-      <Handle type="target" position={Position.Bottom} id="bottom" className="canvas-node-handle handle-bottom" />
+      <Handle type="target" position={Position.Right} id="right" className="canvas-node-handle handle-right" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="canvas-node-handle handle-bottom" />
-      <Handle type="target" position={Position.Left} id="left" className="canvas-node-handle handle-left" />
+      <Handle type="target" position={Position.Bottom} id="bottom" className="canvas-node-handle handle-bottom" />
       <Handle type="source" position={Position.Left} id="left" className="canvas-node-handle handle-left" />
+      <Handle type="target" position={Position.Left} id="left" className="canvas-node-handle handle-left" />
 
       {/* SVG Background Geometry */}
       <svg
         className="canvas-node-svg-bg"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'visible',
+          pointerEvents: 'none',
+        }}
         aria-hidden="true"
       >
         {renderShapeSvg()}
       </svg>
 
       {/* Content Container */}
-      <div className="canvas-node-content-wrapper">
+      <div
+        className="canvas-node-content-wrapper"
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '10px 14px',
+          boxSizing: 'border-box',
+        }}
+      >
         {isEditing ? (
           <div className="canvas-editor-input-box">
             <textarea
