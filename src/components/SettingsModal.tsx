@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
   Upload,
+  Type,
 } from 'lucide-react';
 import { version as appVersion } from '../../package.json';
 import {
@@ -38,6 +39,13 @@ import {
   type StartupConfig,
   type StartupBehavior,
 } from '../startupConfig';
+import {
+  getFontSettings,
+  saveFontSettings,
+  DEFAULT_FONT_SETTINGS,
+  applyFontSettingsToDOM,
+  type FontSettings,
+} from '../fontSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -47,6 +55,7 @@ interface SettingsModalProps {
   fileTree: FileTreeNode[];
   onInstallApp?: () => void;
   isInstalledApp?: boolean;
+  onFontSettingsChange?: (settings: FontSettings) => void;
 }
 
 type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git';
@@ -59,12 +68,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   fileTree,
   onInstallApp,
   isInstalledApp = false,
+  onFontSettingsChange,
 }) => {
   const { t, language, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
 
   // Startup configuration state
   const [startupConfig, setStartupConfigState] = useState<StartupConfig>(getStartupConfig);
+
+  // Font settings state
+  const [fontSettings, setFontSettings] = useState<FontSettings>(getFontSettings);
+
+  const updateFontSettings = (updater: (prev: FontSettings) => FontSettings) => {
+    setFontSettings((prev) => {
+      const next = updater(prev);
+      saveFontSettings(next);
+      applyFontSettingsToDOM(next, typeof window !== 'undefined' && window.innerWidth < 768);
+      onFontSettingsChange?.(next);
+      return next;
+    });
+  };
+
+  const handleResetFonts = () => {
+    setFontSettings(DEFAULT_FONT_SETTINGS);
+    saveFontSettings(DEFAULT_FONT_SETTINGS);
+    applyFontSettingsToDOM(DEFAULT_FONT_SETTINGS, typeof window !== 'undefined' && window.innerWidth < 768);
+    onFontSettingsChange?.(DEFAULT_FONT_SETTINGS);
+  };
 
   // Security state
   const [authEnabled, setAuthEnabled] = useState(true);
@@ -150,6 +180,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!isOpen) return;
 
     setStartupConfigState(getStartupConfig());
+    setFontSettings(getFontSettings());
 
     // Load security settings
     api.getSecuritySettings()
@@ -814,6 +845,173 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       )}
                     </div>
                   </label>
+                </div>
+              </div>
+
+              {/* Font Sizes Matrix */}
+              <div
+                className="font-settings-container"
+                style={{
+                  background: 'var(--bg-secondary)',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  marginBottom: '20px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Type size={18} style={{ color: 'var(--accent-primary)' }} />
+                    <span>{t('settings.fontSettingsHeading')}</span>
+                  </h4>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={handleResetFonts}
+                    style={{ fontSize: '11.5px', padding: '4px 8px' }}
+                  >
+                    <RefreshCw size={12} />
+                    <span>{t('settings.fontResetDefaults')}</span>
+                  </button>
+                </div>
+                <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+                  {t('settings.fontSettingsDesc')}
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  {/* Desktop Column */}
+                  <div style={{ background: 'var(--bg-primary)', padding: '14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+                    <strong style={{ display: 'block', fontSize: '13.5px', marginBottom: '12px', color: 'var(--text-primary)' }}>
+                      💻 {t('settings.fontDesktopHeading')}
+                    </strong>
+
+                    {/* Desktop UI */}
+                    <div style={{ marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                        <span>{t('settings.fontUiLabel')}</span>
+                        <span className="font-size-badge" style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>
+                          {fontSettings.desktop.uiFontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="11"
+                        max="20"
+                        step="1"
+                        value={fontSettings.desktop.uiFontSize}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateFontSettings((prev) => ({
+                            ...prev,
+                            desktop: { ...prev.desktop, uiFontSize: val },
+                          }));
+                        }}
+                        style={{ width: '100%', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        <span>11px</span>
+                        <span>Standard: 14px</span>
+                        <span>20px</span>
+                      </div>
+                    </div>
+
+                    {/* Desktop Editor */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                        <span>{t('settings.fontEditorLabel')}</span>
+                        <span className="font-size-badge" style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>
+                          {fontSettings.desktop.editorFontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="12"
+                        max="24"
+                        step="1"
+                        value={fontSettings.desktop.editorFontSize}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateFontSettings((prev) => ({
+                            ...prev,
+                            desktop: { ...prev.desktop, editorFontSize: val },
+                          }));
+                        }}
+                        style={{ width: '100%', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        <span>12px</span>
+                        <span>Standard: 16px</span>
+                        <span>24px</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mobile Column */}
+                  <div style={{ background: 'var(--bg-primary)', padding: '14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+                    <strong style={{ display: 'block', fontSize: '13.5px', marginBottom: '12px', color: 'var(--text-primary)' }}>
+                      📱 {t('settings.fontMobileHeading')}
+                    </strong>
+
+                    {/* Mobile UI */}
+                    <div style={{ marginBottom: '14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                        <span>{t('settings.fontUiLabel')}</span>
+                        <span className="font-size-badge" style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>
+                          {fontSettings.mobile.uiFontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="12"
+                        max="22"
+                        step="1"
+                        value={fontSettings.mobile.uiFontSize}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateFontSettings((prev) => ({
+                            ...prev,
+                            mobile: { ...prev.mobile, uiFontSize: val },
+                          }));
+                        }}
+                        style={{ width: '100%', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        <span>12px</span>
+                        <span>Standard: 15px</span>
+                        <span>22px</span>
+                      </div>
+                    </div>
+
+                    {/* Mobile Editor */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '4px' }}>
+                        <span>{t('settings.fontEditorLabel')}</span>
+                        <span className="font-size-badge" style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>
+                          {fontSettings.mobile.editorFontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="13"
+                        max="26"
+                        step="1"
+                        value={fontSettings.mobile.editorFontSize}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          updateFontSettings((prev) => ({
+                            ...prev,
+                            mobile: { ...prev.mobile, editorFontSize: val },
+                          }));
+                        }}
+                        style={{ width: '100%', cursor: 'pointer' }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                        <span>13px</span>
+                        <span>Standard: 16px</span>
+                        <span>26px</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

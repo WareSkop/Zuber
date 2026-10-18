@@ -75,6 +75,11 @@ import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
 import { useTranslation } from './i18n';
 import { recordLastActiveNote, resolveStartupNotePath } from './startupConfig';
+import {
+  getFontSettings,
+  applyFontSettingsToDOM,
+  type FontSettings,
+} from './fontSettings';
 
 type MainWorkspaceView = 'editor' | 'graph' | 'split';
 type RightSidebarTab = 'backlinks' | 'outline' | 'local-graph';
@@ -134,11 +139,16 @@ export const App: React.FC = () => {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
+  const [fontSettings, setFontSettings] = useState<FontSettings>(getFontSettings);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isInstalledApp, setIsInstalledApp] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
   });
+
+  useEffect(() => {
+    applyFontSettingsToDOM(fontSettings, window.innerWidth < 768);
+  }, [fontSettings]);
 
   useEffect(() => {
     const handleBeforeInstall = (e: Event) => {
@@ -172,11 +182,13 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      applyFontSettingsToDOM(fontSettings, mobile);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [fontSettings]);
 
   // Sync Android / mobile visual viewport dynamically to prevent keyboard clipping
   useEffect(() => {
@@ -219,17 +231,30 @@ export const App: React.FC = () => {
     const absX = Math.abs(deltaX);
     const absY = Math.abs(deltaY);
 
-    if (absY > absX) return;
+    // Scroll protection: if vertical motion is dominant or equal, ignore swipe
+    if (absY >= absX) return;
 
-    if (!leftSidebarOpen) {
-      const isEdgeStart = startX <= 35;
-      const isStrongSwipe = deltaX > 65 && absX > absY * 1.5;
-      if (isEdgeStart || isStrongSwipe) {
-        setLeftSidebarOpen(true);
-      }
-    } else {
-      if (deltaX < -55 && absX > absY * 1.3) {
-        setLeftSidebarOpen(false);
+    // Horizontal movement must be dominant and at least 50px
+    if (absX < 50 || absX <= absY * 1.4) return;
+
+    if (isMobile) {
+      if (leftSidebarOpen) {
+        // Swipe left closes left sidebar
+        if (deltaX < -50) {
+          setLeftSidebarOpen(false);
+        }
+      } else if (rightSidebarOpen) {
+        // Swipe right closes right sidebar
+        if (deltaX > 50) {
+          setRightSidebarOpen(false);
+        }
+      } else {
+        // Neither sidebar is open: swipe right opens left sidebar
+        const isEdgeStart = startX <= 35;
+        const isStrongSwipe = deltaX > 65;
+        if (isEdgeStart || isStrongSwipe) {
+          setLeftSidebarOpen(true);
+        }
       }
     }
   };
@@ -2308,6 +2333,7 @@ export const App: React.FC = () => {
         fileTree={tree}
         onInstallApp={handleInstallApp}
         isInstalledApp={isInstalledApp}
+        onFontSettingsChange={setFontSettings}
       />
 
       {/* Interactive Conflict Resolution Modal */}
