@@ -2,6 +2,10 @@
 
 All notable changes to Knowmesh will be documented in this file.
 
+## [0.2.1] - 2026-10-18
+### Fixed
+- Upload & Download path traversal check: Resolved false-positive rejections of valid files and notes containing double dots or ellipses in their names (e.g. note titles ending with `..`) by validating individual path segments instead of full string substring matching.
+
 ## [0.2.0] - 2026-10-18
 ### Added
 - Graphical Canvas, Workflow & Network Diagram Editor (`.canvas`):
