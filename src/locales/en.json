@@ -73,7 +73,14 @@
     "deleteEntryConfirm": "Are you sure you want to delete \"{{name}}\"?",
     "deleteFolderConfirm": "Delete folder \"{{name}}\" and all containing files?",
     "copiedToClipboard": "\"{{name}}\" copied to clipboard",
-    "cutToClipboard": "\"{{name}}\" marked to move"
+    "cutToClipboard": "\"{{name}}\" marked to move",
+    "uploadFiles": "Upload files…",
+    "uploadFolder": "Upload folder…",
+    "downloadFile": "Download file",
+    "downloadFolder": "Download folder (.zip)",
+    "downloadVault": "Download entire vault (.zip)",
+    "uploadSuccess": "Successfully uploaded {{count}} file(s)",
+    "uploading": "Uploading..."
   },
   "editor": {
     "placeholder": "Start writing your note... (Type [[ for wiki links or # for tags)",

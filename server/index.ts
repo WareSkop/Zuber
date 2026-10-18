@@ -4,10 +4,12 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import multer from 'multer';
+import { ZipArchive } from 'archiver';
 import { WebSocketServer, WebSocket } from 'ws';
 import {
   COOKIE_NAME,
@@ -480,6 +482,165 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
       });
     }
   );
+
+  // Multi-file and directory upload preserving relative structures
+  const uploadMulti = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        cb(null, os.tmpdir());
+      },
+      filename: (_req, file, cb) => {
+        const unique = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        cb(null, `upload-${unique}-${path.basename(file.originalname).replace(/[^\w.-]/g, '_')}`);
+      },
+    }),
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
+  });
+
+  app.post(
+    '/api/vault/upload-entries',
+    requireAuth,
+    uploadMulti.array('files'),
+    async (req, res) => {
+      const files = (req.files as Express.Multer.File[]) || [];
+      try {
+        if (!files || files.length === 0) {
+          res.status(400).json({ error: 'Keine Dateien hochgeladen.' });
+          return;
+        }
+
+        const targetFolder = String(req.body.targetFolder || '').trim().replace(/\\/g, '/');
+        if (targetFolder.includes('..') || path.isAbsolute(targetFolder) || targetFolder.startsWith('/')) {
+          for (const f of files) await fs.promises.unlink(f.path).catch(() => {});
+          res.status(400).json({ error: 'Ungültiger Zielordner (Path Traversal nicht erlaubt).' });
+          return;
+        }
+
+        let relativePaths: string[] = [];
+        if (typeof req.body.paths === 'string') {
+          try {
+            const parsed = JSON.parse(req.body.paths);
+            if (Array.isArray(parsed)) relativePaths = parsed;
+            else relativePaths = [req.body.paths];
+          } catch {
+            relativePaths = [req.body.paths];
+          }
+        } else if (Array.isArray(req.body.paths)) {
+          relativePaths = req.body.paths;
+        }
+
+        const uploadedPaths: string[] = [];
+        const vaultDir = vaultService.getVaultDir();
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const rawRel = (relativePaths[i] || file.originalname || '').replace(/\\/g, '/');
+
+          if (rawRel.includes('..') || path.isAbsolute(rawRel) || rawRel.startsWith('/')) {
+            for (const f of files) await fs.promises.unlink(f.path).catch(() => {});
+            res.status(400).json({ error: `Ungültiger Dateipfad: "${rawRel}" enthält ungültige Segmente.` });
+            return;
+          }
+
+          const combinedRel = targetFolder ? `${targetFolder}/${rawRel}`.replace(/\/+/g, '/') : rawRel;
+          const destAbsPath = vaultService.resolveSafePath(combinedRel);
+
+          if (!destAbsPath.startsWith(vaultDir + path.sep)) {
+            for (const f of files) await fs.promises.unlink(f.path).catch(() => {});
+            res.status(400).json({ error: 'Dateipfad liegt außerhalb des Vaults.' });
+            return;
+          }
+
+          const destDir = path.dirname(destAbsPath);
+          await fs.promises.mkdir(destDir, { recursive: true });
+          await fs.promises.copyFile(file.path, destAbsPath);
+          await fs.promises.unlink(file.path).catch(() => {});
+
+          vaultService.indexFile(combinedRel);
+          uploadedPaths.push(combinedRel);
+        }
+
+        vaultService.invalidateCaches(true);
+
+        res.json({
+          success: true,
+          count: uploadedPaths.length,
+          paths: uploadedPaths,
+        });
+      } catch (err: unknown) {
+        for (const f of files) await fs.promises.unlink(f.path).catch(() => {});
+        console.error('[Upload Entries] Error:', err);
+        res.status(500).json({ error: (err as Error).message || 'Fehler beim Hochladen der Dateien.' });
+      }
+    }
+  );
+
+  // Single file and folder ZIP download
+  app.get('/api/vault/download', requireAuth, async (req, res) => {
+    try {
+      const rawPath = String(req.query.path || '').trim();
+      if (rawPath.includes('..')) {
+        res.status(400).json({ error: 'Ungültiger Pfad (Path Traversal nicht erlaubt).' });
+        return;
+      }
+
+      const absPath = vaultService.resolveSafePath(rawPath);
+      if (!fs.existsSync(absPath)) {
+        res.status(404).send('Datei oder Ordner nicht gefunden.');
+        return;
+      }
+
+      const stat = await fs.promises.stat(absPath);
+      if (stat.isFile()) {
+        const filename = path.basename(absPath);
+        res.download(absPath, filename);
+        return;
+      }
+
+      if (stat.isDirectory()) {
+        const folderName = path.basename(absPath) || 'vault';
+        const zipFilename = `${folderName}.zip`;
+
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${encodeURIComponent(zipFilename)}"; filename*=UTF-8''${encodeURIComponent(zipFilename)}`
+        );
+
+        const zip = new ZipArchive({ zlib: { level: 6 } });
+        zip.on('error', (err: any) => {
+          console.error('[Download ZIP] Archiver error:', err);
+          if (!res.headersSent) {
+            res.status(500).send('Fehler beim Erstellen der ZIP-Datei.');
+          }
+        });
+
+        zip.pipe(res);
+        zip.directory(absPath, false, (data) => {
+          const entryName = (data.name || '').replace(/\\/g, '/');
+          if (
+            entryName.startsWith('.') ||
+            entryName.includes('/.') ||
+            entryName.startsWith('node_modules/') ||
+            entryName.includes('/node_modules/')
+          ) {
+            return false;
+          }
+          return data;
+        });
+
+        await zip.finalize();
+        return;
+      }
+
+      res.status(400).send('Ungültiger Pfadtyp.');
+    } catch (err: unknown) {
+      console.error('[Download] Error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: (err as Error).message || 'Fehler beim Download.' });
+      }
+    }
+  });
 
   // --- Git & Remote Backup Endpoints ---
   app.get('/api/vault/git/status', requireAuth, async (_req, res) => {

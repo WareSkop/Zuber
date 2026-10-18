@@ -73,7 +73,14 @@
     "deleteEntryConfirm": "Möchtest du „{{name}}“ wirklich löschen?",
     "deleteFolderConfirm": "Ordner „{{name}}“ und alle enthaltenen Dateien wirklich löschen?",
     "copiedToClipboard": "„{{name}}“ in Zwischenablage kopiert",
-    "cutToClipboard": "„{{name}}“ zum Verschieben markiert"
+    "cutToClipboard": "„{{name}}“ zum Verschieben markiert",
+    "uploadFiles": "Dateien hochladen…",
+    "uploadFolder": "Ordner hochladen…",
+    "downloadFile": "Datei herunterladen",
+    "downloadFolder": "Ordner herunterladen (.zip)",
+    "downloadVault": "Gesamten Vault herunterladen (.zip)",
+    "uploadSuccess": "{{count}} Datei(en) erfolgreich hochgeladen",
+    "uploading": "Lade hoch..."
   },
   "editor": {
     "placeholder": "Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)",

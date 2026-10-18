@@ -19,6 +19,8 @@ import {
   Scissors,
   Search,
   Trash2,
+  Upload,
+  Download,
   X,
 } from 'lucide-react';
 import type { FileTreeNode } from '../../shared/types';
@@ -92,6 +94,89 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Upload & Download states
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const [targetUploadFolder, setTargetUploadFolder] = useState<string>('');
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
+  const getParentFolder = (filePath: string) => {
+    const parts = filePath.split('/');
+    parts.pop();
+    return parts.join('/');
+  };
+
+  const triggerUploadFiles = (folder: string) => {
+    setTargetUploadFolder(folder);
+    setContextMenu(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const triggerUploadFolder = (folder: string) => {
+    setTargetUploadFolder(folder);
+    setContextMenu(null);
+    if (folderInputRef.current) {
+      folderInputRef.current.value = '';
+      folderInputRef.current.click();
+    }
+  };
+
+  const handleFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    try {
+      setUploadStatus(t('sidebar.uploading'));
+      const res = await api.uploadEntries(targetUploadFolder, files);
+      if (targetUploadFolder) {
+        setExpandedFolders((prev) => ({ ...prev, [targetUploadFolder]: true }));
+      }
+      onRefresh();
+      setUploadStatus(t('sidebar.uploadSuccess', { count: res.count }));
+      setTimeout(() => setUploadStatus(null), 3500);
+    } catch (err: unknown) {
+      console.error('[Knowmesh] Upload error:', err);
+      alert((err as Error).message || 'Fehler beim Hochladen.');
+      setUploadStatus(null);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFolderChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    try {
+      setUploadStatus(t('sidebar.uploading'));
+      const paths = files.map((f) => (f as any).webkitRelativePath || f.name);
+      const res = await api.uploadEntries(targetUploadFolder, files, paths);
+      if (targetUploadFolder) {
+        setExpandedFolders((prev) => ({ ...prev, [targetUploadFolder]: true }));
+      }
+      onRefresh();
+      setUploadStatus(t('sidebar.uploadSuccess', { count: res.count }));
+      setTimeout(() => setUploadStatus(null), 3500);
+    } catch (err: unknown) {
+      console.error('[Knowmesh] Folder upload error:', err);
+      alert((err as Error).message || 'Fehler beim Hochladen des Ordners.');
+      setUploadStatus(null);
+    } finally {
+      if (folderInputRef.current) folderInputRef.current.value = '';
+    }
+  };
+
+  const handleDownload = async (path: string, isDirectory: boolean) => {
+    setContextMenu(null);
+    try {
+      await api.downloadEntry(path, isDirectory);
+    } catch (err: unknown) {
+      console.error('[Knowmesh] Download error:', err);
+      alert((err as Error).message || 'Fehler beim Download.');
+    }
+  };
 
   // Close context menu on click outside or escape key
   useEffect(() => {
@@ -168,8 +253,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const openContextMenu = (node: FileTreeNode | null, clientX: number, clientY: number) => {
-    const menuWidth = 220;
-    const menuHeight = 280;
+    const menuWidth = 230;
+    const menuHeight = 360;
     const x = Math.max(10, Math.min(clientX, window.innerWidth - menuWidth - 10));
     const y = Math.max(10, Math.min(clientY, window.innerHeight - menuHeight - 10));
     setContextMenu({ x, y, node });
@@ -604,8 +689,61 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <span>{t('sidebar.newFolderInFolder')}</span>
                     </button>
                     <div className="tree-context-separator" />
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => triggerUploadFiles(contextMenu.node!.path)}
+                    >
+                      <Upload size={15} />
+                      <span>{t('sidebar.uploadFiles')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => triggerUploadFolder(contextMenu.node!.path)}
+                    >
+                      <Upload size={15} />
+                      <span>{t('sidebar.uploadFolder')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => handleDownload(contextMenu.node!.path, true)}
+                    >
+                      <Download size={15} />
+                      <span>{t('sidebar.downloadFolder')}</span>
+                    </button>
+                    <div className="tree-context-separator" />
                   </>
-                ) : null}
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => handleDownload(contextMenu.node!.path, false)}
+                    >
+                      <Download size={15} />
+                      <span>{t('sidebar.downloadFile')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => triggerUploadFiles(getParentFolder(contextMenu.node!.path))}
+                    >
+                      <Upload size={15} />
+                      <span>{t('sidebar.uploadFiles')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => triggerUploadFolder(getParentFolder(contextMenu.node!.path))}
+                    >
+                      <Upload size={15} />
+                      <span>{t('sidebar.uploadFolder')}</span>
+                    </button>
+                    <div className="tree-context-separator" />
+                  </>
+                )}
 
                 {/* Copy */}
                 <button
@@ -719,6 +857,31 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   <FolderPlus size={15} />
                   <span>{t('sidebar.newFolder')}</span>
                 </button>
+                <div className="tree-context-separator" />
+                <button
+                  type="button"
+                  className="tree-context-item"
+                  onClick={() => triggerUploadFiles('')}
+                >
+                  <Upload size={15} />
+                  <span>{t('sidebar.uploadFiles')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="tree-context-item"
+                  onClick={() => triggerUploadFolder('')}
+                >
+                  <Upload size={15} />
+                  <span>{t('sidebar.uploadFolder')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="tree-context-item"
+                  onClick={() => handleDownload('', true)}
+                >
+                  <Download size={15} />
+                  <span>{t('sidebar.downloadVault')}</span>
+                </button>
                 {clipboard && (
                   <>
                     <div className="tree-context-separator" />
@@ -737,6 +900,30 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           </div>,
           document.body
         )}
+
+      {/* Hidden file & folder inputs for tree uploads */}
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={handleFilesChange}
+      />
+      <input
+        type="file"
+        multiple
+        ref={folderInputRef}
+        style={{ display: 'none' }}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+        onChange={handleFolderChange}
+      />
+
+      {/* Upload toast indicator */}
+      {uploadStatus && (
+        <div className="sidebar-upload-status-toast">
+          <span>{uploadStatus}</span>
+        </div>
+      )}
     </aside>
   );
 };

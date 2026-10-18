@@ -548,4 +548,125 @@ export const api = {
       method: 'POST',
     });
   },
+
+  async uploadEntries(
+    targetFolder: string,
+    files: File[],
+    relativePaths?: string[]
+  ): Promise<{ success: boolean; count: number; paths: string[] }> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine && offlineSyncDelegate) {
+      let count = 0;
+      const uploadedPaths: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const rel = relativePaths?.[i] || file.name;
+        if (rel.endsWith('.md') || rel.endsWith('.canvas')) {
+          const fullRel = targetFolder ? `${targetFolder}/${rel}`.replace(/\/+/g, '/') : rel;
+          const text = await file.text();
+          await offlineSyncDelegate.saveNote({
+            path: fullRel,
+            rawContent: text,
+          });
+          count++;
+          uploadedPaths.push(fullRel);
+        }
+      }
+      if (count > 0) {
+        return { success: true, count, paths: uploadedPaths };
+      }
+      throw new Error('Offline: Nur .md und .canvas Dateien können offline importiert werden.');
+    }
+
+    const formData = new FormData();
+    formData.append('targetFolder', targetFolder || '');
+    for (const file of files) {
+      formData.append('files', file);
+    }
+    if (relativePaths && relativePaths.length > 0) {
+      formData.append('paths', JSON.stringify(relativePaths));
+    }
+
+    const token = getStoredToken();
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const baseUrl = getBaseUrl();
+    const res = await fetch(`${baseUrl}/api/vault/upload-entries`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data.error) errMsg = data.error;
+      } catch {}
+      throw new Error(errMsg);
+    }
+
+    return res.json();
+  },
+
+  async downloadEntry(path: string, isDirectory = false): Promise<void> {
+    const token = getStoredToken();
+    const baseUrl = getBaseUrl();
+    const url = `${baseUrl}/api/vault/download?path=${encodeURIComponent(path)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+
+    try {
+      const headers = new Headers();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      const res = await fetch(url, { headers, credentials: 'include' });
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data.error) errMsg = data.error;
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      let filename = path.split('/').pop() || (isDirectory ? 'vault.zip' : 'file');
+      if (isDirectory && !filename.endsWith('.zip')) {
+        filename = `${filename || 'vault'}.zip`;
+      }
+      const disposition = res.headers.get('Content-Disposition');
+      if (disposition) {
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+        if (match && match[1]) filename = decodeURIComponent(match[1]);
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (err) {
+      if (!isDirectory && (path.endsWith('.md') || path.endsWith('.canvas')) && offlineSyncDelegate?.getNote) {
+        try {
+          const note = await offlineSyncDelegate.getNote(path);
+          if (note && note.rawContent !== undefined) {
+            const content = note.rawContent;
+            const mimeType = path.endsWith('.canvas') ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8';
+            const blob = new Blob([content], { type: mimeType });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = path.split('/').pop() || 'note.md';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            return;
+          }
+        } catch {}
+      }
+      throw err;
+    }
+  },
 };

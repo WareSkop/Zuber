@@ -283,6 +283,8 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/vault/attachment` | Streamt eine Datei aus dem Vault. Unterstützt direkte Pfade, URL-kodierte Pfade (`%20`), ordnerrelative Pfade (wenn `from` angegeben ist) und Wiki-Embed-Kurznamen (`![[bild.png]]`). | Query: `?path=...&from=Quell/Notiz.md` | Binärer Datei-Stream (`res.sendFile`) mit `Cache-Control: private, max-age=3600` und `ETag` |
 | `POST` | `/api/vault/upload` | Lädt eine neue Binärdatei per `multipart/form-data` (Feldname `file`) in den angegebenen Zielordner hoch (bei Namenskonflikt wird `name-<timestamp>.ext` erzeugt). Erkennt Dateitypen auch bei Clipboard-Blobs ohne Dateiendung automatisch und liefert den fertigen Wiki-Embed-Tag (`![[attachments/...]]`) zurück. | Query: `?folder=attachments`<br>Form-Data: `file` | `UploadResponse` (`{ ok: boolean, path: string, name: string, originalName: string, size: number, wikiEmbed: string }`) |
+| `POST` | `/api/vault/upload-entries` | Lädt mehrere Dateien oder komplette Ordnerstrukturen rekursiv hoch. Erstellt Zwischenordner automatisch, schützt strikt vor Path Traversal (`..`, führende Slashes) und aktualisiert den Vault-Index. | Form-Data: `targetFolder`, `files` (Array), `paths` (optionales JSON-Array relativer Pfade) | `{ success: boolean, count: number, paths: string[] }` |
+| `GET` | `/api/vault/download` | Lädt eine einzelne Datei direkt herunter (Content-Disposition Attachment) oder streamt einen kompletten Ordner / Vault als komprimiertes `.zip`-Archiv (`archiver`, ignoriert `.git`, `.obsidian` und Dotfiles). | Query: `?path=OrdnerOderDatei` | Datei- oder ZIP-Stream (`application/zip`) |
 
 ### 2.5 Git-Versionierung & Remote-Backup
 

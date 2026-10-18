@@ -43,10 +43,9 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   onDeleteEdge,
   allNotes,
 }) => {
+  const inspectorRef = React.useRef<HTMLDivElement>(null);
   const [edgeLabel, setEdgeLabel] = useState('');
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showShapePicker, setShowShapePicker] = useState(false);
-  const [showLinkPicker, setShowLinkPicker] = useState(false);
+  const [activePopover, setActivePopover] = useState<'shape' | 'color' | 'link' | null>(null);
   const [linkSearch, setLinkSearch] = useState('');
 
   useEffect(() => {
@@ -54,6 +53,22 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
       setEdgeLabel((selectedEdge.label as string) || '');
     }
   }, [selectedEdge]);
+
+  useEffect(() => {
+    setActivePopover(null);
+  }, [selectedNode?.id, selectedEdge?.id]);
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (e: MouseEvent) => {
+      if (inspectorRef.current && !inspectorRef.current.contains(e.target as unknown as globalThis.Node)) {
+        setActivePopover(null);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+    };
+  }, []);
 
   if (!selectedNode && !selectedEdge) return null;
 
@@ -83,7 +98,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   ];
 
   return (
-    <div className="canvas-floating-inspector nodrag nowheel">
+    <div ref={inspectorRef} className="canvas-floating-inspector nodrag nowheel">
       {/* --- NODE INSPECTOR --- */}
       {selectedNode && (
         <div className="inspector-content-row">
@@ -92,14 +107,14 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
             <div className="inspector-popover-anchor">
               <button
                 type="button"
-                className="inspector-tool-btn"
-                onClick={() => setShowShapePicker((v) => !v)}
+                className={`inspector-tool-btn ${activePopover === 'shape' ? 'active' : ''}`}
+                onClick={() => setActivePopover((v) => (v === 'shape' ? null : 'shape'))}
                 title="Form ändern"
               >
                 <Square size={15} />
                 <span className="inspector-btn-label">Form</span>
               </button>
-              {showShapePicker && (
+              {activePopover === 'shape' && (
                 <div className="inspector-dropdown-menu shapes-grid">
                   {shapesList.map((s) => (
                     <button
@@ -108,7 +123,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                       className={`inspector-grid-item ${selectedNode.data?.shape === s.shape ? 'active' : ''}`}
                       onClick={() => {
                         onUpdateNodeData(selectedNode.id, { shape: s.shape });
-                        setShowShapePicker(false);
+                        setActivePopover(null);
                       }}
                       title={s.label}
                     >
@@ -125,24 +140,24 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           <div className="inspector-popover-anchor">
             <button
               type="button"
-              className="inspector-tool-btn"
-              onClick={() => setShowColorPicker((v) => !v)}
+              className={`inspector-tool-btn ${activePopover === 'color' ? 'active' : ''}`}
+              onClick={() => setActivePopover((v) => (v === 'color' ? null : 'color'))}
               title="Farbe ändern"
             >
               <Palette size={15} />
               <span className="inspector-btn-label">Farbe</span>
             </button>
-            {showColorPicker && (
+            {activePopover === 'color' && (
               <div className="inspector-dropdown-menu colors-row">
                 {colorPresets.map((c) => (
                   <button
                     key={c.key}
                     type="button"
-                    className="inspector-color-dot"
+                    className={`inspector-color-dot ${selectedNode.data?.color === (c.key || undefined) ? 'active' : ''}`}
                     style={{ backgroundColor: c.hex }}
                     onClick={() => {
                       onUpdateNodeData(selectedNode.id, { color: c.key || undefined });
-                      setShowColorPicker(false);
+                      setActivePopover(null);
                     }}
                     title={c.label}
                   />
@@ -156,14 +171,14 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
             <div className="inspector-popover-anchor">
               <button
                 type="button"
-                className="inspector-tool-btn"
-                onClick={() => setShowLinkPicker((v) => !v)}
+                className={`inspector-tool-btn ${activePopover === 'link' ? 'active' : ''}`}
+                onClick={() => setActivePopover((v) => (v === 'link' ? null : 'link'))}
                 title="[[Wiki-Link]] einfügen"
               >
                 <Link2 size={15} />
                 <span className="inspector-btn-label">Link</span>
               </button>
-              {showLinkPicker && (
+              {activePopover === 'link' && (
                 <div className="inspector-dropdown-menu link-picker scroller">
                   <input
                     type="text"
@@ -185,7 +200,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                           const currentText = (selectedNode.data?.text as string) || '';
                           const append = ` [[${n.basename || n.name}]]`;
                           onUpdateNodeData(selectedNode.id, { text: currentText ? `${currentText}${append}` : `[[${n.basename || n.name}]]` });
-                          setShowLinkPicker(false);
+                          setActivePopover(null);
                         }}
                       >
                         {n.basename || n.name}
@@ -295,23 +310,23 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           <div className="inspector-popover-anchor">
             <button
               type="button"
-              className="inspector-tool-btn"
-              onClick={() => setShowColorPicker((v) => !v)}
+              className={`inspector-tool-btn ${activePopover === 'color' ? 'active' : ''}`}
+              onClick={() => setActivePopover((v) => (v === 'color' ? null : 'color'))}
               title="Kantenfarbe"
             >
               <Palette size={15} />
             </button>
-            {showColorPicker && (
+            {activePopover === 'color' && (
               <div className="inspector-dropdown-menu colors-row">
                 {colorPresets.map((c) => (
                   <button
                     key={c.key}
                     type="button"
-                    className="inspector-color-dot"
+                    className={`inspector-color-dot ${selectedEdge.data?.color === (c.key || undefined) ? 'active' : ''}`}
                     style={{ backgroundColor: c.hex }}
                     onClick={() => {
                       onUpdateEdgeData(selectedEdge.id, { color: c.key || undefined }, edgeLabel);
-                      setShowColorPicker(false);
+                      setActivePopover(null);
                     }}
                     title={c.label}
                   />

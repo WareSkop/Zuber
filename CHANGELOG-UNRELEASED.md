@@ -9,6 +9,12 @@
   - Full backend indexing in `VaultService`: `.canvas` files appear in the file tree with `attachmentKind: 'canvas'` and `<Layout />` icon, integrate into the global knowledge graph with outgoing edges, backlink discovery, and sync manifest.
   - Embedded canvas preview (`![[Workflow.canvas]]` or `![Canvas](Workflow.canvas)`) directly rendered inside Markdown notes in both Live-Preview and Reading views with one-click editor opening.
   - Offline-first caching and outbox mutation persistence in IndexedDB (`localDb.ts`) and `SyncEngine`.
+- File & folder upload and download in file tree context menu:
+  - Multi-file and recursive directory upload (`webkitdirectory`) with directory structure preservation and strict path traversal validation (`POST /api/vault/upload-entries`).
+  - Single file download (attachment) and streaming folder/vault ZIP archive generation (`GET /api/vault/download`) using `archiver` with automatic dotfile and configuration folder (`.git`, `.obsidian`) exclusion.
+  - Offline fallback generating browser Blobs from local IndexedDB cache for single `.md` and `.canvas` note downloads.
+  - Interactive file tree context menu entries: "Dateien hochladen…", "Ordner hochladen…", "Datei herunterladen", "Ordner herunterladen (.zip)", and "Gesamten Vault herunterladen (.zip)".
+  - Added visual upload status feedback in the sidebar (`.sidebar-upload-status-toast`).
 - Containerized Git versioning & automated HTTPS remote backup:
   - Added Git integration running directly inside the Knowmesh server container (`/data/vault`).
   - Added Git settings in UI (`SettingsModal.tsx`) with author identity (name, email), repo status (modified/untracked counts, last commit), manual commit, and remote backup configuration (Codeberg, GitHub, GitLab via HTTPS).
@@ -25,6 +31,10 @@
 - Enhanced Docker publication script to automatically tag and push both `:latest` and `:v<version>` packages to Codeberg Container Registry.
 
 ### Fixed
+- Fixed Canvas Context Inspector layout & popover orientation:
+  - Transformed bottom floating node & edge context inspector into a horizontal pill bar (`bottom: 20px; left: 50%; transform: translateX(-50%); border-radius: 9999px;`).
+  - Configured Shape picker, Color swatches, and Wiki-link popover menus to open upwards (`bottom: calc(100% + 10px)`), eliminating viewport clipping at the screen bottom.
+  - Added global click-outside listener to cleanly dismiss open inspector popovers.
 - Fixed `.canvas` editor display and interaction issues:
   - Repaired 0-height React Flow container chain (`.canvas-workspace-pane`, `.canvas-editor-wrapper`, `.canvas-reactflow-container`) so background grid and controls render properly across the entire workspace.
   - Rebuilt floating toolbar as a clean horizontal bar with flex-row buttons, divider, and dropdown menus (`Workflow ⌄`, `Netzwerk ⌄`, `Notiz einbetten ⌄`).
