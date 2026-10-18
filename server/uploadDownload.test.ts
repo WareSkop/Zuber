@@ -180,4 +180,52 @@ describe('Knowmesh - Upload & Download Endpoints (Multi-file, Directory structur
     const resTraversal = await fetch(`${baseUrl}/api/vault/download?path=../package.json`);
     expect(resTraversal.status).toBe(400);
   });
+
+  it('6. saves and persists a .canvas note with rawContent via POST /api/vault/note without wiping file content to {}', async () => {
+    const canvasPayload = {
+      nodes: [
+        {
+          id: 'node-101',
+          type: 'text',
+          text: '# Important Architecture Node\n\nConnected to [[Wissensbasis/Obsidian-Kompatibilität.md]]',
+          x: 100,
+          y: 100,
+          width: 250,
+          height: 160,
+        },
+      ],
+      edges: [],
+    };
+    const rawJson = JSON.stringify(canvasPayload, null, 2);
+
+    // Save canvas file via POST /api/vault/note
+    const saveRes = await fetch(`${baseUrl}/api/vault/note`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: 'Diagramme/SavedArchitecture.canvas',
+        rawContent: rawJson,
+      }),
+    });
+
+    expect(saveRes.status).toBe(200);
+    const savedData = await saveRes.json();
+    expect(savedData.path).toBe('Diagramme/SavedArchitecture.canvas');
+    expect(savedData.rawContent).toBe(rawJson);
+    expect(savedData.links).toContain('Wissensbasis/Obsidian-Kompatibilität.md');
+
+    // Verify on disk that the file is NOT {}
+    const diskPath = path.join(testVaultDir, 'Diagramme', 'SavedArchitecture.canvas');
+    expect(fs.existsSync(diskPath)).toBe(true);
+    const diskContent = fs.readFileSync(diskPath, 'utf-8');
+    expect(diskContent).not.toBe('{}');
+    expect(diskContent).toBe(rawJson);
+
+    // Verify GET /api/vault/note returns the exact content
+    const getRes = await fetch(`${baseUrl}/api/vault/note?path=Diagramme/SavedArchitecture.canvas`);
+    expect(getRes.status).toBe(200);
+    const retrieved = await getRes.json();
+    expect(retrieved.rawContent).toBe(rawJson);
+    expect(retrieved.body).toBe(rawJson);
+  });
 });

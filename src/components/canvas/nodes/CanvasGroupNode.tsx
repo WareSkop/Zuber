@@ -4,7 +4,7 @@ import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
 
 export const CanvasGroupNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
-  const { readOnly } = useCanvasContext();
+  const { onUpdateNodeData, readOnly } = useCanvasContext();
   const { setNodes } = useReactFlow();
 
   const [label, setLabel] = useState<string>((data.label as string) || '');
@@ -16,9 +16,13 @@ export const CanvasGroupNode: React.FC<NodeProps> = ({ id, data, selected, width
 
   const handleFinishLabel = () => {
     setIsEditingLabel(false);
-    setNodes((nodes) =>
-      nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n))
-    );
+    if (onUpdateNodeData) {
+      onUpdateNodeData(id, { label });
+    } else {
+      setNodes((nodes) =>
+        nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n))
+      );
+    }
   };
 
   const customColor = resolveCanvasColor(data.color as string);

@@ -8,7 +8,7 @@ import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
 
 export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
-  const { onOpenNote, onSelectTag, allNotes, readOnly } = useCanvasContext();
+  const { onOpenNote, onSelectTag, onUpdateNodeData, allNotes, readOnly } = useCanvasContext();
   const { setNodes } = useReactFlow();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -27,9 +27,13 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
   const handleFinishEditing = () => {
     setIsEditing(false);
     setShowWikiDropdown(false);
-    setNodes((nodes) =>
-      nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, text: editText } } : n))
-    );
+    if (onUpdateNodeData) {
+      onUpdateNodeData(id, { text: editText });
+    } else {
+      setNodes((nodes) =>
+        nodes.map((n) => (n.id === id ? { ...n, data: { ...n.data, text: editText } } : n))
+      );
+    }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

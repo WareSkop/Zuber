@@ -3,6 +3,7 @@ import React, { createContext, useContext } from 'react';
 export interface CanvasContextType {
   onOpenNote: (path: string) => void;
   onSelectTag?: (tag: string) => void;
+  onUpdateNodeData?: (nodeId: string, partialData: Record<string, any>) => void;
   allNotes: { path: string; name: string; basename: string }[];
   readOnly?: boolean;
 }

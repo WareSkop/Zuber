@@ -2071,6 +2071,7 @@ export const App: React.FC = () => {
                       });
                       scheduleSave(activeNote.path, {
                         rawContent: newJson,
+                        body: newJson,
                       });
                     }}
                     onOpenNote={(targetPath) => {

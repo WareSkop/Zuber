@@ -80,6 +80,38 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   const isInitialLoadRef = useRef<boolean>(true);
   const lastEmittedJsonRef = useRef<string>('');
   const lastLoadedPathRef = useRef<string>('');
+  const latestNodesRef = useRef<Node[]>([]);
+  const latestEdgesRef = useRef<Edge[]>([]);
+  const hasPendingSaveRef = useRef<boolean>(false);
+
+  // Immediate save flush for note exit / unmount
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (hasPendingSaveRef.current && !readOnly) {
+      hasPendingSaveRef.current = false;
+      let vp: Viewport | undefined;
+      try {
+        vp = getViewport();
+      } catch {
+        // ignore
+      }
+      const jsonStr = reactFlowToJsonCanvas(latestNodesRef.current, latestEdgesRef.current, vp);
+      if (jsonStr !== lastEmittedJsonRef.current) {
+        lastEmittedJsonRef.current = jsonStr;
+        onChange(jsonStr);
+      }
+    }
+  }, [getViewport, onChange, readOnly]);
+
+  // Flush pending changes on unmount (e.g. switching notes or closing tab)
+  useEffect(() => {
+    return () => {
+      flushSave();
+    };
+  }, [flushSave]);
 
   // Initial document parsing and external update synchronization
   useEffect(() => {
@@ -91,6 +123,11 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       return;
     }
 
+    // If switching notes, flush any pending edits on the previous canvas first
+    if (pathChanged && hasPendingSaveRef.current) {
+      flushSave();
+    }
+
     lastLoadedPathRef.current = filePath;
     lastEmittedJsonRef.current = rawContent;
 
@@ -98,6 +135,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     const rf = jsonCanvasToReactFlow(doc);
     setNodes(rf.nodes);
     setEdges(rf.edges);
+    latestNodesRef.current = rf.nodes;
+    latestEdgesRef.current = rf.edges;
 
     historyRef.current = [{ nodes: rf.nodes, edges: rf.edges }];
     historyIndexRef.current = 0;
@@ -122,7 +161,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     setTimeout(() => {
       isInitialLoadRef.current = false;
     }, 300);
-  }, [filePath, rawContent, setNodes, setEdges, setViewport, fitView]);
+  }, [filePath, rawContent, setNodes, setEdges, setViewport, fitView, flushSave]);
 
   // Push state to undo history
   const pushHistory = useCallback((newNodes: Node[], newEdges: Edge[]) => {
@@ -141,9 +180,14 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   const triggerAutoSave = useCallback(
     (currentNodes: Node[], currentEdges: Edge[]) => {
       if (readOnly || isInitialLoadRef.current) return;
+      latestNodesRef.current = currentNodes;
+      latestEdgesRef.current = currentEdges;
+      hasPendingSaveRef.current = true;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
       saveTimerRef.current = setTimeout(() => {
+        hasPendingSaveRef.current = false;
+        saveTimerRef.current = null;
         let vp: Viewport | undefined;
         try {
           vp = getViewport();
@@ -540,7 +584,15 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   }, [handleUndo, handleRedo, selectedNode, selectedEdge, handleDeleteNode, handleDeleteEdge]);
 
   return (
-    <CanvasContext.Provider value={{ onOpenNote, onSelectTag, allNotes, readOnly }}>
+    <CanvasContext.Provider
+      value={{
+        onOpenNote,
+        onSelectTag,
+        onUpdateNodeData: handleUpdateNodeData,
+        allNotes,
+        readOnly,
+      }}
+    >
       <div className="canvas-editor-wrapper" ref={containerRef}>
         {/* Top dock toolbar */}
         {!readOnly && (
@@ -561,11 +613,11 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           />
         )}
 
-        {/* Floating Context Inspector for selected Node or Edge */}
+        {/* Floating Context Inspector for selected Node or Edge (mutually exclusive) */}
         {!readOnly && (
           <CanvasInspector
             selectedNode={selectedNode}
-            selectedEdge={selectedEdge}
+            selectedEdge={selectedNode ? null : selectedEdge}
             onUpdateNodeData={handleUpdateNodeData}
             onUpdateEdgeData={handleUpdateEdgeData}
             onDuplicateNode={handleDuplicateNode}

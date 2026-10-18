@@ -216,7 +216,8 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
 
     expect(css).toMatch(/\.canvas-floating-inspector[\s\S]*?position:\s*absolute/);
     expect(css).toMatch(/\.canvas-floating-inspector[\s\S]*?bottom:\s*20px/);
-    expect(css).toMatch(/\.canvas-floating-inspector[\s\S]*?border-radius:\s*9999px/);
+    expect(css).toMatch(/\.canvas-floating-inspector[\s\S]*?border-radius:\s*12px/);
+    expect(css).toMatch(/\.canvas-floating-inspector[\s\S]*?box-sizing:\s*border-box/);
     expect(css).toMatch(/\.inspector-content-row[\s\S]*?flex-direction:\s*row\s*!important/);
     expect(css).toMatch(/\.inspector-dropdown-menu[\s\S]*?bottom:\s*calc\(100%\s*\+\s*10px\)/);
 
@@ -325,6 +326,26 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
 
     const toggleBtns = container.querySelectorAll('.inspector-toggle-btn');
     expect(toggleBtns.length).toBeGreaterThanOrEqual(4);
+
+    // D. Test mutual exclusivity when both selectedNode and selectedEdge are provided
+    act(() => {
+      root.render(
+        <CanvasInspector
+          selectedNode={selectedNode}
+          selectedEdge={selectedEdge}
+          onUpdateNodeData={onUpdateNodeData}
+          onUpdateEdgeData={onUpdateEdgeData}
+          onDuplicateNode={onDuplicateNode}
+          onDeleteNode={onDeleteNode}
+          onDeleteEdge={onDeleteEdge}
+          allNotes={[]}
+        />
+      );
+    });
+
+    // Node controls should be present, edge controls must NOT be present
+    expect(container.querySelector('.inspector-tool-btn')).not.toBeNull();
+    expect(container.querySelector('.inspector-edge-input')).toBeNull();
 
     act(() => {
       root.unmount();

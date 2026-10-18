@@ -41,5 +41,14 @@
   - Fixed state-echo loop between `App.tsx` and `CanvasEditor.tsx` where saving state would overwrite and reset newly added nodes.
   - Fixed node spawn coordinates using robust viewport and container bounding box calculations to ensure new shapes appear centered on the screen.
   - Added `@xyflow/react/dist/style.css` imports to both `CanvasEditor.tsx` and `CanvasEmbedWidget.tsx`.
+- Fixed `.canvas` file wipe on note leave or reopening:
+  - Resolved missing `rawContent` property in `POST /api/vault/note` route destructuring in `server/index.ts`, preventing server fallback to `{}` when saving canvas files.
+  - Added defensive `body: newJson` alongside `rawContent: newJson` in `src/App.tsx` canvas save scheduler.
+  - Added immediate `flushSave` on unmount and note switch in `CanvasEditor.tsx` to flush debounced canvas edits before the editor unmounts.
+  - Connected `CanvasShapeNode` text editing and `CanvasGroupNode` label editing to `CanvasContext` (`onUpdateNodeData`) to trigger auto-save and push to undo/redo history.
+- Fixed Canvas Context Inspector buttons overflowing toolbox container:
+  - Updated `.canvas-floating-inspector` border-radius to a modern 12px dock with `box-sizing: border-box`, `padding: 6px 14px`, and `height: 44px`, preventing button corners and hover outlines from sticking out beyond circular pill caps.
+  - Refined `.inspector-tool-btn` with `border-radius: 8px` and dedicated `.icon-only` styling (`32px x 32px`, `padding: 0`).
+  - Ensured Node and Edge inspectors are strictly mutually exclusive so both rows cannot render simultaneously.
 - Fixed new devices (e.g., Chromebook) showing an empty offline Vault after login and failing to sync newly created notes to the server because `SyncEngine` remained in `offline` state after authentication.
 - Fixed offline mode file & folder creation where creating a second note or folder could collide with default names, get delayed by pending auto-save timers or network timeouts, or fail to reconcile into the local IndexedDB file tree.

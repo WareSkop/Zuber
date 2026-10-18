@@ -240,13 +240,14 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
 
   app.post('/api/vault/note', requireAuth, (req, res) => {
     try {
-      const { path: notePath, content, properties, body, baseMtime, forceOverwrite } = req.body as {
+      const { path: notePath, content, properties, body, baseMtime, forceOverwrite, rawContent } = req.body as {
         path?: string;
         content?: string;
         properties?: any[];
         body?: string;
         baseMtime?: number;
         forceOverwrite?: boolean;
+        rawContent?: string;
       };
       if (!notePath) {
         res.status(400).json({ error: 'Pfad fehlt.' });
@@ -266,7 +267,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
         }
       }
 
-      const note = vaultService.saveNote(notePath, { content, properties, body });
+      const note = vaultService.saveNote(notePath, { content, properties, body, rawContent, baseMtime, forceOverwrite });
       res.json(note);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });

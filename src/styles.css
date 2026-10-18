@@ -4505,17 +4505,26 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding: 6px 10px;
+  box-sizing: border-box;
+  padding: 6px 14px;
+  height: 44px;
+  min-height: 44px;
   background: var(--bg-secondary, #161b22);
-  background-color: rgba(22, 27, 34, 0.95);
+  background-color: rgba(22, 27, 34, 0.96);
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 9999px;
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  max-width: 95vw;
+  max-width: calc(100vw - 32px);
   user-select: none;
   pointer-events: auto;
+}
+
+.canvas-floating-inspector *,
+.canvas-floating-inspector *::before,
+.canvas-floating-inspector *::after {
+  box-sizing: border-box;
 }
 
 .inspector-content-row {
@@ -4524,11 +4533,13 @@ input:checked + .slider:before {
   align-items: center !important;
   gap: 6px;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .inspector-popover-anchor {
   position: relative;
   display: inline-flex;
+  align-items: center;
 }
 
 .inspector-tool-btn {
@@ -4540,12 +4551,21 @@ input:checked + .slider:before {
   padding: 0 10px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 16px;
+  border-radius: 8px;
   color: var(--text-secondary, #8b949e);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.inspector-tool-btn.icon-only,
+.inspector-tool-btn.danger {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
 }
 
 .inspector-tool-btn:hover {
@@ -4730,11 +4750,12 @@ input:checked + .slider:before {
   padding: 0 10px;
   background: var(--bg-primary, #0d1117);
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 15px;
+  border-radius: 8px;
   color: var(--text-primary, #f0f6fc);
   font-size: 12px;
   min-width: 130px;
   max-width: 180px;
+  box-sizing: border-box;
 }
 
 .inspector-edge-input:focus {
@@ -4747,9 +4768,10 @@ input:checked + .slider:before {
   align-items: center;
   background: var(--bg-primary, #0d1117);
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 2px;
   gap: 2px;
+  box-sizing: border-box;
 }
 
 .inspector-toggle-btn {
@@ -4760,11 +4782,12 @@ input:checked + .slider:before {
   height: 26px;
   background: transparent;
   border: none;
-  border-radius: 13px;
+  border-radius: 6px;
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
   transition: all 0.12s ease;
   padding: 0;
+  box-sizing: border-box;
 }
 
 .inspector-toggle-btn:hover {

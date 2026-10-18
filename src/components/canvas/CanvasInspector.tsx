@@ -100,7 +100,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   return (
     <div ref={inspectorRef} className="canvas-floating-inspector nodrag nowheel">
       {/* --- NODE INSPECTOR --- */}
-      {selectedNode && (
+      {selectedNode ? (
         <div className="inspector-content-row">
           {/* Shape Switcher (only for text/shape nodes) */}
           {selectedNode.type === 'canvasShape' && (
@@ -216,7 +216,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           {/* Duplicate Node */}
           <button
             type="button"
-            className="inspector-tool-btn"
+            className="inspector-tool-btn icon-only"
             onClick={() => onDuplicateNode(selectedNode.id)}
             title="Knoten duplizieren"
           >
@@ -226,17 +226,14 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           {/* Delete Node */}
           <button
             type="button"
-            className="inspector-tool-btn danger"
+            className="inspector-tool-btn danger icon-only"
             onClick={() => onDeleteNode(selectedNode.id)}
             title="Knoten löschen (Entf)"
           >
             <Trash2 size={15} />
           </button>
         </div>
-      )}
-
-      {/* --- EDGE INSPECTOR --- */}
-      {selectedEdge && (
+      ) : selectedEdge ? (
         <div className="inspector-content-row">
           {/* Edge Label Input */}
           <div className="inspector-input-group">
@@ -310,7 +307,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           <div className="inspector-popover-anchor">
             <button
               type="button"
-              className={`inspector-tool-btn ${activePopover === 'color' ? 'active' : ''}`}
+              className={`inspector-tool-btn icon-only ${activePopover === 'color' ? 'active' : ''}`}
               onClick={() => setActivePopover((v) => (v === 'color' ? null : 'color'))}
               title="Kantenfarbe"
             >
@@ -340,14 +337,14 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           {/* Delete Edge */}
           <button
             type="button"
-            className="inspector-tool-btn danger"
+            className="inspector-tool-btn danger icon-only"
             onClick={() => onDeleteEdge(selectedEdge.id)}
             title="Verbindung löschen (Entf)"
           >
             <Trash2 size={15} />
           </button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
