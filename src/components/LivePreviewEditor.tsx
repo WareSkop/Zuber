@@ -48,6 +48,8 @@ export interface LivePreviewEditorRef {
   insertTableRow: () => void;
   insertTableColumn: () => void;
   insertImageEmbed: (embedTag: string) => void;
+  insertExternalLink: (linkText?: string, linkUrl?: string) => void;
+  getSelectedText: () => string;
   focus: () => void;
 }
 
@@ -248,6 +250,33 @@ class WikiLinkWidget extends WidgetType {
   }
 }
 
+class ExternalLinkWidget extends WidgetType {
+  constructor(
+    readonly href: string,
+    readonly display: string
+  ) {
+    super();
+  }
+
+  eq(other: ExternalLinkWidget) {
+    return other.href === this.href && other.display === this.display;
+  }
+
+  toDOM() {
+    const a = document.createElement('a');
+    a.className = 'cm-external-link-widget external-link';
+    a.href = this.href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = this.display || this.href;
+    a.title = `${this.display ? `${this.display} — ` : ''}${this.href} ↗`;
+    a.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+    });
+    return a;
+  }
+}
+
 class TagPillWidget extends WidgetType {
   constructor(
     readonly tag: string,
@@ -277,13 +306,18 @@ class TagPillWidget extends WidgetType {
 class CheckboxWidget extends WidgetType {
   constructor(
     readonly checked: boolean,
-    readonly pos: number
+    readonly pos: number,
+    readonly indentSpaces: number = 0
   ) {
     super();
   }
 
   eq(other: CheckboxWidget) {
-    return other.checked === this.checked && other.pos === this.pos;
+    return (
+      other.checked === this.checked &&
+      other.pos === this.pos &&
+      other.indentSpaces === this.indentSpaces
+    );
   }
 
   toDOM(view: EditorView) {
@@ -291,6 +325,9 @@ class CheckboxWidget extends WidgetType {
     input.type = 'checkbox';
     input.className = 'checkbox-custom cm-task-checkbox';
     input.checked = this.checked;
+    if (this.indentSpaces > 0) {
+      input.style.marginLeft = `calc(4px + ${this.indentSpaces * 0.65}rem)`;
+    }
     input.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -736,16 +773,23 @@ function buildLivePreviewDecorations(
     const inlineDecos: { from: number; to: number; deco: Decoration }[] = [];
 
     // 1. Task list checkbox: - [ ] or - [x]
-    const taskMatch = text.match(/^(\s*[-*+]\s+)(\[[ xX]\])(\s+)/);
+    const taskMatch = text.match(/^(\s*)([-*+]\s+)(\[[ xX]\])(\s*)/);
     if (taskMatch) {
-      const bracketOffset = taskMatch[1].length;
-      const bracketPos = line.from + bracketOffset;
-      const isChecked = taskMatch[2].toLowerCase() === '[x]';
+      const leadingWhitespace = taskMatch[1];
+      const listMarker = taskMatch[2];
+      const checkMarker = taskMatch[3];
+      let indentSpaces = 0;
+      for (const ch of leadingWhitespace) {
+        if (ch === '\t') indentSpaces += 4;
+        else if (ch === ' ') indentSpaces += 1;
+      }
+      const bracketPos = line.from + leadingWhitespace.length + listMarker.length;
+      const isChecked = checkMarker.toLowerCase() === '[x]';
       inlineDecos.push({
         from: line.from,
         to: bracketPos + 3,
         deco: Decoration.replace({
-          widget: new CheckboxWidget(isChecked, bracketPos),
+          widget: new CheckboxWidget(isChecked, bracketPos, indentSpaces),
         }),
       });
     }
@@ -825,13 +869,24 @@ function buildLivePreviewDecorations(
           }),
         });
       } else {
-        inlineDecos.push({
-          from: fullStart,
-          to: fullEnd,
-          deco: Decoration.replace({
-            widget: new WikiLinkWidget(href, label || href, onNavigate),
-          }),
-        });
+        const isExternal = /^(https?:|mailto:)/i.test(href);
+        if (isExternal) {
+          inlineDecos.push({
+            from: fullStart,
+            to: fullEnd,
+            deco: Decoration.replace({
+              widget: new ExternalLinkWidget(href, label || href),
+            }),
+          });
+        } else {
+          inlineDecos.push({
+            from: fullStart,
+            to: fullEnd,
+            deco: Decoration.replace({
+              widget: new WikiLinkWidget(href, label || href, onNavigate),
+            }),
+          });
+        }
       }
     }
 
@@ -1417,6 +1472,38 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
+  const getSelectedText = (): string => {
+    const view = viewRef.current;
+    if (!view) return '';
+    const sel = view.state.selection.main;
+    return view.state.sliceDoc(sel.from, sel.to);
+  };
+
+  const insertExternalLink = (linkText?: string, linkUrl?: string) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const sel = view.state.selection.main;
+    const currentSelected = view.state.sliceDoc(sel.from, sel.to);
+    const finalLabel = linkText !== undefined && linkText.length > 0 ? linkText : currentSelected;
+    const finalUrl = (linkUrl || '').trim();
+
+    if (finalUrl) {
+      const markdown = `[${finalLabel || finalUrl}](${finalUrl})`;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: markdown },
+        selection: { anchor: sel.from + markdown.length },
+      });
+    } else {
+      const markdown = `[${finalLabel}]()`;
+      const cursorAnchor = sel.from + finalLabel.length + 3;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: markdown },
+        selection: { anchor: cursorAnchor },
+      });
+    }
+    view.focus();
+  };
+
   useImperativeHandle(ref, () => ({
     applyFormat,
     insertTable,
@@ -1435,6 +1522,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     insertTableRow,
     insertTableColumn,
     insertImageEmbed,
+    insertExternalLink,
+    getSelectedText,
     focus: () => viewRef.current?.focus(),
   }));
 
@@ -1578,6 +1667,65 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           }
           return true;
         }
+
+        const pastedText = clipboard.getData('text/plain')?.trim();
+        if (pastedText && /^(https?:\/\/[^\s<>()]+)$/i.test(pastedText)) {
+          const state = view.state;
+          const sel = state.selection.main;
+          const doc = state.doc;
+          const line = doc.lineAt(sel.head);
+          const lineText = line.text;
+          const posInLine = sel.head - line.from;
+
+          // Guard 1: Fenced code blocks
+          let inCodeFence = false;
+          for (let l = 1; l <= line.number; l++) {
+            if (doc.line(l).text.trim().startsWith('```')) {
+              if (l === line.number) {
+                inCodeFence = true;
+                break;
+              }
+              inCodeFence = !inCodeFence;
+            }
+          }
+
+          if (!inCodeFence) {
+            // Guard 2: Inline code `...`
+            const textBeforeCursor = lineText.slice(0, posInLine);
+            const backticksBefore = (textBeforeCursor.match(/`/g) || []).length;
+            const inInlineCode = backticksBefore % 2 !== 0;
+
+            // Guard 3: Inside ](...) URL part
+            const lastOpenParen = textBeforeCursor.lastIndexOf('](');
+            let inMarkdownLinkUrl = false;
+            if (lastOpenParen !== -1) {
+              const closingParen = lineText.indexOf(')', lastOpenParen);
+              if (closingParen === -1 || closingParen >= posInLine) {
+                inMarkdownLinkUrl = true;
+              }
+            }
+
+            if (!inInlineCode && !inMarkdownLinkUrl) {
+              event.preventDefault();
+              const selectedText = state.sliceDoc(sel.from, sel.to).trim();
+              if (selectedText.length > 0) {
+                const formatted = `[${selectedText}](${pastedText})`;
+                view.dispatch({
+                  changes: { from: sel.from, to: sel.to, insert: formatted },
+                  selection: { anchor: sel.from + formatted.length },
+                });
+              } else {
+                const formatted = `[${pastedText}](${pastedText})`;
+                view.dispatch({
+                  changes: { from: sel.from, to: sel.to, insert: formatted },
+                  selection: { anchor: sel.from + formatted.length },
+                });
+              }
+              return true;
+            }
+          }
+        }
+
         return false;
       },
       drop(event, view) {
@@ -1766,6 +1914,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (_match, labelRaw, hrefRaw) => {
         const href = String(hrefRaw).trim();
         const label = String(labelRaw).trim();
+        if (/^(https?:|mailto:)/i.test(href)) {
+          return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="external-link">${label}</a>`;
+        }
         return `<a href="#" class="reading-wikilink" data-wikilink="${href}">${label}</a>`;
       }
     );
@@ -1789,13 +1940,19 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       '$1<span class="reading-tag" data-tag="$2">#$2</span>'
     );
 
-    const rawHtml = marked.parse(processed, { async: false, gfm: true }) as string;
+    let rawHtml = marked.parse(processed, { async: false, gfm: true }) as string;
+    // Add task-list-item class to <li> containing input checkbox for reliable styling
+    rawHtml = rawHtml.replace(/<li(\s*[^>]*)>(?:\s*<p>)?\s*(<input\s+[^>]*type=["']checkbox["'][^>]*>)/gi, '<li$1 class="task-list-item">$2');
     return DOMPurify.sanitize(rawHtml, {
-      ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-canvas-path', 'data-tag', 'target', 'loading', 'decoding', 'align'],
+      ADD_ATTR: ['href', 'target', 'rel', 'data-wiki-target', 'data-wikilink', 'data-canvas-path', 'data-tag', 'loading', 'decoding', 'align'],
     });
   }, [body, mode, notePath]);
 
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const extLink = (e.target as HTMLElement).closest('a[target="_blank"]');
+    if (extLink) {
+      return;
+    }
     const targetEl = (e.target as HTMLElement).closest('[data-wikilink], [data-tag]');
     if (!targetEl) return;
 

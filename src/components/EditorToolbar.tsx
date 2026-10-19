@@ -15,6 +15,7 @@ import {
   CheckSquare,
   Indent,
   Outdent,
+  Link,
   Link2,
   Hash,
   Quote,
@@ -42,7 +43,7 @@ interface EditorToolbarProps {
   visible?: boolean;
 }
 
-type OpenMenuType = 'heading' | 'table' | 'callout' | 'image' | null;
+type OpenMenuType = 'heading' | 'table' | 'callout' | 'image' | 'link' | null;
 
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   editorRef,
@@ -55,6 +56,10 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
 
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
+
+  const [linkText, setLinkText] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const linkUrlInputRef = useRef<HTMLInputElement | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -106,7 +111,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
       activeTriggerRef.current = null;
     } else {
       const rect = triggerEl.getBoundingClientRect();
-      const popoverWidth = menu === 'table' ? 240 : 210;
+      const popoverWidth = menu === 'table' ? 240 : menu === 'link' ? 260 : 210;
       const maxLeft = Math.max(8, window.innerWidth - popoverWidth - 10);
       setMenuCoords({
         top: rect.bottom + 4,
@@ -115,6 +120,24 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
       activeTriggerRef.current = triggerEl;
       setOpenMenu(menu);
     }
+  };
+
+  const handleOpenLinkMenu = (triggerEl: HTMLElement) => {
+    const selected = editorRef.current?.getSelectedText() || '';
+    setLinkText(selected);
+    setLinkUrl('');
+    toggleMenu('link', triggerEl);
+    setTimeout(() => {
+      linkUrlInputRef.current?.focus();
+    }, 60);
+  };
+
+  const handleInsertLink = () => {
+    if (linkUrl.trim() || linkText.trim()) {
+      editorRef.current?.insertExternalLink(linkText.trim(), linkUrl.trim());
+    }
+    setOpenMenu(null);
+    activeTriggerRef.current = null;
   };
 
   const handleFormat = (type: 'bold' | 'italic' | 'strikethrough' | 'highlight' | 'code') => {
@@ -320,6 +343,20 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           <Link2 size={16} />
           <span className="toolbar-btn-text">[[ ]]</span>
         </button>
+        <div className="toolbar-item-relative">
+          <button
+            type="button"
+            className={`toolbar-btn ${openMenu === 'link' ? 'active' : ''}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => handleOpenLinkMenu(e.currentTarget)}
+            title={t('toolbar.externalLink')}
+            aria-haspopup="true"
+            aria-expanded={openMenu === 'link'}
+          >
+            <Link size={16} />
+            <span className="toolbar-btn-text">[ ]( )</span>
+          </button>
+        </div>
         <button
           type="button"
           className="toolbar-btn"
@@ -653,6 +690,57 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
                   <Camera size={15} /> <span>{t('toolbar.takePhoto')}</span>
                 </button>
               </div>
+            )}
+
+            {openMenu === 'link' && (
+              <form
+                className="link-popover"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleInsertLink();
+                }}
+              >
+                <div className="link-popover-title">{t('toolbar.externalLinkTitle')}</div>
+                <div className="link-popover-fields">
+                  <label>
+                    <span>{t('toolbar.linkText')}:</span>
+                    <input
+                      type="text"
+                      value={linkText}
+                      onChange={(e) => setLinkText(e.target.value)}
+                      placeholder={t('toolbar.linkTextPlaceholder')}
+                    />
+                  </label>
+                  <label>
+                    <span>{t('toolbar.linkUrl')}:</span>
+                    <input
+                      ref={linkUrlInputRef}
+                      type="text"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </label>
+                </div>
+                <div className="link-popover-actions">
+                  <button
+                    type="button"
+                    className="btn-popover-cancel"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      activeTriggerRef.current = null;
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-popover-primary"
+                  >
+                    {t('toolbar.insertLinkBtn')}
+                  </button>
+                </div>
+              </form>
             )}
           </div>,
           document.body

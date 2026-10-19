@@ -302,7 +302,7 @@ Direkt oberhalb des scrollenden Editor-Bereichs steht eine feste **Sticky-Format
 - **Überschriften-Menü:** Schnellauswahl zwischen `Normaler Text (Absatz)` (Level 0, entfernt bestehende `# `-Präfixe) sowie `H1` bis `H6`.
 - **Textformatierung:** `Fett`, `Kursiv`, `Durchgestrichen`, `Highlight`, `Inline-Code`.
 - **Listen & Einrückung:** Aufzählung (`- `), Nummeriert (`1. `), Aufgaben (`- [ ] `), Einrücken/Ausrücken.
-- **Links & Autocomplete:** Wiki-Links (`[[ ]]`) und Tags (`#`) mit automatischem Start des Autocomplete-Popups.
+- **Links & Autocomplete:** Wiki-Links (`[[ ]]`) mit Autocomplete, externer Link-Button (`[ ]( )`) mit Popover-Dialog für Link-Text und URL sowie Tags (`#`).
 - **Interaktiver Tabellen-Generator:** Voreinstellungen (`2×2`, `3×3`, `4×4`), manuelle Spalten-/Zeilenangabe sowie zeilen-/spaltenweise Erweiterung bei aktiver Tabelle.
 - **Callouts:** Standardisierte Callout-Blöcke (`[!NOTE]`, `[!INFO]`, `[!TIP]`, `[!WARNING]`, `[!DANGER]`, `[!QUESTION]`) mit farbigen Badges und lokalisierten Titeln.
 - **Foto- & Kamera-Upload:** Direkte Wahl zwischen Dateiauswahl / Galerie und Live-Kameraaufnahme.
@@ -588,6 +588,28 @@ flowchart TD
 ### 19.2 Sequentielles Attachment-Paste & Upload-Lock
 - Das Einfügen oder Hineinziehen von Bildern (`LivePreviewEditor.tsx`) setzt während des HTTP-Uploads ein synchrones Sperrflag (`isUploadingAttachmentRef = true`).
 - Laufende oder geplante Auto-Saves werden für diesen Zeitraum pausiert und erst nach Abschluss des Uploads sowie Einfügen der Bild-Referenz (`![[attachments/...]]`) atomar ausgeführt, wodurch Konkurrenz-Konflikte (409) verhindert werden.
+
+---
+
+## 20. Erweiterte Editor-Funktionen & Formatierungs-Optimierungen
+
+### 20.1 Verschachtelte Aufgabenlisten in Live-Preview (`CheckboxWidget`)
+- Aufgaben (`- [ ]`, `* [ ]`, `+ [ ]`) mit führendem Whitespace (`  `, `    `, `\t`) werden über `indentSpaces` dynamisch formatiert.
+- Der `CheckboxWidget` ersetzt das Präfix inklusive Einrückung und Listenzeichen und versieht die Checkbox mit einem berechneten linken Außenabstand (`marginLeft = calc(4px + indentSpaces * 0.65rem)`).
+- Ein Klick auf die Checkbox wechselt atomar `[ ]` $\leftrightarrow$ `[x]` an der exakten Dokumentposition, ohne dass der Cursor in die Zeile springt oder die Einrückung verloren geht.
+
+### 20.2 Bereinigte Aufgabenlisten im Lese-Modus (`mode === 'reading'`)
+- Listenpunkte mit Checkboxen erhalten die CSS-Klasse `task-list-item` und werden via `list-style-type: none !important` und `:has(input[type="checkbox"])` bereinigt.
+- Der störende Standard-Aufzählungspunkt (`•`) vor der Checkbox wird zuverlässig ausgeblendet, während die hierarchische Unterordnung eingerückter Aufgaben (`padding-left: 1.4rem`) exakt erhalten bleibt.
+
+### 20.3 Externe Links (`[Text](https://...)`) & URL-Paste-Automatik
+- **Toolbar-Button `[ ]( )`:** Öffnet ein Portal-Popover zur Eingabe von Link-Text (automatisch vorbefüllt mit markiertem Text) und Web-URL (`https://...`).
+- **Automatisches URL-Paste:** Beim Einfügen einer HTTP/HTTPS-URL über `Ctrl+V` oder Rechtsklick wird:
+  - bei markiertem Text der Text als Label übernommen: `[Markierter Text](URL)`.
+  - ohne Markierung die URL als Markdown-Link formatiert: `[URL](URL)`.
+  - in Fenced-Codeblöcken (` ``` `), Inline-Code (`` ` ``) oder innerhalb existierender `](...)`-Links die URL normal als Rohtext eingefügt (keine störende Fehleskalation).
+- **Interaktive Klickbarkeit:** Externe Links rendern im Live-Preview (`ExternalLinkWidget`) und im Lesemodus als `<a href="..." target="_blank" rel="noopener noreferrer">` und öffnen bei Klick den Link direkt im neuen Browser-Tab.
+
 
 
 

@@ -1407,6 +1407,51 @@ code {
   display: block;
 }
 
+/* Reading View Task Lists (Remove extra bullet dot before checkboxes & preserve indentation) */
+.reading-view-container li.task-list-item,
+.reading-view-content li.task-list-item,
+.reading-view-container li:has(input[type="checkbox"]),
+.reading-view-content li:has(input[type="checkbox"]),
+.markdown-rendered li:has(input[type="checkbox"]) {
+  list-style-type: none !important;
+}
+
+.reading-view-container ul:has(> li > input[type="checkbox"]),
+.reading-view-content ul:has(> li > input[type="checkbox"]),
+.reading-view-container ul:has(> li.task-list-item),
+.reading-view-content ul:has(> li.task-list-item),
+.markdown-rendered ul:has(> li.task-list-item),
+.markdown-rendered ul:has(> li > input[type="checkbox"]) {
+  padding-left: 1.4rem;
+  list-style-type: none !important;
+}
+
+.reading-view-container input[type="checkbox"],
+.reading-view-content input[type="checkbox"],
+.markdown-rendered input[type="checkbox"] {
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* External Markdown Links [Text](https://...) */
+.cm-external-link-widget,
+.external-link,
+a.external-link {
+  color: var(--obsidian-blue, #89b4fa);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.cm-external-link-widget:hover,
+.external-link:hover,
+a.external-link:hover {
+  color: var(--obsidian-purple, #b4befe);
+}
+
 /* Graph View */
 .graph-pane,
 .right-sidebar-graph-wrapper {
@@ -3705,6 +3750,76 @@ input:checked + .slider:before {
 
 .image-popover {
   min-width: 210px;
+}
+
+.link-popover {
+  min-width: 250px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-popover-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.link-popover-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11.5px;
+}
+
+.link-popover-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.link-popover-fields span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.link-popover-fields input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 5px 8px;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.link-popover-fields input:focus {
+  outline: none;
+  border-color: var(--obsidian-purple, #b4befe);
+}
+
+.link-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.btn-popover-cancel {
+  padding: 6px 10px;
+  border-radius: 5px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-popover-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* Mobile Drawer Backdrop - Hidden by default on desktop */
