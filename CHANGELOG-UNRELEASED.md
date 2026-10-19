@@ -23,5 +23,9 @@
 - Konfliktwarteschlange in `syncEngine.ts` wird nun nach Notizpfad dedupliziert (`addOrUpdateConflict`).
 - Einrückung geschachtelter Aufgabenlisten (Todos) im Live-Preview-Modus: Behält führende Einrückungsstufen (`- [ ]`, `  - [ ]`, `    - [ ]` etc.) visuell proportional bei und toggelt Checkboxen an exakter Textposition.
 - Entfernung doppelter Aufzählungspunkte vor Checkboxen im Lesemodus (`Reading Mode`): Unterdrückt Standard-Bullet-Points vor Aufgabenlisten und formatiert Checkboxen sauber linksbündig ausgerichtet.
+- Vergrößerung der Canvas-Knoten-Resize-Hitareas (`.react-flow__resize-control.handle` auf 14px×14px mit `z-index: 25`, Kanten-Linien mit 14px Greifzone bei `z-index: 20`) für zuverlässiges Skalieren unter Linux/KDE/Chromium; Verbindungspunkte (`.canvas-node-handle`) auf `z-index: 30` angehoben.
+- Responsives Layout der oberen Canvas-Toolbar (`.canvas-toolbar`): Begrenzung auf Container-Breite (`max-width: calc(100% - 24px) !important`), automatisches Umbrechen (`flex-wrap: wrap !important`) und dynamisches Boundary-Clamping für Dropdown-Menüs (`CanvasToolbar.tsx`).
+- Vollständige Theme-Adaption der Graph-Ansicht (`GraphView.tsx` & `src/styles.css`): Entfernung harter Dunkelfarben in Toolbar, Tabs, Popover, Steuerelementen, Legende und dynamische Farbanpassung des HTML5-Canvas via `MutationObserver` und `getComputedStyle(document.documentElement)`.
+- Vollständige Theme-Adaption des schwebenden Canvas-Inspektors (`CanvasInspector.tsx`), der React Flow Controls und MiniMap (`CanvasEditor.tsx` & `src/styles.css`) auf CSS-Theme-Variablen.
 
 

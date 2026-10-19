@@ -152,10 +152,26 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
   const [controlsTab, setControlsTab] = useState<'filter' | 'groups' | 'physics'>('filter');
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [touchSelectedNode, setTouchSelectedNode] = useState<SimNode | null>(null);
+  const [themeVersion, setThemeVersion] = useState(0);
 
   const alphaRef = useRef(1.0);
   const wakeUpRef = useRef<() => void>(() => {});
   const transformRef = useRef({ x: 0, y: 0, scale: isLocalGraph ? 0.95 : 0.75 });
+
+  // Listen for theme attribute changes on document.documentElement
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === 'attributes' && (m.attributeName === 'data-theme' || m.attributeName === 'class')) {
+          setThemeVersion((v) => v + 1);
+          alphaRef.current = Math.max(alphaRef.current, 0.2);
+          wakeUpRef.current();
+        }
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+    return () => observer.disconnect();
+  }, []);
 
   // Update settings with persistence
   const updateSettings = useCallback((updater: (prev: GraphSettings) => GraphSettings) => {
@@ -474,7 +490,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         }
       }
 
-      const computedStyle = getComputedStyle(canvas);
+      const computedStyle = getComputedStyle(document.documentElement);
       const activeColor =
         computedStyle.getPropertyValue('--accent-color').trim() || '#d4af37';
       const secondaryColor =
@@ -483,7 +499,12 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         computedStyle.getPropertyValue('--text-primary').trim() || '#e6edf3';
       const mutedColor =
         computedStyle.getPropertyValue('--text-muted').trim() || '#8b949e';
-      const edgeBaseColor = 'rgba(145, 155, 175, 0.22)';
+      const defaultNodeColor =
+        computedStyle.getPropertyValue('--text-secondary').trim() || '#9ca3af';
+      const edgeBaseColor =
+        computedStyle.getPropertyValue('--border-color').trim() || 'rgba(145, 155, 175, 0.22)';
+      const spotlightBg =
+        computedStyle.getPropertyValue('--bg-secondary').trim() || 'rgba(15, 23, 42, 0.85)';
 
       // 2.1 Draw edges (fine lines)
       for (const edge of edges) {
@@ -526,7 +547,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         const isDimmed = spotlightId && !isConnected;
 
         // Determine node color
-        let nodeColor = '#9ca3af'; // default subtle grey/slate
+        let nodeColor = defaultNodeColor;
         const groupColor = matchNodeGroup(n, settings.groups);
 
         if (groupColor) {
@@ -645,7 +666,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
 
         // Draw pill background for spotlighted text to guarantee 100% legibility
         if (isSpotlight) {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.fillStyle = spotlightBg;
           ctx.beginPath();
           ctx.roundRect(
             box.x1 - 2,
@@ -681,6 +702,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
     touchSelectedNode,
     settings,
     localMode,
+    themeVersion,
   ]);
 
   // Screen to world coordinates converter

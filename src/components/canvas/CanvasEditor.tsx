@@ -656,10 +656,10 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             <Controls showInteractive={false} className="canvas-rf-controls" />
             <MiniMap
               nodeColor={(n) => {
-                if (n.data?.color) return resolveCanvasColor(n.data.color as string) || '#888';
-                return '#444';
+                if (n.data?.color) return resolveCanvasColor(n.data.color as string) || 'var(--accent-color, #d4af37)';
+                return 'var(--text-muted, #888888)';
               }}
-              maskColor="rgba(0, 0, 0, 0.55)"
+              maskColor="var(--border-subtle, rgba(0, 0, 0, 0.45))"
               className="canvas-rf-minimap"
             />
           </ReactFlow>

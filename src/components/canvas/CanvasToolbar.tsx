@@ -51,6 +51,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | null>(null);
   const [fileSearch, setFileSearch] = useState('');
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -61,6 +62,23 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!openDropdown || !dropdownRef.current) return;
+    const el = dropdownRef.current;
+    el.style.left = '0px';
+    const rect = el.getBoundingClientRect();
+    const container = el.closest('.canvas-editor-wrapper') || document.body;
+    const containerRect = container.getBoundingClientRect();
+
+    if (rect.right > containerRect.right - 12) {
+      const overflow = rect.right - (containerRect.right - 12);
+      el.style.left = `-${overflow}px`;
+    } else if (rect.left < containerRect.left + 12) {
+      const underflow = containerRect.left + 12 - rect.left;
+      el.style.left = `${underflow}px`;
+    }
+  }, [openDropdown]);
 
   const filteredNotes = allNotes
     .filter(
@@ -102,7 +120,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           </button>
 
           {openDropdown === 'file' && (
-            <div className="canvas-dropdown-menu canvas-file-picker-menu">
+            <div ref={dropdownRef} className="canvas-dropdown-menu canvas-file-picker-menu">
               <div className="canvas-picker-search-row">
                 <Search size={14} />
                 <input
@@ -165,7 +183,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           </button>
 
           {openDropdown === 'workflow' && (
-            <div className="canvas-dropdown-menu">
+            <div ref={dropdownRef} className="canvas-dropdown-menu">
               <div className="canvas-dropdown-title">Workflow-Formen</div>
               <button
                 type="button"
@@ -255,7 +273,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           </button>
 
           {openDropdown === 'network' && (
-            <div className="canvas-dropdown-menu">
+            <div ref={dropdownRef} className="canvas-dropdown-menu">
               <div className="canvas-dropdown-title">Netzwerk-Elemente</div>
               <button
                 type="button"

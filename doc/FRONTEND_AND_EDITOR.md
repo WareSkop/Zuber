@@ -637,6 +637,30 @@ flowchart TD
   - `.sidebar-resizer-right`: Anker am linken Rand der rechten Leiste (Standard: `300px`, min: `200px`, max: `650px`).
 - Die Abmessungen werden in CSS-Variablen `--left-sidebar-width` und `--right-sidebar-width` geschrieben und in `localStorage` (`knowmesh_sidebar_widths`) persistent gespeichert.
 
+---
+
+## 22. Canvas- & Theme-Optimierungen (Phase 4)
+
+### 22.1 Responsive Canvas Top-Toolbar & Popover-Clamping (`CanvasToolbar.tsx` & `src/styles.css`)
+- **Container-relative Breitenbegrenzung:** Die obere Canvas-Werkzeugleiste (`.canvas-toolbar`) orientiert sich nun über `max-width: calc(100% - 24px) !important;` exakt an der tatsächlichen inneren Breite des `.canvas-editor-wrapper` anstelle des Gesamtframes (`100vw`). Bei geöffneten Seitenleisten schneidet die Toolbar nicht mehr am rechten Bildschirmrand ab.
+- **Automatisches Flex-Wrapping:** Mittels `flex-wrap: wrap !important; width: max-content; justify-content: center;` brechen Schaltflächen bei schmalen Viewports oder hohen Zoomstufen sauber in kompakte Reihen um.
+- **Dynamisches Boundary-Clamping für Dropdowns:** Dropdown-Menüs (`Notiz einbetten`, `Workflow ⌄`, `Netzwerk ⌄`) ermitteln per `getBoundingClientRect()` ihre Position relativ zum Container (`.canvas-editor-wrapper`) und verschieben ihre X-Position dynamisch, sodass sie garantiert innerhalb des sichtbaren Arbeitsbereichs bleiben.
+
+### 22.2 Vergrößerte Resize Hit-Areas (14px) für Linux KDE & Chromium (`src/styles.css`)
+- **14px × 14px Eck- und Kanten-Handles:** `.react-flow__resize-control.handle` und `.canvas-resizer-handle` bieten eine vergrößerte Klick- und Greiffläche mit `z-index: 25`, wodurch Größenänderungen unter Linux/KDE/X11/Wayland und Chromium auch bei hochauflösenden Displays verlässlich greifen.
+- **14px unsichtbare Hit-Lines an den Kanten:** `.react-flow__resize-control.line` und `.canvas-resizer-line` besitzen eine unsichtbare Greifzone von 14px (`top/bottom/left/right: -7px; background: transparent; z-index: 20;`), die das Greifen der Kanten erleichtert, ohne das optische Rahmendesign zu stören.
+- **Priorisierte Verbindungs-Handles (`z-index: 30`):** Verbindungspunkte (`.canvas-node-handle`) sitzen mit `z-index: 30 !important` über den Resizer-Linien, sodass neue Verbindungslinien ohne versehentliches Auslösen eines Resizes gezogen werden können.
+
+### 22.3 Umfassende Theme-Anpassung der Graph-Steuerung & Suche (`GraphView.tsx` & `src/styles.css`)
+- **Dynamische Theme-Variablen:** Alle Steuerelemente der Graph-Ansicht (`.graph-toolbar-left`, `.graph-toolbar-right`, `.graph-controls-popover`, `.graph-control-row`, `.graph-group-row`, `.graph-legend`) nutzen semantische CSS-Variablen (`--bg-secondary`, `--bg-primary`, `--border-color`, `--text-primary`, `--accent-color`).
+- **Aktive Farb-Synchronisation:** Die Legendenpunkte (`note-dot`, `active-dot`, `tag-dot`, `unresolved-dot`) und Touch-Aktionspillen reflektieren die aktiven Akzent- und Textfarben des eingestellten Themes.
+- **Live-Reaktivität via `MutationObserver`:** `GraphView.tsx` überwacht `data-theme`- und `class`-Änderungen auf `document.documentElement`, liest aktualisierte Farbewerte aus `getComputedStyle(document.documentElement)` aus und rendert den Canvas im nächsten Frame automatisch in den neuen Theme-Farben.
+
+### 22.4 Vollständige Theme-Integration für Canvas-Inspektor & Controls (`CanvasInspector.tsx`, `CanvasEditor.tsx`, `src/styles.css`)
+- **Entfernung harter Hex-/Dark-Farbwerte:** Der schwebende Inspektor (`.canvas-floating-inspector`), seine Popover-Menüs (`.inspector-dropdown-menu`), Formengitter (`.inspector-grid-item`) und Kanten-Eingabefelder (`.inspector-edge-input`) nutzen einheitlich `var(--bg-secondary)`, `var(--bg-primary)` und `var(--border-color)` und passen sich Hell-, Dunkel- und Warm-Themes nahtlos an.
+- **React Flow Controls & MiniMap:** `.canvas-rf-controls` und `.canvas-rf-minimap` sind vollständig in das Theme-System integriert; die MiniMap verwendet dynamische Masken- und Knotenfarben (`--border-subtle`, `--accent-color`, `--text-muted`).
+
+
 
 
 
