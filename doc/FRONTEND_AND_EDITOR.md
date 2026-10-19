@@ -660,6 +660,17 @@ flowchart TD
 - **Entfernung harter Hex-/Dark-Farbwerte:** Der schwebende Inspektor (`.canvas-floating-inspector`), seine Popover-Menüs (`.inspector-dropdown-menu`), Formengitter (`.inspector-grid-item`) und Kanten-Eingabefelder (`.inspector-edge-input`) nutzen einheitlich `var(--bg-secondary)`, `var(--bg-primary)` und `var(--border-color)` und passen sich Hell-, Dunkel- und Warm-Themes nahtlos an.
 - **React Flow Controls & MiniMap:** `.canvas-rf-controls` und `.canvas-rf-minimap` sind vollständig in das Theme-System integriert; die MiniMap verwendet dynamische Masken- und Knotenfarben (`--border-subtle`, `--accent-color`, `--text-muted`).
 
+### 22.5 Mobile Canvas & Header-Layout (`< 768px` und `< 600px`)
+- **Umbruch der inneren Toolbar-Gruppen (`.canvas-toolbar-group`):** Neben der übergeordneten Toolbar brechen nun auch die inneren Button-Gruppen (`+ Text`, `Notiz einbetten`, `Gruppe`, `Workflow ⌄`, `Netzwerk ⌄`) mittels `flex-wrap: wrap !important; max-width: 100% !important;` sauber um. Dadurch wird verhindert, dass Buttons auf Smartphones (360px–412px Viewport) nach links oder rechts aus dem Bildschirm herausgeschoben werden.
+- **Sichere horizontale Zentrierung:** Anstelle von `left: 50%; transform: translateX(-50%)` sind Toolbar und Inspektor mit `left: 12px; right: 12px; margin: 0 auto; width: fit-content; max-width: calc(100% - 24px) !important;` verankert, wodurch symmetrische Randüberläufe vermieden werden.
+- **Viewport-Clamping für Popover-Menüs:** Dropdowns und Popovers (`CanvasToolbar.tsx` und `CanvasInspector.tsx`) berechnen ihre Ausrichtung via `requestAnimationFrame` dynamisch und klammern sich an die Ränder `[8px, window.innerWidth - 8px]` mit `max-width: calc(100vw - 24px) !important`.
+- **Kollisionsvermeidung bei Zoom-Controls & MiniMap:**
+  - Auf Touchscreens `< 768px` wird die MiniMap (`.react-flow__minimap`) ausgeblendet, da sie auf kleinen Bildschirmen zu viel Arbeitsfläche verdeckt.
+  - Die Zoom- und Fit-View-Controls (`.canvas-rf-controls`) werden auf `< 768px` sowie bei aktiver Element-Selektion (`.has-selection .canvas-rf-controls`) auf `bottom: 76px !important;` angehoben, sodass sie nie mit dem schwebenden Attribut-Inspektor kollidieren.
+- **Kompakte Topbar-Badges (< 600px):**
+  - Auf schmalen Bildschirmen wird der Speichertext im Synchronisations-Badge ausgeblendet und durch ein kompaktes Status-Icon (`.sync-status-icon-mobile`, z. B. `✓`) ersetzt.
+  - Die Textbeschriftung des Canvas-Modus-Indikators (`.canvas-mode-indicator span`) wird verborgen, sodass nur das 14px Workflow-Icon sichtbar bleibt und das Speicher-Badge nicht mehr abgeschnitten wird.
+
 
 
 

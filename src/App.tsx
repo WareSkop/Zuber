@@ -2211,6 +2211,9 @@ export const App: React.FC = () => {
                 }
               >
                 <span className={`sync-status-dot ${syncState}`} />
+                <span className="sync-status-icon-mobile" aria-hidden="true">
+                  {syncState === 'synced' ? '✓' : syncState === 'syncing' ? '⟳' : syncState === 'offline' ? '⚡' : '!'}
+                </span>
                 <span className="sync-status-text">
                   {syncState === 'synced' && t('statusbar.synced')}
                   {syncState === 'syncing' && t('common.syncing')}

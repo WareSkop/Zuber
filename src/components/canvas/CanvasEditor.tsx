@@ -593,7 +593,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         readOnly,
       }}
     >
-      <div className="canvas-editor-wrapper" ref={containerRef}>
+      <div className={`canvas-editor-wrapper ${selectedNode || selectedEdge ? 'has-selection' : ''}`} ref={containerRef}>
         {/* Top dock toolbar */}
         {!readOnly && (
           <CanvasToolbar

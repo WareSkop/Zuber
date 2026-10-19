@@ -58,6 +58,34 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
     setActivePopover(null);
   }, [selectedNode?.id, selectedEdge?.id]);
 
+  const popoverRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!activePopover || !popoverRef.current) return;
+    const el = popoverRef.current;
+    el.style.left = '50%';
+    el.style.transform = 'translateX(-50%)';
+
+    const clampPopover = () => {
+      if (!popoverRef.current) return;
+      const target = popoverRef.current;
+      const rect = target.getBoundingClientRect();
+      const minLeft = 8;
+      const maxRight = window.innerWidth - 8;
+
+      if (rect.right > maxRight) {
+        const overflow = rect.right - maxRight;
+        target.style.transform = `translateX(calc(-50% - ${overflow}px))`;
+      } else if (rect.left < minLeft) {
+        const underflow = minLeft - rect.left;
+        target.style.transform = `translateX(calc(-50% + ${underflow}px))`;
+      }
+    };
+
+    clampPopover();
+    requestAnimationFrame(clampPopover);
+  }, [activePopover]);
+
   useEffect(() => {
     const handleDocumentMouseDown = (e: MouseEvent) => {
       if (inspectorRef.current && !inspectorRef.current.contains(e.target as unknown as globalThis.Node)) {
@@ -115,7 +143,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 <span className="inspector-btn-label">Form</span>
               </button>
               {activePopover === 'shape' && (
-                <div className="inspector-dropdown-menu shapes-grid">
+                <div ref={popoverRef} className="inspector-dropdown-menu shapes-grid">
                   {shapesList.map((s) => (
                     <button
                       key={s.shape}
@@ -148,7 +176,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               <span className="inspector-btn-label">Farbe</span>
             </button>
             {activePopover === 'color' && (
-              <div className="inspector-dropdown-menu colors-row">
+              <div ref={popoverRef} className="inspector-dropdown-menu colors-row">
                 {colorPresets.map((c) => (
                   <button
                     key={c.key}
@@ -179,7 +207,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 <span className="inspector-btn-label">Link</span>
               </button>
               {activePopover === 'link' && (
-                <div className="inspector-dropdown-menu link-picker scroller">
+                <div ref={popoverRef} className="inspector-dropdown-menu link-picker scroller">
                   <input
                     type="text"
                     autoFocus
@@ -314,7 +342,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               <Palette size={15} />
             </button>
             {activePopover === 'color' && (
-              <div className="inspector-dropdown-menu colors-row">
+              <div ref={popoverRef} className="inspector-dropdown-menu colors-row">
                 {colorPresets.map((c) => (
                   <button
                     key={c.key}

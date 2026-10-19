@@ -67,17 +67,34 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     if (!openDropdown || !dropdownRef.current) return;
     const el = dropdownRef.current;
     el.style.left = '0px';
-    const rect = el.getBoundingClientRect();
-    const container = el.closest('.canvas-editor-wrapper') || document.body;
-    const containerRect = container.getBoundingClientRect();
 
-    if (rect.right > containerRect.right - 12) {
-      const overflow = rect.right - (containerRect.right - 12);
-      el.style.left = `-${overflow}px`;
-    } else if (rect.left < containerRect.left + 12) {
-      const underflow = containerRect.left + 12 - rect.left;
-      el.style.left = `${underflow}px`;
-    }
+    const clamp = () => {
+      if (!dropdownRef.current) return;
+      const target = dropdownRef.current;
+      const rect = target.getBoundingClientRect();
+      const container = target.closest('.canvas-editor-wrapper') || document.body;
+      const containerRect = container.getBoundingClientRect();
+
+      const minLeft = Math.max(containerRect.left + 12, 8);
+      const maxRight = Math.min(containerRect.right - 12, window.innerWidth - 8);
+
+      if (rect.right > maxRight) {
+        const overflow = rect.right - maxRight;
+        const targetLeft = -overflow;
+        if (rect.left - overflow < minLeft) {
+          const underflow = minLeft - (rect.left - overflow);
+          target.style.left = `${targetLeft + underflow}px`;
+        } else {
+          target.style.left = `${targetLeft}px`;
+        }
+      } else if (rect.left < minLeft) {
+        const underflow = minLeft - rect.left;
+        target.style.left = `${underflow}px`;
+      }
+    };
+
+    clamp();
+    requestAnimationFrame(clamp);
   }, [openDropdown]);
 
   const filteredNotes = allNotes

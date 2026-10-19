@@ -27,5 +27,9 @@
 - Responsives Layout der oberen Canvas-Toolbar (`.canvas-toolbar`): Begrenzung auf Container-Breite (`max-width: calc(100% - 24px) !important`), automatisches Umbrechen (`flex-wrap: wrap !important`) und dynamisches Boundary-Clamping für Dropdown-Menüs (`CanvasToolbar.tsx`).
 - Vollständige Theme-Adaption der Graph-Ansicht (`GraphView.tsx` & `src/styles.css`): Entfernung harter Dunkelfarben in Toolbar, Tabs, Popover, Steuerelementen, Legende und dynamische Farbanpassung des HTML5-Canvas via `MutationObserver` und `getComputedStyle(document.documentElement)`.
 - Vollständige Theme-Adaption des schwebenden Canvas-Inspektors (`CanvasInspector.tsx`), der React Flow Controls und MiniMap (`CanvasEditor.tsx` & `src/styles.css`) auf CSS-Theme-Variablen.
+- Umbruch der inneren Canvas-Toolbar-Gruppen (`.canvas-toolbar-group`) auf schmalen mobilen Bildschirmen (~360px), um das Herausschieben und Abschneiden von Schaltflächen (`+ Text`, `Workflow`, `Netzwerk`) zu verhindern.
+- Schwebender Canvas-Inspektor (`CanvasInspector.tsx`): Sichere horizontale Zentrierung (`left: 12px; right: 12px; margin: 0 auto; max-width: calc(100% - 24px) !important; flex-wrap: wrap !important`) und dynamisches Popover-Boundary-Clamping gegen Randüberlauf.
+- Kollisionsschutz für React Flow Controls: Hebt die Zoom-Steuerung bei aktiver Element-Selektion (`.has-selection`) sowie auf Mobilgeräten (`< 768px`) auf `bottom: 76px !important;` an und blendet die MiniMap auf Touchscreens `< 768px` aus.
+- Kompakte Topbar-Badges (< 600px): Ersetzt den Speichertext durch ein kompaktes Icon (`✓`) und blendet die Textbeschriftung des Canvas-Indikators aus, um Textabschneidungen im Header zu verhindern.
 
 
