@@ -10,6 +10,7 @@ import {
   saveStoredProfiles,
 } from '../api';
 import { LocalDb, type OutboxMutation, type CachedAttachment, generateMutationId } from './localDb';
+import { processIncomingShares, type ProcessShareOptions } from './shareTargetService';
 import { clientLogger } from '../utils/logger';
 import type {
   BacklinkItem,
@@ -834,6 +835,12 @@ class SyncEngine {
   public async clearCache() {
     return this.localDb.clearCache();
   }
+
+  public async processIncomingShares(options?: ProcessShareOptions): Promise<string | null> {
+    return processIncomingShares(options);
+  }
 }
 
 export const syncEngine = new SyncEngine();
+export { processIncomingShares };
+

@@ -795,3 +795,26 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
   - **Text-Initialisierung & Fokus:** Das getippte Zeichen wird an den bestehenden Knotentext angehängt (bzw. beginnt den Text, falls leer), das `<textarea>` wird unmittelbar fokussiert und der Cursor ans Textende positioniert (`setSelectionRange(len, len)`).
   - **Eingabe-Schutz & Shortcuts:** Modifizierer-Tastenkombinationen (`Ctrl+Z`, `Ctrl+Y`), Panning via Leertaste (`Space`), das Löschen via `Delete`/`Backspace` sowie Eingaben in geöffneten Dialogen oder bestehenden Textfeldern sind durch strikte Guards vor Fehltriggerung geschützt.
 
+---
+
+## 25. Web Share Target API: Direkter Notizen- & Datei-Empfang in `Inbox/`
+
+### 25.1 Manifest & Service Worker Integration
+- **Web App Manifest (`public/manifest.webmanifest`):**
+  - Registriert `share_target` mit `action: "/share-target"`, `method: "POST"` und `enctype: "multipart/form-data"`.
+  - Akzeptiert Bildformate (`image/*`), PDFs (`application/pdf`, `.pdf`) sowie Markdown- und Textdateien (`text/markdown`, `text/plain`, `.md`).
+- **Service Worker (`public/sw.js`):**
+  - Fängt eingehende `POST /share-target`-Anfragen ab, extrahiert Titel, Text, URL und `shared_files` aus den `formData`.
+  - Serialisiert die Nutzdaten in den browser-lokalen IndexedDB-Speicher `knowmesh_shared_incoming` (`{ id, title, text, url, files, timestamp }`).
+  - Bestätigt den Empfang mit einem HTTP-303-Redirect auf `/?incoming_share=1`.
+
+### 25.2 Automatisierte Ingest-Pipeline (`src/sync/shareTargetService.ts` & `src/App.tsx`)
+- Beim App-Start oder Fokus (bei aktiver `?incoming_share=1`-Navigation oder bestehenden Einträgen in `knowmesh_shared_incoming`) wird der Ingest-Handler ausgeführt:
+  1. Stellt sicher, dass das Zielverzeichnis `Inbox/` existiert (`api.createFolder('Inbox')`).
+  2. **Fall A (Markdown/Text):** Liest den Dateiinhalt und speichert ihn direkt als Notiz in `Inbox/${sanitizedTitle}.md`.
+  3. **Fall B (PDF):** Legt die PDF-Datei in `attachments/` ab und erzeugt eine Begleitnotiz in `Inbox/` mit `# Titel\n\n![[attachments/datei.pdf]]`.
+  4. **Fall C (Bilder):** Speichert das Bild in `attachments/` und legt eine Notiz in `Inbox/` mit eingebetteter Vorschau an.
+  5. **Fall D (Reiner Text / URL):** Speichert die Notiz mit formatiertem Markdown-Hyperlink `[Link](url)` und Notiztext.
+  6. **Fokus & Bereinigung:** Die neu erstellte Notiz wird unmittelbar als aktiver Tab geöffnet (`openNoteByPath`), der Eintrag aus IndexedDB entfernt und die URL-Parameter via `window.history.replaceState({}, '', '/')` bereinigt.
+
+

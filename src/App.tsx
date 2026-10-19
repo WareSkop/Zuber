@@ -835,9 +835,18 @@ export const App: React.FC = () => {
         setSyncState('offline');
         try {
           const { treeRes } = await loadVaultIndex();
-          const startupPath = await resolveStartupNotePath(treeRes.files);
-          if (startupPath && !cancelled) {
-            await openNoteByPath(startupPath);
+          const sharedPath = await syncEngine.processIncomingShares({
+            openNote: openNoteByPath,
+            existingFiles: treeRes.files.map((f) => f.path),
+          });
+          if (sharedPath && !cancelled) {
+            await loadVaultIndex();
+            await openNoteByPath(sharedPath);
+          } else {
+            const startupPath = await resolveStartupNotePath(treeRes.files);
+            if (startupPath && !cancelled) {
+              await openNoteByPath(startupPath);
+            }
           }
         } catch (offlineErr) {
           console.warn('Offline mode active, falling back to local cache:', offlineErr);
@@ -870,9 +879,18 @@ export const App: React.FC = () => {
           syncEngine.notifyAuthenticatedOnline();
           try {
             const { treeRes } = await loadVaultIndex();
-            const startupPath = await resolveStartupNotePath(treeRes.files);
-            if (startupPath && !cancelled) {
-              await openNoteByPath(startupPath);
+            const sharedPath = await syncEngine.processIncomingShares({
+              openNote: openNoteByPath,
+              existingFiles: treeRes.files.map((f) => f.path),
+            });
+            if (sharedPath && !cancelled) {
+              await loadVaultIndex();
+              await openNoteByPath(sharedPath);
+            } else {
+              const startupPath = await resolveStartupNotePath(treeRes.files);
+              if (startupPath && !cancelled) {
+                await openNoteByPath(startupPath);
+              }
             }
           } catch (loadErr) {
             console.warn('Offline mode active, falling back to local cache:', loadErr);
@@ -1011,6 +1029,28 @@ export const App: React.FC = () => {
     };
   }, [authenticated, loadVaultIndex, scheduleIndexRefresh, openNoteByPath]);
 
+  // Ingest handler for incoming Web Share Target items while app is running
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!authenticated) return;
+    const isIncoming = window.location.search.includes('incoming_share');
+    if (isIncoming) {
+      syncEngine
+        .processIncomingShares({
+          openNote: openNoteByPath,
+          existingFiles: allFiles.map((f) => f.path),
+        })
+        .then((sharedPath) => {
+          if (sharedPath) {
+            loadVaultIndex().then(() => openNoteByPath(sharedPath));
+          }
+        })
+        .catch((err) => {
+          console.warn('[Knowmesh Share] Error processing incoming share:', err);
+        });
+    }
+  }, [authenticated, allFiles, loadVaultIndex, openNoteByPath]);
+
   const handleLogin = async (password: string) => {
     const loginRes = await api.login(password);
     setAuthenticated(true);
@@ -1018,9 +1058,18 @@ export const App: React.FC = () => {
       syncEngine.notifyAuthenticatedOnline();
     }
     const { treeRes } = await loadVaultIndex();
-    const targetPath = await resolveStartupNotePath(treeRes.files);
-    if (targetPath) {
-      await openNoteByPath(targetPath);
+    const sharedPath = await syncEngine.processIncomingShares({
+      openNote: openNoteByPath,
+      existingFiles: treeRes.files.map((f) => f.path),
+    });
+    if (sharedPath) {
+      await loadVaultIndex();
+      await openNoteByPath(sharedPath);
+    } else {
+      const targetPath = await resolveStartupNotePath(treeRes.files);
+      if (targetPath) {
+        await openNoteByPath(targetPath);
+      }
     }
   };
 

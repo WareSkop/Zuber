@@ -24,23 +24,39 @@ const TOKEN_STORAGE_KEY = 'knowmesh_token';
 const ACTIVE_PROFILE_KEY = 'knowmesh_active_profile_id';
 const PROFILES_STORAGE_KEY = 'knowmesh_vault_profiles';
 
+function getSafeStorage(): Storage | null {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function') {
+      return window.localStorage;
+    }
+    if (typeof localStorage !== 'undefined' && localStorage && typeof localStorage.getItem === 'function') {
+      return localStorage;
+    }
+  } catch {}
+  return null;
+}
+
 export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY) || localStorage.getItem('basalt_token') || localStorage.getItem('obsidian_web_vault_token');
+  const s = getSafeStorage();
+  return s?.getItem(TOKEN_STORAGE_KEY) || s?.getItem('basalt_token') || s?.getItem('obsidian_web_vault_token') || null;
 }
 
 export function setStoredToken(token: string | null): void {
+  const s = getSafeStorage();
+  if (!s) return;
   if (token) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    s.setItem(TOKEN_STORAGE_KEY, token);
   } else {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem('basalt_token');
-    localStorage.removeItem('obsidian_web_vault_token');
+    s.removeItem(TOKEN_STORAGE_KEY);
+    s.removeItem('basalt_token');
+    s.removeItem('obsidian_web_vault_token');
   }
 }
 
 export function getStoredProfiles(): VaultProfile[] {
   try {
-    const raw = localStorage.getItem(PROFILES_STORAGE_KEY) || localStorage.getItem('basalt_vault_profiles');
+    const s = getSafeStorage();
+    const raw = s?.getItem(PROFILES_STORAGE_KEY) || s?.getItem('basalt_vault_profiles');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -57,18 +73,19 @@ export function getStoredProfiles(): VaultProfile[] {
 }
 
 export function saveStoredProfiles(profiles: VaultProfile[]): void {
-  localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
+  getSafeStorage()?.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profiles));
 }
 
 export function getActiveProfile(): VaultProfile {
   const profiles = getStoredProfiles();
-  const activeId = localStorage.getItem(ACTIVE_PROFILE_KEY) || localStorage.getItem('basalt_active_profile_id');
+  const s = getSafeStorage();
+  const activeId = s?.getItem(ACTIVE_PROFILE_KEY) || s?.getItem('basalt_active_profile_id');
   const found = profiles.find((p) => p.id === activeId);
   return found || profiles[0];
 }
 
 export function setActiveProfile(profileId: string): void {
-  localStorage.setItem(ACTIVE_PROFILE_KEY, profileId);
+  getSafeStorage()?.setItem(ACTIVE_PROFILE_KEY, profileId);
   const profiles = getStoredProfiles();
   const profile = profiles.find((p) => p.id === profileId);
   if (profile?.token) {

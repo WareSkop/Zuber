@@ -66,8 +66,86 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Store incoming Web Share Target payload in IndexedDB
+function storeIncomingShare(payload) {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve();
+      return;
+    }
+    const req = indexedDB.open('knowmesh_shared_incoming', 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('knowmesh_shared_incoming')) {
+        db.createObjectStore('knowmesh_shared_incoming', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction('knowmesh_shared_incoming', 'readwrite');
+      const store = tx.objectStore('knowmesh_shared_incoming');
+      store.add(payload);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error);
+      };
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Web Share Target API: intercept incoming requests to /share-target
+  if (url.pathname === '/share-target') {
+    if (event.request.method === 'POST') {
+      event.respondWith(
+        (async () => {
+          try {
+            const formData = await event.request.formData();
+            const title = formData.get('title') || '';
+            const text = formData.get('text') || '';
+            const sharedUrl = formData.get('url') || '';
+            const rawFiles = formData.getAll('shared_files') || [];
+
+            const files = [];
+            for (const f of rawFiles) {
+              if (f && typeof f === 'object' && ('name' in f || 'size' in f)) {
+                files.push({
+                  name: f.name || 'shared_file',
+                  type: f.type || 'application/octet-stream',
+                  blob: f,
+                });
+              }
+            }
+
+            const payload = {
+              id: Date.now() + Math.random(),
+              title: String(title || ''),
+              text: String(text || ''),
+              url: String(sharedUrl || ''),
+              files,
+              timestamp: Date.now(),
+            };
+
+            await storeIncomingShare(payload);
+          } catch (err) {
+            console.error('[Knowmesh SW] Error processing share target:', err);
+          }
+          return Response.redirect('/?incoming_share=1', 303);
+        })()
+      );
+      return;
+    } else {
+      event.respondWith(Response.redirect('/?incoming_share=1', 303));
+      return;
+    }
+  }
 
   // Never intercept /ws or cross-origin requests
   if (url.pathname.startsWith('/ws') || url.origin !== self.location.origin) {

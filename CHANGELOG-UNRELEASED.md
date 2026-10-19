@@ -1,4 +1,8 @@
 ### Added
+- **Web Share Target API für Bilder, PDFs und Markdown-Dateien in `Inbox/` (`manifest.webmanifest`, `public/sw.js`, `src/sync/shareTargetService.ts` & `src/App.tsx`):**
+  - Ermöglicht das direkte Teilen von Notizen, Bildern (`image/*`), PDFs (`application/pdf`) und Markdown-Dateien (`.md`, `text/markdown`, `text/plain`) aus dem nativen Android-/Browser-Share-Sheet in Knowmesh.
+  - Der Service Worker fängt `POST /share-target` ab, serialisiert Dateidaten in die IndexedDB-Queue `knowmesh_shared_incoming` und leitet per HTTP 303 Redirect weiter.
+  - Beim App-Start oder Fokus werden die geteilten Inhalte automatisiert verarbeitet: Markdown-Dateien werden direkt als Notiz in `Inbox/` angelegt, Bilder und PDFs werden in `attachments/` abgelegt und in eine zugehörige Notiz in `Inbox/` eingebettet. Die neu erzeugte Notiz wird sofort als aktiver Tab geöffnet.
 - **Type-to-Edit für ausgewählte Canvas-Knoten (`CanvasEditor.tsx` & `CanvasShapeNode.tsx`):** Beim Tippen eines druckbaren Zeichens auf einem einzeln ausgewählten Form- oder Text-Knoten wird sofort der Inline-Editor geöffnet, der Cursor ans Textende gesetzt und das getippte Zeichen angehängt. Shortcuts wie `Ctrl+Z`, `Space` (Pan) und `Delete` bleiben uneingeschränkt funktionsfähig.
 
 ### Changed

@@ -99,6 +99,11 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     app.use(express.static(distDir));
   }
 
+  // --- Web Share Target Fallback (in case Service Worker is bypassed or inactive) ---
+  app.all('/share-target', (_req, res) => {
+    res.redirect(303, '/?incoming_share=1');
+  });
+
   const isRequestSecure = (req: express.Request): boolean => {
     return ENABLE_HTTPS || req.secure || req.headers['x-forwarded-proto'] === 'https';
   };
