@@ -82,6 +82,7 @@ import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
+import { cleanShareUrlQuery } from './sync/shareTargetService';
 import { clientLogger } from './utils/logger';
 import { useTranslation } from './i18n';
 import { recordLastActiveNote, resolveStartupNotePath } from './startupConfig';
@@ -114,6 +115,8 @@ export const App: React.FC = () => {
   const [allFiles, setAllFiles] = useState<
     { path: string; name: string; basename: string; extension: string }[]
   >([]);
+  const allFilesRef = useRef(allFiles);
+  allFilesRef.current = allFiles;
   const [graphData, setGraphData] = useState<GraphData>({
     nodes: [],
     edges: [],
@@ -809,6 +812,37 @@ export const App: React.FC = () => {
     ]
   );
 
+  const isProcessingSharesRef = useRef(false);
+
+  const consumeIncomingShares = useCallback(
+    async (existingFiles?: string[]): Promise<string | null> => {
+      if (isProcessingSharesRef.current) return null;
+      isProcessingSharesRef.current = true;
+
+      try {
+        // 1. Immediately clean up URL query parameter to avoid re-triggering
+        cleanShareUrlQuery();
+
+        const files = existingFiles || allFilesRef.current.map((f) => f.path);
+        const sharedPath = await syncEngine.processIncomingShares({
+          existingFiles: files,
+        });
+
+        if (sharedPath) {
+          await loadVaultIndex();
+          await openNoteByPath(sharedPath);
+        }
+        return sharedPath;
+      } catch (err) {
+        console.error('[Knowmesh Share] Failed to process incoming shares:', err);
+        return null;
+      } finally {
+        isProcessingSharesRef.current = false;
+      }
+    },
+    [loadVaultIndex, openNoteByPath]
+  );
+
   // Initial authentication check
   useEffect(() => {
     let cancelled = false;
@@ -835,14 +869,8 @@ export const App: React.FC = () => {
         setSyncState('offline');
         try {
           const { treeRes } = await loadVaultIndex();
-          const sharedPath = await syncEngine.processIncomingShares({
-            openNote: openNoteByPath,
-            existingFiles: treeRes.files.map((f) => f.path),
-          });
-          if (sharedPath && !cancelled) {
-            await loadVaultIndex();
-            await openNoteByPath(sharedPath);
-          } else {
+          const sharedPath = await consumeIncomingShares(treeRes.files.map((f) => f.path));
+          if (!sharedPath) {
             const startupPath = await resolveStartupNotePath(treeRes.files);
             if (startupPath && !cancelled) {
               await openNoteByPath(startupPath);
@@ -879,14 +907,8 @@ export const App: React.FC = () => {
           syncEngine.notifyAuthenticatedOnline();
           try {
             const { treeRes } = await loadVaultIndex();
-            const sharedPath = await syncEngine.processIncomingShares({
-              openNote: openNoteByPath,
-              existingFiles: treeRes.files.map((f) => f.path),
-            });
-            if (sharedPath && !cancelled) {
-              await loadVaultIndex();
-              await openNoteByPath(sharedPath);
-            } else {
+            const sharedPath = await consumeIncomingShares(treeRes.files.map((f) => f.path));
+            if (!sharedPath) {
               const startupPath = await resolveStartupNotePath(treeRes.files);
               if (startupPath && !cancelled) {
                 await openNoteByPath(startupPath);
@@ -1033,23 +1055,21 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!authenticated) return;
-    const isIncoming = window.location.search.includes('incoming_share');
-    if (isIncoming) {
-      syncEngine
-        .processIncomingShares({
-          openNote: openNoteByPath,
-          existingFiles: allFiles.map((f) => f.path),
-        })
-        .then((sharedPath) => {
-          if (sharedPath) {
-            loadVaultIndex().then(() => openNoteByPath(sharedPath));
-          }
-        })
-        .catch((err) => {
-          console.warn('[Knowmesh Share] Error processing incoming share:', err);
-        });
-    }
-  }, [authenticated, allFiles, loadVaultIndex, openNoteByPath]);
+
+    const checkIncoming = () => {
+      if (window.location.search.includes('incoming_share')) {
+        consumeIncomingShares();
+      }
+    };
+
+    checkIncoming();
+    window.addEventListener('focus', checkIncoming);
+    window.addEventListener('visibilitychange', checkIncoming);
+    return () => {
+      window.removeEventListener('focus', checkIncoming);
+      window.removeEventListener('visibilitychange', checkIncoming);
+    };
+  }, [authenticated, consumeIncomingShares]);
 
   const handleLogin = async (password: string) => {
     const loginRes = await api.login(password);
@@ -1058,14 +1078,8 @@ export const App: React.FC = () => {
       syncEngine.notifyAuthenticatedOnline();
     }
     const { treeRes } = await loadVaultIndex();
-    const sharedPath = await syncEngine.processIncomingShares({
-      openNote: openNoteByPath,
-      existingFiles: treeRes.files.map((f) => f.path),
-    });
-    if (sharedPath) {
-      await loadVaultIndex();
-      await openNoteByPath(sharedPath);
-    } else {
+    const sharedPath = await consumeIncomingShares(treeRes.files.map((f) => f.path));
+    if (!sharedPath) {
       const targetPath = await resolveStartupNotePath(treeRes.files);
       if (targetPath) {
         await openNoteByPath(targetPath);

@@ -817,4 +817,12 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
   5. **Fall D (Reiner Text / URL):** Speichert die Notiz mit formatiertem Markdown-Hyperlink `[Link](url)` und Notiztext.
   6. **Fokus & Bereinigung:** Die neu erstellte Notiz wird unmittelbar als aktiver Tab geöffnet (`openNoteByPath`), der Eintrag aus IndexedDB entfernt und die URL-Parameter via `window.history.replaceState({}, '', '/')` bereinigt.
 
+### 25.3 Concurrency-Lock, Atomic Drain & 5-Sekunden-Duplikat-Schutz
+- **In-Memory-Lock (`isProcessingSharesRef` in `App.tsx` & `isProcessingSharesGlobal` in `shareTargetService.ts`):** Verhindert parallele Ausführungen während App-Start, React-Re-Renders oder Lebenszyklus-Ereignissen.
+- **Synchrones URL-Clearing (`cleanShareUrlQuery`):** Entfernt `?incoming_share=1` unmittelbar und synchron aus der Adressleiste vor dem ersten async-Tick, sodass nachfolgende Hooks und Event-Listener nicht re-triggern.
+- **Atomic Drain vor Datei-I/O:** Gelesene Share-Payloads werden direkt aus der IndexedDB gelöscht, noch bevor `api.saveNote` oder Datei-Uploads starten. Nachfolgende oder überlappende Lesezugriffe finden stets eine leere Queue vor.
+- **In-Memory-Deduplizierung & 5-Sekunden-Guard (`isRecentDuplicateNote`):** Schützt vor doppelten Android-Share-Intents. Wenn innerhalb von 5 Sekunden eine Notiz mit identischem Titel und Textinhalt empfangen wird, wird kein neues Dokument erstellt, sondern die zuvor erstellte Notiz wiederverwendet und geöffnet.
+- **Deterministische Dateinamen:** Verwendet `item.timestamp` anstelle des fluktuierenden `Date.now()`.
+
+
 

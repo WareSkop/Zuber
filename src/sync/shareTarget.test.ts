@@ -13,6 +13,9 @@ import {
   saveIncomingShare,
   getIncomingShares,
   clearAllIncomingShares,
+  resetShareProcessingLock,
+  clearRecentCreatedNotes,
+  isRecentDuplicateNote,
   openShareDb,
   SHARE_STORE_NAME,
   type SharedIncomingPayload,
@@ -140,7 +143,9 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
       };
     });
 
-    // Clear IndexedDB before each test
+    // Clear IndexedDB, lock and recent notes cache before each test
+    resetShareProcessingLock();
+    clearRecentCreatedNotes();
     try {
       await clearAllIncomingShares();
     } catch {}
@@ -303,5 +308,110 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     expect(savedNotes.some((n) => n.path === 'Inbox/Guide.md')).toBe(true);
     expect(savedNotes.some((n) => n.body.includes('![[attachments/photo.jpg]]'))).toBe(true);
     expect(openNote).toHaveBeenCalled();
+  });
+
+  it('12. prevents duplicate file creation on concurrent execution via processing lock', async () => {
+    const payload: SharedIncomingPayload = {
+      id: 106,
+      title: 'Concurrent Share',
+      text: 'Text message',
+      url: 'https://example.com/concurrent',
+      files: [],
+      timestamp: 1700000000000,
+    };
+
+    await saveIncomingShare(payload);
+
+    // Trigger two concurrent ingest calls simultaneously
+    const [path1, path2] = await Promise.all([
+      processIncomingShares(),
+      processIncomingShares(),
+    ]);
+
+    // Exactly one call should process the share, the other should yield null
+    expect(savedNotes.length).toBe(1);
+    expect(savedNotes[0].path).toBe('Inbox/1700000000000_Concurrent Share.md');
+    const resultPaths = [path1, path2].filter(Boolean);
+    expect(resultPaths.length).toBe(1);
+    expect(resultPaths[0]).toBe('Inbox/1700000000000_Concurrent Share.md');
+  });
+
+  it('13. deduplicates identical share items queued in the same batch', async () => {
+    const payload1: SharedIncomingPayload = {
+      id: 107,
+      title: 'Batch Duplicate',
+      text: 'Identical body',
+      url: 'https://example.com/item',
+      files: [],
+      timestamp: 1700000000001,
+    };
+    const payload2: SharedIncomingPayload = {
+      id: 108,
+      title: 'Batch Duplicate',
+      text: 'Identical body',
+      url: 'https://example.com/item',
+      files: [],
+      timestamp: 1700000000002,
+    };
+
+    await saveIncomingShare(payload1);
+    await saveIncomingShare(payload2);
+
+    const createdPath = await processIncomingShares();
+
+    // Despite two items in the queue, only one unique note is created
+    expect(savedNotes.length).toBe(1);
+    expect(createdPath).toBe('Inbox/1700000000001_Batch Duplicate.md');
+  });
+
+  it('14. guards against duplicate note creation within 5 seconds for identical title and content', async () => {
+    const payload1: SharedIncomingPayload = {
+      id: 109,
+      title: 'Rapid Fire Share',
+      text: 'Some shared thoughts',
+      url: 'https://example.com/rapid',
+      files: [],
+      timestamp: 1700000000010,
+    };
+
+    await saveIncomingShare(payload1);
+    const firstPath = await processIncomingShares();
+    expect(savedNotes.length).toBe(1);
+    expect(firstPath).toBe('Inbox/1700000000010_Rapid Fire Share.md');
+
+    // A second identical share arrives 100ms later (simulating Android sending duplicate intent)
+    const payload2: SharedIncomingPayload = {
+      id: 110,
+      title: 'Rapid Fire Share',
+      text: 'Some shared thoughts',
+      url: 'https://example.com/rapid',
+      files: [],
+      timestamp: 1700000000011,
+    };
+
+    await saveIncomingShare(payload2);
+    const secondPath = await processIncomingShares();
+
+    // 5-second duplicate guard detects identical title and content: skips second file creation!
+    expect(savedNotes.length).toBe(1);
+    expect(secondPath).toBe(firstPath);
+  });
+
+  it('15. generates deterministic note filename based on item.timestamp rather than fluctuating Date.now()', async () => {
+    const fixedTimestamp = 1699999999999;
+    const payload: SharedIncomingPayload = {
+      id: 111,
+      title: 'Deterministic Note',
+      text: 'Check timestamp determinism',
+      url: '',
+      files: [],
+      timestamp: fixedTimestamp,
+    };
+
+    await saveIncomingShare(payload);
+    const createdPath = await processIncomingShares();
+
+    expect(createdPath).toBe(`Inbox/${fixedTimestamp}_Deterministic Note.md`);
+    expect(savedNotes[0].path).toBe(`Inbox/${fixedTimestamp}_Deterministic Note.md`);
   });
 });
