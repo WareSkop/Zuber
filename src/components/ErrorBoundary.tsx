@@ -81,7 +81,9 @@ export class ErrorBoundary extends Component<Props, State> {
               boxShadow: '0 12px 32px rgba(0, 0, 0, 0.4)',
             }}
           >
-            <div style={{ fontSize: '42px', marginBottom: '16px' }}>📲</div>
+            <div style={{ marginBottom: '16px' }}>
+              <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'contain' }} />
+            </div>
             <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#f0f6fc', margin: '0 0 12px 0' }}>
               Knowmesh konnte nicht normal gestartet werden
             </h2>

@@ -825,8 +825,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Info size={16} style={{ color: 'var(--accent-primary)' }} />
+                  <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
                     <span>{t('settings.aboutTitle')}</span>
                     <span
                       style={{

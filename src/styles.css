@@ -364,6 +364,17 @@ code {
   color: var(--obsidian-red);
 }
 
+.ribbon-btn.ribbon-brand-btn {
+  opacity: 0.9;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+.ribbon-btn.ribbon-brand-btn:hover {
+  opacity: 1;
+  transform: scale(1.08);
+  background: var(--bg-hover);
+}
+
 /* Left Sidebar */
 .left-sidebar {
   grid-row: 1 / 2;

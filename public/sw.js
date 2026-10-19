@@ -1,19 +1,12 @@
 // Knowmesh Service Worker - App Shell & Attachment Offline Support
-const CACHE_NAME = 'knowmesh-app-shell-v5';
+const CACHE_NAME = 'knowmesh-app-shell-v6';
 const ATTACHMENT_CACHE_NAME = 'knowmesh-attachments-v1';
 
 const APP_SHELL_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/favicon.png',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/apple-touch-icon.png',
-  '/Knowmesh_icon32.png',
-  '/Knowmesh_icon64.png',
-  '/Knowmesh_icon128.png',
-  '/Knowmesh_icon256.png',
+  '/knowmesh_icon.png',
   '/knowmesh_icon.svg'
 ];
 

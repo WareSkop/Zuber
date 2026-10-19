@@ -1973,6 +1973,21 @@ export const App: React.FC = () => {
       <div className="ribbon-top">
         <button
           type="button"
+          className="ribbon-btn ribbon-brand-btn"
+          onClick={() => setSettingsOpen(true)}
+          title="Knowmesh"
+          aria-label="Knowmesh"
+          style={{ padding: 0 }}
+        >
+          <img
+            src="/knowmesh_icon.png"
+            alt="Knowmesh"
+            style={{ width: 22, height: 22, borderRadius: 5, display: 'block', objectFit: 'contain' }}
+          />
+        </button>
+
+        <button
+          type="button"
           className="ribbon-btn"
           onClick={() => openCreateNoteDialog()}
           title={t('nav.newNote')}
@@ -2153,7 +2168,10 @@ export const App: React.FC = () => {
                 </span>
               </>
             ) : (
-              <span>{t('header.noNoteSelected')}</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 15, height: 15, borderRadius: 3, verticalAlign: 'middle' }} />
+                {t('header.noNoteSelected')}
+              </span>
             )}
           </div>
 

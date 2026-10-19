@@ -38,7 +38,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       <div className="login-card">
         <div className="login-header">
           <div className="login-logo">
-            <img src="/knowmesh_icon.svg" alt="Knowmesh" style={{ width: 44, height: 44 }} />
+            <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'contain' }} />
           </div>
           <h1>Knowmesh</h1>
           <p className="login-subtitle">
