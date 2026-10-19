@@ -10,6 +10,7 @@ import {
   saveStoredProfiles,
 } from '../api';
 import { LocalDb, type OutboxMutation, type CachedAttachment, generateMutationId } from './localDb';
+import { clientLogger } from '../utils/logger';
 import type {
   BacklinkItem,
   FileTreeNode,
@@ -151,6 +152,52 @@ class SyncEngine {
     }
   }
 
+  private isContentIdentical(
+    localBody: string,
+    localProps: FrontmatterProperty[] = [],
+    serverNote: NoteData
+  ): boolean {
+    const isCanvas = serverNote.path.endsWith('.canvas');
+    if (isCanvas) {
+      const incomingRaw = (localBody || '').trim();
+      const existingRaw = (serverNote.rawContent || serverNote.body || '').trim();
+      if (incomingRaw === existingRaw) return true;
+      try {
+        const parsedIncoming = JSON.parse(incomingRaw);
+        const parsedExisting = JSON.parse(existingRaw);
+        return JSON.stringify(parsedIncoming) === JSON.stringify(parsedExisting);
+      } catch {
+        return incomingRaw === existingRaw;
+      }
+    }
+
+    const normLocal = (localBody || '').replace(/\r\n/g, '\n').trim();
+    const normServer = (serverNote.body || '').replace(/\r\n/g, '\n').trim();
+    if (normLocal !== normServer) {
+      return false;
+    }
+
+    // Body is identical! Now check frontmatter properties
+    const serializedLocal = serializeMarkdownWithFrontmatter(localProps, '').replace(/\r\n/g, '\n').trim();
+    const serializedServer = serializeMarkdownWithFrontmatter(serverNote.properties || [], '').replace(/\r\n/g, '\n').trim();
+    if (serializedLocal !== serializedServer) {
+      return JSON.stringify(localProps) === JSON.stringify(serverNote.properties || []);
+    }
+
+    return true;
+  }
+
+  private addOrUpdateConflict(item: ConflictItem): void {
+    const existingIndex = this.activeConflicts.findIndex((c) => c.path === item.path);
+    if (existingIndex >= 0) {
+      this.activeConflicts[existingIndex] = item;
+    } else {
+      this.activeConflicts.push(item);
+    }
+    this.setSyncState('conflict');
+    this.notifyConflictListeners();
+  }
+
   public async getSyncedFolders(): Promise<string[]> {
     return [...this.syncedAttachmentFolders];
   }
@@ -238,20 +285,38 @@ class SyncEngine {
         await this.localDb.removeOutboxMutation(m.id);
       } catch (err: any) {
         if (err instanceof ApiConflictError) {
-          // Add to conflicts modal queue
-          if (!this.activeConflicts.some((c) => c.id === m.id)) {
-            const latestLocalNote = await this.localDb.getNote(m.path);
-            this.activeConflicts.push({
-              id: m.id,
-              path: m.path,
-              localBody: latestLocalNote?.body ?? m.body ?? '',
-              localProperties: latestLocalNote?.properties ?? m.properties ?? [],
-              localTimestamp: m.timestamp,
-              serverNote: err.serverNote,
-            });
-            this.setSyncState('conflict');
-            this.notifyConflictListeners();
+          const latestLocalNote = await this.localDb.getNote(m.path);
+          const localBody = latestLocalNote?.body ?? m.body ?? '';
+          const localProps = latestLocalNote?.properties ?? m.properties ?? [];
+
+          // 1. Content equality check
+          if (this.isContentIdentical(localBody, localProps, err.serverNote)) {
+            clientLogger.info('sync', `[Outbox Replay] Content of "${m.path}" is identical to server version. Silently updating local cache and dropping mutation.`);
+            await this.localDb.putNote(err.serverNote);
+            await this.localDb.removeOutboxMutation(m.id);
+            continue;
           }
+
+          // 2. Empty local version protection (avoid wiping server note)
+          const trimmedLocal = localBody.trim();
+          const trimmedServer = (err.serverNote.body || '').trim();
+          if (trimmedLocal === '' && trimmedServer.length > 0 && !m.explicitClear) {
+            clientLogger.warn('sync', `[Outbox Replay] Empty local version detected for "${m.path}" while server has content. Suppressing conflict and adopting server version.`);
+            await this.localDb.putNote(err.serverNote);
+            await this.localDb.removeOutboxMutation(m.id);
+            continue;
+          }
+
+          // 3. Genuine conflict: deduplicated add/update
+          clientLogger.warn('sync', `[Outbox Replay] Conflict on "${m.path}": queuing in ConflictModal.`);
+          this.addOrUpdateConflict({
+            id: m.id,
+            path: m.path,
+            localBody,
+            localProperties: localProps,
+            localTimestamp: m.timestamp,
+            serverNote: err.serverNote,
+          });
         } else if (err instanceof ApiHttpError && err.status >= 400 && err.status < 500 && err.status !== 401 && err.status !== 408) {
           // Permanent client-side validation error (e.g., invalid path): remove invalid mutation so it doesn't block queue forever
           console.warn(`[Knowmesh Sync] Dropping non-retryable mutation ${m.id} (HTTP ${err.status}):`, err);
@@ -462,6 +527,7 @@ class SyncEngine {
     properties?: FrontmatterProperty[];
     baseMtime?: number;
     forceOverwrite?: boolean;
+    explicitClear?: boolean;
   }): Promise<NoteData> {
     const isCanvas = payload.path.endsWith('.canvas');
     const raw =
@@ -521,17 +587,36 @@ class SyncEngine {
         return saved;
       } catch (err: any) {
         if (err instanceof ApiConflictError) {
+          const localBody = payload.body || '';
+          const localProps = payload.properties || [];
+
+          // 1. Content equality check
+          if (this.isContentIdentical(localBody, localProps, err.serverNote)) {
+            clientLogger.info('sync', `[Direct Save] Content of "${payload.path}" is identical to server version. Silently updating local cache.`);
+            await this.localDb.putNote(err.serverNote);
+            return err.serverNote;
+          }
+
+          // 2. Empty local version protection (avoid wiping server note)
+          const trimmedLocal = localBody.trim();
+          const trimmedServer = (err.serverNote.body || '').trim();
+          if (trimmedLocal === '' && trimmedServer.length > 0 && !payload.explicitClear) {
+            clientLogger.warn('sync', `[Direct Save] Empty local version detected for "${payload.path}" while server has content. Suppressing conflict and adopting server version.`);
+            await this.localDb.putNote(err.serverNote);
+            return err.serverNote;
+          }
+
+          // 3. Genuine conflict: deduplicated add/update
+          clientLogger.warn('sync', `[Direct Save] Conflict on "${payload.path}": queuing in ConflictModal.`);
           const conflictId = `save-${payload.path}-${Date.now()}`;
-          this.activeConflicts.push({
+          this.addOrUpdateConflict({
             id: conflictId,
             path: payload.path,
-            localBody: payload.body || '',
-            localProperties: payload.properties || [],
+            localBody,
+            localProperties: localProps,
             localTimestamp: Date.now(),
             serverNote: err.serverNote,
           });
-          this.setSyncState('conflict');
-          this.notifyConflictListeners();
           throw err;
         }
         console.warn(`[Knowmesh Sync] Server unreachable during save, switching to offline outbox:`, err);
@@ -548,6 +633,7 @@ class SyncEngine {
       properties: updatedNote.properties,
       baseMtime: payload.baseMtime ?? 0,
       timestamp: Date.now(),
+      explicitClear: payload.explicitClear,
     };
     await this.localDb.addOutboxMutation(mutation);
     return updatedNote;

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import type { GitConfig, GitRemoteConfig } from '../shared/types';
+import type { GitConfig, GitRemoteConfig, LogLevel } from '../shared/types';
 
 export interface ServerConfig {
   authEnabled: boolean;
@@ -10,6 +10,7 @@ export interface ServerConfig {
   sessionEpoch: number;
   updatedAt: number;
   git?: GitConfig;
+  logLevel?: LogLevel;
 }
 
 const DEFAULT_CONFIG_FILE = path.resolve(process.cwd(), 'server-config.json');
@@ -71,6 +72,9 @@ export class ConfigService {
               },
             };
           }
+          if (!parsed.logLevel) {
+            parsed.logLevel = 'info';
+          }
           return parsed as ServerConfig;
         }
       }
@@ -89,6 +93,7 @@ export class ConfigService {
       sessionEpoch: 1,
       updatedAt: Date.now(),
       git: { ...DEFAULT_GIT_CONFIG, remote: { ...DEFAULT_GIT_CONFIG.remote } },
+      logLevel: 'info',
     };
 
     try {
@@ -230,6 +235,20 @@ export class ConfigService {
     this.config.git = current;
     this.config.updatedAt = Date.now();
     this.saveConfig();
+  }
+
+  public getLogLevel(): LogLevel {
+    return this.config.logLevel || 'info';
+  }
+
+  public setLogLevel(level: LogLevel): void {
+    this.config.logLevel = level;
+    this.config.updatedAt = Date.now();
+    this.saveConfig();
+  }
+
+  public getConfigDir(): string {
+    return path.dirname(this.configPath);
   }
 
   private saveConfig(): void {

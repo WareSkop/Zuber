@@ -63,6 +63,7 @@ export interface LivePreviewEditorProps {
   onChangeRaw: (newRaw: string) => void;
   onNavigateWikiLink: (target: string) => void;
   onSelectTag: (tag: string) => void;
+  onUploadAttachment?: (file: File) => Promise<string>;
 }
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
@@ -967,6 +968,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onChangeRaw,
     onNavigateWikiLink,
     onSelectTag,
+    onUploadAttachment: props.onUploadAttachment,
     mode,
     notePath,
     allNotes,
@@ -977,6 +979,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onChangeRaw,
     onNavigateWikiLink,
     onSelectTag,
+    onUploadAttachment: props.onUploadAttachment,
     mode,
     notePath,
     allNotes,
@@ -1557,11 +1560,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         if (imageFiles.length > 0) {
           event.preventDefault();
           for (const file of imageFiles) {
-            api
-              .uploadAttachment(file)
-              .then((res) => {
-                const embedTag =
-                  res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`);
+            const uploadPromise = callbacksRef.current.onUploadAttachment
+              ? callbacksRef.current.onUploadAttachment(file)
+              : api.uploadAttachment(file).then((res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`));
+
+            uploadPromise
+              .then((embedTag) => {
                 const pos = view.state.selection.main.head;
                 view.dispatch({
                   changes: { from: pos, insert: `${embedTag}\n` },
@@ -1585,11 +1589,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         if (imageFiles.length > 0) {
           event.preventDefault();
           for (const file of imageFiles) {
-            api
-              .uploadAttachment(file)
-              .then((res) => {
-                const embedTag =
-                  res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`);
+            const uploadPromise = callbacksRef.current.onUploadAttachment
+              ? callbacksRef.current.onUploadAttachment(file)
+              : api.uploadAttachment(file).then((res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`));
+
+            uploadPromise
+              .then((embedTag) => {
                 const pos = view.state.selection.main.head;
                 view.dispatch({
                   changes: { from: pos, insert: `${embedTag}\n` },

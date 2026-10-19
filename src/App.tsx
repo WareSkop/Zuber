@@ -75,6 +75,7 @@ import { ConflictModal } from './components/ConflictModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
+import { clientLogger } from './utils/logger';
 import { useTranslation } from './i18n';
 import { recordLastActiveNote, resolveStartupNotePath } from './startupConfig';
 import {
@@ -269,6 +270,9 @@ export const App: React.FC = () => {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaveTaskRef = useRef<(() => Promise<void>) | null>(null);
   const lastLocalSaveTimeRef = useRef<number>(0);
+  const recentSelfWritesRef = useRef<Map<string, number>>(new Map());
+  const isUploadingAttachmentRef = useRef<boolean>(false);
+  const explicitUserClearRef = useRef<boolean>(false);
   const activeNoteRef = useRef<NoteData | null>(null);
   activeNoteRef.current = activeNote;
   const activePathRef = useRef<string | null>(null);
@@ -593,6 +597,7 @@ export const App: React.FC = () => {
       }
 
       const requestId = ++openRequestRef.current;
+      explicitUserClearRef.current = false;
       try {
         const note = await syncEngine.getNote(relPath);
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
@@ -855,12 +860,18 @@ export const App: React.FC = () => {
               scheduleIndexRefresh(true, 200);
               // If the currently open file was modified externally (not by our own save), reload it
               const currentPath = activePathRef.current;
-              if (
-                currentPath &&
-                paths.includes(currentPath) &&
-                Date.now() - lastLocalSaveTimeRef.current > 1500
-              ) {
-                openNoteByPath(currentPath);
+              if (currentPath && paths.includes(currentPath)) {
+                const selfWriteTime = recentSelfWritesRef.current.get(currentPath) || 0;
+                const isWithinSelfWriteWindow = Date.now() - selfWriteTime < 3000;
+                const isRecentLocalSave = Date.now() - lastLocalSaveTimeRef.current < 3000;
+                const isActivelyUploading = isUploadingAttachmentRef.current;
+
+                if (isWithinSelfWriteWindow || isRecentLocalSave || isActivelyUploading) {
+                  clientLogger.debug('sync', `Echo suppressed for active note "${currentPath}" (within self-write window).`);
+                } else {
+                  clientLogger.info('sync', `External change detected on open note "${currentPath}". Reloading.`);
+                  openNoteByPath(currentPath);
+                }
               }
             }
           } catch {
@@ -945,14 +956,33 @@ export const App: React.FC = () => {
       const executeSave = async () => {
         pendingSaveTaskRef.current = null;
         setSaveState('saving');
-        lastLocalSaveTimeRef.current = Date.now();
+        const now = Date.now();
+        lastLocalSaveTimeRef.current = now;
+        recentSelfWritesRef.current.set(path, now);
+        const currentBaseMtime = activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : baseMtime;
         try {
           const saved = await syncEngine.saveNote({
             path,
             ...payload,
-            baseMtime,
+            baseMtime: currentBaseMtime,
+            explicitClear: explicitUserClearRef.current,
           });
-          lastLocalSaveTimeRef.current = Date.now();
+          const finishTime = Date.now();
+          lastLocalSaveTimeRef.current = finishTime;
+          recentSelfWritesRef.current.set(saved.path, finishTime);
+
+          // Update activeNoteRef immediately
+          if (activeNoteRef.current && activeNoteRef.current.path === saved.path) {
+            activeNoteRef.current = {
+              ...activeNoteRef.current,
+              links: saved.links,
+              embeds: saved.embeds,
+              tags: saved.tags,
+              headings: saved.headings,
+              updatedAt: saved.updatedAt,
+            };
+          }
+
           // Only merge derived metadata – never overwrite text the user typed while saving
           setActiveNote((prev) =>
             prev && prev.path === saved.path
@@ -998,6 +1028,11 @@ export const App: React.FC = () => {
 
   const handleBodyChange = (newBody: string) => {
     if (!activeNote) return;
+    if (newBody.trim() === '' && activeNote.body.trim().length > 0) {
+      explicitUserClearRef.current = true;
+    } else if (newBody.trim().length > 0) {
+      explicitUserClearRef.current = false;
+    }
     setActiveNote({
       ...activeNote,
       body: newBody,
@@ -1011,6 +1046,11 @@ export const App: React.FC = () => {
   const handleRawChange = (newRaw: string) => {
     if (!activeNote) return;
     const parsed = parseMarkdownWithFrontmatter(newRaw);
+    if (parsed.body.trim() === '' && activeNote.body.trim().length > 0) {
+      explicitUserClearRef.current = true;
+    } else if (parsed.body.trim().length > 0) {
+      explicitUserClearRef.current = false;
+    }
     setActiveNote({
       ...activeNote,
       rawContent: newRaw,
@@ -1236,9 +1276,27 @@ export const App: React.FC = () => {
   };
 
   const handleUploadImageFile = async (file: File): Promise<string> => {
-    const uploaded = await api.uploadAttachment(file);
-    await loadVaultIndex();
-    return uploaded.wikiEmbed || (uploaded.path ? `![[${uploaded.path}]]` : `![[${uploaded.name}]]`);
+    // 1. Cancel pending saveTimerRef before starting upload
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    isUploadingAttachmentRef.current = true;
+    try {
+      const uploaded = await api.uploadAttachment(file);
+      const now = Date.now();
+      recentSelfWritesRef.current.set(uploaded.path, now);
+      if (activeNoteRef.current) {
+        recentSelfWritesRef.current.set(activeNoteRef.current.path, now);
+      }
+      await loadVaultIndex();
+      return uploaded.wikiEmbed || (uploaded.path ? `![[${uploaded.path}]]` : `![[${uploaded.name}]]`);
+    } finally {
+      // Absorb immediate chokidar events
+      setTimeout(() => {
+        isUploadingAttachmentRef.current = false;
+      }, 1000);
+    }
   };
 
   const handleUploadImageClick = () => {
@@ -1278,13 +1336,35 @@ export const App: React.FC = () => {
       saveTimerRef.current = null;
     }
     setSaveState('saving');
+    const now = Date.now();
+    lastLocalSaveTimeRef.current = now;
+    recentSelfWritesRef.current.set(activeNote.path, now);
     try {
       const saved = await syncEngine.saveNote({
         path: activeNote.path,
         body: activeNote.body,
         properties: activeNote.properties,
         rawContent: activeNote.rawContent,
+        baseMtime: activeNote.updatedAt,
+        explicitClear: explicitUserClearRef.current,
       });
+      const finishTime = Date.now();
+      lastLocalSaveTimeRef.current = finishTime;
+      recentSelfWritesRef.current.set(saved.path, finishTime);
+
+      if (activeNoteRef.current && activeNoteRef.current.path === saved.path) {
+        activeNoteRef.current = {
+          ...activeNoteRef.current,
+          properties: saved.properties,
+          frontmatter: saved.frontmatter,
+          links: saved.links,
+          embeds: saved.embeds,
+          tags: saved.tags,
+          headings: saved.headings,
+          updatedAt: saved.updatedAt,
+        };
+      }
+
       setActiveNote((prev) =>
         prev && prev.path === saved.path
           ? {
@@ -2129,6 +2209,7 @@ export const App: React.FC = () => {
                             setSelectedTagFilter(tag.replace(/^#+/, ''));
                             setLeftSidebarOpen(true);
                           }}
+                          onUploadAttachment={handleUploadImageFile}
                         />
                       </div>
                     ) : (

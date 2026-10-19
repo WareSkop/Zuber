@@ -51,6 +51,7 @@ export interface NoteSaveRequest {
   properties: FrontmatterProperty[];
   baseMtime?: number;
   forceOverwrite?: boolean;
+  explicitClear?: boolean;
 }
 
 export interface ConflictErrorResponse {
@@ -155,4 +156,22 @@ export interface GitStatusInfo {
   lastPushTime?: number | null;
   lastPushError?: string | null;
 }
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogEntry {
+  id: string;
+  timestamp: string; // ISO timestamp
+  level: LogLevel;
+  source: 'client' | 'server';
+  category: string;  // e.g., 'sync', 'api', 'vault', 'websocket', 'editor', 'auth'
+  message: string;
+  details?: string;  // Optional JSON/stack details
+}
+
+export interface LogsResponse {
+  level: LogLevel;
+  entries: LogEntry[];
+}
+
 

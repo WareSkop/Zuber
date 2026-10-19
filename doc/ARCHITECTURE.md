@@ -265,4 +265,25 @@ Knowmesh behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) al
 - Im Sync-Manifest (`GET /api/vault/sync-manifest`) werden `.canvas`-Dateien als `type: 'markdown'` klassifiziert.
 - Dadurch werden sie von der clientseitigen `SyncEngine` (`localDb.ts`) vollständig im Offline-Cache vorgehalten und über die Outbox synchronisiert.
 
+---
+
+## 11. Diagnose, Logging & Echo-Unterdrückung (`server/logger.ts` & `src/utils/logger.ts`)
+
+### 11.1 Server-Logging (`server/logger.ts`)
+- **In-Memory Ring-Buffer:** Hält die jeweils letzten 1000 Log-Einträge im flüchtigen Speicher für blitzschnellen Abruf über `/api/logs` ($O(1)$).
+- **Rotierende Logdatei:** Schreibt Einträge zusätzlich in `<configDir>/knowmesh.log`. Bei Überschreiten von 5 MB wird die Datei atomar zu `knowmesh.log.1` rotiert (max. 1 Backup), um Plattenplatz zu sparen.
+- **Konfigurierbare Log-Stufen:** Unterstützt `debug`, `info`, `warn` und `error`. Das Level kann dynamisch zur Laufzeit geändert und in `server-config.json` persistiert werden.
+- **Container-Transparenz:** Jeder Log-Eintrag wird parallel formatiert auf die Standardausgabe (`stdout`/`stderr`) ausgegeben (`docker logs`).
+
+### 11.2 Client-Logging (`src/utils/logger.ts`)
+- **Browser-Ring-Buffer:** Verwaltet bis zu 1000 strukturierte Log-Ereignisse im Arbeitsspeicher des Browsers.
+- **Session-Persistenz:** Die letzten 200 Einträge werden in `sessionStorage` gespiegelt, sodass Logs auch nach einem versehentlichen Neuladen der Seite erhalten bleiben.
+- **Globale Fehlererfassung:** Registriert automatische Listener für unhandled exceptions (`window.onerror`) und unhandled promise rejections (`window.onunhandledrejection`).
+
+### 11.3 Echo-Unterdrückung & Falschkonflikt-Prävention
+- **Content-Equality Check:** Weicht der Zeitstempel (`baseMtime`) um wenige Sekunden ab (z. B. durch Dateisystem-Rundung oder Latenz), aber der Inhalt (Markdown-Body und Frontmatter) ist 100 % identisch, wird kein `409 Conflict` geworfen, sondern der Speicheraufruf mit `200 OK` bestätigt.
+- **Schutz vor leerem Puffer:** Versucht ein Client eine Notiz mit leerem Body zu speichern, während auf dem Server Inhalt existiert (typisch bei schnellem Notizwechsel oder Ladeverzögerungen), wird dies ohne `explicitClear: true` abgefangen und der Server-Zustand übernommen, anstatt Daten zu überschreiben.
+- **Echo-Window (3000 ms):** Lokale Speicherungen und Bild-Uploads hinterlegen ihren Pfad in `recentSelfWritesRef`. Eintreffende `vault:changed`-WebSocket-Events für diesen Pfad innerhalb von 3 Sekunden werden ignoriert, um Echo-Schleifen zu verhindern.
+
+
 

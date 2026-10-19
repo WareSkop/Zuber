@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Palette,
   Shield,
@@ -21,6 +21,8 @@ import {
   EyeOff,
   Upload,
   Type,
+  ScrollText,
+  Copy,
 } from 'lucide-react';
 import { version as appVersion } from '../../package.json';
 import {
@@ -31,7 +33,16 @@ import {
   setActiveProfile,
 } from '../api';
 import { syncEngine, type SyncState } from '../sync/syncEngine';
-import type { FileTreeNode, VaultProfile, GitConfig, GitRemoteConfig, GitStatusInfo } from '../../shared/types';
+import { clientLogger } from '../utils/logger';
+import type {
+  FileTreeNode,
+  VaultProfile,
+  GitConfig,
+  GitRemoteConfig,
+  GitStatusInfo,
+  LogLevel,
+  LogEntry,
+} from '../../shared/types';
 import { useTranslation, type SupportedLanguage } from '../i18n';
 import {
   getStartupConfig,
@@ -58,7 +69,7 @@ interface SettingsModalProps {
   onFontSettingsChange?: (settings: FontSettings) => void;
 }
 
-type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git';
+type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git' | 'logs';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -151,6 +162,108 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [pushingGit, setPushingGit] = useState(false);
   const [pushFeedback, setPushFeedback] = useState<{ success: boolean; message: string } | null>(null);
   const [showGitToken, setShowGitToken] = useState(false);
+
+  // Logs state
+  const [logLevel, setLogLevelState] = useState<LogLevel>(() => clientLogger.getLevel());
+  const [logSource, setLogSource] = useState<'all' | 'client' | 'server'>('all');
+  const [logFilter, setLogFilter] = useState('');
+  const [clientLogs, setClientLogs] = useState<LogEntry[]>(() => clientLogger.getEntries());
+  const [serverLogs, setServerLogs] = useState<LogEntry[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [copiedLogs, setCopiedLogs] = useState(false);
+
+  const fetchLogs = useCallback(async () => {
+    setLoadingLogs(true);
+    setClientLogs(clientLogger.getEntries());
+    try {
+      const res = await api.getLogs();
+      setServerLogs(res.entries);
+      setLogLevelState(res.level);
+    } catch (err) {
+      console.warn('Failed to load server logs:', err);
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchLogs();
+      const unsub = clientLogger.subscribe((entries) => {
+        setClientLogs(entries);
+      });
+      return unsub;
+    }
+  }, [activeTab, fetchLogs]);
+
+  const handleLogLevelChange = async (newLevel: LogLevel) => {
+    setLogLevelState(newLevel);
+    clientLogger.setLevel(newLevel);
+    try {
+      await api.setLogLevel(newLevel);
+    } catch (err) {
+      console.warn('Failed to update server log level:', err);
+    }
+  };
+
+  const handleClearLogs = async () => {
+    clientLogger.clear();
+    setClientLogs([]);
+    try {
+      await api.clearServerLogs();
+      setServerLogs([]);
+    } catch (err) {
+      console.warn('Failed to clear server logs:', err);
+    }
+  };
+
+  const filteredLogs = useMemo(() => {
+    let list: LogEntry[] = [];
+    if (logSource === 'all') {
+      list = [...clientLogs, ...serverLogs];
+    } else if (logSource === 'client') {
+      list = [...clientLogs];
+    } else {
+      list = [...serverLogs];
+    }
+    list.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    if (!logFilter.trim()) return list;
+    const q = logFilter.toLowerCase();
+    return list.filter((e) =>
+      e.message.toLowerCase().includes(q) ||
+      e.category.toLowerCase().includes(q) ||
+      e.level.toLowerCase().includes(q) ||
+      (e.details && e.details.toLowerCase().includes(q))
+    );
+  }, [clientLogs, serverLogs, logSource, logFilter]);
+
+  const handleCopyLogs = async () => {
+    const header = [
+      `# Knowmesh Diagnostics & Log Export`,
+      `Generated: ${new Date().toISOString()}`,
+      `Knowmesh Version: v${appVersion}`,
+      `Active Theme: ${currentTheme}`,
+      `Online Status: ${navigator.onLine ? 'Online' : 'Offline'}`,
+      `Active Log Level: ${logLevel.toUpperCase()}`,
+      `Filtered Source: ${logSource} (${filteredLogs.length} entries)`,
+      `--------------------------------------------------------------------------------`,
+      '',
+    ].join('\n');
+
+    const formattedBody = filteredLogs.map((e) => {
+      const details = e.details ? `\n    ${e.details.replace(/\n/g, '\n    ')}` : '';
+      return `[${e.timestamp}] [${e.source.toUpperCase()}] [${e.level.toUpperCase()}] [${e.category}] ${e.message}${details}`;
+    }).join('\n');
+
+    try {
+      await navigator.clipboard.writeText(`${header}\n${formattedBody}`);
+      setCopiedLogs(true);
+      setTimeout(() => setCopiedLogs(false), 2500);
+    } catch (err) {
+      console.error('Failed to copy logs to clipboard:', err);
+    }
+  };
 
   const loadGitInfo = async () => {
     try {
@@ -572,6 +685,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <GitBranch size={16} />
               <span>{t('settings.tabGit')}</span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item ${activeTab === 'logs' ? 'active' : ''}`}
+              onClick={() => setActiveTab('logs')}
+            >
+              <ScrollText size={16} />
+              <span>{t('settings.tabLogs')}</span>
             </button>
           </div>
 
@@ -1576,6 +1697,211 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* Logs & Diagnostics Tab */}
+          {activeTab === 'logs' && (
+            <div className="settings-section">
+              <div className="settings-section-header">
+                <h3>{t('settings.logsTitle')}</h3>
+                <p className="settings-section-desc">{t('settings.logsDesc')}</p>
+              </div>
+
+              {/* Controls Toolbar */}
+              <div className="logs-toolbar" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  {/* Log Level Selector */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                      {t('settings.logsLevel')}:
+                    </label>
+                    <select
+                      value={logLevel}
+                      onChange={(e) => handleLogLevelChange(e.target.value as LogLevel)}
+                      className="form-select"
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: '13px',
+                        borderRadius: '6px',
+                        background: 'var(--bg-secondary)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-color)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option value="debug">DEBUG (Ausführlich)</option>
+                      <option value="info">INFO (Standard)</option>
+                      <option value="warn">WARN (Warnungen)</option>
+                      <option value="error">ERROR (Nur Fehler)</option>
+                    </select>
+                  </div>
+
+                  {/* Actions: Copy, Refresh, Clear */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleCopyLogs}
+                      title={t('settings.logsCopy')}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
+                    >
+                      {copiedLogs ? <Check size={14} style={{ color: 'var(--obsidian-green, #10b981)' }} /> : <Copy size={14} />}
+                      <span>{copiedLogs ? t('settings.logsCopied') : t('settings.logsCopy')}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={fetchLogs}
+                      disabled={loadingLogs}
+                      title={t('settings.logsRefresh')}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
+                    >
+                      <RefreshCw size={14} className={loadingLogs ? 'spin' : ''} />
+                      <span>{t('settings.logsRefresh')}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleClearLogs}
+                      title={t('settings.logsClear')}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
+                    >
+                      <Trash2 size={14} />
+                      <span>{t('settings.logsClear')}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter and Source tabs */}
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', background: 'var(--bg-secondary)', borderRadius: '6px', padding: '2px', border: '1px solid var(--border-color)' }}>
+                    <button
+                      type="button"
+                      onClick={() => setLogSource('all')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: logSource === 'all' ? 'var(--bg-primary)' : 'transparent',
+                        color: logSource === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        fontWeight: logSource === 'all' ? 600 : 400,
+                      }}
+                    >
+                      {t('settings.logsSourceAll')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLogSource('client')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: logSource === 'client' ? 'var(--bg-primary)' : 'transparent',
+                        color: logSource === 'client' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        fontWeight: logSource === 'client' ? 600 : 400,
+                      }}
+                    >
+                      {t('settings.logsSourceClient')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLogSource('server')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: logSource === 'server' ? 'var(--bg-primary)' : 'transparent',
+                        color: logSource === 'server' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        fontWeight: logSource === 'server' ? 600 : 400,
+                      }}
+                    >
+                      {t('settings.logsSourceServer')}
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={logFilter}
+                    onChange={(e) => setLogFilter(e.target.value)}
+                    placeholder={t('settings.logsFilterPlaceholder')}
+                    style={{
+                      flex: 1,
+                      minWidth: '200px',
+                      padding: '5px 10px',
+                      fontSize: '12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
+                    }}
+                  />
+
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    {filteredLogs.length} / {clientLogs.length + serverLogs.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Monospace Log Viewer Container */}
+              <div
+                className="logs-viewer-box"
+                style={{
+                  background: 'var(--bg-tertiary, #0d1117)',
+                  border: '1px solid var(--border-subtle, #30363d)',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                  fontSize: '12px',
+                  lineHeight: '1.5',
+                  height: '420px',
+                  maxHeight: '60vh',
+                  overflowY: 'auto',
+                  overflowX: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {filteredLogs.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>
+                    {t('settings.logsEmpty')}
+                  </div>
+                ) : (
+                  filteredLogs.map((entry) => {
+                    const levelColors: Record<LogLevel, string> = {
+                      debug: '#8b949e',
+                      info: '#58a6ff',
+                      warn: '#d29922',
+                      error: '#f85149',
+                    };
+                    const sourceColor = entry.source === 'server' ? '#3fb950' : '#bc8cff';
+                    const timeStr = entry.timestamp.split('T')[1]?.replace('Z', '') || entry.timestamp;
+
+                    return (
+                      <div key={entry.id} style={{ marginBottom: '4px', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '3px' }}>
+                        <span style={{ color: '#6e7681', marginRight: '6px' }}>[{timeStr}]</span>
+                        <span style={{ color: sourceColor, fontWeight: 600, marginRight: '6px' }}>[{entry.source.toUpperCase()}]</span>
+                        <span style={{ color: levelColors[entry.level], fontWeight: 600, marginRight: '6px' }}>[{entry.level.toUpperCase()}]</span>
+                        <span style={{ color: '#e6edf3', opacity: 0.85, marginRight: '8px' }}>[{entry.category}]</span>
+                        <span style={{ color: 'var(--text-primary, #c9d1d9)' }}>{entry.message}</span>
+                        {entry.details && (
+                          <div style={{ color: '#8b949e', fontSize: '11px', marginTop: '2px', paddingLeft: '16px', wordBreak: 'break-word' }}>
+                            {entry.details}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </main>

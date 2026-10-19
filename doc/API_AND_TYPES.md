@@ -82,6 +82,24 @@ export interface NoteSaveRequest {
   properties: FrontmatterProperty[]; // Wird mit serializeNote() vor dem Schreiben zu YAML zusammengefügt
   baseMtime?: number;         // Server-mtime vor der lokalen Bearbeitung (zur Konflikterkennung)
   forceOverwrite?: boolean;   // Erzwingt das Überschreiben trotz Konflikt
+  explicitClear?: boolean;    // Kennzeichnet gewolltes Leeren des Inhalts (schützt vor versehentlichem Überschreiben bei Ladeverzögerung)
+}
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;          // ISO Zeitstempel
+  level: LogLevel;
+  source: 'client' | 'server';
+  category: string;           // z.B. 'sync', 'vault', 'websocket', 'api', 'editor', 'auth'
+  message: string;
+  details?: string;           // Optionale Stacktraces oder JSON-Objekte
+}
+
+export interface LogsResponse {
+  level: LogLevel;
+  entries: LogEntry[];
 }
 
 export interface ConflictErrorResponse {
@@ -262,7 +280,7 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | `POST` | `/api/vault/notes-batch` | Lädt mehrere Notizen gebündelt aus dem In-Memory-Index herunter. | Body: `{ paths: string[] }` | `{ notes: NoteData[] }` |
 | `GET` | `/api/vault/tree` | Liefert den gecachten Verzeichnisbaum und alle Dateieinträge. | — | `{ tree: FileTreeNode[], files: Array<{path, name, basename, extension}>, vaultPath: string }` |
 | `GET` | `/api/vault/note` | Liest eine Markdown-Notiz inkl. Backlinks. | Query: `?path=Ordner/Notiz.md` | `NoteData` (oder `404`) |
-| `POST` | `/api/vault/note` | Speichert eine Notiz mit optionaler Konflikterkennung (`baseMtime`). Bei Konflikt -> HTTP `409 Conflict`. | Body: `NoteSaveRequest` | `NoteData` (oder `409` mit `{ error: 'Conflict', serverNote }`) |
+| `POST` | `/api/vault/note` | Speichert eine Notiz mit optionaler Konflikterkennung (`baseMtime`). Ist der übergebene Inhalt identisch zum Serverinhalt, wird kein 409 geworfen, sondern 200 OK mit der existierenden Notiz zurückgegeben. Bei echtem Konflikt -> HTTP `409 Conflict`. | Body: `NoteSaveRequest` | `NoteData` (oder `409` mit `{ error: 'Conflict', serverNote }`) |
 | `POST` | `/api/vault/folder` | Erstellt einen neuen Ordner (inkl. Zwischenordnern). | Body: `{ path: string }` | `{ ok: true, path: string }` |
 | `POST` | `/api/vault/rename` | Benennt eine Datei/Ordner um und passt `[[Links]]` vault-weit an. | Body: `{ oldPath: string, newPath: string }` | `{ ok: true, newPath: string }` |
 | `POST` | `/api/vault/copy` | Dupliziert eine Datei oder einen Ordner mit automatischer Namensgebung (` (Copy)`, ` (Copy 2)`) oder in einen Zielordner. | Body: `{ sourcePath: string, targetPath?: string }` | `{ ok: true, newPath: string }` |
@@ -296,6 +314,14 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | `POST` | `/api/vault/git/commit` | Erstellt manuell oder automatisiert einen Git-Commit aller Änderungen. | Body: `{ reason?: string }` | `{ committed: boolean, commitHash?: string, message?: string }` |
 | `POST` | `/api/vault/git/test-remote` | Prüft die Remote-Verbindung via `git ls-remote` ohne Speichern. Credentials werden bei Fehlern maskiert. | Body: `{ remote?: Partial<GitRemoteConfig> }` | `{ success: boolean, message: string }` |
 | `POST` | `/api/vault/git/push` | Führt einen Pre-Push Auto-Commit durch und pusht auf den konfigurierten Remote-Branch. | — | `{ success: boolean, message: string }` |
+
+### 2.6 Logs & Diagnose-Endpunkte
+
+| Methode | Pfad | Beschreibung | Parameter / Body | Response (`200 OK`) |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/logs` | Liefert das aktuelle Server-Log-Level und die letzten bis zu 1000 Server-Log-Einträge aus dem Ring-Buffer. | — | `LogsResponse` (`{ level: LogLevel, entries: LogEntry[] }`) |
+| `POST` | `/api/logs/level` | Ändert das Server-Log-Level dynamisch (`debug`, `info`, `warn`, `error`). | Body: `{ level: LogLevel }` | `{ ok: true, level: LogLevel }` (oder `400`) |
+| `DELETE` | `/api/logs` | Leert den Server-Ring-Buffer und leert die Datei `knowmesh.log`. | — | `{ ok: true }` |
 
 ---
 

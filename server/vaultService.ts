@@ -722,6 +722,57 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     return result;
   }
 
+  public isContentIdentical(
+    existing: NoteData,
+    incoming: {
+      content?: string;
+      rawContent?: string;
+      body?: string;
+      properties?: FrontmatterProperty[];
+    }
+  ): boolean {
+    const isCanvas = existing.path.endsWith('.canvas');
+    if (isCanvas) {
+      const incomingRaw = (incoming.rawContent ?? incoming.content ?? incoming.body ?? '').trim();
+      const existingRaw = (existing.rawContent || '').trim();
+      if (incomingRaw === existingRaw) return true;
+      try {
+        const parsedIncoming = JSON.parse(incomingRaw);
+        const parsedExisting = JSON.parse(existingRaw);
+        return JSON.stringify(parsedIncoming) === JSON.stringify(parsedExisting);
+      } catch {
+        return incomingRaw === existingRaw;
+      }
+    }
+
+    // Markdown note:
+    const incomingRaw = incoming.rawContent ?? incoming.content;
+    if (typeof incomingRaw === 'string') {
+      const normIncomingRaw = incomingRaw.replace(/\r\n/g, '\n').trim();
+      const normExistingRaw = (existing.rawContent || '').replace(/\r\n/g, '\n').trim();
+      if (normIncomingRaw === normExistingRaw) {
+        return true;
+      }
+    }
+
+    const incomingBody = (incoming.body ?? '').replace(/\r\n/g, '\n').trim();
+    const existingBody = (existing.body ?? '').replace(/\r\n/g, '\n').trim();
+    if (incomingBody !== existingBody) {
+      return false;
+    }
+
+    // Body matches! Now check frontmatter properties
+    const incomingProps = incoming.properties ?? [];
+    const existingProps = existing.properties ?? [];
+    const serializedIncoming = serializeMarkdownWithFrontmatter(incomingProps, '').replace(/\r\n/g, '\n').trim();
+    const serializedExisting = serializeMarkdownWithFrontmatter(existingProps, '').replace(/\r\n/g, '\n').trim();
+    if (serializedIncoming !== serializedExisting) {
+      return JSON.stringify(incomingProps) === JSON.stringify(existingProps);
+    }
+
+    return true;
+  }
+
   public saveNote(
     relPath: string,
     payload: {
@@ -744,6 +795,10 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
     if (existing && !payload.forceOverwrite && typeof payload.baseMtime === 'number') {
       const diff = Math.abs(existing.updatedAt - payload.baseMtime);
       if (diff > 50) {
+        if (this.isContentIdentical(existing, payload)) {
+          // Content is identical: suppress conflict and return current server note
+          return existing;
+        }
         const conflictErr = new Error('Conflict') as Error & {
           statusCode: number;
           serverNote: NoteData;

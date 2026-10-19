@@ -12,7 +12,10 @@ import type {
   UpdateSecurityRequest,
   UploadResponse,
   VaultProfile,
+  LogLevel,
+  LogsResponse,
 } from '../shared/types';
+import { clientLogger } from './utils/logger';
 
 const TOKEN_STORAGE_KEY = 'knowmesh_token';
 const ACTIVE_PROFILE_KEY = 'knowmesh_active_profile_id';
@@ -250,6 +253,7 @@ export interface OfflineSyncDelegate {
     properties?: FrontmatterProperty[];
     baseMtime?: number;
     forceOverwrite?: boolean;
+    explicitClear?: boolean;
   }): Promise<NoteData>;
   createFolder(path: string): Promise<{ ok: boolean; path: string }>;
   renameEntry?(oldPath: string, newPath: string): Promise<{ newPath: string }>;
@@ -283,6 +287,7 @@ export const rawApi = {
     properties?: FrontmatterProperty[];
     baseMtime?: number;
     forceOverwrite?: boolean;
+    explicitClear?: boolean;
   }): Promise<NoteData> {
     return apiFetch('/api/vault/note', {
       method: 'POST',
@@ -421,6 +426,7 @@ export const api = {
     properties?: FrontmatterProperty[];
     baseMtime?: number;
     forceOverwrite?: boolean;
+    explicitClear?: boolean;
   }): Promise<NoteData> {
     if (offlineSyncDelegate) {
       return offlineSyncDelegate.saveNote(payload);
@@ -668,5 +674,22 @@ export const api = {
       }
       throw err;
     }
+  },
+
+  async getLogs(): Promise<LogsResponse> {
+    return apiFetch<LogsResponse>('/api/logs');
+  },
+
+  async setLogLevel(level: LogLevel): Promise<{ ok: boolean; level: LogLevel }> {
+    return apiFetch<{ ok: boolean; level: LogLevel }>('/api/logs/level', {
+      method: 'POST',
+      body: JSON.stringify({ level }),
+    });
+  },
+
+  async clearServerLogs(): Promise<{ ok: boolean }> {
+    return apiFetch<{ ok: boolean }>('/api/logs', {
+      method: 'DELETE',
+    });
   },
 };

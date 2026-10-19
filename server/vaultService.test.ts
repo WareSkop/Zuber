@@ -183,6 +183,30 @@ describe('VaultService & Sync Engine', () => {
     expect(forced.body).toBe('Mein erzwungener Text');
   });
 
+  it('suppresses save conflict and returns existing note when incoming content is identical to server note even if baseMtime is stale', () => {
+    const initialNote = service.saveNote('Identical-Conflict-Test.md', {
+      body: '# Gleich\n\nDieser Text ist identisch.',
+    });
+    const firstMtime = initialNote.updatedAt;
+
+    // Simulate another save on server that updates mtime
+    const updated = service.saveNote('Identical-Conflict-Test.md', {
+      body: '# Gleich\n\nDieser Text ist identisch.',
+      forceOverwrite: true,
+    });
+    expect(updated.updatedAt).toBeGreaterThanOrEqual(firstMtime);
+
+    // Now a client sends identical content with an older baseMtime
+    // It should NOT throw Conflict, but return the existing note cleanly
+    const result = service.saveNote('Identical-Conflict-Test.md', {
+      body: '# Gleich\n\nDieser Text ist identisch.',
+      baseMtime: firstMtime - 5000,
+      forceOverwrite: false,
+    });
+    expect(result.path).toBe('Identical-Conflict-Test.md');
+    expect(result.body).toBe('# Gleich\n\nDieser Text ist identisch.');
+  });
+
   it('auto-generates self-signed TLS credentials for HTTPS', () => {
     const tls = ensureTlsCredentials(tmpDir);
     expect(tls.isSelfSigned).toBe(true);

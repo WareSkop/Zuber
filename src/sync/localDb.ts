@@ -15,6 +15,7 @@ export interface OutboxMutation {
   properties?: FrontmatterProperty[];
   baseMtime?: number; // Der mtime-Stand der Notiz vor der lokalen Bearbeitung
   timestamp: number;
+  explicitClear?: boolean;
 }
 
 export interface CachedAttachment {

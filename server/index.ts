@@ -23,6 +23,8 @@ import { rateLimiter } from './rateLimiter';
 import { ensureTlsCredentials, getLocalIpAddresses } from './tls';
 import { VaultService } from './vaultService';
 import { GitService } from './gitService';
+import { serverLogger } from './logger';
+import type { LogLevel } from '../shared/types';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -265,6 +267,13 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
       if (!forceOverwrite && typeof baseMtime === 'number') {
         const existing = vaultService.getNoteOrNull(notePath);
         if (existing && Math.abs(existing.updatedAt - baseMtime) > 50) {
+          const isIdentical = vaultService.isContentIdentical(existing, { content, properties, body, rawContent });
+          if (isIdentical) {
+            serverLogger.info('vault', `Content of "${notePath}" is identical despite baseMtime drift (${baseMtime} vs ${existing.updatedAt}). 409 Conflict suppressed.`);
+            res.json(existing);
+            return;
+          }
+          serverLogger.warn('vault', `Conflict detected on "${notePath}": baseMtime=${baseMtime} vs serverMtime=${existing.updatedAt} (diff=${Math.abs(existing.updatedAt - baseMtime)}ms)`);
           res.status(409).json({
             error: 'Conflict',
             message: 'Die Notiz wurde zwischenzeitlich auf dem Server geändert.',
@@ -275,6 +284,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
       }
 
       const note = vaultService.saveNote(notePath, { content, properties, body, rawContent, baseMtime, forceOverwrite });
+      serverLogger.info('vault', `Saved note "${notePath}" (mtime=${note.updatedAt})`);
       res.json(note);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -479,6 +489,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
       }
       const relPath = path.relative(vaultService.getVaultDir(), req.file.path).replace(/\\/g, '/');
       vaultService.indexFile(relPath);
+      serverLogger.info('vault', `Uploaded attachment "${req.file.originalname}" (${req.file.size} bytes) -> "${relPath}"`);
       const wikiEmbed = `![[${relPath}]]`;
       res.json({
         ok: true,
@@ -707,6 +718,29 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     }
   });
 
+  // --- Logs & Diagnostics Endpoints ---
+  app.get('/api/logs', requireAuth, (_req, res) => {
+    res.json({
+      level: serverLogger.getLevel(),
+      entries: serverLogger.getEntries(),
+    });
+  });
+
+  app.post('/api/logs/level', requireAuth, (req, res) => {
+    const { level } = req.body as { level?: LogLevel };
+    if (!level || !['debug', 'info', 'warn', 'error'].includes(level)) {
+      res.status(400).json({ error: 'Ungültiges Log-Level.' });
+      return;
+    }
+    serverLogger.setLevel(level);
+    res.json({ ok: true, level });
+  });
+
+  app.delete('/api/logs', requireAuth, (_req, res) => {
+    serverLogger.clear();
+    res.json({ ok: true });
+  });
+
   // Fallback to SPA index.html for client-side routing in production
   if (fs.existsSync(distDir)) {
     app.get('*', (req, res, next) => {
@@ -805,6 +839,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   // Broadcast batched file watcher events to all connected WebSocket clients
   vaultService.startWatcher((batch) => {
+    serverLogger.debug('websocket', `Broadcasting vault:changed batch: ${batch.paths.length} paths (structural=${batch.structural})`);
     const payload = JSON.stringify({
       type: 'vault:changed',
       paths: batch.paths,

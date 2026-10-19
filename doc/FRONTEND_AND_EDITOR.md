@@ -571,6 +571,25 @@ flowchart TD
 - **Einzeldatei-Download:** Lädt beliebige Notizen, Canvases oder Anhänge über `/api/vault/download?path=...` mit `Content-Disposition: attachment` herunter. Im Offline-Modus greift für Markdown- und Canvas-Dateien ein Fallback auf `localDb` (Blob-Generierung im Browser).
 - **Ordner- und Vault-Download (.zip):** Komprimiert Verzeichnisse oder den gesamten Vault on-the-fly (`archiver` / `ZipArchive`) mit `Content-Type: application/zip`. Versteckte Dateien und Konfigurationsordner (`.git`, `.obsidian`, dotfiles) werden automatisch herausgefiltert.
 
+---
+
+## 19. Integrierte Diagnose & Log-Viewer (`SettingsModal.tsx` & `clientLogger`)
+
+### 19.1 Diagnose & Logs Tab in den Einstellungen
+- **Zentraler Diagnose-Tab:** Erreichbar über das Zahnrad-Icon (`SettingsModal`) unter dem Tab `Protokolle & Diagnose` (`tabLogs`).
+- **Log-Level Steuerung:** Dynamische Auswahl des Logging-Levels (`debug`, `info`, `warn`, `error`) synchron für Server und Client.
+- **Kombinierte Ansicht:** Führt Client-Logs (`src/utils/logger.ts`) und Server-Logs (`/api/logs`) zeitlich chronologisch zusammen.
+- **Filter- & Suchmöglichkeiten:**
+  - Segmentierte Filter für Quellen: `Alle`, `Client`, `Server`.
+  - Volltext-Echtzeitfilter über Kategorie, Nachrichtentext und Stacktrace/Details.
+- **Ein-Klick-Export für Antigravity-Diagnose:**
+  - Der Button „Für Antigravity kopieren“ (`logsCopy`) exportiert die gefilterten Logs in einem sauberen Markdown-Codeblock inklusive Browser-User-Agent, Betriebssystem, Viewport-Auflösung, Server-URL und aktuellem Zeitstempel direkt in die Zwischenablage.
+
+### 19.2 Sequentielles Attachment-Paste & Upload-Lock
+- Das Einfügen oder Hineinziehen von Bildern (`LivePreviewEditor.tsx`) setzt während des HTTP-Uploads ein synchrones Sperrflag (`isUploadingAttachmentRef = true`).
+- Laufende oder geplante Auto-Saves werden für diesen Zeitraum pausiert und erst nach Abschluss des Uploads sowie Einfügen der Bild-Referenz (`![[attachments/...]]`) atomar ausgeführt, wodurch Konkurrenz-Konflikte (409) verhindert werden.
+
+
 
 
 
