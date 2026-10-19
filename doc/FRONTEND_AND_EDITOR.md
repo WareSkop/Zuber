@@ -610,6 +610,34 @@ flowchart TD
   - in Fenced-Codeblöcken (` ``` `), Inline-Code (`` ` ``) oder innerhalb existierender `](...)`-Links die URL normal als Rohtext eingefügt (keine störende Fehleskalation).
 - **Interaktive Klickbarkeit:** Externe Links rendern im Live-Preview (`ExternalLinkWidget`) und im Lesemodus als `<a href="..." target="_blank" rel="noopener noreferrer">` und öffnen bei Klick den Link direkt im neuen Browser-Tab.
 
+---
+
+## 21. UI-Refinements, Resizable Sidebars & Latching Favoriten-/Verlaufspanels (Phase 3)
+
+### 21.1 Icon-Only Navigation & Tooltips
+- **Linke Leiste (`FileSidebar.tsx`):** Die Reiter-Buttons für **Dateien** (`Folder`), **Suche** (`Search`) und **Tags** (`Hash`) werden ohne störenden Text als reine Icons dargestellt. Die Lokalisierung wird per `title`-Attribut und `aria-label` beim Hovern angezeigt.
+- **Top-Toolbar (`App.tsx`):** Die Umschalter für **Live-Preview** (`Eye`), **Lesen** (`BookOpen`), **Quellcode** (`Code2`) sowie der **Zen-Modus** (`Maximize2`) sind als kompakte, icon-basierte Buttons formatiert.
+- **Bereinigte Statusleiste:** Das redundante „Vault in sync“-Badge in der linken unteren Ecke wurde entfernt, da der Verbindungs- und Sync-Status bereits prominent in der oberen Leiste angezeigt wird.
+
+### 21.2 Neues Mindmap-/Workflow-Canvas-Icon (`WorkflowCanvasIcon`)
+- Das bisherige Raster-Icon (`Layout`) für `.canvas`-Dateien wurde durch ein dediziertes **Workflow- & Mindmap-Icon** (`WorkflowCanvasIcon.tsx`) ersetzt:
+  - Eine Wurzelbox auf der linken Seite verzweigt über geschwungene S-Kurven-Konnektoren zu zwei Kind-Knoten auf der rechten Seite.
+  - Das Icon ist in allen Dateibaum-Einträgen, Datei-Badges, Sidebar-Aktionen, Kontextmenüs und der Befehlspalette einheitlich integriert und unterscheidet sich klar von der globalen Graph-Ansicht.
+
+### 21.3 Einrastende Favoriten- & Zuletzt-verwendet-Panels (`FileSidebar.tsx`)
+- In der Menüleiste der linken Leiste (direkt neben dem Tags-Button) befinden sich zwei einrastende Toggle-Buttons:
+  - **Favoriten (⭐):** Schaltet das Favoriten-Panel oberhalb des Dateibaums ein/aus (Zustand persistent in `localStorage` unter `knowmesh_show_favorites_panel`). Favoriten können im Kontextmenü jeder Datei und jedes Ordners per Rechtsklick hinzugefügt oder entfernt werden.
+  - **Zuletzt verwendet (🕒):** Schaltet das Verlaufspanel der letzten 10 geöffneten Notizen/Canvases ein/aus (`knowmesh_show_recent_panel`).
+- **Höhen- & Scroll-Regel:** Beide Panels zeigen bis zu 10 Elemente ohne Scrollbalken an; darüber hinaus begrenzt `max-height: calc(10 * 28px); overflow-y: auto;` die Liste, sodass der Haupt-Dateibaum darunter stets vollständig bedienbar bleibt.
+- **Rename- & Delete-Synchronisation:** Beim Umbenennen oder Löschen von Dateien oder Ordnern werden Favoriten und Recent-Listen in `localStorage` automatisch angepasst bzw. bereinigt (`src/utils/vaultNavigation.ts`).
+
+### 21.4 Frei ziehbare Seitenleisten (Resizable Sidebars)
+- Die Breiten der linken und rechten Leiste können auf Desktop-Bildschirmen (`>= 768px`) interaktiv über Maus-Ziehgriffe angepasst werden:
+  - `.sidebar-resizer-left`: Anker am rechten Rand der linken Leiste (Standard: `280px`, min: `180px`, max: `600px`).
+  - `.sidebar-resizer-right`: Anker am linken Rand der rechten Leiste (Standard: `300px`, min: `200px`, max: `650px`).
+- Die Abmessungen werden in CSS-Variablen `--left-sidebar-width` und `--right-sidebar-width` geschrieben und in `localStorage` (`knowmesh_sidebar_widths`) persistent gespeichert.
+
+
 
 
 

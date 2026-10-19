@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import '@xyflow/react/dist/style.css';
-import { ExternalLink, Layout } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { api } from '../../api';
 import { CanvasEditor } from './CanvasEditor';
+import { WorkflowCanvasIcon } from './WorkflowCanvasIcon';
 
 export interface CanvasEmbedWidgetProps {
   canvasPath: string;
@@ -50,7 +51,7 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
     <div className="canvas-embed-container nodrag">
       <div className="canvas-embed-header">
         <div className="canvas-embed-title-cluster" title={canvasPath}>
-          <Layout size={14} className="canvas-embed-icon" />
+          <WorkflowCanvasIcon size={14} className="canvas-embed-icon" />
           <span className="canvas-embed-title">{fileName}</span>
         </div>
         <button

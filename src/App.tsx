@@ -37,10 +37,15 @@ import {
   Trash2,
   Edit3,
   Download,
-  Layout,
   Maximize2,
   Minimize2,
 } from 'lucide-react';
+import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
+import {
+  recordRecentNote,
+  notifyVaultEntryRenamed,
+  notifyVaultEntryDeleted,
+} from './utils/vaultNavigation';
 import type {
   BacklinkItem,
   FileTreeNode,
@@ -129,6 +134,97 @@ export const App: React.FC = () => {
   );
   const [rightTab, setRightTab] = useState<RightSidebarTab>('backlinks');
   const [zenMode, setZenMode] = useState(false);
+
+  // Resizable Sidebars (State & localStorage persistence)
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem('knowmesh_sidebar_widths');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.left === 'number') {
+          return Math.min(600, Math.max(180, parsed.left));
+        }
+      }
+    } catch {}
+    return 280;
+  });
+
+  const [rightSidebarWidth, setRightSidebarWidth] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem('knowmesh_sidebar_widths');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.right === 'number') {
+          return Math.min(650, Math.max(200, parsed.right));
+        }
+      }
+    } catch {}
+    return 300;
+  });
+
+  const [isResizingLeft, setIsResizingLeft] = useState(false);
+  const [isResizingRight, setIsResizingRight] = useState(false);
+
+  const leftSidebarWidthRef = useRef(leftSidebarWidth);
+  leftSidebarWidthRef.current = leftSidebarWidth;
+  const rightSidebarWidthRef = useRef(rightSidebarWidth);
+  rightSidebarWidthRef.current = rightSidebarWidth;
+
+  const handleLeftResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingLeft(true);
+    const startX = e.clientX;
+    const startWidth = leftSidebarWidthRef.current;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      const nextWidth = Math.min(600, Math.max(180, startWidth + delta));
+      setLeftSidebarWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingLeft(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      try {
+        localStorage.setItem(
+          'knowmesh_sidebar_widths',
+          JSON.stringify({ left: leftSidebarWidthRef.current, right: rightSidebarWidthRef.current })
+        );
+      } catch {}
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const handleRightResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizingRight(true);
+    const startX = e.clientX;
+    const startWidth = rightSidebarWidthRef.current;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const nextWidth = Math.min(650, Math.max(200, startWidth + delta));
+      setRightSidebarWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingRight(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      try {
+        localStorage.setItem(
+          'knowmesh_sidebar_widths',
+          JSON.stringify({ left: leftSidebarWidthRef.current, right: rightSidebarWidthRef.current })
+        );
+      } catch {}
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
 
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
@@ -604,6 +700,7 @@ export const App: React.FC = () => {
         setActiveNote(note);
         setSaveState('saved');
         recordLastActiveNote(relPath);
+        recordRecentNote(relPath);
         refreshBacklinks(relPath);
       } catch (err) {
         console.error('Fehler beim Laden der Notiz:', err);
@@ -1202,6 +1299,7 @@ export const App: React.FC = () => {
         setActiveNote(created);
         setSaveState('saved');
         recordLastActiveNote(created.path);
+        recordRecentNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
         if (isMobile) setLeftSidebarOpen(false);
       } else if (currentDialog.type === 'create-canvas') {
@@ -1224,6 +1322,7 @@ export const App: React.FC = () => {
         setActiveNote(created);
         setSaveState('saved');
         recordLastActiveNote(created.path);
+        recordRecentNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
         if (isMobile) setLeftSidebarOpen(false);
       } else if (currentDialog.type === 'create-folder') {
@@ -1241,6 +1340,7 @@ export const App: React.FC = () => {
         parts[parts.length - 1] = val;
         const newRelPath = parts.join('/');
         const res = await syncEngine.renameEntry(currentDialog.targetPath, newRelPath);
+        notifyVaultEntryRenamed(currentDialog.targetPath, res.newPath);
         await loadVaultIndex();
         if (activeNote?.path === currentDialog.targetPath) {
           await openNoteByPath(res.newPath);
@@ -1260,6 +1360,7 @@ export const App: React.FC = () => {
             activeNote.path.startsWith(deletedPath + '/'));
 
         await syncEngine.deleteEntry(deletedPath);
+        notifyVaultEntryDeleted(deletedPath);
         const { treeRes } = await loadVaultIndex();
         if (isActiveOrChild) {
           const nextFile = treeRes.files.find((f) => f.extension === 'md' || f.extension === 'canvas');
@@ -1683,7 +1784,7 @@ export const App: React.FC = () => {
         id: 'vault-new-canvas',
         title: 'Vault: Neues Canvas erstellen (Workflow / Diagramm)',
         category: 'Vault',
-        icon: <Layout size={16} />,
+        icon: <WorkflowCanvasIcon size={16} />,
         keywords: ['canvas', 'diagramm', 'flowchart', 'network', 'workflow', 'whiteboard'],
         action: () => openCreateCanvasDialog(),
       },
@@ -1922,6 +2023,11 @@ export const App: React.FC = () => {
   return (
     <div
       className={`knowmesh-app-shell obsidian-app-shell ${zenMode ? 'zen-mode-active zen-mode' : ''}`}
+      style={{
+        '--left-sidebar-width': `${leftSidebarWidth}px`,
+        '--right-sidebar-width': `${rightSidebarWidth}px`,
+        ...(isResizingLeft || isResizingRight ? { userSelect: 'none', cursor: 'col-resize' } : {}),
+      } as React.CSSProperties}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -1947,6 +2053,8 @@ export const App: React.FC = () => {
                 tags={graphData.tags}
                 selectedTagFilter={selectedTagFilter}
                 onClose={() => setLeftSidebarOpen(false)}
+                onLeftResizeStart={handleLeftResizeStart}
+                isResizingLeft={isResizingLeft}
                 {...sidebarHandlers}
               />
             </div>
@@ -1957,6 +2065,8 @@ export const App: React.FC = () => {
               tags={graphData.tags}
               selectedTagFilter={selectedTagFilter}
               onClose={() => setLeftSidebarOpen(false)}
+              onLeftResizeStart={handleLeftResizeStart}
+              isResizingLeft={isResizingLeft}
               {...sidebarHandlers}
             />
           )}
@@ -2016,32 +2126,32 @@ export const App: React.FC = () => {
             {workspaceView !== 'graph' && activeNote && (
               isCanvasNote ? (
                 <div className="canvas-mode-indicator" title="Canvas & Diagramm-Editor">
-                  <Layout size={14} />
+                  <WorkflowCanvasIcon size={14} />
                   <span>Canvas</span>
                 </div>
               ) : (
                 <div className="editor-mode-switcher" role="group" aria-label={t('header.modeGroupAria')}>
                   <button
                     type="button"
-                    className={`mode-btn ${editorMode === 'live' ? 'active' : ''}`}
+                    className={`mode-btn icon-only ${editorMode === 'live' ? 'active' : ''}`}
                     onClick={() => setEditorMode('live')}
                     title={t('header.livePreviewTitle')}
+                    aria-label={t('header.livePreview')}
                   >
                     <Eye size={14} />
-                    <span>{t('header.livePreview')}</span>
                   </button>
                   <button
                     type="button"
-                    className={`mode-btn ${editorMode === 'reading' ? 'active' : ''}`}
+                    className={`mode-btn icon-only ${editorMode === 'reading' ? 'active' : ''}`}
                     onClick={() => setEditorMode('reading')}
                     title={t('header.readingTitle')}
+                    aria-label={t('header.reading')}
                   >
                     <BookOpen size={14} />
-                    <span>{t('header.reading')}</span>
                   </button>
                   <button
                     type="button"
-                    className={`mode-btn ${editorMode === 'source' ? 'active' : ''}`}
+                    className={`mode-btn icon-only ${editorMode === 'source' ? 'active' : ''}`}
                     onClick={() => {
                       if (editorMode !== 'source') {
                         setActiveNote((prev) =>
@@ -2053,9 +2163,9 @@ export const App: React.FC = () => {
                       setEditorMode('source');
                     }}
                     title={t('header.sourceTitle')}
+                    aria-label={t('header.source')}
                   >
                     <Code2 size={14} />
-                    <span>{t('header.source')}</span>
                   </button>
                 </div>
               )
@@ -2063,13 +2173,12 @@ export const App: React.FC = () => {
 
             <button
               type="button"
-              className="topbar-action-btn"
+              className="topbar-action-btn icon-only"
               onClick={() => setZenMode(true)}
               title={t('header.zenTitle')}
               aria-label={t('header.zenTitle')}
             >
               <Maximize2 size={15} />
-              <span>{t('header.zen')}</span>
             </button>
 
             {/* Sync & Settings */}
@@ -2232,7 +2341,7 @@ export const App: React.FC = () => {
                             className="btn-secondary"
                             onClick={() => openCreateCanvasDialog()}
                           >
-                            <Layout size={15} />
+                            <WorkflowCanvasIcon size={15} />
                             <span>+ Neues Canvas</span>
                           </button>
                         </div>
@@ -2281,6 +2390,11 @@ export const App: React.FC = () => {
             />
           )}
           <aside className="right-sidebar">
+          {/* Desktop Resize Handle on left edge */}
+          <div
+            className={`sidebar-resizer-right ${isResizingRight ? 'resizing' : ''}`}
+            onMouseDown={handleRightResizeStart}
+          />
           <div className="sidebar-tabs">
             <button
               type="button"
@@ -2431,13 +2545,6 @@ export const App: React.FC = () => {
             <span className="status-item" title="HTTPS / TLS">
               <Lock size={12} />
               {httpsActive ? 'HTTPS / TLS' : 'HTTP'}
-            </span>
-            <span
-              className={`status-item ${wsConnected ? 'sync-online' : 'sync-offline'}`}
-              title="Live Watcher"
-            >
-              <Radio size={12} />
-              {wsConnected ? t('statusbar.synced') : t('statusbar.syncing')}
             </span>
           </div>
 

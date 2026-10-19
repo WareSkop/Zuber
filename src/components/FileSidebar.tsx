@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clipboard,
+  Clock,
   Copy,
   FilePlus,
   FileText,
@@ -12,12 +13,12 @@ import {
   FolderPlus,
   Hash,
   Image as ImageIcon,
-  Layout,
   MoreVertical,
   Pencil,
   RefreshCw,
   Scissors,
   Search,
+  Star,
   Trash2,
   Upload,
   Download,
@@ -26,6 +27,16 @@ import {
 import type { FileTreeNode } from '../../shared/types';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
+import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
+import {
+  loadFavorites,
+  saveFavorites,
+  loadRecentNotes,
+  notifyVaultEntryRenamed,
+  FavoriteItem,
+} from '../utils/vaultNavigation';
+
+export type { FavoriteItem } from '../utils/vaultNavigation';
 
 export interface ClipboardItem {
   path: string;
@@ -54,6 +65,8 @@ interface FileSidebarProps {
   onRefresh: () => void;
   onSelectTagFilter: (tag: string | null) => void;
   onClose?: () => void;
+  onLeftResizeStart?: (e: React.MouseEvent) => void;
+  isResizingLeft?: boolean;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -70,6 +83,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onRefresh,
   onSelectTagFilter,
   onClose,
+  onLeftResizeStart,
+  isResizingLeft = false,
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'files' | 'search' | 'tags'>('files');
@@ -88,6 +103,70 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }[]
   >([]);
   const [searching, setSearching] = useState(false);
+
+  // Favorites & Recent panels latching states
+  const [showFavoritesPanel, setShowFavoritesPanel] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('knowmesh_show_favorites_panel') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [showRecentPanel, setShowRecentPanel] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('knowmesh_show_recent_panel') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [favorites, setFavorites] = useState<FavoriteItem[]>(() => loadFavorites());
+  const [recentNotesList, setRecentNotesList] = useState<string[]>(() => loadRecentNotes());
+
+  const reloadFavorites = useCallback(() => {
+    setFavorites(loadFavorites());
+  }, []);
+
+  const reloadRecentNotes = useCallback(() => {
+    setRecentNotesList(loadRecentNotes());
+  }, []);
+
+  useEffect(() => {
+    const handleFavChange = () => reloadFavorites();
+    const handleRecentChange = () => reloadRecentNotes();
+
+    window.addEventListener('knowmesh_favorites_changed', handleFavChange);
+    window.addEventListener('knowmesh_recent_changed', handleRecentChange);
+    window.addEventListener('storage', handleFavChange);
+    window.addEventListener('storage', handleRecentChange);
+
+    return () => {
+      window.removeEventListener('knowmesh_favorites_changed', handleFavChange);
+      window.removeEventListener('knowmesh_recent_changed', handleRecentChange);
+      window.removeEventListener('storage', handleFavChange);
+      window.removeEventListener('storage', handleRecentChange);
+    };
+  }, [reloadFavorites, reloadRecentNotes]);
+
+  useEffect(() => {
+    reloadRecentNotes();
+  }, [activePath, reloadRecentNotes]);
+
+  const toggleFavorite = (path: string, type: 'file' | 'folder') => {
+    setFavorites((prev) => {
+      let next: FavoriteItem[];
+      if (prev.some((f) => f.path === path)) {
+        next = prev.filter((f) => f.path !== path);
+      } else {
+        next = [...prev, { path, type }];
+      }
+      saveFavorites(next);
+      return next;
+    });
+  };
+
+  const isFavorite = (path: string) => favorites.some((f) => f.path === path);
 
   // Clipboard & Context menu states
   const [clipboard, setClipboard] = useState<ClipboardItem | null>(null);
@@ -327,6 +406,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       if (clipboard.mode === 'move') {
         if (clipboard.path === destinationPath) return;
         await api.renameEntry(clipboard.path, destinationPath);
+        notifyVaultEntryRenamed(clipboard.path, destinationPath);
         setClipboard(null);
       } else {
         await api.copyEntry(clipboard.path, destinationPath);
@@ -423,7 +503,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       >
         <span className="tree-icon">
           {isCanvas ? (
-            <Layout size={14} className="tree-canvas-icon" />
+            <WorkflowCanvasIcon size={14} className="tree-canvas-icon" />
           ) : isMd ? (
             <FileText size={14} />
           ) : (
@@ -456,35 +536,71 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       <div className="sidebar-tabs">
         <button
           type="button"
-          className={`sidebar-tab-btn ${activeTab === 'files' ? 'active' : ''}`}
+          className={`sidebar-tab-btn icon-only ${activeTab === 'files' ? 'active' : ''}`}
           onClick={() => setActiveTab('files')}
-          title={t('sidebar.filesTitle')}
+          title={t('sidebar.files')}
+          aria-label={t('sidebar.files')}
         >
           <Folder size={15} />
-          <span>{t('sidebar.files')}</span>
         </button>
         <button
           type="button"
-          className={`sidebar-tab-btn ${activeTab === 'search' ? 'active' : ''}`}
+          className={`sidebar-tab-btn icon-only ${activeTab === 'search' ? 'active' : ''}`}
           onClick={() => setActiveTab('search')}
-          title={t('sidebar.searchTitle')}
+          title={t('sidebar.search')}
+          aria-label={t('sidebar.search')}
         >
           <Search size={15} />
-          <span>{t('sidebar.search')}</span>
         </button>
         <button
           type="button"
-          className={`sidebar-tab-btn ${activeTab === 'tags' ? 'active' : ''}`}
+          className={`sidebar-tab-btn icon-only ${activeTab === 'tags' ? 'active' : ''}`}
           onClick={() => setActiveTab('tags')}
-          title={t('sidebar.tagsTitle')}
+          title={t('sidebar.tags')}
+          aria-label={t('sidebar.tags')}
         >
           <Hash size={15} />
-          <span>{t('sidebar.tags')}</span>
+        </button>
+        <button
+          type="button"
+          className={`sidebar-tab-btn icon-only latch-btn ${showFavoritesPanel ? 'active' : ''}`}
+          onClick={() => {
+            setShowFavoritesPanel((prev) => {
+              const next = !prev;
+              try {
+                localStorage.setItem('knowmesh_show_favorites_panel', String(next));
+              } catch {}
+              return next;
+            });
+            setActiveTab('files');
+          }}
+          title={t('sidebar.favoritesTitle')}
+          aria-label={t('sidebar.favorites')}
+        >
+          <Star size={15} className={showFavoritesPanel ? 'starred-icon' : ''} fill={showFavoritesPanel ? 'currentColor' : 'none'} />
+        </button>
+        <button
+          type="button"
+          className={`sidebar-tab-btn icon-only latch-btn ${showRecentPanel ? 'active' : ''}`}
+          onClick={() => {
+            setShowRecentPanel((prev) => {
+              const next = !prev;
+              try {
+                localStorage.setItem('knowmesh_show_recent_panel', String(next));
+              } catch {}
+              return next;
+            });
+            setActiveTab('files');
+          }}
+          title={t('sidebar.recentNotesTitle')}
+          aria-label={t('sidebar.recentNotes')}
+        >
+          <Clock size={15} />
         </button>
         {onClose && (
           <button
             type="button"
-            className="sidebar-tab-btn close-sidebar-btn"
+            className="sidebar-tab-btn close-sidebar-btn icon-only"
             onClick={onClose}
             title={t('sidebar.closeLeft')}
             aria-label={t('sidebar.closeLeft')}
@@ -514,7 +630,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   title={t('canvas.newCanvas')}
                   onClick={() => onCreateCanvas()}
                 >
-                  <Layout size={15} />
+                  <WorkflowCanvasIcon size={15} />
                 </button>
               )}
               <button
@@ -535,6 +651,154 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Latching Favorites Panel */}
+          {showFavoritesPanel && (
+            <div className="sidebar-favorites-panel">
+              <div className="sidebar-section-header">
+                <div className="sidebar-section-title">
+                  <Star size={13} className="section-header-icon starred-icon" fill="currentColor" />
+                  <span>{t('sidebar.favorites')}</span>
+                </div>
+                <span className="sidebar-section-count">({favorites.length})</span>
+              </div>
+              <div className="sidebar-favorites-list scroller">
+                {favorites.length === 0 ? (
+                  <div className="sidebar-empty-hint small">{t('sidebar.noFavorites')}</div>
+                ) : (
+                  favorites.map((fav) => {
+                    const name = fav.path.split('/').pop() || fav.path;
+                    const isCanvas = fav.path.endsWith('.canvas');
+                    const isMd = fav.path.endsWith('.md');
+                    const displayName =
+                      fav.type === 'file' ? name.replace(/\.(md|canvas)$/i, '') : name;
+                    return (
+                      <div
+                        key={fav.path}
+                        className={`tree-item favorite-item ${activePath === fav.path ? 'active' : ''}`}
+                        onClick={() => {
+                          if (fav.type === 'file') {
+                            onSelectNote(fav.path);
+                          } else {
+                            const parts = fav.path.split('/');
+                            setExpandedFolders((prev) => {
+                              const next = { ...prev };
+                              let current = '';
+                              for (const p of parts) {
+                                current = current ? `${current}/${p}` : p;
+                                next[current] = true;
+                              }
+                              return next;
+                            });
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openContextMenu(
+                            {
+                              path: fav.path,
+                              name,
+                              type: fav.type,
+                              extension: isCanvas ? 'canvas' : isMd ? 'md' : undefined,
+                            },
+                            e.clientX,
+                            e.clientY
+                          );
+                        }}
+                        title={fav.path}
+                      >
+                        <span className="tree-icon">
+                          {fav.type === 'folder' ? (
+                            expandedFolders[fav.path] ? (
+                              <FolderOpen size={14} />
+                            ) : (
+                              <Folder size={14} />
+                            )
+                          ) : isCanvas ? (
+                            <WorkflowCanvasIcon size={14} className="tree-canvas-icon" />
+                          ) : isMd ? (
+                            <FileText size={14} />
+                          ) : (
+                            <ImageIcon size={14} />
+                          )}
+                        </span>
+                        <span className="tree-label">{displayName}</span>
+                        <button
+                          type="button"
+                          className="favorite-remove-btn"
+                          title={t('sidebar.removeFromFavorites')}
+                          aria-label={t('sidebar.removeFromFavorites')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(fav.path, fav.type);
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Latching Recent Notes Panel */}
+          {showRecentPanel && (
+            <div className="sidebar-recent-panel">
+              <div className="sidebar-section-header">
+                <div className="sidebar-section-title">
+                  <Clock size={13} className="section-header-icon" />
+                  <span>{t('sidebar.recentNotes')}</span>
+                </div>
+                <span className="sidebar-section-count">({recentNotesList.length})</span>
+              </div>
+              <div className="sidebar-recent-list scroller">
+                {recentNotesList.length === 0 ? (
+                  <div className="sidebar-empty-hint small">{t('sidebar.noRecentNotes')}</div>
+                ) : (
+                  recentNotesList.map((notePath) => {
+                    const name = notePath.split('/').pop() || notePath;
+                    const isCanvas = notePath.endsWith('.canvas');
+                    const isMd = notePath.endsWith('.md');
+                    const displayName = name.replace(/\.(md|canvas)$/i, '');
+                    return (
+                      <div
+                        key={notePath}
+                        className={`tree-item recent-item ${activePath === notePath ? 'active' : ''}`}
+                        onClick={() => onSelectNote(notePath)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openContextMenu(
+                            {
+                              path: notePath,
+                              name,
+                              type: 'file',
+                              extension: isCanvas ? 'canvas' : isMd ? 'md' : undefined,
+                            },
+                            e.clientX,
+                            e.clientY
+                          );
+                        }}
+                        title={notePath}
+                      >
+                        <span className="tree-icon">
+                          {isCanvas ? (
+                            <WorkflowCanvasIcon size={14} className="tree-canvas-icon" />
+                          ) : (
+                            <FileText size={14} />
+                          )}
+                        </span>
+                        <span className="tree-label">{displayName}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
 
           <div
             className="file-tree-scroller scroller"
@@ -671,7 +935,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                           setContextMenu(null);
                         }}
                       >
-                        <Layout size={15} />
+                        <WorkflowCanvasIcon size={15} />
                         <span>{t('canvas.newCanvasInFolder')}</span>
                       </button>
                     )}
@@ -744,6 +1008,28 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                     <div className="tree-context-separator" />
                   </>
                 )}
+
+                {/* Favorite Toggle Button in Context Menu */}
+                <button
+                  type="button"
+                  className="tree-context-item"
+                  onClick={() => {
+                    toggleFavorite(contextMenu.node!.path, contextMenu.node!.type);
+                    setContextMenu(null);
+                  }}
+                >
+                  <Star
+                    size={15}
+                    className={isFavorite(contextMenu.node!.path) ? 'starred-icon' : ''}
+                    fill={isFavorite(contextMenu.node!.path) ? 'currentColor' : 'none'}
+                  />
+                  <span>
+                    {isFavorite(contextMenu.node!.path)
+                      ? t('sidebar.removeFromFavorites')
+                      : t('sidebar.addToFavorites')}
+                  </span>
+                </button>
+                <div className="tree-context-separator" />
 
                 {/* Copy */}
                 <button
@@ -842,7 +1128,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       setContextMenu(null);
                     }}
                   >
-                    <Layout size={15} />
+                    <WorkflowCanvasIcon size={15} />
                     <span>{t('canvas.newCanvas')}</span>
                   </button>
                 )}
@@ -923,6 +1209,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         <div className="sidebar-upload-status-toast">
           <span>{uploadStatus}</span>
         </div>
+      )}
+
+      {/* Desktop Resize Handle on right edge */}
+      {onLeftResizeStart && (
+        <div
+          className={`sidebar-resizer-left ${isResizingLeft ? 'resizing' : ''}`}
+          onMouseDown={onLeftResizeStart}
+        />
       )}
     </aside>
   );
