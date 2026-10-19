@@ -88,7 +88,8 @@
     "downloadFolder": "Ordner herunterladen (.zip)",
     "downloadVault": "Gesamten Vault herunterladen (.zip)",
     "uploadSuccess": "{{count}} Datei(en) erfolgreich hochgeladen",
-    "uploading": "Lade hoch..."
+    "uploading": "Lade hoch...",
+    "versionHistory": "Versionsverlauf"
   },
   "editor": {
     "placeholder": "Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)",
@@ -404,5 +405,30 @@
     "edgeStep": "Rechtwinklig (Step)",
     "nodeGroupLabel": "Gruppen-Titel...",
     "searchNotesPlaceholder": "Notiz zum Einbetten auswählen..."
+  },
+  "history": {
+    "title": "Versionsverlauf",
+    "file": "Datei: {{path}}",
+    "commits": "Commits",
+    "noCommits": "Noch keine Versionshistorie in Git vorhanden.",
+    "noCommitsHint": "Diese Datei wurde noch nicht in Git committet.",
+    "createInitialCommit": "Jetzt ersten Commit erstellen",
+    "creatingCommit": "Erstelle Commit...",
+    "gitDisabled": "Git-Versionskontrolle ist in den Einstellungen nicht aktiviert.",
+    "loading": "Lade Versionsverlauf...",
+    "diffToCurrent": "Unterschied zur aktuellen Version",
+    "diffToPrevious": "Unterschied zur Vorversion",
+    "fullContent": "Vollständige Ansicht",
+    "restore": "Diese Version wiederherstellen",
+    "restoreConfirm": "Möchtest du „{{path}}“ wirklich auf die Version vom {{date}} ({{hash}}) zurücksetzen?",
+    "restoring": "Wiederherstellen...",
+    "restoreSuccess": "Version {{hash}} erfolgreich wiederhergestellt.",
+    "restoreError": "Fehler beim Wiederherstellen der Version: {{error}}",
+    "additions": "+{{count}} Zeilen hinzugefügt",
+    "deletions": "-{{count}} Zeilen entfernt",
+    "noChanges": "Keine Unterschiede in dieser Ansicht.",
+    "author": "Autor",
+    "date": "Datum",
+    "close": "Schließen"
   }
 }

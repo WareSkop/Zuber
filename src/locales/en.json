@@ -88,7 +88,8 @@
     "downloadFolder": "Download folder (.zip)",
     "downloadVault": "Download entire vault (.zip)",
     "uploadSuccess": "Successfully uploaded {{count}} file(s)",
-    "uploading": "Uploading..."
+    "uploading": "Uploading...",
+    "versionHistory": "Version History"
   },
   "editor": {
     "placeholder": "Start writing your note... (Type [[ for wiki links or # for tags)",
@@ -404,5 +405,30 @@
     "edgeStep": "Stepped (Orthogonal)",
     "nodeGroupLabel": "Group title...",
     "searchNotesPlaceholder": "Select note to embed..."
+  },
+  "history": {
+    "title": "Version History",
+    "file": "File: {{path}}",
+    "commits": "Commits",
+    "noCommits": "No version history in Git yet.",
+    "noCommitsHint": "This file has not been committed to Git yet.",
+    "createInitialCommit": "Create initial commit now",
+    "creatingCommit": "Creating commit...",
+    "gitDisabled": "Git version control is disabled in Settings.",
+    "loading": "Loading version history...",
+    "diffToCurrent": "Diff to Current",
+    "diffToPrevious": "Diff to Previous Commit",
+    "fullContent": "Full Version Content",
+    "restore": "Restore this version",
+    "restoreConfirm": "Are you sure you want to restore \"{{path}}\" to the version from {{date}} ({{hash}})?",
+    "restoring": "Restoring...",
+    "restoreSuccess": "Version {{hash}} successfully restored.",
+    "restoreError": "Failed to restore version: {{error}}",
+    "additions": "+{{count}} lines added",
+    "deletions": "-{{count}} lines removed",
+    "noChanges": "No changes found in this view.",
+    "author": "Author",
+    "date": "Date",
+    "close": "Close"
   }
 }

@@ -671,6 +671,46 @@ flowchart TD
   - Auf schmalen Bildschirmen wird der Speichertext im Synchronisations-Badge ausgeblendet und durch ein kompaktes Status-Icon (`.sync-status-icon-mobile`, z. B. `✓`) ersetzt.
   - Die Textbeschriftung des Canvas-Modus-Indikators (`.canvas-mode-indicator span`) wird verborgen, sodass nur das 14px Workflow-Icon sichtbar bleibt und das Speicher-Badge nicht mehr abgeschnitten wird.
 
+---
+
+## 23. Git-Versionsverlauf, Visueller Diff-Viewer & Ein-Klick-Wiederherstellung (`VersionHistoryModal.tsx`, `gitService.ts`, `FileSidebar.tsx`, `src/styles.css`)
+
+Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für alle `.md`-Notizen und `.canvas`-Whiteboards, die direkt auf der Git-Historie des Vaults aufsetzt.
+
+### 23.1 Kontextmenü & Aufruf im Dateibaum (`FileSidebar.tsx`)
+- **Kontextmenü-Integration:** Durch Rechtsklick (oder das `⋮`-Menü auf mobilen Endgeräten) auf eine beliebige Markdown-Datei oder ein Canvas-Board öffnet sich das Kontextmenü mit dem Menüpunkt **„Versionsverlauf“** (`sidebar.versionHistory`).
+- **Befehlspalette (`Strg+P`):** Alternativ kann der Versionsverlauf für die aktuell geöffnete Notiz jederzeit über den Befehl **„Vault: Versionsverlauf für aktuelle Notiz öffnen“** aufgerufen werden.
+- **Header-Badge:** Im Modal-Kopf wird der Dateiname als Code-Badge angezeigt, um zu jeder Zeit Orientierung über die betrachtete Datei zu bieten.
+
+### 23.2 Backend Git-Abfrage mit `--follow` & Rename-Tracing (`server/gitService.ts`)
+- **Git Rename-Tracking (`--follow`):** Das Backend ruft `git log --follow` auf. Dadurch werden alle Commits einer Datei lückenlos bis zur Erstellung nachverfolgt, selbst wenn die Datei im Laufe der Zeit in andere Ordner verschoben oder umbenannt wurde.
+- **Fallback bei historischen Pfaden:** Bei `git show <commitHash>:<currentPath>` schlägt Git fehl, wenn die Datei im gewählten Commit noch einen älteren Namen trug. `GitService.getFileAtCommit()` fängt diesen Fehler automatisch ab, ermittelt den historischen Pfad der Datei in jenem Commit über `git log --follow --name-status` und ruft die Datei mit ihrem ursprünglichen Pfad erfolgreich ab.
+- **Path-Traversal-Schutz:** Alle relativen Dateipfade werden über `sanitizeRelativePath()` validiert und dürfen den Vault-Wurzelordner niemals verlassen.
+
+### 23.3 Interaktives Versions-Modal mit drei Ansichtsmodi (`VersionHistoryModal.tsx`)
+- **Commit-Sidebar (Links):** Chronologische Liste aller bisherigen Commits für die Datei mit Commit-Nachricht, 7-stelligem Kurz-Hash-Badge, Autorenangabe, formatiertem Zeitstempel und einem grünen `Neueste`-Badge für den HEAD-Commit.
+- **Diff- & Content-Pane (Rechts):**
+  1. **Diff zur aktuellen Datei (`diff-current`, Standard):** Vergleicht die gewählte historische Version direkt mit dem aktuellen Arbeitsstand im Vault.
+  2. **Diff zum vorherigen Commit (`diff-previous`):** Zeigt die Änderungen, die im ausgewählten Commit im Vergleich zu seinem unmittelbaren Vorgänger vorgenommen wurden.
+  3. **Vollständiger Inhalt (`full`):** Zeigt den vollständigen Rohinhalt der Notiz oder des Canvas-Boards zum Zeitpunkt des ausgewählten Commits mit Zeilennummern.
+- **Statistik-Badge:** Neben dem View-Switcher zeigt ein kompaktes Badge die Anzahl der hinzugefügten (`+X` in Grün) und entfernten (`-Y` in Rot) Zeilen an.
+
+### 23.4 Performanter Zeilen-Diff-Algorithmus (`computeLineDiff`)
+- **Reiner TypeScript-Diff:** Arbeitet vollständig im Frontend ohne externe Abhängigkeiten über einen optimierten LCS-Algorithmus (Longest Common Subsequence).
+- **Präfix- & Suffix-Trimming:** Identische Zeilen am Anfang und Ende zweier Versionen werden vor dem Aufbau der LCS-Matrix herausgeschnitten. Dadurch wird die Matrix auf den tatsächlich veränderten Bereich beschränkt und berechnet selbst umfangreiche Dokumente in wenigen Millisekunden.
+- **Linearer Fallback bei extremen Änderungen:** Überschreitet die theoretische Matrixgröße 600.000 Zellen, schützt ein linearer Block-Diff vor hohem Speicherverbrauch.
+- **Zeilennummerngutter:** Zweispaltige Zeilennummern (Alte Zeile / Neue Zeile) plus `+` / `-` Marker im Stile von GitHub/GitLab.
+
+### 23.5 Atomare Ein-Klick-Wiederherstellung & Echo-Prävention
+- **Wiederherstellen-Schaltfläche (`Diese Version wiederherstellen`):** Öffnet einen auffälligen, roten Inline-Bestätigungsdialog mit Dateiname, Commit-Datum und Kurz-Hash zur Vermeidung von Fehlklicks.
+- **Atomares Speichern via `VaultService`:** Das Backend speichert die Notiz über `vaultService.saveNote(cleanPath, { rawContent, forceOverwrite: true })`, sodass der In-Memory-Index, die Frontmatter-Caches und die Disk-Datei synchronisiert werden.
+- **Automatischer Git-Commit:** Sofern Git aktiviert ist, wird automatisch ein neuer Commit mit der Nachricht `restore: <path> to <shortHash>` erstellt.
+- **Frontend-Aktualisierung ohne Konflikte:**
+  1. `recentSelfWritesRef` absorbiert nachfolgende Chokidar-Dateisystem-Events.
+  2. Der IndexedDB-Cache (`syncEngine.getLocalDb().putNote`) wird sofort mit der wiederhergestellten Version aktualisiert.
+  3. Ist die Datei aktuell im Editor geöffnet, wird `activeNote` sofort auf den wiederhergestellten Stand gesetzt und `saveState` auf `saved` gesetzt, ohne dass ein falscher 409-Konflikt ausgelöst wird.
+
+
 
 
 

@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitConfig, GitRemoteConfig, GitStatusInfo } from '../shared/types';
+import type { GitConfig, GitRemoteConfig, GitStatusInfo, GitFileCommit, NoteData } from '../shared/types';
 import { ConfigService, configService as defaultConfigService } from './configService';
+import type { VaultService } from './vaultService';
 
 const execFileAsync = promisify(execFile);
 
@@ -369,5 +370,167 @@ export class GitService {
         };
       }
     });
+  }
+
+  /**
+   * Sanitizes and verifies that a relative path stays within the vault directory.
+   */
+  public sanitizeRelativePath(relPath: string): string {
+    if (!relPath || typeof relPath !== 'string') {
+      throw new Error('Ungültiger Dateipfad.');
+    }
+    const cleaned = relPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    const resolved = path.resolve(this.vaultDir, cleaned);
+    if (resolved !== this.vaultDir && !resolved.startsWith(this.vaultDir + path.sep)) {
+      throw new Error('Ungültiger Dateipfad außerhalb des Vaults.');
+    }
+    return path.relative(this.vaultDir, resolved).replace(/\\/g, '/');
+  }
+
+  /**
+   * Retrieves Git commit history for a specific file across renames using --follow.
+   */
+  public async getFileHistory(relPath: string, limit = 50): Promise<GitFileCommit[]> {
+    const config = this.configService.getGitConfig();
+    const gitDir = path.join(this.vaultDir, '.git');
+    if (!config.enabled || !fs.existsSync(gitDir)) {
+      return [];
+    }
+
+    const cleanPath = this.sanitizeRelativePath(relPath);
+    const safeLimit = Math.max(1, Math.min(limit, 500));
+
+    return this.runExclusive(async () => {
+      try {
+        const { stdout } = await this.execGit([
+          'log',
+          '--follow',
+          `-n`,
+          String(safeLimit),
+          '--pretty=format:%H%x1f%h%x1f%aI%x1f%an%x1f%s',
+          '--',
+          cleanPath,
+        ]);
+
+        if (!stdout || stdout.trim().length === 0) {
+          return [];
+        }
+
+        const lines = stdout.split('\n').filter((l) => l.trim().length > 0);
+        const commits: GitFileCommit[] = [];
+
+        for (const line of lines) {
+          const parts = line.split('\x1f');
+          if (parts.length >= 5) {
+            commits.push({
+              hash: parts[0],
+              shortHash: parts[1],
+              date: parts[2],
+              author: parts[3],
+              message: parts[4],
+            });
+          }
+        }
+
+        return commits;
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  /**
+   * Retrieves full raw file content at a specific historical Git commit.
+   * Resolves historical paths if the file was renamed in previous commits.
+   */
+  public async getFileAtCommit(relPath: string, commitHash: string): Promise<string> {
+    const config = this.configService.getGitConfig();
+    const gitDir = path.join(this.vaultDir, '.git');
+    if (!config.enabled || !fs.existsSync(gitDir)) {
+      throw new Error('Git ist nicht initialisiert oder deaktiviert.');
+    }
+
+    const cleanPath = this.sanitizeRelativePath(relPath);
+    if (!commitHash || !/^[0-9a-f]{7,40}$/i.test(commitHash)) {
+      throw new Error('Ungültiger Commit-Hash.');
+    }
+
+    return this.runExclusive(async () => {
+      // 1. Direct retrieval with cleanPath
+      try {
+        const { stdout } = await this.execGit(['show', `${commitHash}:${cleanPath}`]);
+        return stdout;
+      } catch {
+        // Direct retrieval failed (likely renamed in past commits)
+      }
+
+      // 2. Resolve historical path via git log --follow --name-status
+      try {
+        const { stdout: logOut } = await this.execGit([
+          'log',
+          '--follow',
+          '--name-status',
+          '--format=%H',
+          '--',
+          cleanPath,
+        ]);
+
+        let historicalPath: string | null = null;
+        let currentCommit = '';
+        const lines = logOut.split('\n');
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (/^[0-9a-f]{40}$/i.test(trimmed)) {
+            currentCommit = trimmed;
+          } else if (currentCommit.toLowerCase().startsWith(commitHash.toLowerCase()) && trimmed.length > 0) {
+            const parts = trimmed.split(/\s+/);
+            if (parts.length >= 2) {
+              // In git rename status R100 oldPath newPath, parts[1] is oldPath
+              historicalPath = parts[1];
+              break;
+            }
+          }
+        }
+
+        if (historicalPath) {
+          const { stdout } = await this.execGit(['show', `${commitHash}:${historicalPath}`]);
+          return stdout;
+        }
+      } catch {}
+
+      throw new Error(`Datei "${cleanPath}" konnte im Commit ${commitHash.slice(0, 7)} nicht gefunden werden.`);
+    });
+  }
+
+  /**
+   * Restores a file to its content at a specific historical commit.
+   * Coordinates with VaultService so in-memory index, mtime, and WebSocket clients update atomically.
+   */
+  public async restoreFileToCommit(
+    relPath: string,
+    commitHash: string,
+    vaultService: VaultService
+  ): Promise<NoteData> {
+    const cleanPath = this.sanitizeRelativePath(relPath);
+    const content = await this.getFileAtCommit(cleanPath, commitHash);
+
+    // Save through VaultService so caches, mtime, and in-memory index update atomically
+    const restoredNote = vaultService.saveNote(cleanPath, {
+      rawContent: content,
+      forceOverwrite: true,
+    });
+
+    // Auto-commit restoration if Git is active
+    const config = this.configService.getGitConfig();
+    if (config.enabled) {
+      try {
+        await this.commit(`restore: ${cleanPath} to ${commitHash.slice(0, 7)}`);
+      } catch (err) {
+        console.warn('[Knowmesh Git] Auto-commit after restore error:', err);
+      }
+    }
+
+    return restoredNote;
   }
 }

@@ -39,6 +39,7 @@ import {
   Download,
   Maximize2,
   Minimize2,
+  History,
 } from 'lucide-react';
 import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
 import {
@@ -77,6 +78,7 @@ import { CanvasEditor } from './components/canvas/CanvasEditor';
 import { GraphView } from './components/GraphView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
@@ -134,6 +136,7 @@ export const App: React.FC = () => {
   );
   const [rightTab, setRightTab] = useState<RightSidebarTab>('backlinks');
   const [zenMode, setZenMode] = useState(false);
+  const [versionHistoryPath, setVersionHistoryPath] = useState<string | null>(null);
 
   // Resizable Sidebars (State & localStorage persistence)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState<number>(() => {
@@ -792,6 +795,7 @@ export const App: React.FC = () => {
         loadVaultIndex();
       },
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
+      onOpenVersionHistory: (path: string) => setVersionHistoryPath(path),
     }),
     [
       openNoteByPath,
@@ -1510,6 +1514,25 @@ export const App: React.FC = () => {
     URL.revokeObjectURL(url);
   }, [activeNote]);
 
+  const handleVersionRestored = useCallback(
+    async (restoredNote: NoteData) => {
+      const now = Date.now();
+      recentSelfWritesRef.current.set(restoredNote.path, now);
+      try {
+        await syncEngine.getLocalDb().putNote(restoredNote);
+      } catch (e) {
+        console.warn('Failed to update localDb with restored note:', e);
+      }
+      if (activePathRef.current === restoredNote.path) {
+        setActiveNote(restoredNote);
+        setSaveState('saved');
+      }
+      loadVaultIndex().catch(() => {});
+      refreshBacklinks(restoredNote.path).catch(() => {});
+    },
+    [loadVaultIndex, refreshBacklinks]
+  );
+
   const commands: CommandItem[] = useMemo(() => {
     return [
       // Formatting
@@ -1836,6 +1859,18 @@ export const App: React.FC = () => {
         icon: <Download size={16} />,
         keywords: ['export', 'download', 'herunterladen', 'datei'],
         action: handleDownloadNote,
+      },
+      {
+        id: 'vault-version-history',
+        title: 'Vault: Versionsverlauf für aktuelle Notiz öffnen',
+        category: 'Vault',
+        icon: <History size={16} />,
+        keywords: ['history', 'versionsverlauf', 'git', 'diff', 'wiederherstellen', 'commits'],
+        action: () => {
+          if (activeNote) {
+            setVersionHistoryPath(activeNote.path);
+          }
+        },
       },
 
       // Settings & Themes
@@ -2642,6 +2677,14 @@ export const App: React.FC = () => {
       <ConflictModal
         conflicts={conflicts}
         onClose={() => setConflicts([])}
+      />
+
+      {/* Version History Modal (Git Commits & Visual Diff) */}
+      <VersionHistoryModal
+        filePath={versionHistoryPath}
+        isOpen={Boolean(versionHistoryPath)}
+        onClose={() => setVersionHistoryPath(null)}
+        onRestore={handleVersionRestored}
       />
 
       {/* Command Palette (Strg+P) */}

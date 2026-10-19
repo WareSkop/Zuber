@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ConfigService } from './configService';
 import { GitService } from './gitService';
+import { VaultService } from './vaultService';
 import type { GitRemoteConfig } from '../shared/types';
 
 describe('GitService & ConfigService Git Integration', () => {
@@ -188,6 +189,142 @@ describe('GitService & ConfigService Git Integration', () => {
       const result = await gitService.testRemote(remote);
       expect(result.success).toBe(false);
       expect(result.message).not.toContain(secretToken);
+    });
+  });
+
+  describe('Git File History & Version Restore', () => {
+    it('rejects path traversal attempts in sanitizeRelativePath', () => {
+      expect(() => gitService.sanitizeRelativePath('../../etc/passwd')).toThrow(
+        /Ungültiger Dateipfad/
+      );
+      expect(() => gitService.sanitizeRelativePath('/../secrets.txt')).toThrow(
+        /Ungültiger Dateipfad/
+      );
+      expect(() => gitService.sanitizeRelativePath('')).toThrow(
+        /Ungültiger Dateipfad/
+      );
+    });
+
+    it('returns empty history if git is not enabled or repo not initialized', async () => {
+      const history = await gitService.getFileHistory('Note.md');
+      expect(history).toEqual([]);
+    });
+
+    it('retrieves full commit history across edits and renames', async () => {
+      configService.updateGitConfig({
+        enabled: true,
+        userName: 'History Tester',
+        userEmail: 'history@test.org',
+      });
+      await gitService.initIfNeeded();
+
+      const noteRel = 'Projects/Alpha.md';
+      const absPath = path.join(vaultDir, noteRel);
+      fs.mkdirSync(path.dirname(absPath), { recursive: true });
+
+      // Commit 1: Initial content
+      fs.writeFileSync(absPath, '# Alpha V1\nInitial content\n', 'utf-8');
+      const c1 = await gitService.commit('feat: create Alpha');
+      expect(c1.committed).toBe(true);
+
+      // Commit 2: Modification
+      fs.writeFileSync(absPath, '# Alpha V2\nUpdated content with more details\n', 'utf-8');
+      const c2 = await gitService.commit('update: modify Alpha');
+      expect(c2.committed).toBe(true);
+
+      const history = await gitService.getFileHistory(noteRel);
+      expect(history.length).toBe(2);
+      expect(history[0].message).toBe('update: modify Alpha');
+      expect(history[0].author).toBe('History Tester');
+      expect(history[0].shortHash).toBe(c2.commitHash);
+      expect(history[0].hash.startsWith(c2.commitHash!)).toBe(true);
+      expect(history[0].shortHash.length).toBe(7);
+      expect(history[1].message).toBe('feat: create Alpha');
+      expect(history[1].shortHash).toBe(c1.commitHash);
+      expect(history[1].hash.startsWith(c1.commitHash!)).toBe(true);
+
+      // Verify getFileAtCommit retrieves exact content at each version
+      const v1Content = await gitService.getFileAtCommit(noteRel, c1.commitHash!);
+      expect(v1Content).toBe('# Alpha V1\nInitial content\n');
+
+      const v2Content = await gitService.getFileAtCommit(noteRel, c2.commitHash!);
+      expect(v2Content).toBe('# Alpha V2\nUpdated content with more details\n');
+    });
+
+    it('tracks file history and retrieves content across git renames', async () => {
+      configService.updateGitConfig({
+        enabled: true,
+        userName: 'Rename Tester',
+        userEmail: 'rename@test.org',
+      });
+      await gitService.initIfNeeded();
+
+      const origRel = 'DocOld.md';
+      const newRel = 'DocRenamed.md';
+      const origAbs = path.join(vaultDir, origRel);
+      const newAbs = path.join(vaultDir, newRel);
+
+      // Commit 1: Create under original name
+      fs.writeFileSync(origAbs, '# Historic Document\nFirst draft content.\n', 'utf-8');
+      const c1 = await gitService.commit('docs: add DocOld');
+      expect(c1.committed).toBe(true);
+
+      // Rename file on disk and commit
+      fs.renameSync(origAbs, newAbs);
+      const c2 = await gitService.commit('refactor: rename DocOld to DocRenamed');
+      expect(c2.committed).toBe(true);
+
+      // Querying the renamed file should follow the history back to commit 1
+      const history = await gitService.getFileHistory(newRel);
+      expect(history.length).toBe(2);
+      expect(history[0].shortHash).toBe(c2.commitHash);
+      expect(history[1].shortHash).toBe(c1.commitHash);
+
+      // getFileAtCommit for the new name at commit 1 should automatically resolve historical name
+      const contentAtV1 = await gitService.getFileAtCommit(newRel, c1.commitHash!);
+      expect(contentAtV1).toBe('# Historic Document\nFirst draft content.\n');
+    });
+
+    it('restores file to historical commit atomically and auto-commits', async () => {
+      configService.updateGitConfig({
+        enabled: true,
+        userName: 'Restore Tester',
+        userEmail: 'restore@test.org',
+      });
+      await gitService.initIfNeeded();
+
+      const vaultService = new VaultService(vaultDir);
+      const testFile = 'Notes/RestoreTarget.md';
+      const absPath = path.join(vaultDir, testFile);
+      fs.mkdirSync(path.dirname(absPath), { recursive: true });
+
+      // Commit 1: Version 1
+      fs.writeFileSync(absPath, '# Version 1\nImportant original data\n', 'utf-8');
+      const c1 = await gitService.commit('feat: version 1');
+      expect(c1.committed).toBe(true);
+
+      // Commit 2: Corrupted or unwanted edit
+      fs.writeFileSync(absPath, '# Version 2\nAccidental unwanted changes\n', 'utf-8');
+      const c2 = await gitService.commit('feat: version 2 corrupted');
+      expect(c2.committed).toBe(true);
+
+      // Restore to Commit 1
+      const restored = await gitService.restoreFileToCommit(testFile, c1.commitHash!, vaultService);
+      expect(restored.path).toBe(testFile);
+      expect(restored.rawContent).toBe('# Version 1\nImportant original data\n');
+
+      // Verify file on disk has original content
+      const diskContent = fs.readFileSync(absPath, 'utf-8');
+      expect(diskContent).toBe('# Version 1\nImportant original data\n');
+
+      // Verify VaultService cache updated
+      const inMemoryNote = vaultService.getNote(testFile);
+      expect(inMemoryNote?.rawContent).toBe('# Version 1\nImportant original data\n');
+
+      // Verify automatic commit was created for the restoration
+      const historyAfterRestore = await gitService.getFileHistory(testFile);
+      expect(historyAfterRestore.length).toBe(3);
+      expect(historyAfterRestore[0].message).toContain(`restore: ${testFile} to ${c1.commitHash!.slice(0, 7)}`);
     });
   });
 });

@@ -718,6 +718,88 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     }
   });
 
+  app.get('/api/vault/git/file-history', requireAuth, async (req, res) => {
+    try {
+      const rawPath = String(req.query.path || '');
+      if (!rawPath) {
+        res.status(400).json({ error: 'Pfad fehlt.' });
+        return;
+      }
+      let filePath = rawPath;
+      try {
+        filePath = decodeURIComponent(rawPath);
+      } catch {}
+
+      const commits = await actualGitService.getFileHistory(filePath);
+      const config = configService.getGitConfig();
+      const gitDir = path.join(vaultService.getVaultDir(), '.git');
+      const gitEnabled = config.enabled && fs.existsSync(gitDir);
+
+      res.json({
+        path: filePath,
+        gitEnabled,
+        commits,
+      });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || 'Fehler beim Abrufen der Versionshistorie' });
+    }
+  });
+
+  app.get('/api/vault/git/file-version', requireAuth, async (req, res) => {
+    try {
+      const rawPath = String(req.query.path || '');
+      const commitHash = String(req.query.hash || '');
+      if (!rawPath || !commitHash) {
+        res.status(400).json({ error: 'Pfad und Commit-Hash sind erforderlich.' });
+        return;
+      }
+      let filePath = rawPath;
+      try {
+        filePath = decodeURIComponent(rawPath);
+      } catch {}
+
+      const content = await actualGitService.getFileAtCommit(filePath, commitHash);
+
+      // Read current content on disk for diffing
+      let currentContent = '';
+      try {
+        const absPath = vaultService.resolveSafePath(filePath);
+        if (fs.existsSync(absPath)) {
+          currentContent = fs.readFileSync(absPath, 'utf-8');
+        }
+      } catch {}
+
+      res.json({
+        path: filePath,
+        hash: commitHash,
+        content,
+        currentContent,
+      });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || 'Fehler beim Abrufen der Dateiversion' });
+    }
+  });
+
+  app.post('/api/vault/git/file-restore', requireAuth, async (req, res) => {
+    try {
+      const { path: rawPath, hash: commitHash } = req.body || {};
+      if (!rawPath || !commitHash) {
+        res.status(400).json({ error: 'Pfad und Commit-Hash sind erforderlich.' });
+        return;
+      }
+      let filePath = String(rawPath);
+      try {
+        filePath = decodeURIComponent(filePath);
+      } catch {}
+
+      const restoredNote = await actualGitService.restoreFileToCommit(filePath, String(commitHash), vaultService);
+      serverLogger.info('vault', `Restored "${filePath}" to Git commit ${String(commitHash).slice(0, 7)}`);
+      res.json({ ok: true, note: restoredNote });
+    } catch (err: unknown) {
+      res.status(500).json({ error: (err as Error).message || 'Fehler beim Wiederherstellen der Version' });
+    }
+  });
+
   // --- Logs & Diagnostics Endpoints ---
   app.get('/api/logs', requireAuth, (_req, res) => {
     res.json({

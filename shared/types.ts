@@ -174,4 +174,26 @@ export interface LogsResponse {
   entries: LogEntry[];
 }
 
+export interface GitFileCommit {
+  hash: string;
+  shortHash: string;
+  date: string;       // ISO date string
+  author: string;
+  message: string;
+}
+
+export interface GitFileHistoryResponse {
+  path: string;
+  gitEnabled: boolean;
+  commits: GitFileCommit[];
+}
+
+export interface GitFileVersionResponse {
+  path: string;
+  hash: string;
+  content: string;        // Full raw file content at that commit
+  currentContent: string; // Current raw file content on disk for diffing
+}
+
+
 

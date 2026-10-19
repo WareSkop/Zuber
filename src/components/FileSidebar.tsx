@@ -22,6 +22,7 @@ import {
   Trash2,
   Upload,
   Download,
+  History,
   X,
 } from 'lucide-react';
 import type { FileTreeNode } from '../../shared/types';
@@ -65,6 +66,7 @@ interface FileSidebarProps {
   onRefresh: () => void;
   onSelectTagFilter: (tag: string | null) => void;
   onClose?: () => void;
+  onOpenVersionHistory?: (path: string) => void;
   onLeftResizeStart?: (e: React.MouseEvent) => void;
   isResizingLeft?: boolean;
 }
@@ -83,6 +85,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onRefresh,
   onSelectTagFilter,
   onClose,
+  onOpenVersionHistory,
   onLeftResizeStart,
   isResizingLeft = false,
 }) => {
@@ -989,6 +992,23 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <Download size={15} />
                       <span>{t('sidebar.downloadFile')}</span>
                     </button>
+                    {(contextMenu.node.extension === 'md' ||
+                      contextMenu.node.extension === 'canvas' ||
+                      contextMenu.node.path.endsWith('.md') ||
+                      contextMenu.node.path.endsWith('.canvas')) && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => {
+                          const p = contextMenu.node!.path;
+                          onOpenVersionHistory?.(p);
+                          setContextMenu(null);
+                        }}
+                      >
+                        <History size={15} />
+                        <span>{t('sidebar.versionHistory')}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="tree-context-item"

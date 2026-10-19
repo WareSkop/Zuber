@@ -9,6 +9,8 @@
 - Kontextmenü-Aktionen für Favoriten (`Zu Favoriten hinzufügen` / `Aus Favoriten entfernen` ⭐) für Dateien und Ordner mit automatischer Pfadaktualisierung bei Umbenennung oder Löschung (`src/utils/vaultNavigation.ts`).
 - Frei ziehbare Seitenleisten (Resizable Sidebars): Interaktive Maus-Ziehgriffe (`.sidebar-resizer-left`, `.sidebar-resizer-right`) auf Desktops mit automatischer Breitenbegrenzung und persistenter Speicherung in `localStorage` (`knowmesh_sidebar_widths`).
 - Dediziertes Workflow- & Mindmap-Icon (`WorkflowCanvasIcon`) für `.canvas`-Dateien im Dateibaum, Header, Kontextmenü, der Befehlspalette und Embeds.
+- Git-Versionsverlauf & Visueller Diff-Viewer (`VersionHistoryModal.tsx`): Obsidian-ähnliche Dateiwiederherstellung für `.md`- und `.canvas`-Dateien direkt aus dem Dateibaum-Kontextmenü oder via Befehlspalette (`Strg+P`). Mit chronologischer Commit-Liste (`git log --follow` mit automatischer Umbenennungsverfolgung), interaktiver Diff-Ansicht (Diff zu Aktuell, Diff zum Vorgänger, Volltext-Modus), Zeilennummern-Gutter, `+X / -Y`-Statistik-Badge sowie atomarer Ein-Klick-Wiederherstellung inklusive Auto-Commit und Echo-Prävention.
+
 
 ### Changed
 - `NoteSaveRequest` und `syncEngine.saveNote` unterstützen nun den Parameter `explicitClear`, um gewolltes Leeren einer Notiz von flüchtigen Initialzuständen zu unterscheiden.

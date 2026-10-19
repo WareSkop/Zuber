@@ -5,6 +5,9 @@ import type {
   GitConfig,
   GitRemoteConfig,
   GitStatusInfo,
+  GitFileCommit,
+  GitFileHistoryResponse,
+  GitFileVersionResponse,
   GraphData,
   NoteData,
   SecuritySettingsResponse,
@@ -552,6 +555,21 @@ export const api = {
   pushGit(): Promise<{ success: boolean; message: string }> {
     return apiFetch('/api/vault/git/push', {
       method: 'POST',
+    });
+  },
+
+  getFileGitHistory(path: string): Promise<GitFileHistoryResponse> {
+    return apiFetch(`/api/vault/git/file-history?path=${encodeURIComponent(path)}`);
+  },
+
+  getFileGitVersion(path: string, hash: string): Promise<GitFileVersionResponse> {
+    return apiFetch(`/api/vault/git/file-version?path=${encodeURIComponent(path)}&hash=${encodeURIComponent(hash)}`);
+  },
+
+  restoreFileGitVersion(path: string, hash: string): Promise<{ ok: boolean; note: NoteData }> {
+    return apiFetch('/api/vault/git/file-restore', {
+      method: 'POST',
+      body: JSON.stringify({ path, hash }),
     });
   },
 

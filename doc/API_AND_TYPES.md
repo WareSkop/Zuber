@@ -254,6 +254,28 @@ export interface GitStatusInfo {
   lastPushTime?: number | null;
   lastPushError?: string | null;
 }
+
+export interface GitFileCommit {
+  hash: string;
+  shortHash: string;
+  date: string;
+  author: string;
+  authorEmail: string;
+  message: string;
+}
+
+export interface GitFileHistoryResponse {
+  enabled: boolean;
+  isRepo: boolean;
+  path: string;
+  commits: GitFileCommit[];
+}
+
+export interface GitFileVersionResponse {
+  path: string;
+  hash: string;
+  content: string;
+}
 ```
 
 ---
@@ -314,6 +336,9 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | `POST` | `/api/vault/git/commit` | Erstellt manuell oder automatisiert einen Git-Commit aller Änderungen. | Body: `{ reason?: string }` | `{ committed: boolean, commitHash?: string, message?: string }` |
 | `POST` | `/api/vault/git/test-remote` | Prüft die Remote-Verbindung via `git ls-remote` ohne Speichern. Credentials werden bei Fehlern maskiert. | Body: `{ remote?: Partial<GitRemoteConfig> }` | `{ success: boolean, message: string }` |
 | `POST` | `/api/vault/git/push` | Führt einen Pre-Push Auto-Commit durch und pusht auf den konfigurierten Remote-Branch. | — | `{ success: boolean, message: string }` |
+| `GET` | `/api/vault/git/file-history` | Liefert die chronologische Commit-Historie einer Datei via `git log --follow` über alle Umbenennungen hinweg. | Query: `?path=notiz.md&limit=50` | `GitFileHistoryResponse` |
+| `GET` | `/api/vault/git/file-version` | Liefert den historischen Dateiinhalt zu einem Commit-Hash (`git show <hash>:<path>`, inklusive Fallback für historische Dateipfade). | Query: `?path=notiz.md&hash=abc1234` | `GitFileVersionResponse` |
+| `POST` | `/api/vault/git/file-restore` | Stellt eine historische Version wieder her, aktualisiert den VaultService atomar und erstellt einen automatischen Git-Restore-Commit. | Body: `{ path: string, hash: string }` | `{ ok: true, note: NoteData }` |
 
 ### 2.6 Logs & Diagnose-Endpunkte
 
