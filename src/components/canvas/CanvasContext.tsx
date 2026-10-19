@@ -6,6 +6,8 @@ export interface CanvasContextType {
   onUpdateNodeData?: (nodeId: string, partialData: Record<string, any>) => void;
   allNotes: { path: string; name: string; basename: string }[];
   readOnly?: boolean;
+  editingNodeState?: { nodeId: string; initialChar: string } | null;
+  setEditingNodeState?: (state: { nodeId: string; initialChar: string } | null) => void;
 }
 
 export const CanvasContext = createContext<CanvasContextType>({

@@ -785,3 +785,13 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
   - **Styling (`src/styles.css`):** Ausgewählte Kanten erhalten eine 3,5px starke Gold-Kontur (`stroke: var(--accent-color, #d4af37)`), einen weichen Glow-Filter (`drop-shadow(0 0 5px rgba(212, 175, 55, 0.65))`) und eine passende goldene Pfeilspitze (`marker path`).
   - **Reconnection-Handles (`.react-flow__edgeupdater`):** React Flow's Wiederverbindungspunkte (7px Radius mit Goldfüllung) werden ausschließlich für selektierte Kanten eingeblendet (`.react-flow__edge:not(.selected) .react-flow__edgeupdater { display: none !important; }`), sodass unselektierte Kanten sauber und aufgeräumt wirken.
   - **Reconnection-Handler (`onReconnect`, `reconnectEdge`):** Ausgewählte Verbindungslinien können per Drag & Drop an Start- oder Endpunkten auf andere Knoten umgehängt werden, wobei die Pfeilspitze am Ziel erhalten bleibt.
+
+### 24.11 Deterministische Pfeilrichtung bei Canvas-Drop & Type-to-Edit für selektierte Knoten
+- **Deterministische Pfeilrichtung beim Ablegen ins Leere (`onConnectEnd`):**
+  - Unabhängig davon, ob der Drag an einem als `source` oder `target` klassifizierten Handle des Ursprungsknotens gestartet wurde, wird der Ursprungsknoten A (`originNodeId`) ausnahmslos als `source` und der neu erzeugte Knoten B (`newNodeId`) als `target` der Kante zugewiesen.
+  - Dadurch zeigt die Pfeilspitze (`markerEnd: MarkerType.ArrowClosed`) stets 100% deterministisch von Knoten A nach Knoten B, mit `data.fromEnd = 'none'` und `data.toEnd = 'arrow'`.
+- **Type-to-Edit für selektierte Canvas-Knoten (`CanvasEditor.tsx` & `CanvasShapeNode.tsx`):**
+  - **Tastatur-Erkennung:** Wenn genau ein Form- oder Textknoten selektiert ist und der Benutzer ein beliebiges druckbares Zeichen tippt, schaltet der Knoten sofort ohne vorherigen Doppelklick in den Inline-Bearbeitungsmodus um.
+  - **Text-Initialisierung & Fokus:** Das getippte Zeichen wird an den bestehenden Knotentext angehängt (bzw. beginnt den Text, falls leer), das `<textarea>` wird unmittelbar fokussiert und der Cursor ans Textende positioniert (`setSelectionRange(len, len)`).
+  - **Eingabe-Schutz & Shortcuts:** Modifizierer-Tastenkombinationen (`Ctrl+Z`, `Ctrl+Y`), Panning via Leertaste (`Space`), das Löschen via `Delete`/`Backspace` sowie Eingaben in geöffneten Dialogen oder bestehenden Textfeldern sind durch strikte Guards vor Fehltriggerung geschützt.
+

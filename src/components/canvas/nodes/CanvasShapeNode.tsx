@@ -8,7 +8,15 @@ import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
 
 export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
-  const { onOpenNote, onSelectTag, onUpdateNodeData, allNotes, readOnly } = useCanvasContext();
+  const {
+    onOpenNote,
+    onSelectTag,
+    onUpdateNodeData,
+    allNotes,
+    readOnly,
+    editingNodeState,
+    setEditingNodeState,
+  } = useCanvasContext();
   const { setNodes } = useReactFlow();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -21,8 +29,39 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
   const customColor = resolveCanvasColor(data.color as string);
 
   useEffect(() => {
-    setEditText((data.text as string) || '');
-  }, [data.text]);
+    if (!isEditing) {
+      setEditText((data.text as string) || '');
+    }
+  }, [data.text, isEditing]);
+
+  // Type-to-Edit listener: activates inline editor and appends initial keystroke on selected node
+  useEffect(() => {
+    if (editingNodeState && editingNodeState.nodeId === id && !readOnly) {
+      const char = editingNodeState.initialChar;
+      const baseText = (data.text as string) || '';
+      const updatedText = baseText + char;
+      setEditText(updatedText);
+      setIsEditing(true);
+      setEditingNodeState?.(null);
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const len = updatedText.length;
+          textareaRef.current.setSelectionRange(len, len);
+        }
+      }, 0);
+    }
+  }, [editingNodeState, id, data.text, readOnly, setEditingNodeState]);
+
+  // Focus textarea and set cursor at end whenever isEditing transitions to true
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [isEditing]);
 
   const handleFinishEditing = () => {
     setIsEditing(false);

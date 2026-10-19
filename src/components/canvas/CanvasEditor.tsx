@@ -112,6 +112,9 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   // Floating context menu position for right-click inspector
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Type-to-edit state for single selected node
+  const [editingNodeState, setEditingNodeState] = useState<{ nodeId: string; initialChar: string } | null>(null);
+
   // Group dragging tracking refs (moving a group moves enclosed elements)
   const draggingChildNodeIdsRef = useRef<Set<string>>(new Set());
   const dragStartGroupPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -471,7 +474,6 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             },
           };
 
-          const isSource = connectingRef.current.handleType === 'source';
           const originNodeId = connectingRef.current.nodeId;
           const originHandleId = connectingRef.current.handleId;
 
@@ -499,22 +501,19 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             bestHandle === 'right' ? 'left' :
             bestHandle === 'top' ? 'bottom' : 'top';
 
-          const targetHandle = isSource ? bestHandle : (originHandleId || oppositeHandle);
-          const sourceHandle = isSource ? (originHandleId || oppositeHandle) : bestHandle;
-
-          // Connect from origin to new node (arrow points strictly towards destination new node!):
-          const newEdgeId = `edge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          // Strictly connect origin node as source and newly created node as target:
+          const newEdgeId = `edge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           const newEdge: Edge = {
             id: newEdgeId,
-            source: isSource ? originNodeId : newNodeId,
-            target: isSource ? newNodeId : originNodeId,
-            sourceHandle: sourceHandle || undefined,
-            targetHandle: targetHandle || undefined,
+            source: originNodeId,
+            target: newNodeId,
+            sourceHandle: originHandleId || oppositeHandle,
+            targetHandle: bestHandle,
             type: 'default',
             style: { stroke: strokeColor, strokeWidth: 2 },
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              color: strokeColor,
+              color: 'var(--accent-color, #d4af37)',
               width: 16,
               height: 16,
             },
@@ -940,44 +939,94 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [selectedEdges, setEdges, pushHistory, triggerAutoSave, nodes]
   );
 
-  // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, Delete)
+  // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, Delete, Type-to-Edit)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Avoid intercepting input fields or textareas
+      // Guard 1: Ignore if already inside an active input or textarea or contenteditable element
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (
+        activeTag === 'input' ||
+        activeTag === 'textarea' ||
+        document.activeElement?.getAttribute('contenteditable') === 'true'
+      ) {
+        return;
+      }
       const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      const isInput = targetTag === 'input' || targetTag === 'textarea';
+      if (targetTag === 'input' || targetTag === 'textarea') {
+        return;
+      }
+
+      // Ignore when a modal or palette dialog is open
+      if (document.querySelector('.modal-overlay, .modal-backdrop, .command-palette-modal, .version-history-modal-backdrop')) {
+        return;
+      }
 
       if (e.key === 'Escape') {
         setContextMenuPos(null);
       }
 
+      // Undo / Redo
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        if (!isInput) {
-          e.preventDefault();
-          if (e.shiftKey) handleRedo();
-          else handleUndo();
-        }
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+        return;
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-        if (!isInput) {
-          e.preventDefault();
-          handleRedo();
-        }
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (!isInput) {
-          if (selectedNodes.length > 0) {
-            e.preventDefault();
-            handleDeleteNode(selectedNodes[0].id);
-          } else if (selectedEdges.length > 0) {
-            e.preventDefault();
-            handleDeleteEdge(selectedEdges[0].id);
-          }
-        }
+        e.preventDefault();
+        handleRedo();
+        return;
       }
+
+      // Delete / Backspace
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNodes.length > 0) {
+          e.preventDefault();
+          handleDeleteNode(selectedNodes[0].id);
+        } else if (selectedEdges.length > 0) {
+          e.preventDefault();
+          handleDeleteEdge(selectedEdges[0].id);
+        }
+        return;
+      }
+
+      // Guard 2: Ignore modifier shortcuts (Ctrl, Meta, Alt)
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      // Guard 3: Only trigger on single printable characters (Space is reserved for canvas panning)
+      if (e.key.length !== 1 || e.key === ' ') return;
+
+      // Guard 4: Type-to-Edit: Only trigger if not readOnly and exactly one editable node is selected
+      if (readOnly) return;
+      if (selectedNodes.length !== 1) return;
+
+      const targetNode = selectedNodes[0];
+      const isEditable =
+        targetNode.type === 'canvasShape' ||
+        targetNode.type === 'shape' ||
+        targetNode.type === 'text' ||
+        targetNode.data?.rawType === 'text';
+
+      if (!isEditable) return;
+
+      // Prevent default so browser does not duplicate the keystroke in native events
+      e.preventDefault();
+      setEditingNodeState({
+        nodeId: targetNode.id,
+        initialChar: e.key,
+      });
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, selectedNodes, selectedEdges, handleDeleteNode, handleDeleteEdge]);
+  }, [
+    handleUndo,
+    handleRedo,
+    selectedNodes,
+    selectedEdges,
+    handleDeleteNode,
+    handleDeleteEdge,
+    readOnly,
+  ]);
 
   return (
     <CanvasContext.Provider
@@ -987,6 +1036,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         onUpdateNodeData: handleUpdateNodeData,
         allNotes,
         readOnly,
+        editingNodeState,
+        setEditingNodeState,
       }}
     >
       <div className={`canvas-editor-wrapper ${selectedNode || selectedEdge ? 'has-selection' : ''}`} ref={containerRef}>

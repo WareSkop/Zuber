@@ -658,6 +658,162 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     // 4. Drag upwards -> facing handle on new node is 'bottom'
     expect(getBestHandle(origin, { x: 170, y: -100 })).toBe('bottom');
   });
+
+  it('9. verifies deterministic edge arrow direction pointing from origin to auto-created node even with target handleType', () => {
+    // Simulates onConnectEnd edge construction
+    const createAutoDropEdge = (params: {
+      originNodeId: string;
+      originHandleId?: string | null;
+      originHandleType?: 'source' | 'target';
+      newNodeId: string;
+      bestHandle: 'top' | 'right' | 'bottom' | 'left';
+    }) => {
+      const oppositeHandle =
+        params.bestHandle === 'left' ? 'right' :
+        params.bestHandle === 'right' ? 'left' :
+        params.bestHandle === 'top' ? 'bottom' : 'top';
+
+      return {
+        id: `edge-${Date.now()}-test`,
+        source: params.originNodeId,
+        target: params.newNodeId,
+        sourceHandle: params.originHandleId || oppositeHandle,
+        targetHandle: params.bestHandle,
+        type: 'default',
+        markerEnd: {
+          color: 'var(--accent-color, #d4af37)',
+          width: 16,
+          height: 16,
+        },
+        markerStart: undefined,
+        data: {
+          color: undefined,
+          edgeStyle: 'bezier',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      };
+    };
+
+    // Even if origin connection was initiated from a 'target' handle:
+    const edgeFromTarget = createAutoDropEdge({
+      originNodeId: 'node-A',
+      originHandleId: 'top',
+      originHandleType: 'target',
+      newNodeId: 'node-B',
+      bestHandle: 'bottom',
+    });
+
+    expect(edgeFromTarget.source).toBe('node-A');
+    expect(edgeFromTarget.target).toBe('node-B');
+    expect(edgeFromTarget.markerEnd).toBeDefined();
+    expect(edgeFromTarget.markerStart).toBeUndefined();
+    expect(edgeFromTarget.data.toEnd).toBe('arrow');
+    expect(edgeFromTarget.data.fromEnd).toBe('none');
+
+    // From source handle:
+    const edgeFromSource = createAutoDropEdge({
+      originNodeId: 'node-A',
+      originHandleId: 'right',
+      originHandleType: 'source',
+      newNodeId: 'node-B',
+      bestHandle: 'left',
+    });
+
+    expect(edgeFromSource.source).toBe('node-A');
+    expect(edgeFromSource.target).toBe('node-B');
+    expect(edgeFromSource.targetHandle).toBe('left');
+  });
+
+  it('10. verifies type-to-edit immediately activates inline editor and appends keystroke', () => {
+    const shapeContainer = document.createElement('div');
+    document.body.appendChild(shapeContainer);
+    const shapeRoot = createRoot(shapeContainer);
+
+    const setEditingNodeState = vi.fn();
+    const onUpdateNodeData = vi.fn();
+
+    // 1. Initial render in display mode
+    act(() => {
+      shapeRoot.render(
+        <ReactFlowProvider>
+          <CanvasContext.Provider
+            value={{
+              onOpenNote: vi.fn(),
+              onUpdateNodeData,
+              allNotes: [],
+              readOnly: false,
+              editingNodeState: null,
+              setEditingNodeState,
+            }}
+          >
+            <CanvasShapeNode
+              id="node-type-test"
+              data={{ text: 'Hello', shape: 'rectangle', rawType: 'text' }}
+              selected={true}
+              type="canvasShape"
+              zIndex={1}
+              isConnectable={true}
+              positionAbsoluteX={0}
+              positionAbsoluteY={0}
+              dragging={false}
+              deletable={true}
+              selectable={true}
+              draggable={true}
+            />
+          </CanvasContext.Provider>
+        </ReactFlowProvider>
+      );
+    });
+
+    // Displays rendered markdown initially
+    expect(shapeContainer.querySelector('.canvas-node-display-text')).not.toBeNull();
+    expect(shapeContainer.querySelector('textarea')).toBeNull();
+
+    // 2. Trigger Type-to-Edit with initialChar '!'
+    act(() => {
+      shapeRoot.render(
+        <ReactFlowProvider>
+          <CanvasContext.Provider
+            value={{
+              onOpenNote: vi.fn(),
+              onUpdateNodeData,
+              allNotes: [],
+              readOnly: false,
+              editingNodeState: { nodeId: 'node-type-test', initialChar: '!' },
+              setEditingNodeState,
+            }}
+          >
+            <CanvasShapeNode
+              id="node-type-test"
+              data={{ text: 'Hello', shape: 'rectangle', rawType: 'text' }}
+              selected={true}
+              type="canvasShape"
+              zIndex={1}
+              isConnectable={true}
+              positionAbsoluteX={0}
+              positionAbsoluteY={0}
+              dragging={false}
+              deletable={true}
+              selectable={true}
+              draggable={true}
+            />
+          </CanvasContext.Provider>
+        </ReactFlowProvider>
+      );
+    });
+
+    // Textarea is now rendered with updated text "Hello!"
+    const textarea = shapeContainer.querySelector('textarea');
+    expect(textarea).not.toBeNull();
+    expect(textarea?.value).toBe('Hello!');
+    expect(setEditingNodeState).toHaveBeenCalledWith(null);
+
+    act(() => {
+      shapeRoot.unmount();
+    });
+    document.body.removeChild(shapeContainer);
+  });
 });
 
 
