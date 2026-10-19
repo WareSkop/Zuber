@@ -767,15 +767,16 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
 - **Automatisches Schließen:** Das Kontextmenü schließt sich nahtlos beim Klick auf die Arbeitsfläche (`onPaneClick`, `onPaneContextMenu`), bei normaler Linksklick-Selektion (`onNodeClick`, `onEdgeClick`), beim Zoomen/Verschieben (`onMoveStart`) oder beim Drücken von `Escape`.
 - **Standard-Modus:** Ohne Rechtsklick verbleibt die Toolbar wie gewohnt zentriert am unteren Bildschirmrand.
 
-
-
-
-
-
-
-
-
-
-
-
-
+### 24.10 Kanten-Verbesserungen: Pfeilrichtung, Auto-Erstellung ins Leere & Wiederverbindung
+- **Korrektur der Pfeilrichtung (`CanvasShapeNode.tsx`, `CanvasEditor.tsx` & `canvasMapper.ts`):**
+  - **DOM-Stacking der Handles:** In `CanvasShapeNode.tsx` (sowie `CanvasFileNode` und `CanvasLinkNode`) werden `target`-Handles vor `source`-Handles im DOM gerendert. Dadurch liegt der `source`-Handle bei Hit-Tests oben, sodass das Ziehen einer Linie an jedem Verbindungspunkt deterministisch als `source` startet.
+  - **Reversal-Schutz in `onConnect`:** Falls React Flow Quell- und Zielknoten vertauscht, korrigiert `CanvasEditor.tsx` die Orientierung anhand von `connectingRef.current`. Das Pfeilsymbol (`markerEnd: MarkerType.ArrowClosed`) wird garantiert am Zielknoten platziert, während `markerStart` `undefined` bleibt.
+  - **JSON-Canvas-Mapping:** In `canvasMapper.ts` spiegelt `reactFlowToJsonCanvas` `edge.markerEnd` direkt auf `jsonEdge.toEnd = 'arrow'` und `edge.markerStart` auf `jsonEdge.fromEnd = 'arrow'`.
+- **Auto-Knotenerstellung beim Ziehen ins Leere (`onConnectEnd`):**
+  - Zieht der Nutzer eine Verbindungslinie aus einem Knoten-Handle heraus und lässt sie auf einer freien Canvas-Fläche (`.react-flow__pane`) los, wird an der Loslass-Position automatisch ein neuer Rechteck-Textknoten (`type: 'canvasShape'`, `shape: 'rectangle'`, 140×80px) erzeugt (`screenToFlowPosition`).
+  - Eine Verbindungslinie vom Ausgangsknoten zum neuen Knoten wird unmittelbar erstellt, mit der Pfeilspitze zum neuen Knoten gerichtet.
+  - Der neue Knoten wird automatisch ausgewählt und in den Verlauf (`pushHistory`) sowie den Auto-Save übernommen.
+- **Markante Kanten-Selektion & Kanten-Wiederverbindung (`edgesReconnectable`):**
+  - **Styling (`src/styles.css`):** Ausgewählte Kanten erhalten eine 3,5px starke Gold-Kontur (`stroke: var(--accent-color, #d4af37)`), einen weichen Glow-Filter (`drop-shadow(0 0 5px rgba(212, 175, 55, 0.65))`) und eine passende goldene Pfeilspitze (`marker path`).
+  - **Reconnection-Handles (`.react-flow__edgeupdater`):** React Flow's Wiederverbindungspunkte (7px Radius mit Goldfüllung) werden ausschließlich für selektierte Kanten eingeblendet (`.react-flow__edge:not(.selected) .react-flow__edgeupdater { display: none !important; }`), sodass unselektierte Kanten sauber und aufgeräumt wirken.
+  - **Reconnection-Handler (`onReconnect`, `reconnectEdge`):** Ausgewählte Verbindungslinien können per Drag & Drop an Start- oder Endpunkten auf andere Knoten umgehängt werden, wobei die Pfeilspitze am Ziel erhalten bleibt.

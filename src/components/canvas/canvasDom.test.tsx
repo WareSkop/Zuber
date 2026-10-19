@@ -554,4 +554,73 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     });
     document.body.removeChild(inspContainer);
   });
+
+  it('7. verifies edge selection styling, edgeupdater rules, and handle DOM stacking order', () => {
+    const cssPath = path.resolve(__dirname, '../../styles.css');
+    const css = fs.readFileSync(cssPath, 'utf-8');
+
+    // 1. High-contrast selected edge styling
+    expect(css).toContain('.react-flow__edge.selected .react-flow__edge-path');
+    expect(css).toMatch(/\.react-flow__edge\.selected\s+\.react-flow__edge-path[\s\S]*?stroke:\s*var\(--accent-color,\s*#d4af37\)/);
+    expect(css).toMatch(/\.react-flow__edge\.selected\s+\.react-flow__edge-path[\s\S]*?stroke-width:\s*3\.5px/);
+
+    // 2. Selected edge arrow marker
+    expect(css).toMatch(/\.react-flow__edge\.selected\s+marker\s+path[\s\S]*?fill:\s*var\(--accent-color,\s*#d4af37\)/);
+
+    // 3. Edgeupdater reconnection handles
+    expect(css).toContain('.react-flow__edgeupdater');
+    expect(css).toMatch(/\.react-flow__edgeupdater[\s\S]*?r:\s*7\s*!important/);
+
+    // 4. Edgeupdater visibility rule: hidden on unselected edges
+    expect(css).toContain('.react-flow__edge:not(.selected) .react-flow__edgeupdater');
+    expect(css).toMatch(/\.react-flow__edge:not\(\.selected\)\s+\.react-flow__edgeupdater[\s\S]*?display:\s*none\s*!important/);
+
+    // 5. Mount CanvasShapeNode and verify Handle DOM stacking (source rendered after target)
+    const shapeContainer = document.createElement('div');
+    document.body.appendChild(shapeContainer);
+    const shapeRoot = createRoot(shapeContainer);
+
+    act(() => {
+      shapeRoot.render(
+        <ReactFlowProvider>
+          <CanvasShapeNode
+            id="node-test-handles"
+            data={{ shape: 'rectangle', text: 'Stacking Test' }}
+            selected={false}
+            width={160}
+            height={80}
+            zIndex={1}
+            isConnectable={true}
+            positionAbsoluteX={0}
+            positionAbsoluteY={0}
+            dragging={false}
+            type="canvasShape"
+            deletable={true}
+            selectable={true}
+            draggable={true}
+          />
+        </ReactFlowProvider>
+      );
+    });
+
+    const handles = shapeContainer.querySelectorAll('.canvas-node-handle');
+    expect(handles.length).toBe(8); // 4 positions * (target + source)
+
+    // For each pair, target is first, source is second (on top in DOM hit-testing order)
+    const topHandles = shapeContainer.querySelectorAll('.handle-top');
+    expect(topHandles.length).toBe(2);
+    expect(topHandles[0].classList.contains('target')).toBe(true);
+    expect(topHandles[1].classList.contains('source')).toBe(true);
+
+    const rightHandles = shapeContainer.querySelectorAll('.handle-right');
+    expect(rightHandles.length).toBe(2);
+    expect(rightHandles[0].classList.contains('target')).toBe(true);
+    expect(rightHandles[1].classList.contains('source')).toBe(true);
+
+    act(() => {
+      shapeRoot.unmount();
+    });
+    document.body.removeChild(shapeContainer);
+  });
 });
+

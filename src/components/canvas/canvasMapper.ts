@@ -289,15 +289,11 @@ export function reactFlowToJsonCanvas(
     }
 
     // Arrows (strictly preserve toEnd on target and fromEnd on source)
-    const toEnd = (data.toEnd === 'none' || (data.toEnd === undefined && !edge.markerEnd)) ? 'none' : 'arrow';
-    const fromEnd = (data.fromEnd === 'arrow' || Boolean(edge.markerStart)) ? 'arrow' : 'none';
+    const toEnd = edge.markerEnd ? 'arrow' : (data.toEnd === 'arrow' ? 'arrow' : 'none');
+    const fromEnd = edge.markerStart ? 'arrow' : (data.fromEnd === 'arrow' ? 'arrow' : 'none');
 
     jsonEdge.toEnd = toEnd;
-    if (fromEnd === 'arrow') {
-      jsonEdge.fromEnd = 'arrow';
-    } else {
-      jsonEdge.fromEnd = 'none';
-    }
+    jsonEdge.fromEnd = fromEnd;
 
     // Edge style (Knowmesh extension)
     if (data.edgeStyle && data.edgeStyle !== 'bezier') {

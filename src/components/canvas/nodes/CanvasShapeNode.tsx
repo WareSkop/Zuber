@@ -345,14 +345,14 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       />
 
       {/* 4 Multi-directional handles (Obsidian-compatible top, right, bottom, left) */}
-      <Handle type="source" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
       <Handle type="target" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
-      <Handle type="source" position={Position.Right} id="right" className="canvas-node-handle handle-right" />
+      <Handle type="source" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
       <Handle type="target" position={Position.Right} id="right" className="canvas-node-handle handle-right" />
-      <Handle type="source" position={Position.Bottom} id="bottom" className="canvas-node-handle handle-bottom" />
+      <Handle type="source" position={Position.Right} id="right" className="canvas-node-handle handle-right" />
       <Handle type="target" position={Position.Bottom} id="bottom" className="canvas-node-handle handle-bottom" />
-      <Handle type="source" position={Position.Left} id="left" className="canvas-node-handle handle-left" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="canvas-node-handle handle-bottom" />
       <Handle type="target" position={Position.Left} id="left" className="canvas-node-handle handle-left" />
+      <Handle type="source" position={Position.Left} id="left" className="canvas-node-handle handle-left" />
 
       {/* SVG Background Geometry */}
       <svg

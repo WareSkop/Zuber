@@ -9,6 +9,7 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
+  reconnectEdge,
   useReactFlow,
   ReactFlowProvider,
   ConnectionMode,
@@ -19,6 +20,9 @@ import {
   type Viewport,
   MarkerType,
   type OnNodeDrag,
+  type OnConnectStart,
+  type OnConnectEnd,
+  type OnReconnect,
 } from '@xyflow/react';
 
 import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
@@ -68,7 +72,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   allNotes,
   readOnly = false,
 }) => {
-  const { fitView, getViewport, setViewport } = useReactFlow();
+  const { fitView, getViewport, setViewport, screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -111,6 +115,17 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   // Group dragging tracking refs (moving a group moves enclosed elements)
   const draggingChildNodeIdsRef = useRef<Set<string>>(new Set());
   const dragStartGroupPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Connection dragging refs for drop-to-create node
+  const connectingRef = useRef<{
+    nodeId: string;
+    handleId: string | null;
+    handleType: 'source' | 'target';
+  } | null>(null);
+  const didConnectRef = useRef<boolean>(false);
+
+  // Edge reconnection tracking ref
+  const edgeReconnectSuccessful = useRef<boolean>(true);
 
   // History stack for Undo / Redo
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
@@ -331,20 +346,47 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [setNodes, pushHistory, triggerAutoSave, edges]
   );
 
+  // Connection line handlers:
+  const onConnectStart: OnConnectStart = useCallback((_event, params) => {
+    if (params.nodeId && params.handleType) {
+      connectingRef.current = {
+        nodeId: params.nodeId,
+        handleId: params.handleId || null,
+        handleType: params.handleType,
+      };
+      didConnectRef.current = false;
+    }
+  }, []);
+
   // Connections handler: strictly places the arrow marker on the target side
   const onConnect = useCallback(
     (params: Connection) => {
       if (readOnly) return;
+      didConnectRef.current = true;
+
+      let sourceId = params.source;
+      let targetId = params.target;
+      let sourceHandle = params.sourceHandle;
+      let targetHandle = params.targetHandle;
+
+      // React Flow can sometimes flip source and target if connection was initiated from a handle classified as target
+      if (connectingRef.current?.nodeId === targetId && connectingRef.current.nodeId !== sourceId) {
+        sourceId = params.target;
+        targetId = params.source;
+        sourceHandle = params.targetHandle;
+        targetHandle = params.sourceHandle;
+      }
+
       const newEdgeId = `edge_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const strokeColor = 'var(--border-strong, #888)';
 
       const newEdge: Edge = {
         ...params,
         id: newEdgeId,
-        source: params.source,
-        target: params.target,
-        sourceHandle: params.sourceHandle,
-        targetHandle: params.targetHandle,
+        source: sourceId,
+        target: targetId,
+        sourceHandle,
+        targetHandle,
         type: 'default',
         style: { stroke: strokeColor, strokeWidth: 2 },
         markerEnd: {
@@ -364,13 +406,169 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
       setEdges((eds) => {
         const next = addEdge(newEdge, eds);
-        pushHistory(nodes, next);
-        triggerAutoSave(nodes, next);
+        pushHistory(latestNodesRef.current, next);
+        triggerAutoSave(latestNodesRef.current, next);
         return next;
       });
     },
-    [setEdges, pushHistory, triggerAutoSave, nodes, readOnly]
+    [setEdges, pushHistory, triggerAutoSave, readOnly]
   );
+
+  // Auto-create rectangle node when dropping a connection line onto empty canvas space
+  const onConnectEnd: OnConnectEnd = useCallback(
+    (event, connectionState) => {
+      if (readOnly) {
+        connectingRef.current = null;
+        return;
+      }
+      if (didConnectRef.current || connectionState?.isValid) {
+        connectingRef.current = null;
+        return;
+      }
+      if (!connectingRef.current) return;
+
+      const targetEl = event.target as HTMLElement | null;
+      const isNodeOrHandle = Boolean(targetEl?.closest('.react-flow__node, .react-flow__handle'));
+      const isPane = targetEl?.classList?.contains('react-flow__pane') || Boolean(targetEl?.closest('.react-flow__pane'));
+
+      if (isPane || !isNodeOrHandle) {
+        const clientX =
+          'changedTouches' in event && event.changedTouches?.[0]
+            ? event.changedTouches[0].clientX
+            : 'clientX' in event
+            ? event.clientX
+            : undefined;
+        const clientY =
+          'changedTouches' in event && event.changedTouches?.[0]
+            ? event.changedTouches[0].clientY
+            : 'clientY' in event
+            ? event.clientY
+            : undefined;
+
+        if (clientX !== undefined && clientY !== undefined) {
+          const dropPos = screenToFlowPosition({ x: clientX, y: clientY });
+          const nodeWidth = 140;
+          const nodeHeight = 80;
+          const newNodeId = `node_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const strokeColor = 'var(--border-strong, #888)';
+
+          const newNode: Node = {
+            id: newNodeId,
+            type: 'canvasShape',
+            position: {
+              x: Math.round(dropPos.x - nodeWidth / 2),
+              y: Math.round(dropPos.y - nodeHeight / 2),
+            },
+            width: nodeWidth,
+            height: nodeHeight,
+            style: { width: `${nodeWidth}px`, height: `${nodeHeight}px`, zIndex: 1 },
+            selected: true,
+            data: {
+              rawType: 'text',
+              text: '',
+              shape: 'rectangle',
+              color: undefined,
+            },
+          };
+
+          const isSource = connectingRef.current.handleType === 'source';
+          const originNodeId = connectingRef.current.nodeId;
+          const originHandleId = connectingRef.current.handleId;
+
+          // Connect from origin to new node (arrow points strictly towards destination new node!):
+          const newEdgeId = `edge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          const newEdge: Edge = {
+            id: newEdgeId,
+            source: isSource ? originNodeId : newNodeId,
+            target: isSource ? newNodeId : originNodeId,
+            sourceHandle: isSource ? originHandleId : 'left',
+            targetHandle: isSource ? 'left' : originHandleId,
+            type: 'default',
+            style: { stroke: strokeColor, strokeWidth: 2 },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: strokeColor,
+              width: 16,
+              height: 16,
+            },
+            markerStart: undefined,
+            data: {
+              color: undefined,
+              edgeStyle: 'bezier',
+              fromEnd: 'none',
+              toEnd: 'arrow',
+            },
+          };
+
+          setNodes((nds) => {
+            const unselected = nds.map((n) => ({ ...n, selected: false }));
+            const nextNodes = [...unselected, newNode];
+            setEdges((eds) => {
+              const nextEdges = [...eds, newEdge];
+              pushHistory(nextNodes, nextEdges);
+              triggerAutoSave(nextNodes, nextEdges);
+              return nextEdges;
+            });
+            return nextNodes;
+          });
+        }
+      }
+
+      connectingRef.current = null;
+    },
+    [readOnly, screenToFlowPosition, setNodes, setEdges, pushHistory, triggerAutoSave]
+  );
+
+  // Edge Reconnection Handlers
+  const onReconnectStart = useCallback(() => {
+    edgeReconnectSuccessful.current = false;
+  }, []);
+
+  const onReconnect: OnReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      if (readOnly) return;
+      edgeReconnectSuccessful.current = true;
+      const strokeColor =
+        (oldEdge.markerEnd as any)?.color ||
+        (oldEdge.style?.stroke as string) ||
+        'var(--border-strong, #888)';
+
+      setEdges((eds) => {
+        const reconnected = reconnectEdge(oldEdge, newConnection, eds);
+        const next = reconnected.map((e) => {
+          if (e.source === newConnection.source && e.target === newConnection.target) {
+            return {
+              ...e,
+              markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: strokeColor,
+                width: 16,
+                height: 16,
+              },
+              markerStart: undefined,
+              data: {
+                ...(e.data || {}),
+                toEnd: 'arrow',
+                fromEnd: 'none',
+              },
+            };
+          }
+          return e;
+        });
+        pushHistory(latestNodesRef.current, next);
+        triggerAutoSave(latestNodesRef.current, next);
+        return next;
+      });
+    },
+    [readOnly, setEdges, pushHistory, triggerAutoSave]
+  );
+
+  const onReconnectEnd = useCallback((_event: MouseEvent | TouchEvent, _edge: Edge) => {
+    if (!edgeReconnectSuccessful.current) {
+      // User dropped reconnection handle onto empty canvas: maintain old edge stability
+    }
+    edgeReconnectSuccessful.current = true;
+  }, []);
 
   // Right-click context menu event handlers for Node and Edge
   const handleNodeContextMenu = useCallback(
@@ -807,7 +1005,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             edges={edges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
+            edgesReconnectable={!readOnly}
             onConnect={onConnect}
+            onConnectStart={onConnectStart}
+            onConnectEnd={onConnectEnd}
+            onReconnect={onReconnect}
+            onReconnectStart={onReconnectStart}
+            onReconnectEnd={onReconnectEnd}
             onNodeDragStart={onNodeDragStart}
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}

@@ -5423,6 +5423,31 @@ input:checked + .slider:before {
   border-color: var(--accent-color);
 }
 
+/* Edge Selection & Reconnection Styling */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent-color, #d4af37) !important;
+  stroke-width: 3.5px !important;
+  filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.65));
+}
+
+.react-flow__edge.selected marker path {
+  fill: var(--accent-color, #d4af37) !important;
+  stroke: var(--accent-color, #d4af37) !important;
+}
+
+.react-flow__edgeupdater {
+  cursor: move;
+  fill: var(--accent-color, #d4af37) !important;
+  stroke: var(--bg-primary, #0d1117) !important;
+  stroke-width: 2px !important;
+  r: 7 !important;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.5));
+}
+
+.react-flow__edge:not(.selected) .react-flow__edgeupdater {
+  display: none !important;
+}
+
 /* Custom Nodes Base & Handles */
 .canvas-custom-node {
   position: relative;

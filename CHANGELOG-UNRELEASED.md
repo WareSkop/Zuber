@@ -18,7 +18,9 @@
 - Deterministische Canvas-Kantenpfeile: Exakte `markerEnd`-Pfeilspitzen am Zielknoten ohne Invertierung oder doppelte Pfeile.
 - Kontext-Inspektor am Mauszeiger bei Rechtsklick (`CanvasEditor.tsx` & `CanvasInspector.tsx`): Öffnet die Attribut- und Werkzeugleiste (`CanvasInspector`) per Rechtsklick auf Knoten (`onNodeContextMenu`) oder Kanten (`onEdgeContextMenu`) unmittelbar an der Mauszeiger-Position mit automatischem Viewport-Clamping und Schließen bei Pane-Click, Canvas-Panning oder Escape.
 - Zentriertes Formen-Auswahl-Popover (`CanvasInspector.tsx` & `src/styles.css`): Das Formauswahl-Menü (`.canvas-shape-picker-popover`) ist direkt über der Inspektionsleiste zentriert und bietet ein 380px breites, 3-spaltiges Gitter (`repeat(3, minmax(110px, 1fr))`), in dem alle Formbezeichnungen ohne Textumbruch oder Verzerrung Platz finden, inklusive dynamischem Flip nach unten bei Bildschirmkopfnähe.
-
+- Automatisches Erstellen von Rechteck-Knoten beim Loslassen einer Verbindungslinie auf leerer Canvas-Fläche (`CanvasEditor.tsx` via `onConnectEnd`): Zieht man eine Verbindung von einem beliebigen Handle ins Leere (`.react-flow__pane`), wird an den Maus-/Touch-Koordinaten sofort ein neuer Rechteck-Textknoten (`type: 'canvasShape'`, `shape: 'rectangle'`) erstellt, ausgewählt und mit einer Kante inklusive Ziel-Pfeilspitze verbunden.
+- Kanten-Wiederverbindung (Edge Reconnection) mit selektierten Ziehpunkten (`CanvasEditor.tsx` & `src/styles.css`): Über React Flows `edgesReconnectable` und `reconnectEdge` können ausgewählte Verbindungslinien an ihren Enden auf neue Ziel- oder Startknoten umgehängt werden. Reconnection-Handles (`.react-flow__edgeupdater`, 7px Radius, Gold-Akzent) erscheinen ausschließlich bei selektierten Kanten (`.react-flow__edge:not(.selected) .react-flow__edgeupdater { display: none !important; }`).
+- Kontrastreiche Kanten-Selektionshervorhebung (`src/styles.css`): Selektierte Verbindungslinien heben sich mit einer 3,5px starken Goldlinie (`stroke: var(--accent-color, #d4af37)`), dezentem Glow (`drop-shadow`) und goldener Pfeilspitze visuell eindeutig von nicht ausgewählten Linien ab.
 
 ### Changed
 - `NoteSaveRequest` und `syncEngine.saveNote` unterstützen nun den Parameter `explicitClear`, um gewolltes Leeren einer Notiz von flüchtigen Initialzuständen zu unterscheiden.
@@ -45,5 +47,6 @@
 - Schwebender Canvas-Inspektor (`CanvasInspector.tsx`): Sichere horizontale Zentrierung (`left: 12px; right: 12px; margin: 0 auto; max-width: calc(100% - 24px) !important; flex-wrap: wrap !important`) und dynamisches Popover-Boundary-Clamping gegen Randüberlauf.
 - Kollisionsschutz für React Flow Controls: Hebt die Zoom-Steuerung bei aktiver Element-Selektion (`.has-selection`) sowie auf Mobilgeräten (`< 768px`) auf `bottom: 76px !important;` an und blendet die MiniMap auf Touchscreens `< 768px` aus.
 - Kompakte Topbar-Badges (< 600px): Ersetzt den Speichertext durch ein kompaktes Icon (`✓`) und blendet die Textbeschriftung des Canvas-Indikators aus, um Textabschneidungen im Header zu verhindern.
+- Invertierte Canvas-Kantenpfeil-Richtung (`CanvasEditor.tsx`, `CanvasShapeNode.tsx` & `canvasMapper.ts`): Behebt das Problem, dass Verbindungslinien von Quellknoten A zu Zielknoten B in Richtung von A zeigten. Die DOM-Reihenfolge der Knoten-Handles in `CanvasShapeNode.tsx` stellt nun sicher, dass Ziehvorgänge stets als `source` initiiert werden; `onConnect` korrigiert etwaige Reversals deterministisch und setzt die Pfeilspitze (`MarkerType.ArrowClosed`) ausschließlich auf `markerEnd`.
 
 
