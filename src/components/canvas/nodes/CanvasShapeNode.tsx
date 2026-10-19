@@ -374,24 +374,27 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
 
       {/* Content Container */}
       <div
-        className="canvas-node-content-wrapper"
+        className="canvas-node-content-wrapper canvas-shape-content"
         style={{
           position: 'relative',
           zIndex: 2,
           width: '100%',
           height: '100%',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
+          textAlign: 'center',
           padding: '10px 14px',
           boxSizing: 'border-box',
         }}
       >
         {isEditing ? (
-          <div className="canvas-editor-input-box">
+          <div className="canvas-editor-input-box" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <textarea
               ref={textareaRef}
               className="canvas-node-textarea nodrag nowheel"
+              style={{ textAlign: 'center', width: '100%' }}
               value={editText}
               onChange={handleTextChange}
               onKeyDown={(e) => {
@@ -443,6 +446,7 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
         ) : (
           <div
             className="canvas-node-display-text canvas-shape-markdown markdown-rendered"
+            style={{ width: '100%', textAlign: 'center' }}
             onMouseDown={handleDisplayMouseDown}
             onClick={handleDisplayClick}
             dangerouslySetInnerHTML={{

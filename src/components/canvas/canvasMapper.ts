@@ -86,6 +86,9 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
           ? 'smoothstep'
           : 'default';
 
+    const toEnd = e.toEnd ?? 'arrow';
+    const fromEnd = e.fromEnd ?? 'none';
+
     const rfEdge: Edge = {
       id: e.id,
       source: e.fromNode,
@@ -101,33 +104,115 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
       data: {
         color: e.color,
         edgeStyle: e.edgeStyle || 'bezier',
-        fromEnd: e.fromEnd,
-        toEnd: e.toEnd ?? 'arrow',
+        fromEnd: fromEnd,
+        toEnd: toEnd,
       },
     };
 
-    if (e.toEnd !== 'none') {
+    if (toEnd === 'arrow') {
       rfEdge.markerEnd = {
         type: MarkerType.ArrowClosed,
         color: strokeColor,
-        width: 14,
-        height: 14,
+        width: 16,
+        height: 16,
       };
+    } else {
+      rfEdge.markerEnd = undefined;
     }
 
-    if (e.fromEnd === 'arrow') {
+    if (fromEnd === 'arrow') {
       rfEdge.markerStart = {
         type: MarkerType.ArrowClosed,
         color: strokeColor,
-        width: 14,
-        height: 14,
+        width: 16,
+        height: 16,
       };
+    } else {
+      rfEdge.markerStart = undefined;
     }
 
     return rfEdge;
   });
 
   return { nodes, edges, viewport: doc.viewport };
+}
+
+/**
+ * Calculates which child nodes are enclosed inside a group node's bounding box.
+ * A node is enclosed if its center point (pos.x + width/2, pos.y + height/2) lies within the group bounds.
+ */
+export function getChildNodesInGroup(groupNode: Node, allNodes: Node[]): string[] {
+  const isGroup =
+    groupNode.type === 'canvasGroup' ||
+    groupNode.type === 'group' ||
+    groupNode.data?.rawType === 'group';
+  if (!isGroup) return [];
+
+  const styleGroupW =
+    typeof groupNode.style?.width === 'number'
+      ? groupNode.style.width
+      : parseFloat(String(groupNode.style?.width || '400'));
+  const groupW =
+    groupNode.measured?.width ??
+    groupNode.width ??
+    (Number.isFinite(styleGroupW) ? styleGroupW : 400);
+
+  const styleGroupH =
+    typeof groupNode.style?.height === 'number'
+      ? groupNode.style.height
+      : parseFloat(String(groupNode.style?.height || '300'));
+  const groupH =
+    groupNode.measured?.height ??
+    groupNode.height ??
+    (Number.isFinite(styleGroupH) ? styleGroupH : 300);
+
+  const groupLeft = groupNode.position.x;
+  const groupTop = groupNode.position.y;
+  const groupRight = groupLeft + groupW;
+  const groupBottom = groupTop + groupH;
+
+  const childIds: string[] = [];
+
+  for (const node of allNodes) {
+    if (node.id === groupNode.id) continue;
+    const isOtherGroup =
+      node.type === 'canvasGroup' ||
+      node.type === 'group' ||
+      node.data?.rawType === 'group';
+    if (isOtherGroup) continue;
+
+    const styleNodeW =
+      typeof node.style?.width === 'number'
+        ? node.style.width
+        : parseFloat(String(node.style?.width || '260'));
+    const nodeW =
+      node.measured?.width ??
+      node.width ??
+      (Number.isFinite(styleNodeW) ? styleNodeW : 260);
+
+    const styleNodeH =
+      typeof node.style?.height === 'number'
+        ? node.style.height
+        : parseFloat(String(node.style?.height || '160'));
+    const nodeH =
+      node.measured?.height ??
+      node.height ??
+      (Number.isFinite(styleNodeH) ? styleNodeH : 160);
+
+    const centerX = node.position.x + nodeW / 2;
+    const centerY = node.position.y + nodeH / 2;
+
+    if (
+      centerX >= groupLeft &&
+      centerX <= groupRight &&
+      centerY >= groupTop &&
+      centerY <= groupBottom
+    ) {
+      childIds.push(node.id);
+    }
+  }
+
+  return childIds;
 }
 
 export function reactFlowToJsonCanvas(
@@ -203,14 +288,15 @@ export function reactFlowToJsonCanvas(
       jsonEdge.color = data.color;
     }
 
-    // Arrows
-    if (data.fromEnd === 'arrow') {
+    // Arrows (strictly preserve toEnd on target and fromEnd on source)
+    const toEnd = (data.toEnd === 'none' || (data.toEnd === undefined && !edge.markerEnd)) ? 'none' : 'arrow';
+    const fromEnd = (data.fromEnd === 'arrow' || Boolean(edge.markerStart)) ? 'arrow' : 'none';
+
+    jsonEdge.toEnd = toEnd;
+    if (fromEnd === 'arrow') {
       jsonEdge.fromEnd = 'arrow';
-    }
-    if (data.toEnd === 'none') {
-      jsonEdge.toEnd = 'none';
     } else {
-      jsonEdge.toEnd = 'arrow';
+      jsonEdge.fromEnd = 'none';
     }
 
     // Edge style (Knowmesh extension)

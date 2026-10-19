@@ -12,22 +12,29 @@ import {
   useReactFlow,
   ReactFlowProvider,
   ConnectionMode,
+  SelectionMode,
   type Connection,
   type Edge,
   type Node,
   type Viewport,
   MarkerType,
+  type OnNodeDrag,
 } from '@xyflow/react';
 
 import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../shared/canvasTypes';
 import { CanvasContext } from './CanvasContext';
-import { parseCanvasJson, jsonCanvasToReactFlow, reactFlowToJsonCanvas } from './canvasMapper';
+import {
+  parseCanvasJson,
+  jsonCanvasToReactFlow,
+  reactFlowToJsonCanvas,
+  getChildNodesInGroup,
+} from './canvasMapper';
 import { CanvasShapeNode } from './nodes/CanvasShapeNode';
 import { CanvasFileNode } from './nodes/CanvasFileNode';
 import { CanvasGroupNode } from './nodes/CanvasGroupNode';
 import { CanvasLinkNode } from './nodes/CanvasLinkNode';
-import { CanvasToolbar } from './CanvasToolbar';
+import { CanvasToolbar, type CanvasGridConfig } from './CanvasToolbar';
 import { CanvasInspector } from './CanvasInspector';
 
 export interface CanvasEditorProps {
@@ -66,7 +73,41 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [gridMode, setGridMode] = useState<'dots' | 'lines' | 'off'>('dots');
+
+  // Configurable Grid and Snap settings
+  const [gridConfig, setGridConfig] = useState<CanvasGridConfig>(() => {
+    try {
+      const stored = localStorage.getItem('knowmesh_canvas_grid');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          snapToGrid: parsed.snapToGrid ?? true,
+          gridSize: [10, 15, 20, 25].includes(parsed.gridSize) ? parsed.gridSize : 15,
+          showGrid: parsed.showGrid ?? true,
+          gridVariant: ['dots', 'lines', 'off'].includes(parsed.gridVariant) ? parsed.gridVariant : 'dots',
+        };
+      }
+    } catch {}
+    return {
+      snapToGrid: true,
+      gridSize: 15,
+      showGrid: true,
+      gridVariant: 'dots',
+    };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('knowmesh_canvas_grid', JSON.stringify(gridConfig));
+    } catch {}
+  }, [gridConfig]);
+
+  // Multi-selection tool mode toggle (Marquee Box Selection)
+  const [isSelectionToolActive, setIsSelectionToolActive] = useState<boolean>(false);
+
+  // Group dragging tracking refs (moving a group moves enclosed elements)
+  const draggingChildNodeIdsRef = useRef<Set<string>>(new Set());
+  const dragStartGroupPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // History stack for Undo / Redo
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
@@ -225,7 +266,69 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [onEdgesChange, setEdges, triggerAutoSave, nodes]
   );
 
-  // Connections handler
+  // Group dragging: moving a group node moves all enclosed child nodes
+  const onNodeDragStart: OnNodeDrag = useCallback(
+    (_event, node) => {
+      const isGroup =
+        node.type === 'canvasGroup' ||
+        node.type === 'group' ||
+        node.data?.rawType === 'group';
+      if (isGroup) {
+        const childIds = getChildNodesInGroup(node, latestNodesRef.current);
+        draggingChildNodeIdsRef.current = new Set(childIds);
+        dragStartGroupPosRef.current = { x: node.position.x, y: node.position.y };
+      } else {
+        draggingChildNodeIdsRef.current.clear();
+        dragStartGroupPosRef.current = null;
+      }
+    },
+    []
+  );
+
+  const onNodeDrag: OnNodeDrag = useCallback(
+    (_event, node) => {
+      if (
+        dragStartGroupPosRef.current &&
+        draggingChildNodeIdsRef.current.size > 0
+      ) {
+        const dx = node.position.x - dragStartGroupPosRef.current.x;
+        const dy = node.position.y - dragStartGroupPosRef.current.y;
+        if (dx !== 0 || dy !== 0) {
+          setNodes((nds) =>
+            nds.map((n) => {
+              if (draggingChildNodeIdsRef.current.has(n.id)) {
+                return {
+                  ...n,
+                  position: {
+                    x: n.position.x + dx,
+                    y: n.position.y + dy,
+                  },
+                };
+              }
+              return n;
+            })
+          );
+          dragStartGroupPosRef.current = { x: node.position.x, y: node.position.y };
+        }
+      }
+    },
+    [setNodes]
+  );
+
+  const onNodeDragStop: OnNodeDrag = useCallback(
+    (_event, _node) => {
+      draggingChildNodeIdsRef.current.clear();
+      dragStartGroupPosRef.current = null;
+      setNodes((nds) => {
+        pushHistory(nds, edges);
+        triggerAutoSave(nds, edges);
+        return nds;
+      });
+    },
+    [setNodes, pushHistory, triggerAutoSave, edges]
+  );
+
+  // Connections handler: strictly places the arrow marker on the target side
   const onConnect = useCallback(
     (params: Connection) => {
       if (readOnly) return;
@@ -235,14 +338,19 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       const newEdge: Edge = {
         ...params,
         id: newEdgeId,
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
         type: 'default',
         style: { stroke: strokeColor, strokeWidth: 2 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: strokeColor,
-          width: 14,
-          height: 14,
+          width: 16,
+          height: 16,
         },
+        markerStart: undefined,
         data: {
           color: undefined,
           edgeStyle: 'bezier',
@@ -421,9 +529,11 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     });
   }, [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]);
 
-  // Selected item tracking for Floating Inspector
-  const selectedNode = useMemo(() => nodes.find((n) => n.selected) || null, [nodes]);
-  const selectedEdge = useMemo(() => edges.find((e) => e.selected) || null, [edges]);
+  // Selected item tracking for Floating Inspector & Multi-Selection
+  const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
+  const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
+  const selectedNode = selectedNodes[0] || null;
+  const selectedEdge = selectedEdges[0] || null;
 
   // Inspector action handlers
   const handleUpdateNodeData = useCallback(
@@ -470,8 +580,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             updated.markerEnd = {
               type: MarkerType.ArrowClosed,
               color: strokeColor,
-              width: 14,
-              height: 14,
+              width: 16,
+              height: 16,
             };
           } else {
             updated.markerEnd = undefined;
@@ -481,8 +591,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             updated.markerStart = {
               type: MarkerType.ArrowClosed,
               color: strokeColor,
-              width: 14,
-              height: 14,
+              width: 16,
+              height: 16,
             };
           } else {
             updated.markerStart = undefined;
@@ -500,32 +610,40 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
   const handleDuplicateNode = useCallback(
     (nodeId: string) => {
-      const target = nodes.find((n) => n.id === nodeId);
-      if (!target) return;
-      const cloneId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const clonedNode: Node = {
-        ...target,
-        id: cloneId,
-        position: { x: target.position.x + 40, y: target.position.y + 40 },
+      const isMulti = selectedNodes.some((n) => n.id === nodeId) && selectedNodes.length > 1;
+      const targets = isMulti ? selectedNodes : nodes.filter((n) => n.id === nodeId);
+      if (targets.length === 0) return;
+
+      const clonedNodes: Node[] = targets.map((t) => ({
+        ...t,
+        id: `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        position: { x: t.position.x + 40, y: t.position.y + 40 },
         selected: true,
-      };
+      }));
 
       setNodes((current) => {
-        const next = current.map((n) => (n.id === nodeId ? { ...n, selected: false } : n)).concat(clonedNode);
+        const targetIds = new Set(targets.map((t) => t.id));
+        const unselected = current.map((n) => (targetIds.has(n.id) ? { ...n, selected: false } : n));
+        const next = unselected.concat(clonedNodes);
         pushHistory(next, edges);
         triggerAutoSave(next, edges);
         return next;
       });
     },
-    [nodes, setNodes, pushHistory, triggerAutoSave, edges]
+    [selectedNodes, nodes, setNodes, pushHistory, triggerAutoSave, edges]
   );
 
   const handleDeleteNode = useCallback(
     (nodeId: string) => {
+      const isMulti = selectedNodes.some((n) => n.id === nodeId) && selectedNodes.length > 1;
+      const idsToDelete = isMulti ? new Set(selectedNodes.map((n) => n.id)) : new Set([nodeId]);
+
       setNodes((nds) => {
-        const nextNodes = nds.filter((n) => n.id !== nodeId);
+        const nextNodes = nds.filter((n) => !idsToDelete.has(n.id));
         setEdges((eds) => {
-          const nextEdges = eds.filter((e) => e.source !== nodeId && e.target !== nodeId);
+          const nextEdges = eds.filter(
+            (e) => !idsToDelete.has(e.source) && !idsToDelete.has(e.target)
+          );
           pushHistory(nextNodes, nextEdges);
           triggerAutoSave(nextNodes, nextEdges);
           return nextEdges;
@@ -533,19 +651,22 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         return nextNodes;
       });
     },
-    [setNodes, setEdges, pushHistory, triggerAutoSave]
+    [selectedNodes, setNodes, setEdges, pushHistory, triggerAutoSave]
   );
 
   const handleDeleteEdge = useCallback(
     (edgeId: string) => {
+      const isMulti = selectedEdges.some((e) => e.id === edgeId) && selectedEdges.length > 1;
+      const idsToDelete = isMulti ? new Set(selectedEdges.map((e) => e.id)) : new Set([edgeId]);
+
       setEdges((eds) => {
-        const next = eds.filter((e) => e.id !== edgeId);
+        const next = eds.filter((e) => !idsToDelete.has(e.id));
         pushHistory(nodes, next);
         triggerAutoSave(nodes, next);
         return next;
       });
     },
-    [setEdges, pushHistory, triggerAutoSave, nodes]
+    [selectedEdges, setEdges, pushHistory, triggerAutoSave, nodes]
   );
 
   // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, Delete)
@@ -568,12 +689,12 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!isInput) {
-          if (selectedNode) {
+          if (selectedNodes.length > 0) {
             e.preventDefault();
-            handleDeleteNode(selectedNode.id);
-          } else if (selectedEdge) {
+            handleDeleteNode(selectedNodes[0].id);
+          } else if (selectedEdges.length > 0) {
             e.preventDefault();
-            handleDeleteEdge(selectedEdge.id);
+            handleDeleteEdge(selectedEdges[0].id);
           }
         }
       }
@@ -581,7 +702,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, selectedNode, selectedEdge, handleDeleteNode, handleDeleteEdge]);
+  }, [handleUndo, handleRedo, selectedNodes, selectedEdges, handleDeleteNode, handleDeleteEdge]);
 
   return (
     <CanvasContext.Provider
@@ -601,10 +722,10 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onAddFileNode={handleAddFileNode}
             onAddGroupNode={handleAddGroupNode}
             onFitView={() => fitView({ padding: 0.2 })}
-            onToggleGrid={() =>
-              setGridMode((m) => (m === 'dots' ? 'lines' : m === 'lines' ? 'off' : 'dots'))
-            }
-            gridMode={gridMode}
+            gridConfig={gridConfig}
+            onChangeGridConfig={setGridConfig}
+            isSelectionToolActive={isSelectionToolActive}
+            onToggleSelectionTool={() => setIsSelectionToolActive((prev) => !prev)}
             canUndo={canUndo}
             canRedo={canRedo}
             onUndo={handleUndo}
@@ -636,20 +757,32 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
+            onNodeDragStart={onNodeDragStart}
+            onNodeDrag={onNodeDrag}
+            onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             connectionMode={ConnectionMode.Loose}
-            panOnDrag={[1, 2]}
+            selectionMode={SelectionMode.Partial}
+            selectionKeyCode="Shift"
+            multiSelectionKeyCode="Shift"
+            selectionOnDrag={isSelectionToolActive}
+            panOnDrag={isSelectionToolActive ? [2] : [1, 2]}
             zoomOnPinch={true}
-            selectionOnDrag={false}
+            snapToGrid={gridConfig.snapToGrid}
+            snapGrid={[gridConfig.gridSize, gridConfig.gridSize]}
             proOptions={{ hideAttribution: true }}
             minZoom={0.15}
             maxZoom={2.5}
           >
-            {gridMode !== 'off' && (
+            {gridConfig.showGrid && gridConfig.gridVariant !== 'off' && (
               <Background
-                variant={gridMode === 'dots' ? BackgroundVariant.Dots : BackgroundVariant.Lines}
-                gap={gridMode === 'dots' ? 24 : 32}
-                size={gridMode === 'dots' ? 1.5 : 1}
+                variant={
+                  gridConfig.gridVariant === 'lines'
+                    ? BackgroundVariant.Lines
+                    : BackgroundVariant.Dots
+                }
+                gap={gridConfig.gridSize * (gridConfig.gridSize <= 15 ? 2 : 1)}
+                size={gridConfig.gridVariant === 'lines' ? 1 : 1.5}
                 color="var(--border-subtle, rgba(255, 255, 255, 0.15))"
               />
             )}

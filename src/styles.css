@@ -4832,6 +4832,59 @@ input:checked + .slider:before {
   max-width: calc(100vw - 24px) !important;
 }
 
+.canvas-grid-menu {
+  min-width: 210px !important;
+  padding: 8px 10px !important;
+  gap: 6px !important;
+}
+
+.canvas-dropdown-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 4px;
+}
+
+.canvas-dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+.canvas-grid-pills {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.canvas-grid-pill-btn {
+  flex: 1;
+  padding: 5px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.12s ease;
+}
+
+.canvas-grid-pill-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+
+.canvas-grid-pill-btn.active {
+  background: var(--accent-color, #d4af37);
+  color: #000;
+  border-color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
 .canvas-picker-search-row {
   display: flex;
   align-items: center;
@@ -5421,30 +5474,77 @@ input:checked + .slider:before {
   cursor: ew-resize !important;
 }
 
+/* Handles: Base definitions */
 .canvas-handle,
 .canvas-node-handle {
+  z-index: 30 !important;
+}
+
+.canvas-handle,
+.canvas-node-handle,
+.react-flow__handle {
   width: 10px !important;
   height: 10px !important;
   background: var(--accent-color, #d4af37) !important;
   border: 2px solid var(--bg-primary, #0d1117) !important;
   border-radius: 50% !important;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease-in-out !important;
   z-index: 30 !important;
-  opacity: 0.6;
 }
 
-.canvas-custom-node:hover .canvas-handle,
-.canvas-custom-node:hover .canvas-node-handle,
-.canvas-custom-node.selected .canvas-handle,
-.canvas-custom-node.selected .canvas-node-handle {
-  opacity: 1;
+/* Desktop / Mouse Mode (@media (hover: hover) and (pointer: fine)) */
+@media (hover: hover) and (pointer: fine) {
+  .canvas-handle,
+  .canvas-node-handle,
+  .react-flow__handle {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .react-flow__node:hover .react-flow__handle,
+  .react-flow__node:hover .canvas-node-handle,
+  .canvas-custom-node:hover .canvas-handle,
+  .canvas-custom-node:hover .canvas-node-handle,
+  .react-flow__node.selected .react-flow__handle,
+  .react-flow__node.selected .canvas-node-handle,
+  .canvas-custom-node.selected .canvas-handle,
+  .canvas-custom-node.selected .canvas-node-handle {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .canvas-handle:hover,
+  .canvas-node-handle:hover,
+  .react-flow__handle:hover {
+    transform: scale(1.4) !important;
+    background: var(--accent-color, #d4af37) !important;
+    box-shadow: 0 0 6px var(--accent-color, #d4af37) !important;
+  }
 }
 
-.canvas-handle:hover,
-.canvas-node-handle:hover {
-  transform: scale(1.4);
-  background: var(--accent-color, #d4af37) !important;
-  box-shadow: 0 0 6px var(--accent-color, #d4af37);
+/* Touch / Mobile Mode (@media (pointer: coarse)) */
+@media (pointer: coarse) {
+  .canvas-handle,
+  .canvas-node-handle,
+  .react-flow__handle {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .react-flow__node.selected .react-flow__handle,
+  .react-flow__node.selected .canvas-node-handle,
+  .canvas-custom-node.selected .canvas-handle,
+  .canvas-custom-node.selected .canvas-node-handle {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    width: 18px !important;
+    height: 18px !important;
+    border-radius: 50% !important;
+    border: 2px solid var(--bg-primary, #0d1117) !important;
+    background: var(--accent-color, #d4af37) !important;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.4) !important;
+    margin: -9px !important;
+  }
 }
 
 /* Shape Node */
@@ -5477,35 +5577,66 @@ input:checked + .slider:before {
 .canvas-node-content-wrapper {
   position: relative;
   z-index: 2;
-  width: 100%;
-  height: 100%;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 10px 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
   word-break: break-word;
   user-select: text;
-  box-sizing: border-box;
+  box-sizing: border-box !important;
 }
 
 .canvas-node-display-text,
 .canvas-shape-markdown {
+  width: 100% !important;
   max-width: 100%;
   font-size: 13.5px;
   line-height: 1.45;
   color: var(--text-primary);
   word-break: break-word;
   user-select: text;
+  text-align: center !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .canvas-node-display-text p,
-.canvas-shape-markdown p {
+.canvas-node-display-text div,
+.canvas-node-display-text h1,
+.canvas-node-display-text h2,
+.canvas-node-display-text h3,
+.canvas-shape-markdown p,
+.canvas-shape-markdown div,
+.canvas-shape-markdown h1,
+.canvas-shape-markdown h2,
+.canvas-shape-markdown h3,
+.canvas-shape-content p,
+.canvas-shape-content div,
+.canvas-shape-content h1,
+.canvas-shape-content h2,
+.canvas-shape-content h3 {
+  text-align: center !important;
   margin: 0 0 4px;
 }
 
 .canvas-node-display-text p:last-child,
-.canvas-shape-markdown p:last-child {
+.canvas-shape-markdown p:last-child,
+.canvas-shape-content p:last-child {
   margin-bottom: 0;
+}
+
+.canvas-shape-content textarea,
+.canvas-shape-node textarea.canvas-node-textarea,
+.canvas-node-textarea {
+  text-align: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .canvas-wikilink,

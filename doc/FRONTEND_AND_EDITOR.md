@@ -710,6 +710,49 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
   2. Der IndexedDB-Cache (`syncEngine.getLocalDb().putNote`) wird sofort mit der wiederhergestellten Version aktualisiert.
   3. Ist die Datei aktuell im Editor geöffnet, wird `activeNote` sofort auf den wiederhergestellten Stand gesetzt und `saveState` auf `saved` gesetzt, ohne dass ein falscher 409-Konflikt ausgelöst wird.
 
+---
+
+## 24. Canvas-Interaktionsverbesserungen (`CanvasEditor.tsx`, `canvasMapper.ts`, `CanvasToolbar.tsx`, `CanvasShapeNode.tsx`, `src/styles.css`)
+
+### 24.1 Gruppen-Verschiebung (Group Child Dragging)
+- **Problem:** Beim Ziehen einer Gruppe (`type === 'group'`) wurde zuvor nur der Begrenzungsrahmen bewegt, während alle Notizen, Formen und Karten an ihrer alten Position verharrten.
+- **Implementierung (`CanvasEditor.tsx` & `canvasMapper.ts`):**
+  - `getChildNodesInGroup(groupNode, allNodes)`: Ermittelt alle Nicht-Gruppen-Knoten, deren Mittelpunkt `(x + width/2, y + height/2)` innerhalb der Bounding-Box der Gruppe liegt.
+  - In `onNodeDragStart`: Bei Beginn des Drags einer Gruppe werden die IDs aller umschlossenen Kindknoten in `draggingChildNodeIdsRef` und die Startkoordinate der Gruppe in `dragStartGroupPosRef` festgehalten.
+  - In `onNodeDrag`: Berechnet das Bewegungs-Delta `(dx, dy)` und verschiebt alle umschlossenen Kindknoten synchron um dieselbe Distanz.
+  - In `onNodeDragStop`: Bereinigt die Tracking-Refs und persistiert den gemeinsamen Zustand im Undo/Redo-Stack sowie im automatischen Speichern.
+
+### 24.2 Mehrfachauswahl & Marquee-Rechteck (Multi-Select & Box-Selection)
+- **Konfiguration:**
+  - `selectionMode={SelectionMode.Partial}`: Knoten werden bereits selektiert, sobald das Auswahlrechteck sie teilweise schneidet.
+  - `selectionKeyCode="Shift"` & `multiSelectionKeyCode="Shift"`: Halten von `Shift` ermöglicht das Aufziehen eines Auswahlrahmens sowie das additive Selektieren per Klick.
+  - `BoxSelect`-Schaltfläche in der Canvas-Toolbar: Aktiviert den Auswahl-Rechteck-Modus (`isSelectionToolActive`), sodass auch auf Touchscreens oder ohne Tastatur ein Marquee-Rahmen durch einfaches Ziehen aufgezogen werden kann (`selectionOnDrag={true}`).
+- **Massenoperationen:**
+  - **Verschieben:** React Flow bewegt alle selektierten Knoten gemeinsam.
+  - **Löschen:** Klick auf den Löschen-Button im Inspektor oder `Entf`/`Backspace` löscht alle ausgewählten Knoten und deren anliegende Kanten in einer atomaren Operation.
+  - **Duplizieren:** Dupliziert alle selektierten Knoten mit einem Versatz von `(+30px, +30px)` und selektiert sofort die neuen Duplikate.
+
+### 24.3 Konfigurierbares Gitter & Einrasten (Snap-to-Grid & Grid Size)
+- **Toolbar-Popover (`CanvasToolbar.tsx`):**
+  - Schneller Einrast-Umschalter: `Einrasten aktiv (Snap)` / `Einrasten deaktiviert`.
+  - Rastergrößen-Auswahl: Vier Pillen für `10px`, `15px` (Standard), `20px` und `25px`.
+  - Hintergrundmuster: Umschaltbar zwischen `Punkte` (`dots`), `Linien` (`lines`) und `Aus` (`off`).
+- **Persistenz:** Zustand wird in `localStorage` unter `knowmesh_canvas_grid` gespeichert und bleibt beim Notizwechsel und Neustart erhalten.
+- **Bindung:** Wird direkt an `<ReactFlow snapToGrid={gridConfig.snapToGrid} snapGrid={[gridConfig.gridSize, gridConfig.gridSize]}>` und `<Background gap={gridConfig.gridSize} variant={...}>` übergeben.
+
+### 24.4 Zentrierter Text & Markdown in Formen (`CanvasShapeNode.tsx`)
+- Text- und Notiz-Inhalte in Formen besitzen die CSS-Klasse `.canvas-shape-content` mit `display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; height: 100%; width: 100%;`.
+- Alle Paragraphen, Überschriften und Textareas innerhalb von Formen richten sich automatisch horizontal und vertikal mittig aus.
+
+### 24.5 Kontextsensitive Verbindungs-Handles
+- **Desktop (`@media (hover: hover) and (pointer: fine)`):** Verbindungspunkte (`.canvas-handle`, `.canvas-node-handle`, `.react-flow__handle`) sind im Ruhezustand transparent (`opacity: 0; pointer-events: none;`) und werden sanft eingeblendet (`opacity: 1; pointer-events: auto;`), sobald der Mauszeiger über den Knoten schwebt (`:hover`) oder der Knoten selektiert ist (`.selected`).
+- **Touch-Geräte (`@media (pointer: coarse)`):** Handles bleiben unauffällig ausgeblendet, bis ein Knoten angetippt und damit selektiert wird. Bei Selektion erscheinen vergrößerte 18px × 18px Touch-Handles (`margin: -9px`) für präzises Verbinden mit dem Finger.
+
+### 24.6 Zuverlässige Pfeilrichtung an Verbindungen
+- **`onConnect` in `CanvasEditor.tsx`:** Beim Verbinden zweier Knoten wird `markerEnd` stets deterministisch an der Zielseite (`target`) mit `MarkerType.ArrowClosed` (16×16px) gesetzt, während `markerStart` `undefined` bleibt.
+- **Bidirektionale Serialisierung (`canvasMapper.ts`):** `reactFlowToJsonCanvas` und `jsonCanvasToReactFlow` mappen `toEnd` und `fromEnd` ohne Richtungsvertauschung eins-zu-eins in das JSON-Canvas-Format.
+
+
 
 
 

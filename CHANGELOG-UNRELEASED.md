@@ -10,6 +10,12 @@
 - Frei ziehbare Seitenleisten (Resizable Sidebars): Interaktive Maus-Ziehgriffe (`.sidebar-resizer-left`, `.sidebar-resizer-right`) auf Desktops mit automatischer Breitenbegrenzung und persistenter Speicherung in `localStorage` (`knowmesh_sidebar_widths`).
 - Dediziertes Workflow- & Mindmap-Icon (`WorkflowCanvasIcon`) für `.canvas`-Dateien im Dateibaum, Header, Kontextmenü, der Befehlspalette und Embeds.
 - Git-Versionsverlauf & Visueller Diff-Viewer (`VersionHistoryModal.tsx`): Obsidian-ähnliche Dateiwiederherstellung für `.md`- und `.canvas`-Dateien direkt aus dem Dateibaum-Kontextmenü oder via Befehlspalette (`Strg+P`). Mit chronologischer Commit-Liste (`git log --follow` mit automatischer Umbenennungsverfolgung), interaktiver Diff-Ansicht (Diff zu Aktuell, Diff zum Vorgänger, Volltext-Modus), Zeilennummern-Gutter, `+X / -Y`-Statistik-Badge sowie atomarer Ein-Klick-Wiederherstellung inklusive Auto-Commit und Echo-Prävention.
+- Automatisches Mitbewegen von Kind-Elementen beim Verschieben von Gruppen im Canvas (`CanvasEditor.tsx` & `canvasMapper.ts`): Erkennt alle Notiz-, Formen- und Link-Knoten innerhalb des Gruppen-Rahmens und verschiebt diese synchron mit der Gruppe.
+- Canvas-Mehrfachauswahl & Marquee-Rechteck (`SelectionMode.Partial` & `BoxSelect`-Toolbar-Schaltfläche): Ermöglicht das gleichzeitige Auswählen mehrerer Knoten per Rahmenziehen (Touch/Maus) oder mit gedrückter `Shift`-Taste sowie synchrones Verschieben, Duplizieren und Löschen.
+- Konfigurierbares Canvas-Gitter & Einrasten (`Snap-to-Grid`): Popover-Menü in der Canvas-Toolbar mit konfigurierbaren Rastergrößen (`10px`, `15px`, `20px`, `25px`) und Hintergrund-Varianten (`Punkte`, `Linien`, `Aus`), persistent gespeichert in `localStorage` (`knowmesh_canvas_grid`).
+- Vertikale und horizontale Zentrierung von Text & Markdown in Formen (`CanvasShapeNode.tsx` & `.canvas-shape-content`).
+- Kontextsensitive Canvas-Verbindungs-Handles: Im Desktop-Modus standardmäßig ausgeblendet und bei Hover/Selektion sichtbar; im Touch-Modus auf vergrößerte 18px-Hit-Areas bei Selektion optimiert.
+- Deterministische Canvas-Kantenpfeile: Exakte `markerEnd`-Pfeilspitzen am Zielknoten ohne Invertierung oder doppelte Pfeile.
 
 
 ### Changed

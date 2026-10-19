@@ -18,16 +18,29 @@ import {
   Search,
   Plus,
   ChevronDown,
+  BoxSelect,
 } from 'lucide-react';
 import type { CanvasShape } from '../../../shared/canvasTypes';
+
+export interface CanvasGridConfig {
+  snapToGrid: boolean;
+  gridSize: number;
+  showGrid: boolean;
+  gridVariant: 'dots' | 'lines' | 'off';
+}
 
 interface CanvasToolbarProps {
   onAddTextNode: (shape?: CanvasShape) => void;
   onAddFileNode: (filePath: string) => void;
   onAddGroupNode: () => void;
   onFitView: () => void;
-  onToggleGrid: () => void;
-  gridMode: 'dots' | 'lines' | 'off';
+  gridConfig?: CanvasGridConfig;
+  onChangeGridConfig?: (config: CanvasGridConfig) => void;
+  // Legacy props compatibility
+  gridMode?: 'dots' | 'lines' | 'off';
+  onToggleGrid?: () => void;
+  isSelectionToolActive?: boolean;
+  onToggleSelectionTool?: () => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -40,15 +53,33 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onAddFileNode,
   onAddGroupNode,
   onFitView,
-  onToggleGrid,
+  gridConfig,
+  onChangeGridConfig,
   gridMode,
+  onToggleGrid,
+  isSelectionToolActive = false,
+  onToggleSelectionTool,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
   allNotes,
 }) => {
-  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | null>(null);
+  const activeGridConfig: CanvasGridConfig = gridConfig || {
+    snapToGrid: true,
+    gridSize: 15,
+    showGrid: gridMode !== 'off',
+    gridVariant: gridMode || 'dots',
+  };
+
+  const handleGridConfigChange = (newConfig: CanvasGridConfig) => {
+    if (onChangeGridConfig) {
+      onChangeGridConfig(newConfig);
+    } else if (onToggleGrid) {
+      onToggleGrid();
+    }
+  };
+  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | 'grid' | null>(null);
   const [fileSearch, setFileSearch] = useState('');
   const toolbarRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -382,13 +413,93 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
         </button>
         <button
           type="button"
-          className={`canvas-toolbar-btn icon-only ${gridMode !== 'off' ? 'active' : ''}`}
-          onClick={onToggleGrid}
-          title={`Gitter: ${gridMode}`}
-          aria-label="Gitter umschalten"
+          className={`canvas-toolbar-btn icon-only ${isSelectionToolActive ? 'active' : ''}`}
+          onClick={onToggleSelectionTool}
+          title={
+            isSelectionToolActive
+              ? 'Auswahl-Rechteck aktiv (Klicken zum Deaktivieren)'
+              : 'Auswahl-Rechteck / Marquee aktivieren (oder Shift gedrückt halten)'
+          }
+          aria-label="Auswahl-Rechteck aktivieren"
         >
-          <Grid size={16} />
+          <BoxSelect size={16} />
         </button>
+
+        {/* Grid & Snap popover dropdown */}
+        <div className="canvas-toolbar-dropdown">
+          <button
+            type="button"
+            className={`canvas-toolbar-btn icon-only ${
+              activeGridConfig.snapToGrid || activeGridConfig.gridVariant !== 'off' ? 'active' : ''
+            }`}
+            onClick={() => setOpenDropdown((prev) => (prev === 'grid' ? null : 'grid'))}
+            title={`Gitter & Einrasten (${activeGridConfig.snapToGrid ? 'Einrasten an' : 'Einrasten aus'}, ${activeGridConfig.gridSize}px)`}
+            aria-label="Gitter-Einstellungen"
+          >
+            <Grid size={16} />
+          </button>
+
+          {openDropdown === 'grid' && (
+            <div ref={dropdownRef} className="canvas-dropdown-menu canvas-grid-menu">
+              <div className="canvas-dropdown-title">Gitter & Einrasten</div>
+
+              {/* Snap to grid toggle */}
+              <button
+                type="button"
+                className={`canvas-dropdown-item ${activeGridConfig.snapToGrid ? 'active' : ''}`}
+                onClick={() =>
+                  handleGridConfigChange({
+                    ...activeGridConfig,
+                    snapToGrid: !activeGridConfig.snapToGrid,
+                  })
+                }
+              >
+                <span>{activeGridConfig.snapToGrid ? '✓ Einrasten aktiv (Snap)' : 'Einrasten deaktiviert'}</span>
+              </button>
+
+              <div className="canvas-dropdown-divider" />
+              <div className="canvas-dropdown-subtitle">Gittergröße</div>
+              <div className="canvas-grid-pills">
+                {[10, 15, 20, 25].map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className={`canvas-grid-pill-btn ${activeGridConfig.gridSize === size ? 'active' : ''}`}
+                    onClick={() =>
+                      handleGridConfigChange({
+                        ...activeGridConfig,
+                        gridSize: size,
+                      })
+                    }
+                  >
+                    {size}px
+                  </button>
+                ))}
+              </div>
+
+              <div className="canvas-dropdown-divider" />
+              <div className="canvas-dropdown-subtitle">Hintergrund</div>
+              <div className="canvas-grid-pills">
+                {(['dots', 'lines', 'off'] as const).map((variant) => (
+                  <button
+                    key={variant}
+                    type="button"
+                    className={`canvas-grid-pill-btn ${activeGridConfig.gridVariant === variant ? 'active' : ''}`}
+                    onClick={() =>
+                      handleGridConfigChange({
+                        ...activeGridConfig,
+                        gridVariant: variant,
+                        showGrid: variant !== 'off',
+                      })
+                    }
+                  >
+                    {variant === 'dots' ? 'Punkte' : variant === 'lines' ? 'Linien' : 'Aus'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

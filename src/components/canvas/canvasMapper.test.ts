@@ -3,8 +3,9 @@ import {
   parseCanvasJson,
   jsonCanvasToReactFlow,
   reactFlowToJsonCanvas,
+  getChildNodesInGroup,
 } from './canvasMapper';
-import type { Node, Edge } from '@xyflow/react';
+import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import type { JsonCanvasDocument, CanvasShape } from '../../../shared/canvasTypes';
 
 describe('Knowmesh Canvas - canvasMapper & State Roundtrip', () => {
@@ -276,5 +277,125 @@ describe('Knowmesh Canvas - canvasMapper & State Roundtrip', () => {
     expect(spawnFallback.x).not.toBeNaN();
     expect(spawnFallback.y).not.toBeNaN();
     expect(spawnFallback).toEqual({ x: 100, y: 100 });
+  });
+
+  it('5. correctly identifies child nodes inside a group node via getChildNodesInGroup', () => {
+    const groupNode: Node = {
+      id: 'group-1',
+      type: 'canvasGroup',
+      position: { x: 100, y: 100 },
+      width: 400,
+      height: 300,
+      data: { rawType: 'group', label: 'Backend Cluster' },
+    };
+
+    const nodeInsideA: Node = {
+      id: 'node-inside-a',
+      type: 'canvasShape',
+      position: { x: 120, y: 120 },
+      width: 100,
+      height: 60,
+      data: { rawType: 'text' },
+    };
+
+    const nodeInsideB: Node = {
+      id: 'node-inside-b',
+      type: 'canvasFile',
+      position: { x: 250, y: 220 },
+      width: 120,
+      height: 80,
+      data: { rawType: 'file' },
+    };
+
+    const nodeOutside: Node = {
+      id: 'node-outside',
+      type: 'canvasShape',
+      position: { x: 600, y: 200 },
+      width: 120,
+      height: 80,
+      data: { rawType: 'text' },
+    };
+
+    const otherGroup: Node = {
+      id: 'group-2',
+      type: 'canvasGroup',
+      position: { x: 150, y: 150 },
+      width: 200,
+      height: 150,
+      data: { rawType: 'group' },
+    };
+
+    const allNodes = [groupNode, nodeInsideA, nodeInsideB, nodeOutside, otherGroup];
+    const childIds = getChildNodesInGroup(groupNode, allNodes);
+
+    expect(childIds).toContain('node-inside-a');
+    expect(childIds).toContain('node-inside-b');
+    expect(childIds).not.toContain('node-outside');
+    expect(childIds).not.toContain('group-1'); // Group should not contain itself
+    expect(childIds).not.toContain('group-2'); // Other groups should not be included
+    expect(childIds).toHaveLength(2);
+  });
+
+  it('6. preserves edge arrow direction deterministically (toEnd & fromEnd)', () => {
+    // Test: edge with arrow on target side only
+    const docWithTargetArrow: JsonCanvasDocument = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50 },
+        { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50 },
+      ],
+      edges: [
+        {
+          id: 'e1',
+          fromNode: 'n1',
+          toNode: 'n2',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      ],
+    };
+
+    const rf = jsonCanvasToReactFlow(docWithTargetArrow);
+    const rfEdge = rf.edges[0];
+    expect(rfEdge.source).toBe('n1');
+    expect(rfEdge.target).toBe('n2');
+    expect(rfEdge.markerEnd).toBeDefined();
+    expect((rfEdge.markerEnd as any)?.type).toBe(MarkerType.ArrowClosed);
+    expect(rfEdge.markerStart).toBeUndefined();
+
+    // Roundtrip back to JSON Canvas
+    const jsonStr = reactFlowToJsonCanvas(rf.nodes, rf.edges);
+    const parsed = parseCanvasJson(jsonStr);
+    expect(parsed.edges[0].fromNode).toBe('n1');
+    expect(parsed.edges[0].toNode).toBe('n2');
+    expect(parsed.edges[0].toEnd).toBe('arrow');
+    expect(parsed.edges[0].fromEnd).toBe('none');
+
+    // Test: edge with arrow on source side (fromEnd: arrow, toEnd: none)
+    const docWithSourceArrow: JsonCanvasDocument = {
+      nodes: [
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50 },
+        { id: 'n2', type: 'text', x: 200, y: 0, width: 100, height: 50 },
+      ],
+      edges: [
+        {
+          id: 'e2',
+          fromNode: 'n1',
+          toNode: 'n2',
+          fromEnd: 'arrow',
+          toEnd: 'none',
+        },
+      ],
+    };
+
+    const rfSource = jsonCanvasToReactFlow(docWithSourceArrow);
+    const rfSourceEdge = rfSource.edges[0];
+    expect(rfSourceEdge.markerEnd).toBeUndefined();
+    expect(rfSourceEdge.markerStart).toBeDefined();
+    expect((rfSourceEdge.markerStart as any)?.type).toBe(MarkerType.ArrowClosed);
+
+    const jsonStrSource = reactFlowToJsonCanvas(rfSource.nodes, rfSource.edges);
+    const parsedSource = parseCanvasJson(jsonStrSource);
+    expect(parsedSource.edges[0].fromEnd).toBe('arrow');
+    expect(parsedSource.edges[0].toEnd).toBe('none');
   });
 });
