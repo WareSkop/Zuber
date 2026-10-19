@@ -475,14 +475,41 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           const originNodeId = connectingRef.current.nodeId;
           const originHandleId = connectingRef.current.handleId;
 
+          // Retrieve origin node center to determine the closest facing handle on the new node
+          const originNode =
+            latestNodesRef.current.find((n) => n.id === originNodeId) ||
+            nodes.find((n) => n.id === originNodeId);
+          const originNodeW = originNode?.measured?.width ?? originNode?.width ?? 140;
+          const originNodeH = originNode?.measured?.height ?? originNode?.height ?? 80;
+          const originX = originNode ? originNode.position.x + originNodeW / 2 : dropPos.x;
+          const originY = originNode ? originNode.position.y + originNodeH / 2 : dropPos.y;
+
+          const dx = originX - dropPos.x;
+          const dy = originY - dropPos.y;
+
+          let bestHandle: 'top' | 'right' | 'bottom' | 'left' = 'left';
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            bestHandle = dx > 0 ? 'right' : 'left';
+          } else {
+            bestHandle = dy > 0 ? 'bottom' : 'top';
+          }
+
+          const oppositeHandle =
+            bestHandle === 'left' ? 'right' :
+            bestHandle === 'right' ? 'left' :
+            bestHandle === 'top' ? 'bottom' : 'top';
+
+          const targetHandle = isSource ? bestHandle : (originHandleId || oppositeHandle);
+          const sourceHandle = isSource ? (originHandleId || oppositeHandle) : bestHandle;
+
           // Connect from origin to new node (arrow points strictly towards destination new node!):
           const newEdgeId = `edge_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
           const newEdge: Edge = {
             id: newEdgeId,
             source: isSource ? originNodeId : newNodeId,
             target: isSource ? newNodeId : originNodeId,
-            sourceHandle: isSource ? originHandleId : 'left',
-            targetHandle: isSource ? 'left' : originHandleId,
+            sourceHandle: sourceHandle || undefined,
+            targetHandle: targetHandle || undefined,
             type: 'default',
             style: { stroke: strokeColor, strokeWidth: 2 },
             markerEnd: {

@@ -774,7 +774,12 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
   - **JSON-Canvas-Mapping:** In `canvasMapper.ts` spiegelt `reactFlowToJsonCanvas` `edge.markerEnd` direkt auf `jsonEdge.toEnd = 'arrow'` und `edge.markerStart` auf `jsonEdge.fromEnd = 'arrow'`.
 - **Auto-Knotenerstellung beim Ziehen ins Leere (`onConnectEnd`):**
   - Zieht der Nutzer eine Verbindungslinie aus einem Knoten-Handle heraus und lässt sie auf einer freien Canvas-Fläche (`.react-flow__pane`) los, wird an der Loslass-Position automatisch ein neuer Rechteck-Textknoten (`type: 'canvasShape'`, `shape: 'rectangle'`, 140×80px) erzeugt (`screenToFlowPosition`).
-  - Eine Verbindungslinie vom Ausgangsknoten zum neuen Knoten wird unmittelbar erstellt, mit der Pfeilspitze zum neuen Knoten gerichtet.
+  - **Dynamisches Andocken an die nächste Seite (`targetHandle`):** Aus dem relativen Richtungsvektor zwischen dem Ursprungsknoten und der Loslass-Position (`dx = originX - dropPos.x`, `dy = originY - dropPos.y`) ermittelt das System automatisch die dem Ursprungsknoten zugewandte Seite des neuen Knotens:
+    - Bei Bewegung nach rechts: `bestHandle = 'left'`
+    - Bei Bewegung nach links: `bestHandle = 'right'`
+    - Bei Bewegung nach unten: `bestHandle = 'top'`
+    - Bei Bewegung nach oben: `bestHandle = 'bottom'`
+  - Eine Verbindungslinie vom Ausgangsknoten zum neuen Knoten wird unmittelbar erstellt, wobei der Ziel-Handle exakt an die ermittelte Seite andockt und die Pfeilspitze zum neuen Knoten gerichtet ist.
   - Der neue Knoten wird automatisch ausgewählt und in den Verlauf (`pushHistory`) sowie den Auto-Save übernommen.
 - **Markante Kanten-Selektion & Kanten-Wiederverbindung (`edgesReconnectable`):**
   - **Styling (`src/styles.css`):** Ausgewählte Kanten erhalten eine 3,5px starke Gold-Kontur (`stroke: var(--accent-color, #d4af37)`), einen weichen Glow-Filter (`drop-shadow(0 0 5px rgba(212, 175, 55, 0.65))`) und eine passende goldene Pfeilspitze (`marker path`).

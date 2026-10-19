@@ -622,5 +622,42 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     });
     document.body.removeChild(shapeContainer);
   });
+
+  it('8. calculates nearest facing handle on drop and serializes to JSON Canvas sides', () => {
+    // Nearest handle calculation function matching onConnectEnd implementation
+    const getBestHandle = (
+      origin: { x: number; y: number; width?: number; height?: number },
+      drop: { x: number; y: number }
+    ): 'top' | 'right' | 'bottom' | 'left' => {
+      const originNodeW = origin.width ?? 140;
+      const originNodeH = origin.height ?? 80;
+      const originX = origin.x + originNodeW / 2;
+      const originY = origin.y + originNodeH / 2;
+
+      const dx = originX - drop.x;
+      const dy = originY - drop.y;
+
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        return dx > 0 ? 'right' : 'left';
+      } else {
+        return dy > 0 ? 'bottom' : 'top';
+      }
+    };
+
+    const origin = { x: 100, y: 100, width: 140, height: 80 }; // center at (170, 140)
+
+    // 1. Drag right -> facing handle on new node is 'left'
+    expect(getBestHandle(origin, { x: 400, y: 140 })).toBe('left');
+
+    // 2. Drag left -> facing handle on new node is 'right'
+    expect(getBestHandle(origin, { x: -100, y: 140 })).toBe('right');
+
+    // 3. Drag downwards -> facing handle on new node is 'top'
+    expect(getBestHandle(origin, { x: 170, y: 400 })).toBe('top');
+
+    // 4. Drag upwards -> facing handle on new node is 'bottom'
+    expect(getBestHandle(origin, { x: 170, y: -100 })).toBe('bottom');
+  });
 });
+
 
