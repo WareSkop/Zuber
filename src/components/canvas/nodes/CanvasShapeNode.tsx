@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Handle, Position, NodeResizer, type NodeProps, useReactFlow } from '@xyflow/react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { Edit3, Check, Link2 } from 'lucide-react';
+import { Check, Link2 } from 'lucide-react';
 import type { CanvasShape } from '../../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
@@ -455,19 +455,6 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
           />
         )}
       </div>
-
-      {/* Hover edit quick action button */}
-      {!isEditing && !readOnly && (
-        <button
-          type="button"
-          className="canvas-quick-edit-btn nodrag"
-          onClick={() => setIsEditing(true)}
-          title="Text bearbeiten"
-          aria-label="Text bearbeiten"
-        >
-          <Edit3 size={13} />
-        </button>
-      )}
     </div>
   );
 };

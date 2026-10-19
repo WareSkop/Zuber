@@ -438,4 +438,120 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     });
     document.body.removeChild(container);
   });
+
+  it('6. verifies node pencil edit button is removed, double-click edits, and inspector handles right-click contextMenuPos', () => {
+    const cssPath = path.resolve(__dirname, '../../styles.css');
+    const css = fs.readFileSync(cssPath, 'utf-8');
+
+    // Verify popover CSS classes
+    expect(css).toContain('.canvas-shape-picker-popover');
+    expect(css).toContain('.canvas-inspector-popover');
+    expect(css).toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(110px,\s*1fr\)\)/);
+
+    // Mount CanvasShapeNode
+    const nodeContainer = document.createElement('div');
+    document.body.appendChild(nodeContainer);
+    const nodeRoot = createRoot(nodeContainer);
+
+    const dummyNodeProps: any = {
+      id: 'test-shape-edit',
+      data: {
+        rawType: 'text',
+        text: 'Editable node',
+        shape: 'rectangle',
+      },
+      selected: false,
+      width: 200,
+      height: 100,
+    };
+
+    act(() => {
+      nodeRoot.render(
+        <ReactFlowProvider>
+          <CanvasContext.Provider
+            value={{
+              onOpenNote: vi.fn(),
+              onSelectTag: vi.fn(),
+              allNotes: [],
+              readOnly: false,
+            }}
+          >
+            <CanvasShapeNode {...dummyNodeProps} />
+          </CanvasContext.Provider>
+        </ReactFlowProvider>
+      );
+    });
+
+    const shapeNode = nodeContainer.querySelector('.canvas-shape-node') as HTMLElement;
+    expect(shapeNode).not.toBeNull();
+
+    // 1. Verify pencil edit button is NOT in DOM
+    const editBtn = shapeNode.querySelector('.canvas-quick-edit-btn');
+    expect(editBtn).toBeNull();
+
+    // 2. Double-click node opens inline editor
+    act(() => {
+      shapeNode.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    const textarea = nodeContainer.querySelector('.canvas-node-textarea') as HTMLTextAreaElement;
+    expect(textarea).not.toBeNull();
+    expect(textarea.value).toBe('Editable node');
+
+    act(() => {
+      nodeRoot.unmount();
+    });
+    document.body.removeChild(nodeContainer);
+
+    // 3. Mount CanvasInspector with contextMenuPos
+    const inspContainer = document.createElement('div');
+    document.body.appendChild(inspContainer);
+    const inspRoot = createRoot(inspContainer);
+
+    act(() => {
+      inspRoot.render(
+        <CanvasInspector
+          selectedNode={{
+            id: 'node-context',
+            type: 'canvasShape',
+            data: { shape: 'rectangle', text: 'Node' },
+            position: { x: 0, y: 0 },
+          } as any}
+          selectedEdge={null}
+          contextMenuPos={{ x: 150, y: 200 }}
+          onUpdateNodeData={vi.fn()}
+          onUpdateEdgeData={vi.fn()}
+          onDuplicateNode={vi.fn()}
+          onDeleteNode={vi.fn()}
+          onDeleteEdge={vi.fn()}
+          allNotes={[]}
+        />
+      );
+    });
+
+    const inspectorEl = inspContainer.querySelector('.canvas-floating-inspector') as HTMLElement;
+    expect(inspectorEl).not.toBeNull();
+    expect(inspectorEl.style.position).toBe('fixed');
+    expect(inspectorEl.style.left).toBe('158px'); // 150 + 8
+    expect(inspectorEl.style.top).toBe('208px'); // 200 + 8
+
+    // Open Form popover and verify classes
+    const formBtn = Array.from(inspectorEl.querySelectorAll('.inspector-tool-btn') || []).find((b) =>
+      b.textContent?.includes('Form')
+    ) as HTMLButtonElement;
+    expect(formBtn).toBeDefined();
+
+    act(() => {
+      formBtn.click();
+    });
+
+    const popover = inspContainer.querySelector('.canvas-shape-picker-popover');
+    expect(popover).not.toBeNull();
+    expect(popover?.classList.contains('canvas-inspector-popover')).toBe(true);
+    expect(popover?.classList.contains('shapes-grid')).toBe(true);
+
+    act(() => {
+      inspRoot.unmount();
+    });
+    document.body.removeChild(inspContainer);
+  });
 });

@@ -16,12 +16,18 @@
 - Vertikale und horizontale Zentrierung von Text & Markdown in Formen (`CanvasShapeNode.tsx` & `.canvas-shape-content`).
 - Kontextsensitive Canvas-Verbindungs-Handles: Im Desktop-Modus standardmäßig ausgeblendet und bei Hover/Selektion sichtbar; im Touch-Modus auf vergrößerte 18px-Hit-Areas bei Selektion optimiert.
 - Deterministische Canvas-Kantenpfeile: Exakte `markerEnd`-Pfeilspitzen am Zielknoten ohne Invertierung oder doppelte Pfeile.
+- Kontext-Inspektor am Mauszeiger bei Rechtsklick (`CanvasEditor.tsx` & `CanvasInspector.tsx`): Öffnet die Attribut- und Werkzeugleiste (`CanvasInspector`) per Rechtsklick auf Knoten (`onNodeContextMenu`) oder Kanten (`onEdgeContextMenu`) unmittelbar an der Mauszeiger-Position mit automatischem Viewport-Clamping und Schließen bei Pane-Click, Canvas-Panning oder Escape.
+- Zentriertes Formen-Auswahl-Popover (`CanvasInspector.tsx` & `src/styles.css`): Das Formauswahl-Menü (`.canvas-shape-picker-popover`) ist direkt über der Inspektionsleiste zentriert und bietet ein 380px breites, 3-spaltiges Gitter (`repeat(3, minmax(110px, 1fr))`), in dem alle Formbezeichnungen ohne Textumbruch oder Verzerrung Platz finden, inklusive dynamischem Flip nach unten bei Bildschirmkopfnähe.
 
 
 ### Changed
 - `NoteSaveRequest` und `syncEngine.saveNote` unterstützen nun den Parameter `explicitClear`, um gewolltes Leeren einer Notiz von flüchtigen Initialzuständen zu unterscheiden.
 - Icon-Only-Navigation in der linken Leiste (`Dateien`, `Suche`, `Tags`) sowie im Topbar-Modus-Umschalter (`Live-Preview`, `Lesen`, `Quellcode`, `Zen`) mit responsiven `title`- und `aria-label`-Tooltips.
 - Entfernung des redundanten „Vault in sync“-Statusbadges in der linken unteren Bildschirmecke (Verbindungs- und Sync-Status verbleiben in der oberen Leiste).
+
+
+### Removed
+- Überflüssiger Stift-Button (`Edit3`) auf Canvas-Formknoten (`CanvasShapeNode.tsx`): Verhindert visuelle Kollisionen mit Verbindungs-Handles; Text- und Notizbearbeitung erfolgt konsistent per Doppelklick.
 
 ### Fixed
 - Falsche 409-Versionskonflikte bei identischem Inhalt (z. B. durch 1-Sekunden-Zeitstempel-Drift oder Dateisystem-Rundung) werden serverseitig und clientseitig unterdrückt; stattdessen wird 200 OK zurückgegeben.

@@ -25,6 +25,7 @@ import { OBSIDIAN_CANVAS_COLORS } from '../../../shared/canvasTypes';
 interface CanvasInspectorProps {
   selectedNode: Node | null;
   selectedEdge: Edge | null;
+  contextMenuPos?: { x: number; y: number } | null;
   onUpdateNodeData: (nodeId: string, partialData: Record<string, any>) => void;
   onUpdateEdgeData: (edgeId: string, partialData: Record<string, any>, label?: string) => void;
   onDuplicateNode: (nodeId: string) => void;
@@ -36,6 +37,7 @@ interface CanvasInspectorProps {
 export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   selectedNode,
   selectedEdge,
+  contextMenuPos,
   onUpdateNodeData,
   onUpdateEdgeData,
   onDuplicateNode,
@@ -47,6 +49,35 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   const [edgeLabel, setEdgeLabel] = useState('');
   const [activePopover, setActivePopover] = useState<'shape' | 'color' | 'link' | null>(null);
   const [linkSearch, setLinkSearch] = useState('');
+  const [posStyle, setPosStyle] = useState<React.CSSProperties | undefined>(undefined);
+
+  React.useLayoutEffect(() => {
+    if (!contextMenuPos) {
+      setPosStyle(undefined);
+      return;
+    }
+
+    const inspectorEl = inspectorRef.current;
+    const inspectorWidth = inspectorEl?.offsetWidth || 320;
+    const inspectorHeight = inspectorEl?.offsetHeight || 44;
+
+    const rawX = contextMenuPos.x + 8;
+    const rawY = contextMenuPos.y + 8;
+
+    const clampedX = Math.max(12, Math.min(rawX, window.innerWidth - inspectorWidth - 16));
+    const clampedY = Math.max(12, Math.min(rawY, window.innerHeight - inspectorHeight - 16));
+
+    setPosStyle({
+      position: 'fixed',
+      left: `${clampedX}px`,
+      top: `${clampedY}px`,
+      bottom: 'auto',
+      right: 'auto',
+      margin: 0,
+      transform: 'none',
+      zIndex: 100,
+    });
+  }, [contextMenuPos]);
 
   useEffect(() => {
     if (selectedEdge) {
@@ -73,6 +104,16 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
       const minLeft = 8;
       const maxRight = window.innerWidth - 8;
 
+      // Vertical flip if inspector is near the top of the viewport
+      if (rect.top < 10 || (inspectorRef.current && inspectorRef.current.getBoundingClientRect().top < 220)) {
+        target.style.bottom = 'auto';
+        target.style.top = 'calc(100% + 10px)';
+      } else {
+        target.style.bottom = 'calc(100% + 10px)';
+        target.style.top = 'auto';
+      }
+
+      // Horizontal boundary clamping
       if (rect.right > maxRight) {
         const overflow = rect.right - maxRight;
         target.style.transform = `translateX(calc(-50% - ${overflow}px))`;
@@ -126,7 +167,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   ];
 
   return (
-    <div ref={inspectorRef} className="canvas-floating-inspector nodrag nowheel">
+    <div ref={inspectorRef} className="canvas-floating-inspector nodrag nowheel" style={posStyle}>
       {/* --- NODE INSPECTOR --- */}
       {selectedNode ? (
         <div className="inspector-content-row">
@@ -143,7 +184,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 <span className="inspector-btn-label">Form</span>
               </button>
               {activePopover === 'shape' && (
-                <div ref={popoverRef} className="inspector-dropdown-menu shapes-grid">
+                <div ref={popoverRef} className="inspector-dropdown-menu shapes-grid canvas-shape-picker-popover canvas-inspector-popover">
                   {shapesList.map((s) => (
                     <button
                       key={s.shape}
@@ -176,7 +217,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               <span className="inspector-btn-label">Farbe</span>
             </button>
             {activePopover === 'color' && (
-              <div ref={popoverRef} className="inspector-dropdown-menu colors-row">
+              <div ref={popoverRef} className="inspector-dropdown-menu colors-row canvas-inspector-popover">
                 {colorPresets.map((c) => (
                   <button
                     key={c.key}
@@ -207,7 +248,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 <span className="inspector-btn-label">Link</span>
               </button>
               {activePopover === 'link' && (
-                <div ref={popoverRef} className="inspector-dropdown-menu link-picker scroller">
+                <div ref={popoverRef} className="inspector-dropdown-menu link-picker scroller canvas-inspector-popover">
                   <input
                     type="text"
                     autoFocus
@@ -342,7 +383,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               <Palette size={15} />
             </button>
             {activePopover === 'color' && (
-              <div ref={popoverRef} className="inspector-dropdown-menu colors-row">
+              <div ref={popoverRef} className="inspector-dropdown-menu colors-row canvas-inspector-popover">
                 {colorPresets.map((c) => (
                   <button
                     key={c.key}

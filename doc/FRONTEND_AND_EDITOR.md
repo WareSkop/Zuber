@@ -752,6 +752,22 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
 - **`onConnect` in `CanvasEditor.tsx`:** Beim Verbinden zweier Knoten wird `markerEnd` stets deterministisch an der Zielseite (`target`) mit `MarkerType.ArrowClosed` (16×16px) gesetzt, während `markerStart` `undefined` bleibt.
 - **Bidirektionale Serialisierung (`canvasMapper.ts`):** `reactFlowToJsonCanvas` und `jsonCanvasToReactFlow` mappen `toEnd` und `fromEnd` ohne Richtungsvertauschung eins-zu-eins in das JSON-Canvas-Format.
 
+### 24.7 Entfernung des Bearbeiten-Buttons auf Knoten (`CanvasShapeNode.tsx`)
+- Der kleine Stift-Button am unteren Rand von Formknoten wurde entfernt, um visuelle Überlagerungen mit den unteren Verbindungs-Handles zu vermeiden.
+- Die Inline-Bearbeitung von Notiz- und Kartentexten wird intuitiv und zuverlässig über Doppelklick (`onDoubleClick`) auf den Knoten aktiviert.
+
+### 24.8 Zentriertes Formen-Popover & 3-Spalten-Gitter (`CanvasInspector.tsx` & `src/styles.css`)
+- **Zentrierung:** Das Popover zur Formenauswahl (`.canvas-shape-picker-popover`) zentriert sich dank `position: static` auf `.inspector-popover-anchor` direkt über der gesamten Inspektions-Toolbar (`left: 50% !important; transform: translateX(-50%) !important`).
+- **3-Spalten-Gitter:** Die Formauswahl verwendet ein 380px breites Gitter mit `grid-template-columns: repeat(3, minmax(110px, 1fr))`, sodass lange Begriffe wie `Parallelogramm` und `Abgerundet` ohne Textumbruch oder Stauchung dargestellt werden.
+- **Dynamisches Clamping & Vertikales Flippen:** Erkennt die Nähe zum Bildschirmrand via `getBoundingClientRect()` und flippt bei wenig Platz nach oben automatisch nach unten (`top: calc(100% + 10px)`).
+
+### 24.9 Kontext-Inspektor am Mauszeiger bei Rechtsklick (`CanvasEditor.tsx` & `CanvasInspector.tsx`)
+- **Direktzugriff am Cursor:** Ein Rechtsklick auf einen Knoten (`onNodeContextMenu`) oder eine Kante (`onEdgeContextMenu`) selektiert das Element exklusiv und öffnet den schwebenden Inspektor direkt an der Mauszeiger-Position (`contextMenuPos`).
+- **Viewport-Clamping (`position: fixed`):** Der Inspektor wird über `window.innerWidth - inspectorWidth - 16` und `window.innerHeight - inspectorHeight - 16` geklammert, sodass er niemals aus dem Bildschirm ragt.
+- **Automatisches Schließen:** Das Kontextmenü schließt sich nahtlos beim Klick auf die Arbeitsfläche (`onPaneClick`, `onPaneContextMenu`), bei normaler Linksklick-Selektion (`onNodeClick`, `onEdgeClick`), beim Zoomen/Verschieben (`onMoveStart`) oder beim Drücken von `Escape`.
+- **Standard-Modus:** Ohne Rechtsklick verbleibt die Toolbar wie gewohnt zentriert am unteren Bildschirmrand.
+
+
 
 
 

@@ -105,6 +105,9 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   // Multi-selection tool mode toggle (Marquee Box Selection)
   const [isSelectionToolActive, setIsSelectionToolActive] = useState<boolean>(false);
 
+  // Floating context menu position for right-click inspector
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+
   // Group dragging tracking refs (moving a group moves enclosed elements)
   const draggingChildNodeIdsRef = useRef<Set<string>>(new Set());
   const dragStartGroupPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -368,6 +371,49 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     },
     [setEdges, pushHistory, triggerAutoSave, nodes, readOnly]
   );
+
+  // Right-click context menu event handlers for Node and Edge
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      // 1. Select the right-clicked node exclusively:
+      setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === node.id })));
+      setEdges((eds) => eds.map((e) => ({ ...e, selected: false })));
+
+      // 2. Set cursor position for the context inspector:
+      setContextMenuPos({ x: event.clientX, y: event.clientY });
+    },
+    [setNodes, setEdges]
+  );
+
+  const handleEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      // 1. Select the right-clicked edge exclusively:
+      setEdges((eds) => eds.map((e) => ({ ...e, selected: e.id === edge.id })));
+      setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+
+      // 2. Set cursor position for the context inspector:
+      setContextMenuPos({ x: event.clientX, y: event.clientY });
+    },
+    [setNodes, setEdges]
+  );
+
+  const handlePaneClick = useCallback(() => {
+    setContextMenuPos(null);
+  }, []);
+
+  const handleNodeClick = useCallback(() => {
+    setContextMenuPos(null);
+  }, []);
+
+  const handleEdgeClick = useCallback(() => {
+    setContextMenuPos(null);
+  }, []);
+
+  const handleMoveStart = useCallback(() => {
+    setContextMenuPos(null);
+  }, []);
 
   // Undo / Redo actions
   const handleUndo = useCallback(() => {
@@ -676,6 +722,10 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       const isInput = targetTag === 'input' || targetTag === 'textarea';
 
+      if (e.key === 'Escape') {
+        setContextMenuPos(null);
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         if (!isInput) {
           e.preventDefault();
@@ -739,6 +789,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           <CanvasInspector
             selectedNode={selectedNode}
             selectedEdge={selectedNode ? null : selectedEdge}
+            contextMenuPos={contextMenuPos}
             onUpdateNodeData={handleUpdateNodeData}
             onUpdateEdgeData={handleUpdateEdgeData}
             onDuplicateNode={handleDuplicateNode}
@@ -760,6 +811,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onNodeDragStart={onNodeDragStart}
             onNodeDrag={onNodeDrag}
             onNodeDragStop={onNodeDragStop}
+            onNodeContextMenu={handleNodeContextMenu}
+            onEdgeContextMenu={handleEdgeContextMenu}
+            onPaneClick={handlePaneClick}
+            onPaneContextMenu={handlePaneClick}
+            onNodeClick={handleNodeClick}
+            onEdgeClick={handleEdgeClick}
+            onMoveStart={handleMoveStart}
             nodeTypes={nodeTypes}
             connectionMode={ConnectionMode.Loose}
             selectionMode={SelectionMode.Partial}
