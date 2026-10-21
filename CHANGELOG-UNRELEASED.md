@@ -6,6 +6,7 @@
 - **Type-to-Edit für ausgewählte Canvas-Knoten (`CanvasEditor.tsx` & `CanvasShapeNode.tsx`):** Beim Tippen eines druckbaren Zeichens auf einem einzeln ausgewählten Form- oder Text-Knoten wird sofort der Inline-Editor geöffnet, der Cursor ans Textende gesetzt und das getippte Zeichen angehängt. Shortcuts wie `Ctrl+Z`, `Space` (Pan) und `Delete` bleiben uneingeschränkt funktionsfähig.
 
 ### Changed
+- **Trennung von :dev- und :latest-Builds in GitHub Actions (`.github/workflows/docker-publish.yml`, `AGENT.md` & `README.md`):** Branch-Pushes bauen und taggen ausschließlich das Test-Image `ghcr.io/wareskop/zuber:dev` und überschreiben `:latest` nicht mehr. Die Produktions-Tags (`:latest`, `:<version>`) werden strikt nur bei semantischen Release-Tags (`v*.*.*`) erzeugt.
 - Migrated container registry and CI/CD pipelines from Codeberg to GitHub (ghcr.io).
 - **Vollständiges Rebranding von „Knowmesh“ zu „Zuber“ & Vereinheitlichung der Umgebungsvariablen:**
   - **Identität & PWA:** Aktualisierung aller Anwendungsnamen, Titel, Web-Manifest-Metadaten (`public/manifest.webmanifest`), `package.json`, Standard-Themes (`zuber`), Lokalisierungsdateien (`de.json`, `en.json`) sowie UI-Komponenten (`App.tsx`, `FileSidebar.tsx`, `SettingsModal.tsx`, `LoginModal.tsx`, `ErrorBoundary.tsx`).

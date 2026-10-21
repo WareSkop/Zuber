@@ -13,10 +13,14 @@
 ## 3. Versioning & Changelog Workflow (Temporary Changelog & Release Command)
 - **Temporary Changelog (`CHANGELOG-UNRELEASED.md`):** 
   - Every time code is modified, added, or a bug is fixed, the agent MUST automatically append a short bullet point describing the change into an unreleased temporary changelog file named `CHANGELOG-UNRELEASED.md` (grouped under `### Added`, `### Fixed`, `### Changed`).
-- **Release Command (`Create new version <VERSION>`):**
-  - When the user explicitly requests a new version release (e.g., "Create version 0.2.0"), the agent must:
+- **Normal Development & Bugfixes (Branch Pushes):**
+  - Bei normalen Bugfixes und Feature-Entwicklungen wird normal auf den Branch gepusht (`git push origin main`). Dadurch erzeugt GitHub Actions automatisch das Test- und Entwicklungs-Image `ghcr.io/wareskop/zuber:dev`. Pushes auf Branches überschreiben NIEMALS das `:latest`-Image.
+- **Release Command (`Create new version <VERSION>` / z. B. "Erstelle Version 0.3.0"):**
+  - Erst beim expliziten Befehl zur Versionserstellung führt der Agent folgende Schritte aus:
     1. Read all entries from `CHANGELOG-UNRELEASED.md`.
-    2. Move and format them into the official `CHANGELOG.md` under a new heading with the current date (e.g., `## [0.2.0] - YYYY-MM-DD`).
+    2. Move and format them into the official `CHANGELOG.md` under a new heading with the current date (e.g., `## [0.3.0] - YYYY-MM-DD`).
     3. Clear/empty `CHANGELOG-UNRELEASED.md`.
     4. Update the version number in `package.json`.
-    5. Commit, tag (e.g., `v0.2.0`), push to GitHub (`git push origin main --tags`) to trigger the automated GitHub Actions Docker build (or run `./scripts/publish-docker.sh` locally).
+    5. Commit the release changes (e.g., `git commit -m "chore(release): bump version to 0.3.0"`).
+    6. Tag the release: `git tag -a v0.3.0 -m "Release v0.3.0"`.
+    7. Push branch and tag to GitHub: `git push origin main --tags`. Dadurch baut GitHub Actions das offizielle Release-Image `ghcr.io/wareskop/zuber:latest` sowie das versionierte Image `ghcr.io/wareskop/zuber:0.3.0`.

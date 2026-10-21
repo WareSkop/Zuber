@@ -78,6 +78,11 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 
 Zuber is distributed via the **GitHub Container Registry (`ghcr.io`)** and pre-configured for containerized deployment behind reverse proxies such as **Nginx Proxy Manager (NPM)**, Traefik, or Caddy.
 
+#### Container Image Tags
+- `ghcr.io/wareskop/zuber:latest`: Official stable production release (built exclusively on release tags, e.g. `v0.3.0`).
+- `ghcr.io/wareskop/zuber:<version>` (e.g. `:0.3.0`): Pinned semantic version for reproducible production deployments.
+- `ghcr.io/wareskop/zuber:dev`: Bleeding-edge development build (automatically built on branch pushes to test unreleased changes).
+
 1. Create a `docker-compose.yml` file:
 
 ```yaml
