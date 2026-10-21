@@ -1,4 +1,4 @@
-# AGENT INSTRUCTIONS FOR KNOWMESH
+# AGENT INSTRUCTIONS FOR ZUBER
 
 ## 1. Startup Routine
 - Always read the documentation in `doc/` before modifying code.
@@ -19,4 +19,4 @@
     2. Move and format them into the official `CHANGELOG.md` under a new heading with the current date (e.g., `## [0.2.0] - YYYY-MM-DD`).
     3. Clear/empty `CHANGELOG-UNRELEASED.md`.
     4. Update the version number in `package.json`.
-    5. Commit, tag (e.g., `v0.2.0`), push to Codeberg, and update the Docker image via script.
+    5. Commit, tag (e.g., `v0.2.0`), push to GitHub (`git push origin main --tags`) to trigger the automated GitHub Actions Docker build (or run `./scripts/publish-docker.sh` locally).

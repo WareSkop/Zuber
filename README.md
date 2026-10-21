@@ -21,7 +21,7 @@ Zuber (ehemals „Knowmesh“ / „Basalt“) ist eine selbstgehostete Web-Appli
 ```yaml
 services:
   zuber:
-    image: codeberg.org/waring/zuber:latest
+    image: ghcr.io/wareskop/zuber:latest
     container_name: zuber
     restart: unless-stopped
     ports:

@@ -3,6 +3,10 @@
   "version": "0.2.2",
   "private": true,
   "description": "Zuber – Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WareSkop/Zuber.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",

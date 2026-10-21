@@ -138,7 +138,7 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 
 ---
 
-## 5. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)
+## 5. Deployment mit Docker, GitHub Container Registry (GHCR) & Nginx Proxy Manager (NPM)
 
 Zuber ist vollständig für den Betrieb als Docker-Container hinter einem Reverse Proxy wie dem **Nginx Proxy Manager (NPM)** gehärtet.
 
@@ -149,7 +149,7 @@ Erstelle eine `docker-compose.yml` (bzw. nutze die im Repository enthaltene Date
 ```yaml
 services:
   zuber:
-    image: codeberg.org/waring/zuber:latest
+    image: ghcr.io/wareskop/zuber:latest
     container_name: zuber
     restart: unless-stopped
     ports:
@@ -192,9 +192,10 @@ Lege im Nginx Proxy Manager einen neuen **Proxy Host** an:
   - HTTP/2 Support: **Aktiviert**
   - HSTS Enabled: **Aktiviert**
 
-### 5.3 Codeberg Container Registry & CI/CD
+### 5.3 GitHub Container Registry & CI/CD
 
-Das Image wird automatisiert über Forgejo / Codeberg Actions bei jedem Push auf `main` gebaut:
-- Registry: `codeberg.org/waring/zuber:latest`
-- Lokaler Build & Push: `./scripts/publish-codeberg.sh`
+Das Image wird automatisiert über GitHub Actions bei jedem Push auf `main` gebaut:
+- Registry: `ghcr.io/wareskop/zuber:latest`
+- Repository: `https://github.com/WareSkop/Zuber.git`
+- Lokaler Build & Push: `./scripts/publish-docker.sh`
 

@@ -181,7 +181,7 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
 
 ---
 
-## 8. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)
+## 8. Deployment mit Docker, GitHub Container Registry (GHCR) & Nginx Proxy Manager (NPM)
 
 Zuber verfügt über eine vollständig gehärtete Architektur für das Hosting im öffentlichen Internet hinter einem Reverse Proxy.
 
@@ -201,7 +201,7 @@ Zuber verfügt über eine vollständig gehärtete Architektur für das Hosting i
 
 ### 8.2 Docker & Nginx Proxy Manager (NPM) Setup
 - **Docker Compose:**
-  - Image: `codeberg.org/waring/zuber:latest`
+  - Image: `ghcr.io/wareskop/zuber:latest`
   - Volumes: `./vault:/data/vault`, `./config:/data/config`
   - Umgebung: `ENABLE_HTTPS=false`, `TRUST_PROXY=true`, `FORCE_AUTH=true`, `PORT=3443`, `PASSWORD=dein_sicheres_passwort`
 - **NPM Host Konfiguration:**

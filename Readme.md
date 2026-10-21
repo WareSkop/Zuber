@@ -63,9 +63,9 @@ Knowmesh is packaged for containerized deployment (e.g., via Dockge, Portainer, 
 
 ```yaml
 services:
-  knowmesh:
-    image: codeberg.org/waring/knowmesh:latest
-    container_name: knowmesh
+  zuber:
+    image: ghcr.io/wareskop/zuber:latest
+    container_name: zuber
     restart: unless-stopped
     ports:
       - "3443:3443"
@@ -78,8 +78,8 @@ services:
       - VAULT_DIR=/data/vault
       - CONFIG_PATH=/data/config/server-config.json
       - SESSION_SECRET=please_generate_a_long_random_string_here
-      - KNOWMESH_PASSWORD=your_initial_password
-      - ALLOWED_ORIGINS=[https://knowmesh.yourdomain.com](https://knowmesh.yourdomain.com)
+      - PASSWORD=your_initial_password
+      - ALLOWED_ORIGINS=https://zuber.yourdomain.com
     volumes:
       - ./vault:/data/vault
       - ./config:/data/config
@@ -105,8 +105,8 @@ services:
 
 1. Clone the repository:
    ```bash
-   git clone [https://codeberg.org/Waring/Knowmesh.git](https://codeberg.org/Waring/Knowmesh.git)
-   cd Knowmesh
+   git clone https://github.com/WareSkop/Zuber.git
+   cd Zuber
    ```
 
 2. Install dependencies:
