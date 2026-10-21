@@ -57,11 +57,21 @@ describe('Font Settings Module', () => {
     saveFontSettings(custom);
     const loaded = getFontSettings();
     expect(loaded).toEqual(custom);
-    expect(mockStorage['knowmesh_font_settings']).toBe(JSON.stringify(custom));
+    expect(mockStorage['zuber_font_settings']).toBe(JSON.stringify(custom));
+  });
+
+  it('falls back to legacy knowmesh_font_settings when zuber_font_settings is not set', () => {
+    const legacy: FontSettings = {
+      desktop: { uiFontSize: 18, editorFontSize: 20 },
+      mobile: { uiFontSize: 19, editorFontSize: 22 },
+    };
+    mockStorage['knowmesh_font_settings'] = JSON.stringify(legacy);
+    const loaded = getFontSettings();
+    expect(loaded).toEqual(legacy);
   });
 
   it('handles partial or corrupted localStorage data gracefully with fallback defaults', () => {
-    mockStorage['knowmesh_font_settings'] = '{ invalid json';
+    mockStorage['zuber_font_settings'] = '{ invalid json';
     const settings = getFontSettings();
     expect(settings).toEqual(DEFAULT_FONT_SETTINGS);
   });

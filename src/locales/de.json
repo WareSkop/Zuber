@@ -35,7 +35,7 @@
     "toggleRightSidebar": "Rechte Leiste (Backlinks & Gliederung) ein-/ausblenden (Ctrl+Shift+B)",
     "noNoteSelected": "Keine Notiz ausgewählt",
     "livePreview": "Live-Preview",
-    "livePreviewTitle": "Knowmesh Live-Preview (Syntax nur in aktiver Zeile)",
+    "livePreviewTitle": "Zuber Live-Preview (Syntax nur in aktiver Zeile)",
     "reading": "Lesen",
     "readingTitle": "Lese-Ansicht (Komplett gerendert)",
     "source": "Quellcode",
@@ -43,7 +43,7 @@
     "zen": "Zen",
     "zenTitle": "Ablenkungsfreier Zen-Modus (Alt+Z)",
     "installApp": "App",
-    "installAppTitle": "📲 Knowmesh als native App installieren",
+    "installAppTitle": "📲 Zuber als native App installieren",
     "modeGroupAria": "Editor-Modus"
   },
   "sidebar": {
@@ -222,7 +222,7 @@
     "cmdSwitchSplit": "Zu Split-Ansicht wechseln",
     "cmdOpenSettings": "Einstellungen öffnen",
     "cmdManualSave": "Notiz jetzt speichern",
-    "cmdInstallApp": "Knowmesh als App installieren"
+    "cmdInstallApp": "Zuber als App installieren"
   },
   "login": {
     "subtitle": "Offline-First Wissensbasis & Markdown-Editor",
@@ -230,12 +230,12 @@
     "secureTls": "TLS / HTTPS Verschlüsselt",
     "localConnection": "Lokale Verbindung",
     "vaultPassword": "Vault-Passwort",
-    "passwordPlaceholder": "Passwort eingeben (Standard: knowmesh)",
+    "passwordPlaceholder": "Passwort eingeben (Standard: zuber)",
     "unlock": "Vault entsperren",
     "connecting": "Verbinde mit Vault...",
-    "firstLoginOffline": "Keine Verbindung zum Knowmesh-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.",
+    "firstLoginOffline": "Keine Verbindung zum Zuber-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.",
     "loginFailed": "Anmeldung fehlgeschlagen",
-    "envHint": "Standard-Passwort in .env: knowmesh"
+    "envHint": "Standard-Passwort in .env: zuber"
   },
   "conflict": {
     "title": "Versionskonflikt entdeckt",
@@ -258,14 +258,14 @@
     "tabGit": "Git & Backup",
     "tabLogs": "Protokolle & Diagnose",
     "appearanceTitle": "Darstellung & Farb-Themes",
-    "appearanceDesc": "Wähle das passende Farbschema und die Sprache für Knowmesh. Alle Oberflächenelemente, der Editor, der Graph und Icons passen sich sofort an.",
+    "appearanceDesc": "Wähle das passende Farbschema und die Sprache für Zuber. Alle Oberflächenelemente, der Editor, der Graph und Icons passen sich sofort an.",
     "languageLabel": "Sprache / Language",
     "langEn": "English",
     "langDe": "Deutsch",
     "editorTitle": "Editor- & Datei-Einstellungen",
-    "editorDesc": "Konfiguriere das Verhalten des Editors und das Startverhalten von Knowmesh.",
+    "editorDesc": "Konfiguriere das Verhalten des Editors und das Startverhalten von Zuber.",
     "startupHeading": "Startverhalten / Startup Note",
-    "startupDesc": "Wähle, welche Notiz beim Start von Knowmesh geöffnet werden soll:",
+    "startupDesc": "Wähle, welche Notiz beim Start von Zuber geöffnet werden soll:",
     "startupLast": "Letzte geöffnete Notiz öffnen (Standard & Empfohlen)",
     "startupLastDesc": "Öffnet automatisch die Notiz, an der zuletzt gearbeitet wurde.",
     "startupDaily": "Neue / Heutige Tagesnotiz mit aktuellem Datum",
@@ -290,7 +290,7 @@
     "saveSecurity": "Sicherheitseinstellungen speichern",
     "securitySaved": "Sicherheitseinstellungen erfolgreich gespeichert.",
     "serversTitle": "Vault-Verbindungen (Server-Profile)",
-    "serversDesc": "Verwalte Remote-Knowmesh-Server-Profile.",
+    "serversDesc": "Verwalte Remote-Zuber-Server-Profile.",
     "addServer": "Server-Profil hinzufügen",
     "serverName": "Profil-Name",
     "serverUrl": "Server-URL",
@@ -356,7 +356,7 @@
     "logsClear": "Logs leeren",
     "logsEmpty": "Keine Protokolleinträge vorhanden.",
     "logsCount": "{{count}} Einträge",
-    "aboutTitle": "Über Knowmesh",
+    "aboutTitle": "Über Zuber",
     "aboutDesc": "Offline-First persönliche Wissensdatenbank, Live-Preview Markdown-Editor & Sync-Engine"
   },
   "graph": {

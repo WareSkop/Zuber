@@ -35,7 +35,7 @@
     "toggleRightSidebar": "Toggle right sidebar (Ctrl+Shift+B)",
     "noNoteSelected": "No note selected",
     "livePreview": "Live Preview",
-    "livePreviewTitle": "Knowmesh Live Preview (WYSIWYG markdown)",
+    "livePreviewTitle": "Zuber Live Preview (WYSIWYG markdown)",
     "reading": "Reading",
     "readingTitle": "Reading view (Fully rendered)",
     "source": "Source",
@@ -43,7 +43,7 @@
     "zen": "Zen",
     "zenTitle": "Distraction-free Zen mode (Alt+Z)",
     "installApp": "App",
-    "installAppTitle": "📲 Install Knowmesh as native app",
+    "installAppTitle": "📲 Install Zuber as native app",
     "modeGroupAria": "Editor mode"
   },
   "sidebar": {
@@ -222,7 +222,7 @@
     "cmdSwitchSplit": "Switch to Split view",
     "cmdOpenSettings": "Open Settings",
     "cmdManualSave": "Save note now",
-    "cmdInstallApp": "Install Knowmesh as App"
+    "cmdInstallApp": "Install Zuber as App"
   },
   "login": {
     "subtitle": "Offline-First Personal Knowledge Base & Markdown Editor",
@@ -230,12 +230,12 @@
     "secureTls": "TLS / HTTPS Encrypted",
     "localConnection": "Local Connection",
     "vaultPassword": "Vault Password",
-    "passwordPlaceholder": "Enter password (Default: knowmesh)",
+    "passwordPlaceholder": "Enter password (Default: zuber)",
     "unlock": "Unlock Vault",
     "connecting": "Connecting to Vault...",
-    "firstLoginOffline": "No connection to the Knowmesh server. An internet connection is required for the very first login.",
+    "firstLoginOffline": "No connection to the Zuber server. An internet connection is required for the very first login.",
     "loginFailed": "Login failed",
-    "envHint": "Default password in .env: knowmesh"
+    "envHint": "Default password in .env: zuber"
   },
   "conflict": {
     "title": "Version Conflict Detected",
@@ -258,14 +258,14 @@
     "tabGit": "Git & Backup",
     "tabLogs": "Logs & Diagnostics",
     "appearanceTitle": "Appearance & Color Themes",
-    "appearanceDesc": "Choose your color scheme and language for Knowmesh. All UI elements, editor, graph, and icons adapt immediately.",
+    "appearanceDesc": "Choose your color scheme and language for Zuber. All UI elements, editor, graph, and icons adapt immediately.",
     "languageLabel": "Language / Sprache",
     "langEn": "English",
     "langDe": "Deutsch",
     "editorTitle": "Editor & File Settings",
-    "editorDesc": "Configure note behavior and how Knowmesh starts.",
+    "editorDesc": "Configure note behavior and how Zuber starts.",
     "startupHeading": "Startup Note Behavior",
-    "startupDesc": "Choose which note opens when launching Knowmesh:",
+    "startupDesc": "Choose which note opens when launching Zuber:",
     "startupLast": "Open last active note (Recommended)",
     "startupLastDesc": "Automatically reopens the note you were working on last.",
     "startupDaily": "Open or create today's daily note",
@@ -290,7 +290,7 @@
     "saveSecurity": "Save security settings",
     "securitySaved": "Security settings saved successfully.",
     "serversTitle": "Vault Connections (Server Profiles)",
-    "serversDesc": "Manage your remote Knowmesh server profiles.",
+    "serversDesc": "Manage your remote Zuber server profiles.",
     "addServer": "Add Server Profile",
     "serverName": "Profile Name",
     "serverUrl": "Server URL",
@@ -356,7 +356,7 @@
     "logsClear": "Clear Logs",
     "logsEmpty": "No log entries found.",
     "logsCount": "{{count}} entries",
-    "aboutTitle": "About Knowmesh",
+    "aboutTitle": "About Zuber",
     "aboutDesc": "Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine"
   },
   "graph": {

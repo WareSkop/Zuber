@@ -33,14 +33,14 @@ flowchart TD
   - `allNotes`: Flache Liste aller Markdown-Notizen (`Array<{ path, name, folder }>`) für schnelles `[[`-Autovervollständigen und den Schnellöffner (`Ctrl/Cmd + O`)
   - `tags`: Alle im Vault vorkommenden `#tags` mit Häufigkeitszähler
 - **Aktive Notiz & Tabs:**
-  - `openTabs`: Liste der geöffneten Notizpfade (`string[]`), persistiert in `localStorage` (`knowmesh_open_tabs`)
+  - `openTabs`: Liste der geöffneten Notizpfade (`string[]`), persistiert in `localStorage` (`zuber_open_tabs`, Fallback `knowmesh_open_tabs`)
   - `activeNote`: Aktuell geladenes `NotePayload`-Objekt
   - `editorBody`: Aktueller Markdown-Text (ohne Frontmatter) im Editor
   - `editorProps`: Aktuelle `FrontmatterProperty[]`-Liste im visuellen Eigenschaften-Panel
   - `dirty`: `boolean` – gibt an, ob ungespeicherte Änderungen vorliegen
   - `saving`: `boolean` – gibt an, ob gerade ein Speicher-Request läuft
 - **Ansichtsmodi:**
-  - `editorMode`: `'live'` (Knowmesh Live-Preview) | `'source'` (Reiner Markdown-Quelltext) | `'reading'` (Komplett gerenderte HTML-Leseansicht)
+  - `editorMode`: `'live'` (Zuber Live-Preview) | `'source'` (Reiner Markdown-Quelltext) | `'reading'` (Komplett gerenderte HTML-Leseansicht)
   - `centerView`: `'editor'` (Standard) | `'graph'` (Vollbild-Graph im Hauptbereich)
   - `rightTab`: `'graph'` (Lokaler Nachbarschafts-Graph in der rechten Seitenleiste) | `'backlinks'` (Eingehende & ausgehende Verweise) | `'outline'` (Gliederung nach Überschriften)
 
@@ -113,7 +113,7 @@ Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zus
 
 ### 2.5 Interaktive Bildanpassung (Größenänderung per Maus & Ausrichtung via HTML-Attribute)
 
-Für maximale Kompatibilität mit Standard-Markdown-Readern, GitHub Flavored Markdown und Webviewern speichert Knowmesh Bildgrößen und -ausrichtungen nicht über proprietäre Syntax, sondern über Standard-HTML-Attribute:
+Für maximale Kompatibilität mit Standard-Markdown-Readern, GitHub Flavored Markdown und Webviewern speichert Zuber Bildgrößen und -ausrichtungen nicht über proprietäre Syntax, sondern über Standard-HTML-Attribute:
 `<img src="attachments/beispiel.png" alt="Bildbeschreibung" width="450" align="center" />`
 
 - **Interaktiver Auswahl-Rahmen:** Ein Klick auf ein gerendertes Bild im Live-Preview-Modus selektiert das Bild (`selected = true`) und blendet eine schwebende Schnellzugriffs-Toolbar sowie Größenanfasser (Drag-Handles) ein.
@@ -178,7 +178,7 @@ Die Graph-Ansicht nutzt ein performantes HTML5 `<canvas>` mit screen-space Rende
   - **Initiales Layout:** Gleichmäßige Vogel-Spirale (Golden-Angle Sunflower-Verteilung $\approx 137.5^\circ$) um das Zentrum.
   - **Spatial Hashing für Coulomb-Abstoßung:** Der Raum wird in ein Grid (Zellgröße `180px`) unterteilt. Jeder Knoten berechnet die Abstoßung nur gegen seine 9 Nachbarzellen $\rightarrow$ Skalierung in $O(N)$ statt $O(N^2)$ für flüssige 60 FPS auch bei 1.800+ Notizen.
   - **Degree-gewichtete Federkräfte:** Blatt-Knoten (`degree === 1`) werden nah an ihren Themen-Hub gezogen (`targetDist = linkDist * 0.55`), während Kanten zwischen zwei großen Hubs (`degree > 5`) mehr Abstand halten (`targetDist = linkDist * 1.8`), um klare, sternförmige Cluster zu bilden.
-- **Einklappbares Einstellungs-Panel (`knowmesh_graph_settings` in `localStorage`):**
+- **Einklappbares Einstellungs-Panel (`zuber_graph_settings` in `localStorage`):**
   - **Filter:** Volltext- und Prefix-Filter (`path:Ordner`, `#tag`), Toggles für Orphans (verwaiste Knoten), Tags und ungelöste Links.
   - **Farb-Gruppen:** Benutzerdefinierte Farb-Regeln (`{ id, query, color }`) nach Pfad, Tag oder Titel mit Farbwähler.
   - **Anzeige & Kräfte:** Schieberegler für Knotengröße, Textschwelle, Zentripetalkraft, Abstoßung und Link-Abstand.
@@ -192,13 +192,13 @@ Die Graph-Ansicht nutzt ein performantes HTML5 `<canvas>` mit screen-space Rende
 
 ## 5. Einstellungs-Modal & Theme-System ([`src/components/SettingsModal.tsx`](../src/components/SettingsModal.tsx))
 
-Knowmesh bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-Toolbar und im Ribbon erreichbar):
+Zuber bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der Top-Toolbar und im Ribbon erreichbar):
 
 - **Menü 1: „Darstellung & Themes“:**
   - Steuert über `data-theme` auf `document.documentElement` alle Farben im Editor, in Sidebars, Tabellen und im Canvas-Graphen.
-  - Das Theme wird persistent in `localStorage` unter `knowmesh_theme` gesichert.
+  - Das Theme wird persistent in `localStorage` unter `zuber_theme` gesichert.
   - **Die 5 Themes:**
-    1. `knowmesh`: Dunkles Knowmesh (#0d1117/#161c24), Kristall-Gold (`#d4af37`) & Facetten-Türkis (`#29b6c8`).
+    1. `zuber`: Dunkles Zuber (#0d1117/#161c24), Kristall-Gold (`#d4af37`) & Facetten-Türkis (`#29b6c8`).
     2. `dark-cold`: Mitternachtsblau (#0f172a/#1e293b) & Eisblau-Akzent (`#38bdf8`).
     3. `dark-warm`: Espresso-Anthrazit (#1c1917/#292524) & Bernstein-Akzent (`#f59e0b`).
     4. `light-cold`: Eisweiß (#f8fafc/#f1f5f9) & Kobaltblau-Akzent (`#2563eb`).
@@ -215,7 +215,7 @@ Knowmesh bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der To
 ## 6. Offline-First Sync & Konfliktlösung ([`src/sync/`](../src/sync/) & [`src/components/ConflictModal.tsx`](../src/components/ConflictModal.tsx))
 
 - **IndexedDB (`src/sync/localDb.ts`):**
-  - Getrennte Datenbank pro Server-Profil (`knowmesh_cache_<profileId>`).
+  - Getrennte Datenbank pro Server-Profil (`zuber_cache_<profileId>`).
   - Stores: `meta` (Baum, Tags, Graph), `notes` (alle `.md`-Notizen vollständig lokal), `attachments` (gecachte Binär-Blobs) und `outbox` (Offline-Änderungen).
 - **SyncEngine (`src/sync/syncEngine.ts`):**
   - Online: Flusht die `outbox`, vergleicht `GET /api/vault/sync-manifest`, lädt Deltas per `POST /api/vault/notes-batch` und aktualisiert ausgewählte Offline-Anhänge im Hintergrund.
@@ -229,7 +229,7 @@ Knowmesh bietet ein umfassendes Einstellungsfenster (über das Zahnrad in der To
 
 ## 7. Befehlspalette (`Ctrl+P` / `Cmd+P`) & Shortcuts ([`src/components/CommandPalette.tsx`](../src/components/CommandPalette.tsx))
 
-Knowmesh implementiert eine vollwertige **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie `Ctrl+O` aufgerufen werden kann:
+Zuber implementiert eine vollwertige **Befehlspalette**, die global per Tastenkombination `Ctrl+P` (oder `Cmd+P` auf macOS) sowie `Ctrl+O` aufgerufen werden kann:
 
 - **Eigenschaften & Bedienung:**
   - **Fuzzy-/Volltextsuche:** Durchsucht Titel, Beschreibungen, Kategorien und Synonyme (z. B. „fett“, „table“, „theme“, „sync“).
@@ -330,7 +330,7 @@ Direkt oberhalb des scrollenden Editor-Bereichs steht eine feste **Sticky-Format
 
 Zur Beseitigung redundanter Bedienelemente und Schaffung maximalen Freiraums für den Notizinhalt:
 - **Linke Ribbon-Leiste:** Beginnt direkt mit dem Button „Neue Notiz“ (`+`-Datei-Icon), gefolgt von Editor-Ansicht, Graph-Ansicht und Split-View. Der frühere doppelte Sidebar-Toggle-Button am Kopf des Ribbons wurde entfernt, da die Leiste primär über den linken Button der Haupt-Toolbar gesteuert wird.
-- **Obere Haupt-Toolbar (Links):** Der frühere Branding-Block (`Knowmesh`-Logo, Text, `vault`-Badge und Trennstrich) wurde vollständig entfernt. Unmittelbar neben dem linken Sidebar-Toggle-Button folgt nahtlos der Breadcrumb-Pfad der geöffneten Notiz inklusive des Speicherstatus-Badges.
+- **Obere Haupt-Toolbar (Links):** Der frühere Branding-Block (`Zuber`-Logo, Text, `vault`-Badge und Trennstrich) wurde vollständig entfernt. Unmittelbar neben dem linken Sidebar-Toggle-Button folgt nahtlos der Breadcrumb-Pfad der geöffneten Notiz inklusive des Speicherstatus-Badges.
 - **Obere Haupt-Toolbar (Rechts):**
   - Entfernung redundanter Buttons: „Bild einfügen“ (befindet sich in der `EditorToolbar`), „Graph-Ansicht“ (befindet sich im Ribbon) und „>_ Befehle“ (wird über den Shortcut `Ctrl+P` / `Cmd+P` bedient).
   - Die verbleibende Menüleiste rechts enthält sauber strukturiert:
@@ -344,8 +344,8 @@ Zur Beseitigung redundanter Bedienelemente und Schaffung maximalen Freiraums fü
 
 ## 12. Mehrsprachigkeit & Internationalisierung (i18n)
 
-Knowmesh verfügt über eine schlanke, performante Internationalisierung direkt im Client-Bundle:
-- **Standardsprache (Default & Fallback):** **Englisch (`en`)**, sofern in `localStorage` (`knowmesh_language`) noch keine andere Sprache hinterlegt ist.
+Zuber verfügt über eine schlanke, performante Internationalisierung direkt im Client-Bundle:
+- **Standardsprache (Default & Fallback):** **Englisch (`en`)**, sofern in `localStorage` (`zuber_language`) noch keine andere Sprache hinterlegt ist.
 - **Unterstützte Sprachen:**
   - `en` – English (Default)
   - `de` – Deutsch
@@ -362,7 +362,7 @@ Knowmesh verfügt über eine schlanke, performante Internationalisierung direkt 
 ## 13. Einstellungs-Rubrik „Editor & Files“ & Konfigurierbares Startverhalten
 
 In `SettingsModal.tsx` existiert der dedizierte Bereich **„Editor & Files“** mit konfigurierbarem Startverhalten:
-- **Konfiguration (`src/startupConfig.ts`, `localStorage: knowmesh_startup_config`):**
+- **Konfiguration (`src/startupConfig.ts`, `localStorage: zuber_startup_config`):**
   ```ts
   export type StartupBehavior = 'last' | 'daily' | 'specific';
   export interface StartupConfig {
@@ -372,7 +372,7 @@ In `SettingsModal.tsx` existiert der dedizierte Bereich **„Editor & Files“**
   }
   ```
 - **Optionen:**
-  1. **Letzte geöffnete Notiz (`last` – Standard):** Speichert bei jedem Notizwechsel den relativen Pfad in `knowmesh_last_active_note` und stellt exakt diese Notiz beim nächsten Start wieder her.
+  1. **Letzte geöffnete Notiz (`last` – Standard):** Speichert bei jedem Notizwechsel den relativen Pfad in `zuber_last_active_note` und stellt exakt diese Notiz beim nächsten Start wieder her.
   2. **Heutige Tagesnotiz (`daily`):** Prüft, ob `YYYY-MM-DD.md` (z. B. `2026-10-17.md`) im konfigurierten Ordner existiert. Falls nicht, wird die Datei mit Standard-Header (`# YYYY-MM-DD`) und Tagesdatum automatisch erstellt und geöffnet.
   3. **Bestimmte Notiz immer öffnen (`specific`):** Bietet ein Dropdown-Auswahlfeld aller Markdown-Dateien im Vault, um z. B. eine Startseite oder ein Dashboard als feste Startnotiz zu definieren.
 
@@ -411,7 +411,7 @@ Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufge
 ### 15.3 Offline-Erstellung von Dateien & Ordnern (IndexedDB & Outbox)
 
 1. **Architektur auf API- & Data-Layer-Ebene (`src/api.ts` & `src/sync/syncEngine.ts`):**
-   - Knowmesh verwendet das **OfflineSyncDelegate**-Pattern: `api.ts` delegiert Aufrufe von `saveNote`, `createFolder`, `renameEntry`, `copyEntry` und `deleteEntry` an die `SyncEngine`.
+   - Zuber verwendet das **OfflineSyncDelegate**-Pattern: `api.ts` delegiert Aufrufe von `saveNote`, `createFolder`, `renameEntry`, `copyEntry` und `deleteEntry` an die `SyncEngine`.
    - Bei bestehender Online-Verbindung versucht die App, Mutationen direkt über `rawApi` an den Server zu senden.
    - Ist das Gerät offline (`navigator.onLine === false`) oder schlägt die Server-Anfrage fehl (Netzwerkfehler, Server nicht erreichbar), schaltet die App nahtlos auf die lokale IndexedDB um:
      - **Ordner (`createFolder`):**
@@ -460,7 +460,7 @@ Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufge
 - **Desktop-Layout (`>= 768px`):** Bleibt unverändert zentriert mit `max-width: 820px; margin: 0 auto;` und angenehmem Weißraum.
 
 ### 16.2 Getrennte Schriftgrößen-Regler (Desktop vs. Mobile & UI vs. Editor)
-- **Persistierung:** Gespeichert unter `localStorage.getItem('knowmesh_font_settings')` als `FontSettings`-Objekt via [`src/fontSettings.ts`](../src/fontSettings.ts):
+- **Persistierung:** Gespeichert unter `localStorage.getItem('zuber_font_settings')` als `FontSettings`-Objekt via [`src/fontSettings.ts`](../src/fontSettings.ts):
   ```ts
   interface FontSettings {
     desktop: { uiFontSize: number; editorFontSize: number };
@@ -489,7 +489,7 @@ Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufge
 
 ## 17. Grafischer Canvas-, Workflow- & Netzwerk-Editor (`.canvas` & `@xyflow/react`)
 
-Knowmesh integriert einen vollwertigen, grafischen Unendliche-Leinwand-Editor für `.canvas`-Dateien im zentralen Arbeitsbereich, basierend auf `@xyflow/react`.
+Zuber integriert einen vollwertigen, grafischen Unendliche-Leinwand-Editor für `.canvas`-Dateien im zentralen Arbeitsbereich, basierend auf `@xyflow/react`.
 
 ### 17.1 Komponenten-Architektur (`src/components/canvas/`)
 
@@ -514,7 +514,7 @@ flowchart TD
 - **React Flow $\rightarrow$ JSON Canvas:**
   - Extrahiert saubere, minimal getypte Knoten und Kanten ohne interne React Flow Transient-States.
   - Standardknoten (`rectangle` ohne Spezial-Shape) werden als reguläre Obsidian `text`- oder `file`-Nodes exportiert.
-  - Erweiterte Knowmesh-Formen behalten `shape: CanvasShape` bei (Graceful Degradation: Obsidian Desktop rendert sie als rechteckige Textkarten und ignoriert `shape`).
+  - Erweiterte Zuber-Formen behalten `shape: CanvasShape` bei (Graceful Degradation: Obsidian Desktop rendert sie als rechteckige Textkarten und ignoriert `shape`).
 
 ### 17.3 Container-Hierarchie, State-Sync & Interaktion
 - **Explizite Container-Höhe:** Vom übergeordneten Workspace (`.canvas-workspace-pane`) über `.canvas-editor-wrapper` bis zu `.canvas-reactflow-container` ist eine durchgängige Mindesthöhe von `450px` bzw. `height: 100%` festgelegt. Das `<ReactFlow>`-Element spannt so garantiert die gesamte Arbeitsfläche auf.
@@ -626,8 +626,8 @@ flowchart TD
 
 ### 21.3 Einrastende Favoriten- & Zuletzt-verwendet-Panels (`FileSidebar.tsx`)
 - In der Menüleiste der linken Leiste (direkt neben dem Tags-Button) befinden sich zwei einrastende Toggle-Buttons:
-  - **Favoriten (⭐):** Schaltet das Favoriten-Panel oberhalb des Dateibaums ein/aus (Zustand persistent in `localStorage` unter `knowmesh_show_favorites_panel`). Favoriten können im Kontextmenü jeder Datei und jedes Ordners per Rechtsklick hinzugefügt oder entfernt werden.
-  - **Zuletzt verwendet (🕒):** Schaltet das Verlaufspanel der letzten 10 geöffneten Notizen/Canvases ein/aus (`knowmesh_show_recent_panel`).
+  - **Favoriten (⭐):** Schaltet das Favoriten-Panel oberhalb des Dateibaums ein/aus (Zustand persistent in `localStorage` unter `zuber_show_favorites_panel`). Favoriten können im Kontextmenü jeder Datei und jedes Ordners per Rechtsklick hinzugefügt oder entfernt werden.
+  - **Zuletzt verwendet (🕒):** Schaltet das Verlaufspanel der letzten 10 geöffneten Notizen/Canvases ein/aus (`zuber_show_recent_panel`).
 - **Höhen- & Scroll-Regel:** Beide Panels zeigen bis zu 10 Elemente ohne Scrollbalken an; darüber hinaus begrenzt `max-height: calc(10 * 28px); overflow-y: auto;` die Liste, sodass der Haupt-Dateibaum darunter stets vollständig bedienbar bleibt.
 - **Rename- & Delete-Synchronisation:** Beim Umbenennen oder Löschen von Dateien oder Ordnern werden Favoriten und Recent-Listen in `localStorage` automatisch angepasst bzw. bereinigt (`src/utils/vaultNavigation.ts`).
 
@@ -635,7 +635,7 @@ flowchart TD
 - Die Breiten der linken und rechten Leiste können auf Desktop-Bildschirmen (`>= 768px`) interaktiv über Maus-Ziehgriffe angepasst werden:
   - `.sidebar-resizer-left`: Anker am rechten Rand der linken Leiste (Standard: `280px`, min: `180px`, max: `600px`).
   - `.sidebar-resizer-right`: Anker am linken Rand der rechten Leiste (Standard: `300px`, min: `200px`, max: `650px`).
-- Die Abmessungen werden in CSS-Variablen `--left-sidebar-width` und `--right-sidebar-width` geschrieben und in `localStorage` (`knowmesh_sidebar_widths`) persistent gespeichert.
+- Die Abmessungen werden in CSS-Variablen `--left-sidebar-width` und `--right-sidebar-width` geschrieben und in `localStorage` (`zuber_sidebar_widths`) persistent gespeichert.
 
 ---
 
@@ -675,7 +675,7 @@ flowchart TD
 
 ## 23. Git-Versionsverlauf, Visueller Diff-Viewer & Ein-Klick-Wiederherstellung (`VersionHistoryModal.tsx`, `gitService.ts`, `FileSidebar.tsx`, `src/styles.css`)
 
-Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für alle `.md`-Notizen und `.canvas`-Whiteboards, die direkt auf der Git-Historie des Vaults aufsetzt.
+Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für alle `.md`-Notizen und `.canvas`-Whiteboards, die direkt auf der Git-Historie des Vaults aufsetzt.
 
 ### 23.1 Kontextmenü & Aufruf im Dateibaum (`FileSidebar.tsx`)
 - **Kontextmenü-Integration:** Durch Rechtsklick (oder das `⋮`-Menü auf mobilen Endgeräten) auf eine beliebige Markdown-Datei oder ein Canvas-Board öffnet sich das Kontextmenü mit dem Menüpunkt **„Versionsverlauf“** (`sidebar.versionHistory`).
@@ -737,7 +737,7 @@ Knowmesh integriert eine vollständige, Obsidian-ähnliche Versionshistorie für
   - Schneller Einrast-Umschalter: `Einrasten aktiv (Snap)` / `Einrasten deaktiviert`.
   - Rastergrößen-Auswahl: Vier Pillen für `10px`, `15px` (Standard), `20px` und `25px`.
   - Hintergrundmuster: Umschaltbar zwischen `Punkte` (`dots`), `Linien` (`lines`) und `Aus` (`off`).
-- **Persistenz:** Zustand wird in `localStorage` unter `knowmesh_canvas_grid` gespeichert und bleibt beim Notizwechsel und Neustart erhalten.
+- **Persistenz:** Zustand wird in `localStorage` unter `zuber_canvas_grid` gespeichert und bleibt beim Notizwechsel und Neustart erhalten.
 - **Bindung:** Wird direkt an `<ReactFlow snapToGrid={gridConfig.snapToGrid} snapGrid={[gridConfig.gridSize, gridConfig.gridSize]}>` und `<Background gap={gridConfig.gridSize} variant={...}>` übergeben.
 
 ### 24.4 Zentrierter Text & Markdown in Formen (`CanvasShapeNode.tsx`)

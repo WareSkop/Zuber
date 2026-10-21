@@ -7,8 +7,8 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
   error: 40,
 };
 
-const STORAGE_KEY_LEVEL = 'knowmesh_log_level';
-const STORAGE_KEY_LOGS = 'knowmesh_client_logs';
+const STORAGE_KEY_LEVEL = 'zuber_log_level';
+const STORAGE_KEY_LOGS = 'zuber_client_logs';
 const MAX_BUFFER_SIZE = 1000;
 const MAX_PERSISTED_LOGS = 200;
 
@@ -26,7 +26,7 @@ export class ClientLogger {
   private loadLevel(): LogLevel {
     if (typeof localStorage === 'undefined') return 'info';
     try {
-      const stored = localStorage.getItem(STORAGE_KEY_LEVEL) as LogLevel;
+      const stored = (localStorage.getItem(STORAGE_KEY_LEVEL) || localStorage.getItem('knowmesh_log_level')) as LogLevel;
       if (stored && ['debug', 'info', 'warn', 'error'].includes(stored)) {
         return stored;
       }
@@ -39,7 +39,7 @@ export class ClientLogger {
   private loadPersistedLogs(): LogEntry[] {
     if (typeof sessionStorage === 'undefined') return [];
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY_LOGS);
+      const raw = sessionStorage.getItem(STORAGE_KEY_LOGS) || sessionStorage.getItem('knowmesh_client_logs');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed.slice(-MAX_BUFFER_SIZE);

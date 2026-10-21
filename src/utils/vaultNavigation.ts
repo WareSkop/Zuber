@@ -5,7 +5,7 @@ export interface FavoriteItem {
 
 export const loadFavorites = (): FavoriteItem[] => {
   try {
-    const raw = localStorage.getItem('knowmesh_favorites');
+    const raw = localStorage.getItem('zuber_favorites') || localStorage.getItem('knowmesh_favorites');
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -23,14 +23,15 @@ export const loadFavorites = (): FavoriteItem[] => {
 
 export const saveFavorites = (favorites: FavoriteItem[]): void => {
   try {
-    localStorage.setItem('knowmesh_favorites', JSON.stringify(favorites));
+    localStorage.setItem('zuber_favorites', JSON.stringify(favorites));
+    window.dispatchEvent(new CustomEvent('zuber_favorites_changed'));
     window.dispatchEvent(new CustomEvent('knowmesh_favorites_changed'));
   } catch {}
 };
 
 export const loadRecentNotes = (): string[] => {
   try {
-    const raw = localStorage.getItem('knowmesh_recent_notes');
+    const raw = localStorage.getItem('zuber_recent_notes') || localStorage.getItem('knowmesh_recent_notes');
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -45,7 +46,8 @@ export const recordRecentNote = (notePath: string): void => {
     const current = loadRecentNotes();
     const filtered = current.filter((p) => p !== notePath);
     const updated = [notePath, ...filtered].slice(0, 10);
-    localStorage.setItem('knowmesh_recent_notes', JSON.stringify(updated));
+    localStorage.setItem('zuber_recent_notes', JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('zuber_recent_changed'));
     window.dispatchEvent(new CustomEvent('knowmesh_recent_changed'));
   } catch {}
 };
@@ -86,7 +88,8 @@ export const notifyVaultEntryRenamed = (oldPath: string, newPath: string): void 
       return p;
     });
     if (recChanged) {
-      localStorage.setItem('knowmesh_recent_notes', JSON.stringify(nextRecents));
+      localStorage.setItem('zuber_recent_notes', JSON.stringify(nextRecents));
+      window.dispatchEvent(new CustomEvent('zuber_recent_changed'));
       window.dispatchEvent(new CustomEvent('knowmesh_recent_changed'));
     }
   } catch {}
@@ -109,7 +112,8 @@ export const notifyVaultEntryDeleted = (deletedPath: string): void => {
       (p) => p !== deletedPath && !p.startsWith(deletedPath + '/')
     );
     if (nextRecents.length !== recents.length) {
-      localStorage.setItem('knowmesh_recent_notes', JSON.stringify(nextRecents));
+      localStorage.setItem('zuber_recent_notes', JSON.stringify(nextRecents));
+      window.dispatchEvent(new CustomEvent('zuber_recent_changed'));
       window.dispatchEvent(new CustomEvent('knowmesh_recent_changed'));
     }
   } catch {}

@@ -143,8 +143,8 @@ export class GitService {
       }
 
       // Configure author identity
-      const userName = config.userName || 'Knowmesh Server';
-      const userEmail = config.userEmail || 'knowmesh@local';
+      const userName = config.userName || 'Zuber Server';
+      const userEmail = config.userEmail || 'zuber@local';
 
       await execFileAsync('git', ['config', 'user.name', userName], { cwd: this.vaultDir });
       await execFileAsync('git', ['config', 'user.email', userEmail], { cwd: this.vaultDir });
@@ -155,7 +155,7 @@ export class GitService {
           await execFileAsync('git', ['add', '-A'], { cwd: this.vaultDir });
           await execFileAsync(
             'git',
-            ['commit', '-m', 'chore: initial knowmesh vault commit', '--allow-empty'],
+            ['commit', '-m', 'chore: initial zuber vault commit', '--allow-empty'],
             { cwd: this.vaultDir }
           );
         } catch {}
@@ -177,8 +177,8 @@ export class GitService {
     }
 
     await this.runExclusive(async () => {
-      const userName = config.userName || 'Knowmesh Server';
-      const userEmail = config.userEmail || 'knowmesh@local';
+      const userName = config.userName || 'Zuber Server';
+      const userEmail = config.userEmail || 'zuber@local';
       await execFileAsync('git', ['config', 'user.name', userName], { cwd: this.vaultDir });
       await execFileAsync('git', ['config', 'user.email', userEmail], { cwd: this.vaultDir });
     });
@@ -346,7 +346,7 @@ export class GitService {
           await this.execGit(['commit', '-m', 'auto: pre-push commit']);
         }
       } catch (commitErr) {
-        console.warn('[Knowmesh Git] Pre-push commit note:', commitErr);
+        console.warn('[Zuber Git] Pre-push commit note:', commitErr);
       }
 
       // 2. Push to remote
@@ -527,7 +527,7 @@ export class GitService {
       try {
         await this.commit(`restore: ${cleanPath} to ${commitHash.slice(0, 7)}`);
       } catch (err) {
-        console.warn('[Knowmesh Git] Auto-commit after restore error:', err);
+        console.warn('[Zuber Git] Auto-commit after restore error:', err);
       }
     }
 

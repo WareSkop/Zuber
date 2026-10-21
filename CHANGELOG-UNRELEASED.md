@@ -6,6 +6,17 @@
 - **Type-to-Edit für ausgewählte Canvas-Knoten (`CanvasEditor.tsx` & `CanvasShapeNode.tsx`):** Beim Tippen eines druckbaren Zeichens auf einem einzeln ausgewählten Form- oder Text-Knoten wird sofort der Inline-Editor geöffnet, der Cursor ans Textende gesetzt und das getippte Zeichen angehängt. Shortcuts wie `Ctrl+Z`, `Space` (Pan) und `Delete` bleiben uneingeschränkt funktionsfähig.
 
 ### Changed
+- **Vollständiges Rebranding von „Knowmesh“ zu „Zuber“ & Vereinheitlichung der Umgebungsvariablen:**
+  - **Identität & PWA:** Aktualisierung aller Anwendungsnamen, Titel, Web-Manifest-Metadaten (`public/manifest.webmanifest`), `package.json`, Standard-Themes (`zuber`), Lokalisierungsdateien (`de.json`, `en.json`) sowie UI-Komponenten (`App.tsx`, `FileSidebar.tsx`, `SettingsModal.tsx`, `LoginModal.tsx`, `ErrorBoundary.tsx`).
+  - **Passwort-Umgebungsvariable:** Vereinheitlicht auf `PASSWORD=` mit transparenter Abwärtskompatibilität zu `ZUBER_PASSWORD`, `KNOWMESH_PASSWORD`, `OBSIDIAN_WEB_PASSWORD` und Fallback-Passwort `'zuber'`.
+  - **Speicher- und Session-Migration:**
+    - Session-Cookie aktualisiert auf `zuber_session` mit nahtloser Erkennung bestehender `knowmesh_session`-, `basalt_session`- und `obsidian_vault_session`-Cookies.
+    - IndexedDB-Datenbank migriert auf `zuber_cache_<profileId>` mit automatischer Datenübernahme aus bestehenden `knowmesh_cache_<profileId>`-Instanzen beim ersten Start.
+    - `localStorage`-Keys migriert von `knowmesh_*` auf `zuber_*` (inkl. `zuber_token`, `zuber_vault_profiles`, `zuber_theme`, `zuber_language`, `zuber_font_settings`, `zuber_open_tabs`, `zuber_startup_config`, etc.).
+  - **Docker & Workflows:**
+    - `docker-compose.yml` und `.env.example` auf Container `zuber`, Image `codeberg.org/waring/zuber:latest` und `PASSWORD=` aktualisiert.
+    - Build- und Publish-Skripte (`scripts/publish-codeberg.sh` und `.forgejo/workflows/docker-publish.yml`) auf Image `codeberg.org/waring/zuber` angepasst.
+  - **Dokumentation:** Vollständige Aktualisierung von `doc/README.md`, `doc/ARCHITECTURE.md`, `doc/API_AND_TYPES.md`, `doc/FRONTEND_AND_EDITOR.md` und `doc/LLM_DEVELOPER_GUIDE.md`.
 
 ### Fixed
 - **Web Share Target Duplikat-Schutz (`src/App.tsx`, `src/sync/shareTargetService.ts` & `src/sync/syncEngine.ts`):** Verhindert das mehrfache Anlegen (Doppel-/Dreifachnotizen) beim Empfang geteilter Inhalte auf Android und Desktop durch einen atomaren In-Memory-Verarbeitungs-Lock (`isProcessingSharesRef` / `isProcessingSharesGlobal`), sofortiges Löschen der Einträge aus der IndexedDB-Queue noch vor Beginn der Datei-I/O, synchrone Bereinigung der URL-Parameter, Signatur-Deduplizierung sowie eine 5-Sekunden-Schutzprüfung gegen identische Notiztitel und Inhalte mit deterministischer Benennung (`${item.timestamp}_...`).

@@ -2,10 +2,10 @@ import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { configService } from './configService';
 
-const COOKIE_NAME = 'knowmesh_session';
+const COOKIE_NAME = 'zuber_session';
 
 function getSecret(): string {
-  return process.env.SESSION_SECRET || 'knowmesh-offline-vault-secret-key-change-me-in-prod';
+  return process.env.SESSION_SECRET || 'zuber-offline-vault-secret-key-change-me-in-prod';
 }
 
 export function createSessionToken(): string {
@@ -67,7 +67,7 @@ export function extractTokenFromRequest(req: Request): string | null {
     return authHeader.slice(7).trim();
   }
 
-  const cookieToken = req.cookies?.[COOKIE_NAME] || req.cookies?.['basalt_session'] || req.cookies?.['obsidian_vault_session'];
+  const cookieToken = req.cookies?.[COOKIE_NAME] || req.cookies?.['knowmesh_session'] || req.cookies?.['basalt_session'] || req.cookies?.['obsidian_vault_session'];
   if (cookieToken) return cookieToken;
 
   if (typeof req.query.token === 'string') {

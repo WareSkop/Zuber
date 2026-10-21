@@ -102,7 +102,7 @@ export class VaultService {
     const welcomeNote = `---
 tags:
   - willkommen
-  - knowmesh
+  - zuber
   - dashboard
 aliases:
   - Startseite
@@ -113,9 +113,9 @@ favorit: true
 priorität: 1
 ---
 
-# Willkommen in Knowmesh
+# Willkommen in Zuber
 
-Dies ist deine selbstgehostete **Knowmesh Web-Applikation** mit verschlüsselter HTTPS-Verbindung, Echtzeit-Dateisystem-Synchronisation, visuellem **Frontmatter-Manager (Eigenschaften)** und interaktiver **Graph-Ansicht**.
+Dies ist deine selbstgehostete **Zuber Web-Applikation** mit verschlüsselter HTTPS-Verbindung, Echtzeit-Dateisystem-Synchronisation, visuellem **Frontmatter-Manager (Eigenschaften)** und interaktiver **Graph-Ansicht**.
 
 > [!tip] Live-Preview Editor
 > Klicke in eine beliebige Zeile, um den Markdown-Quellcode direkt zu bearbeiten. Sobald der Cursor die Zeile verlässt, werden Überschriften, **Fettdruck**, *Kursivschrift*, ==Markierungen==, \`Inline-Code\`, Aufgabenlisten und \`[[Wiki-Links]]\` interaktiv gerendert!
@@ -155,7 +155,7 @@ verschlüsselt: true
 
 # Projekt-Architektur
 
-Diese Notiz beschreibt den Aufbau der Web-Applikation, die auf der [[Willkommen in Knowmesh|Startseite]] vorgestellt wird.
+Diese Notiz beschreibt den Aufbau der Web-Applikation, die auf der [[Willkommen in Zuber|Startseite]] vorgestellt wird.
 
 > [!info] Echtzeit-Synchronisation (Chokidar + WebSockets)
 > Alle Dateien liegen als reguläre \`.md\`-Dateien auf dem Server. Wenn du Dateien parallel mit externen Editoren, Git oder Syncthing bearbeitest, erkennt der Server die Änderung sofort und aktualisiert den Browser live.
@@ -190,13 +190,13 @@ bewertung: 5
 Die **Zettelkasten Methode** lebt von atomaren Notizen und bidirektionalen Verknüpfungen.
 
 > [!important] Backlinks automatisch erkennen
-> In der rechten Seitenleiste siehst du unter **Backlinks** sofort alle Notizen, die auf diese Notiz verweisen – zum Beispiel [[Willkommen in Knowmesh]] und [[Projekt-Architektur]].
+> In der rechten Seitenleiste siehst du unter **Backlinks** sofort alle Notizen, die auf diese Notiz verweisen – zum Beispiel [[Willkommen in Zuber]] und [[Projekt-Architektur]].
 
 ## Prinzipien
 
 - **Atomarität**: Ein Gedanke pro Notiz.
 - **Vernetzung**: Verlinke verwandte Konzepte mit \`[[Wiki-Links]]\`, z. B. zur [[Projekt-Architektur]].
-- **Graph-Exploration**: Nutze die Graph-Ansicht, um Wissenscluster über #wissen und #knowmesh sichtbar zu machen.
+- **Graph-Exploration**: Nutze die Graph-Ansicht, um Wissenscluster über #wissen und #zuber sichtbar zu machen.
 `;
 
     const dailyNote = `---
@@ -210,7 +210,7 @@ erledigt: false
 
 # 2026-10-16
 
-Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Startseite]].
+Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startseite]].
 
 > [!warning] Erinnerung
 > Vergiss nicht, neue Erkenntnisse direkt mit der [[Zettelkasten Methode]] zu verknüpfen!
@@ -222,7 +222,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Knowmesh|Star
 - [ ] Neue Ideen für das nächste Quartal sammeln
 `;
 
-    fs.writeFileSync(path.join(this.vaultDir, 'Willkommen in Knowmesh.md'), welcomeNote, 'utf-8');
+    fs.writeFileSync(path.join(this.vaultDir, 'Willkommen in Zuber.md'), welcomeNote, 'utf-8');
     fs.writeFileSync(path.join(this.vaultDir, 'Projekte', 'Projekt-Architektur.md'), archNote, 'utf-8');
     fs.writeFileSync(path.join(this.vaultDir, 'Wissensbasis', 'Zettelkasten Methode.md'), zettelkastenNote, 'utf-8');
     fs.writeFileSync(path.join(this.vaultDir, 'Tägliche Notizen', '2026-10-16.md'), dailyNote, 'utf-8');

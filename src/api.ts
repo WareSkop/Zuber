@@ -20,9 +20,9 @@ import type {
 } from '../shared/types';
 import { clientLogger } from './utils/logger';
 
-const TOKEN_STORAGE_KEY = 'knowmesh_token';
-const ACTIVE_PROFILE_KEY = 'knowmesh_active_profile_id';
-const PROFILES_STORAGE_KEY = 'knowmesh_vault_profiles';
+const TOKEN_STORAGE_KEY = 'zuber_token';
+const ACTIVE_PROFILE_KEY = 'zuber_active_profile_id';
+const PROFILES_STORAGE_KEY = 'zuber_vault_profiles';
 
 function getSafeStorage(): Storage | null {
   try {
@@ -38,7 +38,13 @@ function getSafeStorage(): Storage | null {
 
 export function getStoredToken(): string | null {
   const s = getSafeStorage();
-  return s?.getItem(TOKEN_STORAGE_KEY) || s?.getItem('basalt_token') || s?.getItem('obsidian_web_vault_token') || null;
+  return (
+    s?.getItem(TOKEN_STORAGE_KEY) ||
+    s?.getItem('knowmesh_token') ||
+    s?.getItem('basalt_token') ||
+    s?.getItem('obsidian_web_vault_token') ||
+    null
+  );
 }
 
 export function setStoredToken(token: string | null): void {
@@ -48,6 +54,7 @@ export function setStoredToken(token: string | null): void {
     s.setItem(TOKEN_STORAGE_KEY, token);
   } else {
     s.removeItem(TOKEN_STORAGE_KEY);
+    s.removeItem('knowmesh_token');
     s.removeItem('basalt_token');
     s.removeItem('obsidian_web_vault_token');
   }
@@ -56,7 +63,10 @@ export function setStoredToken(token: string | null): void {
 export function getStoredProfiles(): VaultProfile[] {
   try {
     const s = getSafeStorage();
-    const raw = s?.getItem(PROFILES_STORAGE_KEY) || s?.getItem('basalt_vault_profiles');
+    const raw =
+      s?.getItem(PROFILES_STORAGE_KEY) ||
+      s?.getItem('knowmesh_vault_profiles') ||
+      s?.getItem('basalt_vault_profiles');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -79,7 +89,10 @@ export function saveStoredProfiles(profiles: VaultProfile[]): void {
 export function getActiveProfile(): VaultProfile {
   const profiles = getStoredProfiles();
   const s = getSafeStorage();
-  const activeId = s?.getItem(ACTIVE_PROFILE_KEY) || s?.getItem('basalt_active_profile_id');
+  const activeId =
+    s?.getItem(ACTIVE_PROFILE_KEY) ||
+    s?.getItem('knowmesh_active_profile_id') ||
+    s?.getItem('basalt_active_profile_id');
   const found = profiles.find((p) => p.id === activeId);
   return found || profiles[0];
 }
@@ -121,7 +134,7 @@ export class ApiHttpError extends Error {
   }
 }
 
-const OFFLINE_AUTH_VERIFIER_KEY = 'knowmesh_offline_auth_verifier';
+const OFFLINE_AUTH_VERIFIER_KEY = 'zuber_offline_auth_verifier';
 
 export async function storeOfflinePasswordHash(password: string): Promise<void> {
   if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) return;
@@ -143,14 +156,14 @@ export async function storeOfflinePasswordHash(password: string): Promise<void> 
     const record = { salt: saltHex, hash: hashHex, timestamp: Date.now() };
     localStorage.setItem(OFFLINE_AUTH_VERIFIER_KEY, JSON.stringify(record));
   } catch (err) {
-    console.warn('[Knowmesh Auth] Could not store offline password verifier', err);
+    console.warn('[Zuber Auth] Could not store offline password verifier', err);
   }
 }
 
 export async function verifyOfflinePassword(password: string): Promise<boolean> {
   if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) return false;
   try {
-    const raw = localStorage.getItem(OFFLINE_AUTH_VERIFIER_KEY);
+    const raw = localStorage.getItem(OFFLINE_AUTH_VERIFIER_KEY) || localStorage.getItem('knowmesh_offline_auth_verifier');
     if (!raw) return false;
     const { salt, hash } = JSON.parse(raw);
     if (!salt || !hash) return false;
@@ -171,34 +184,49 @@ export async function verifyOfflinePassword(password: string): Promise<boolean> 
 
 export function hasOfflineAuthVerifier(): boolean {
   if (typeof localStorage === 'undefined') return false;
-  return Boolean(localStorage.getItem(OFFLINE_AUTH_VERIFIER_KEY));
+  return Boolean(
+    localStorage.getItem(OFFLINE_AUTH_VERIFIER_KEY) ||
+    localStorage.getItem('knowmesh_offline_auth_verifier')
+  );
 }
 
 export function migrateLegacyStorageKeys(): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    if (!localStorage.getItem(TOKEN_STORAGE_KEY)) {
-      const oldToken = localStorage.getItem('basalt_token') || localStorage.getItem('obsidian_web_vault_token');
-      if (oldToken) localStorage.setItem(TOKEN_STORAGE_KEY, oldToken);
-    }
-    if (!localStorage.getItem(ACTIVE_PROFILE_KEY)) {
-      const oldActive = localStorage.getItem('basalt_active_profile_id') || localStorage.getItem('obsidian_active_profile_id');
-      if (oldActive) localStorage.setItem(ACTIVE_PROFILE_KEY, oldActive);
-    }
-    if (!localStorage.getItem(PROFILES_STORAGE_KEY)) {
-      const oldProfiles = localStorage.getItem('basalt_vault_profiles') || localStorage.getItem('obsidian_vault_profiles');
-      if (oldProfiles) localStorage.setItem(PROFILES_STORAGE_KEY, oldProfiles);
-    }
-    if (!localStorage.getItem('knowmesh_open_tabs')) {
-      const oldTabs = localStorage.getItem('obsidian_web_open_tabs') || localStorage.getItem('basalt_open_tabs');
-      if (oldTabs) localStorage.setItem('knowmesh_open_tabs', oldTabs);
-    }
-    if (!localStorage.getItem('knowmesh_theme')) {
-      const oldTheme = localStorage.getItem('basalt_theme') || localStorage.getItem('obsidian_theme');
-      if (oldTheme) localStorage.setItem('knowmesh_theme', oldTheme);
+    const keyMap: Record<string, string[]> = {
+      zuber_token: ['knowmesh_token', 'basalt_token', 'obsidian_web_vault_token'],
+      zuber_active_profile_id: ['knowmesh_active_profile_id', 'basalt_active_profile_id', 'obsidian_active_profile_id'],
+      zuber_vault_profiles: ['knowmesh_vault_profiles', 'basalt_vault_profiles', 'obsidian_vault_profiles'],
+      zuber_offline_auth_verifier: ['knowmesh_offline_auth_verifier'],
+      zuber_open_tabs: ['knowmesh_open_tabs', 'obsidian_web_open_tabs', 'basalt_open_tabs'],
+      zuber_theme: ['knowmesh_theme', 'basalt_theme', 'obsidian_theme'],
+      zuber_language: ['knowmesh_language'],
+      zuber_sidebar_widths: ['knowmesh_sidebar_widths'],
+      zuber_graph_settings: ['knowmesh_graph_settings', 'basalt_graph_settings'],
+      zuber_font_settings: ['knowmesh_font_settings'],
+      zuber_show_favorites_panel: ['knowmesh_show_favorites_panel'],
+      zuber_show_recent_panel: ['knowmesh_show_recent_panel'],
+      zuber_favorites: ['knowmesh_favorites'],
+      zuber_recent_notes: ['knowmesh_recent_notes'],
+      zuber_canvas_grid: ['knowmesh_canvas_grid'],
+      zuber_startup_config: ['knowmesh_startup_config'],
+      zuber_last_active_note: ['knowmesh_last_active_note'],
+      zuber_log_level: ['knowmesh_log_level'],
+    };
+
+    for (const [newKey, oldKeys] of Object.entries(keyMap)) {
+      if (!localStorage.getItem(newKey)) {
+        for (const oldKey of oldKeys) {
+          const val = localStorage.getItem(oldKey);
+          if (val !== null) {
+            localStorage.setItem(newKey, val);
+            break;
+          }
+        }
+      }
     }
   } catch (err) {
-    console.warn('[Knowmesh] Legacy storage key migration error:', err);
+    console.warn('[Zuber] Legacy storage key migration error:', err);
   }
 }
 
@@ -378,12 +406,12 @@ export const api = {
       // Network error or offline
       const isValid = await verifyOfflinePassword(password);
       if (isValid) {
-        const token = getStoredToken() || 'knowmesh_offline_session_token';
+        const token = getStoredToken() || 'zuber_offline_session_token';
         setStoredToken(token);
         return { authenticated: true, token, offline: true };
       }
       if (!hasOfflineAuthVerifier()) {
-        throw new Error('Keine Verbindung zum Knowmesh-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.');
+        throw new Error('Keine Verbindung zum Zuber-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.');
       }
       throw new Error('Ungültiges Passwort (Offline-Prüfung).');
     }

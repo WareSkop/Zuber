@@ -127,20 +127,20 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
 - Andernfalls prüft `ensureTlsCredentials` das Verzeichnis `./certs/`. Fehlen `server.crt` oder `server.key`, erzeugt der Server automatisch per `openssl req -x509 -newkey rsa:2048` ein 10 Jahre gültiges Self-Signed-Zertifikat für `DNS:localhost,IP:127.0.0.1`.
 
 ### Dynamische Passwort- & Sicherheitskonfiguration (`server/configService.ts`)
-- Knowmesh speichert Sicherheitseinstellungen persistent in `server-config.json` im Projekt-Root (`{ authEnabled: boolean, passwordHash: string, salt: string, updatedAt: number }`).
-- Beim ersten Start ohne `server-config.json` wird das Initialpasswort aus `process.env.KNOWMESH_PASSWORD || process.env.OBSIDIAN_WEB_PASSWORD || 'knowmesh'` mit `crypto.scryptSync(password, salt, 64)` gehasht.
+- Zuber speichert Sicherheitseinstellungen persistent in `server-config.json` im Projekt-Root (`{ authEnabled: boolean, passwordHash: string, salt: string, updatedAt: number }`).
+- Beim ersten Start ohne `server-config.json` wird das Initialpasswort aus `process.env.PASSWORD || process.env.ZUBER_PASSWORD || process.env.KNOWMESH_PASSWORD || process.env.OBSIDIAN_WEB_PASSWORD || 'zuber'` mit `crypto.scryptSync(password, salt, 64)` gehasht.
 - Über `GET /api/settings/security` und `POST /api/settings/security` kann der Benutzer im UI das Passwort ändern oder den Passwortschutz komplett deaktivieren (`authEnabled: false`).
 - Ist `authEnabled === false`, lässt `authMiddleware` alle Requests ohne Token durch (`GET /api/auth/status` antwortet mit `{ authenticated: true, authRequired: false }`).
 
 ### CORS & Multi-Origin Support (`server/index.ts`)
-- Da Knowmesh als PWA auf mehreren Geräten installiert werden und sich mit entfernten Knowmesh-Servern verbinden kann, erlaubt die CORS-Middleware Cross-Origin-Anfragen (`origin: true`, `credentials: true`, `methods: GET, POST, PUT, DELETE, OPTIONS`, `allowedHeaders: Content-Type, Authorization`).
+- Da Zuber als PWA auf mehreren Geräten installiert werden und sich mit entfernten Zuber-Servern verbinden kann, erlaubt die CORS-Middleware Cross-Origin-Anfragen (`origin: true`, `credentials: true`, `methods: GET, POST, PUT, DELETE, OPTIONS`, `allowedHeaders: Content-Type, Authorization`).
 
 ### Authentifizierungs-Token (`server/auth.ts`)
 - Bei erfolgreichem Login (`POST /api/auth/login`) oder Passwort-Update erzeugt `createSessionToken()` ein 30 Tage gültiges JSON-Payload (`{ user: 'owner', iat, exp }`), Base64URL-codiert und mit `HMAC-SHA256` signiert.
-- Das Token wird als HTTP-Only-Cookie (`knowmesh_session`) gesetzt und im JSON-Response zurückgegeben (vom Frontend in `localStorage` unter `knowmesh_token` gespeichert).
+- Das Token wird als HTTP-Only-Cookie (`zuber_session`) gesetzt und im JSON-Response zurückgegeben (vom Frontend in `localStorage` unter `zuber_token` gespeichert).
 - `extractTokenFromRequest(req)` akzeptiert das Token aus:
   1. Header `Authorization: Bearer <token>` (bevorzugt für Cross-Origin PWA)
-  2. Cookie `knowmesh_session` (oder `basalt_session` / `obsidian_vault_session` als Legacy-Fallback)
+  2. Cookie `zuber_session` (oder `knowmesh_session` / `basalt_session` / `obsidian_vault_session` als Legacy-Fallback)
   3. Query-Parameter `?token=<token>` (für `<img>`-Tags und WebSocket `/ws?token=...`)
 - Die Signaturprüfung in `verifySessionToken` nutzt `crypto.timingSafeEqual`, um Timing-Angriffe auszuschließen.
 
@@ -183,7 +183,7 @@ Statt bei jedem Graph-Aufruf eine $O(N^2)$-Matrix über alle Notizen hinweg zu b
 
 ## 8. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)
 
-Knowmesh verfügt über eine vollständig gehärtete Architektur für das Hosting im öffentlichen Internet hinter einem Reverse Proxy.
+Zuber verfügt über eine vollständig gehärtete Architektur für das Hosting im öffentlichen Internet hinter einem Reverse Proxy.
 
 ### 8.1 Sicherheits-Mechanismen im Internetbetrieb
 - **Reverse-Proxy Support (`trust proxy`):** Express wertet `X-Forwarded-For` für Client-IPs und `X-Forwarded-Proto` für HTTPS aus (aktiviert über `TRUST_PROXY=true`).
@@ -201,11 +201,11 @@ Knowmesh verfügt über eine vollständig gehärtete Architektur für das Hostin
 
 ### 8.2 Docker & Nginx Proxy Manager (NPM) Setup
 - **Docker Compose:**
-  - Image: `codeberg.org/waring/knowmesh:latest`
+  - Image: `codeberg.org/waring/zuber:latest`
   - Volumes: `./vault:/data/vault`, `./config:/data/config`
-  - Umgebung: `ENABLE_HTTPS=false`, `TRUST_PROXY=true`, `FORCE_AUTH=true`, `PORT=3443`
+  - Umgebung: `ENABLE_HTTPS=false`, `TRUST_PROXY=true`, `FORCE_AUTH=true`, `PORT=3443`, `PASSWORD=dein_sicheres_passwort`
 - **NPM Host Konfiguration:**
-  - Scheme: `http`, Hostname: `knowmesh`, Port: `3443`
+  - Scheme: `http`, Hostname: `zuber`, Port: `3443`
   - **Websockets Support:** Enabled
   - **Block Common Exploits:** Enabled
   - **SSL:** Let's Encrypt, Force SSL, HTTP/2, HSTS Enabled
@@ -214,10 +214,10 @@ Knowmesh verfügt über eine vollständig gehärtete Architektur für das Hostin
 
 ## 9. Vault Git-Versionierung & Remote-Backup (`server/gitService.ts`)
 
-Knowmesh enthält eine integrierte, containerisierte Git-Engine zur Versionierung des Vaults sowie verschlüsselte Remote-Backups auf Codeberg, GitHub oder GitLab via HTTPS.
+Zuber enthält eine integrierte, containerisierte Git-Engine zur Versionierung des Vaults sowie verschlüsselte Remote-Backups auf Codeberg, GitHub oder GitLab via HTTPS.
 
 ### 9.1 Containerisierte Git-Laufzeit
-- Das Knowmesh Docker-Image enthält das offizielle `git`-Paket (`RUN apk add --no-cache ... git`).
+- Das Zuber Docker-Image enthält das offizielle `git`-Paket (`RUN apk add --no-cache ... git`).
 - Alle Git-Befehle werden direkt im Vault-Verzeichnis (`/data/vault` bzw. `VAULT_DIR`) ausgeführt.
 - Auf dem Host-System muss kein Git installiert oder eingerichtet sein.
 - Der Chokidar-Dateiwatcher von `VaultService` ignoriert das `.git`-Verzeichnis strikt (`/(^|[/\\])\.git([/\\]|$)/`), um Endlosschleifen bei Git-Operationen auszuschließen.
@@ -239,7 +239,7 @@ Knowmesh enthält eine integrierte, containerisierte Git-Engine zur Versionierun
 
 ## 10. Canvas-Architektur & Backend-Integration (`.canvas`)
 
-Knowmesh behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als erstklassige Bürger im Gesamtsystem – gleichwertig zu Standard-Markdown-Notizen:
+Zuber behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als erstklassige Bürger im Gesamtsystem – gleichwertig zu Standard-Markdown-Notizen:
 
 ### 10.1 Reines JSON-Format ohne Frontmatter
 - Während Notizen (`.md`) mit YAML-Frontmatter (`--- ... ---`) serialisiert werden, bleiben `.canvas`-Dateien strikt reines JSON.
@@ -249,7 +249,7 @@ Knowmesh behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) al
 - `VaultService.indexFile()` parst `.canvas`-Dateien und nutzt `extractCanvasLinksAndTags(rawJson)` aus `shared/markdownUtils.ts`:
   - **Knoten vom Typ `file`:** Der referenzierte relative Pfad wird als ausgehender Link (`links`) und Einbettung (`embeds`) registriert.
   - **Knoten vom Typ `text`:** Roher Markdown-Text wird auf `[[Wiki-Links]]`, `[MD-Links](...)` und `#tags` untersucht.
-  - **Erweiterte Knowmesh-Shapes:** Auch benutzerdefinierte Formen mit `text` oder `label` werden nach Links durchsucht.
+  - **Erweiterte Zuber-Shapes:** Auch benutzerdefinierte Formen mit `text` oder `label` werden nach Links durchsucht.
   - **Kantenbeschriftungen (`label`):** Auch Beschriftungen von Verbindungslinien können Wiki-Links enthalten.
 
 ### 10.3 Wissensgraph & Backlinks
@@ -271,7 +271,7 @@ Knowmesh behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) al
 
 ### 11.1 Server-Logging (`server/logger.ts`)
 - **In-Memory Ring-Buffer:** Hält die jeweils letzten 1000 Log-Einträge im flüchtigen Speicher für blitzschnellen Abruf über `/api/logs` ($O(1)$).
-- **Rotierende Logdatei:** Schreibt Einträge zusätzlich in `<configDir>/knowmesh.log`. Bei Überschreiten von 5 MB wird die Datei atomar zu `knowmesh.log.1` rotiert (max. 1 Backup), um Plattenplatz zu sparen.
+- **Rotierende Logdatei:** Schreibt Einträge zusätzlich in `<configDir>/zuber.log`. Bei Überschreiten von 5 MB wird die Datei atomar zu `zuber.log.1` rotiert (max. 1 Backup), um Plattenplatz zu sparen.
 - **Konfigurierbare Log-Stufen:** Unterstützt `debug`, `info`, `warn` und `error`. Das Level kann dynamisch zur Laufzeit geändert und in `server-config.json` persistiert werden.
 - **Container-Transparenz:** Jeder Log-Eintrag wird parallel formatiert auf die Standardausgabe (`stdout`/`stderr`) ausgegeben (`docker logs`).
 

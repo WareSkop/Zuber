@@ -33,7 +33,7 @@ describe('GitService & ConfigService Git Integration', () => {
     it('returns default git config', () => {
       const cfg = configService.getGitConfig();
       expect(cfg.enabled).toBe(false);
-      expect(cfg.userName).toBe('Knowmesh Server');
+      expect(cfg.userName).toBe('Zuber Server');
       expect(cfg.autoCommitOnClose).toBe(true);
       expect(cfg.remote.branch).toBe('main');
     });
@@ -142,7 +142,7 @@ describe('GitService & ConfigService Git Integration', () => {
       expect(status.enabled).toBe(true);
       expect(status.clean).toBe(true);
       expect(status.lastCommit).not.toBeNull();
-      expect(status.lastCommit?.message).toContain('initial knowmesh vault commit');
+      expect(status.lastCommit?.message).toContain('initial zuber vault commit');
     });
 
     it('tracks changes, status, and creates commit on demand', async () => {

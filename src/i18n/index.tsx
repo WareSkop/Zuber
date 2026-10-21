@@ -10,7 +10,7 @@ export interface I18nContextType {
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-const STORAGE_KEY = 'knowmesh_language';
+const STORAGE_KEY = 'zuber_language';
 
 const dictionaries: Record<SupportedLanguage, any> = {
   en: enTranslations,
@@ -48,7 +48,7 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [language, setLanguageState] = useState<SupportedLanguage>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('knowmesh_language');
         if (stored === 'de' || stored === 'en') {
           return stored;
         }

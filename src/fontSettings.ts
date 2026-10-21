@@ -8,7 +8,7 @@ export interface FontSettings {
   mobile: DeviceFontSettings;
 }
 
-export const FONT_SETTINGS_STORAGE_KEY = 'knowmesh_font_settings';
+export const FONT_SETTINGS_STORAGE_KEY = 'zuber_font_settings';
 
 export const DEFAULT_FONT_SETTINGS: FontSettings = {
   desktop: {
@@ -24,7 +24,7 @@ export const DEFAULT_FONT_SETTINGS: FontSettings = {
 export function getFontSettings(): FontSettings {
   if (typeof window === 'undefined') return DEFAULT_FONT_SETTINGS;
   try {
-    const raw = localStorage.getItem(FONT_SETTINGS_STORAGE_KEY);
+    const raw = localStorage.getItem(FONT_SETTINGS_STORAGE_KEY) || localStorage.getItem('knowmesh_font_settings');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {

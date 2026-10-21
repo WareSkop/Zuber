@@ -1,8 +1,8 @@
 {
-  "name": "knowmesh",
+  "name": "zuber",
   "version": "0.2.2",
   "private": true,
-  "description": "Knowmesh – Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine",
+  "description": "Zuber – Offline-First Personal Knowledge Base, Live-Preview Markdown Editor & Sync Engine",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",

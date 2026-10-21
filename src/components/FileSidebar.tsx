@@ -110,6 +110,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   // Favorites & Recent panels latching states
   const [showFavoritesPanel, setShowFavoritesPanel] = useState<boolean>(() => {
     try {
+      const v = localStorage.getItem('zuber_show_favorites_panel');
+      if (v !== null) return v === 'true';
       return localStorage.getItem('knowmesh_show_favorites_panel') === 'true';
     } catch {
       return false;
@@ -118,6 +120,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const [showRecentPanel, setShowRecentPanel] = useState<boolean>(() => {
     try {
+      const v = localStorage.getItem('zuber_show_recent_panel');
+      if (v !== null) return v === 'true';
       return localStorage.getItem('knowmesh_show_recent_panel') === 'true';
     } catch {
       return false;
@@ -139,13 +143,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     const handleFavChange = () => reloadFavorites();
     const handleRecentChange = () => reloadRecentNotes();
 
+    window.addEventListener('zuber_favorites_changed', handleFavChange);
     window.addEventListener('knowmesh_favorites_changed', handleFavChange);
+    window.addEventListener('zuber_recent_changed', handleRecentChange);
     window.addEventListener('knowmesh_recent_changed', handleRecentChange);
     window.addEventListener('storage', handleFavChange);
     window.addEventListener('storage', handleRecentChange);
 
     return () => {
+      window.removeEventListener('zuber_favorites_changed', handleFavChange);
       window.removeEventListener('knowmesh_favorites_changed', handleFavChange);
+      window.removeEventListener('zuber_recent_changed', handleRecentChange);
       window.removeEventListener('knowmesh_recent_changed', handleRecentChange);
       window.removeEventListener('storage', handleFavChange);
       window.removeEventListener('storage', handleRecentChange);
@@ -220,7 +228,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       setUploadStatus(t('sidebar.uploadSuccess', { count: res.count }));
       setTimeout(() => setUploadStatus(null), 3500);
     } catch (err: unknown) {
-      console.error('[Knowmesh] Upload error:', err);
+      console.error('[Zuber] Upload error:', err);
       alert((err as Error).message || 'Fehler beim Hochladen.');
       setUploadStatus(null);
     } finally {
@@ -242,7 +250,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       setUploadStatus(t('sidebar.uploadSuccess', { count: res.count }));
       setTimeout(() => setUploadStatus(null), 3500);
     } catch (err: unknown) {
-      console.error('[Knowmesh] Folder upload error:', err);
+      console.error('[Zuber] Folder upload error:', err);
       alert((err as Error).message || 'Fehler beim Hochladen des Ordners.');
       setUploadStatus(null);
     } finally {
@@ -255,7 +263,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     try {
       await api.downloadEntry(path, isDirectory);
     } catch (err: unknown) {
-      console.error('[Knowmesh] Download error:', err);
+      console.error('[Zuber] Download error:', err);
       alert((err as Error).message || 'Fehler beim Download.');
     }
   };
@@ -416,7 +424,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       }
       onRefresh();
     } catch (err) {
-      console.error('[Knowmesh] Paste error:', err);
+      console.error('[Zuber] Paste error:', err);
       alert((err as Error).message || 'Fehler beim Einfügen');
     }
   };
@@ -571,7 +579,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             setShowFavoritesPanel((prev) => {
               const next = !prev;
               try {
-                localStorage.setItem('knowmesh_show_favorites_panel', String(next));
+                localStorage.setItem('zuber_show_favorites_panel', String(next));
               } catch {}
               return next;
             });
@@ -589,7 +597,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             setShowRecentPanel((prev) => {
               const next = !prev;
               try {
-                localStorage.setItem('knowmesh_show_recent_panel', String(next));
+                localStorage.setItem('zuber_show_recent_panel', String(next));
               } catch {}
               return next;
             });

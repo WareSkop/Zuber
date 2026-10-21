@@ -158,9 +158,9 @@ export interface GraphData {
 }
 ```
 
-### 1.5 JSON Canvas Spezifikation & Knowmesh-Erweiterungen ([`shared/canvasTypes.ts`](../shared/canvasTypes.ts))
+### 1.5 JSON Canvas Spezifikation & Zuber-Erweiterungen ([`shared/canvasTypes.ts`](../shared/canvasTypes.ts))
 
-Knowmesh implementiert das offizielle **Obsidian JSON Canvas 1.0 Datenmodell** (`.canvas`), erweitert um optionale Attribute für Workflow- und Netzwerkdiagramme (Graceful Degradation):
+Zuber implementiert das offizielle **Obsidian JSON Canvas 1.0 Datenmodell** (`.canvas`), erweitert um optionale Attribute für Workflow- und Netzwerkdiagramme (Graceful Degradation):
 
 ```ts
 export type CanvasNodeType = 'text' | 'file' | 'link' | 'group';
@@ -194,7 +194,7 @@ export interface JsonCanvasNode {
   subpath?: string;        // Optional #Heading oder #^block
   url?: string;            // Für type === 'link'
   label?: string;          // Für type === 'group'
-  shape?: CanvasShape;     // Knowmesh-Erweiterung (Default: 'rectangle')
+  shape?: CanvasShape;     // Zuber-Erweiterung (Default: 'rectangle')
   icon?: string;           // Optionales Icon / Symbol
   zIndex?: number;
 }
@@ -282,7 +282,7 @@ export interface GitFileVersionResponse {
 
 ## 2. REST-API Endpunkte ([`server/index.ts`](../server/index.ts))
 
-Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../server/auth.ts) geschützt (Header `Authorization: Bearer <token>` oder Cookie `knowmesh_session` / `basalt_session`). Ist `authEnabled === false`, werden alle Anfragen automatisch autorisiert.
+Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../server/auth.ts) geschützt (Header `Authorization: Bearer <token>` oder Cookie `zuber_session` / `knowmesh_session` / `basalt_session`). Ist `authEnabled === false`, werden alle Anfragen automatisch autorisiert.
 
 ### 2.1 Authentifizierung & Sicherheit
 
@@ -346,13 +346,13 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | :--- | :--- | :--- | :--- | :--- |
 | `GET` | `/api/logs` | Liefert das aktuelle Server-Log-Level und die letzten bis zu 1000 Server-Log-Einträge aus dem Ring-Buffer. | — | `LogsResponse` (`{ level: LogLevel, entries: LogEntry[] }`) |
 | `POST` | `/api/logs/level` | Ändert das Server-Log-Level dynamisch (`debug`, `info`, `warn`, `error`). | Body: `{ level: LogLevel }` | `{ ok: true, level: LogLevel }` (oder `400`) |
-| `DELETE` | `/api/logs` | Leert den Server-Ring-Buffer und leert die Datei `knowmesh.log`. | — | `{ ok: true }` |
+| `DELETE` | `/api/logs` | Leert den Server-Ring-Buffer und leert die Datei `zuber.log`. | — | `{ ok: true }` |
 
 ---
 
 ## 3. WebSocket-Protokoll (`/ws`)
 
-Der WebSocket-Server (`ws` Paket) teilt sich denselben HTTPS-Port wie Express und validiert beim `upgrade`-Handshake das Cookie `knowmesh_session` (bzw. Query-Token `?token=...`) über [`verifyRequestAuth`](../server/auth.ts).
+Der WebSocket-Server (`ws` Paket) teilt sich denselben HTTPS-Port wie Express und validiert beim `upgrade`-Handshake das Cookie `zuber_session` (bzw. Query-Token `?token=...` oder Fallback `knowmesh_session`) über [`verifyRequestAuth`](../server/auth.ts).
 
 ### Nachrichten vom Server an den Client
 

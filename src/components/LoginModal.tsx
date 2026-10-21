@@ -38,9 +38,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       <div className="login-card">
         <div className="login-header">
           <div className="login-logo">
-            <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'contain' }} />
+            <img src="/knowmesh_icon.png" alt="Zuber" style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'contain' }} />
           </div>
-          <h1>Knowmesh</h1>
+          <h1>Zuber</h1>
           <p className="login-subtitle">
             {t('login.subtitle')}
           </p>

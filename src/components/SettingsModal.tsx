@@ -139,8 +139,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Git state
   const [gitConfig, setGitConfig] = useState<GitConfig>({
     enabled: false,
-    userName: 'Knowmesh Server',
-    userEmail: 'knowmesh@local',
+    userName: 'Zuber Server',
+    userEmail: 'zuber@local',
     autoCommitOnClose: true,
     remote: {
       enabled: false,
@@ -240,9 +240,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleCopyLogs = async () => {
     const header = [
-      `# Knowmesh Diagnostics & Log Export`,
+      `# Zuber Diagnostics & Log Export`,
       `Generated: ${new Date().toISOString()}`,
-      `Knowmesh Version: v${appVersion}`,
+      `Zuber Version: v${appVersion}`,
       `Active Theme: ${currentTheme}`,
       `Online Status: ${navigator.onLine ? 'Online' : 'Offline'}`,
       `Active Log Level: ${logLevel.toUpperCase()}`,
@@ -327,9 +327,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const themes = [
     {
-      id: 'knowmesh',
-      name: 'Knowmesh (Standard)',
-      desc: 'Dunkles Knowmesh, Kristall-Gold (#d4af37) & Facetten-Türkis (#29b6c8)',
+      id: 'zuber',
+      name: 'Zuber (Standard)',
+      desc: 'Dunkles Zuber, Kristall-Gold (#d4af37) & Facetten-Türkis (#29b6c8)',
       bg: '#0d1117',
       sidebar: '#161c24',
       accent: '#d4af37',
@@ -698,7 +698,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div className="settings-nav-version">
             <Info size={13} style={{ flexShrink: 0 }} />
-            <span>Knowmesh v{appVersion}</span>
+            <span>Zuber v{appVersion}</span>
           </div>
         </aside>
 
@@ -784,7 +784,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {themes.map((tItem) => (
                   <div
                     key={tItem.id}
-                    className={`theme-card ${currentTheme === tItem.id || (tItem.id === 'knowmesh' && currentTheme === 'basalt') ? 'active' : ''}`}
+                    className={`theme-card ${currentTheme === tItem.id || (tItem.id === 'zuber' && (currentTheme === 'knowmesh' || currentTheme === 'basalt')) ? 'active' : ''}`}
                     onClick={() => onThemeChange(tItem.id)}
                   >
                     <div className="theme-card-preview" style={{ background: tItem.bg }}>
@@ -799,7 +799,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="theme-card-info">
                       <div className="theme-card-header">
                         <strong>{tItem.name}</strong>
-                        {(currentTheme === tItem.id || (tItem.id === 'knowmesh' && currentTheme === 'basalt')) && (
+                        {(currentTheme === tItem.id || (tItem.id === 'zuber' && (currentTheme === 'knowmesh' || currentTheme === 'basalt'))) && (
                           <Check size={15} className="theme-check-icon" />
                         )}
                       </div>
@@ -809,7 +809,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 ))}
               </div>
 
-              {/* About Knowmesh Section */}
+              {/* About Zuber Section */}
               <div
                 style={{
                   marginTop: '28px',
@@ -826,7 +826,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
+                    <img src="/knowmesh_icon.png" alt="Zuber" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'contain' }} />
                     <span>{t('settings.aboutTitle')}</span>
                     <span
                       style={{
@@ -1315,8 +1315,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <strong className="pwa-title">
                     {isInstalledApp
-                      ? language === 'de' ? 'Knowmesh ist als eigenständige App eingerichtet' : 'Knowmesh is installed as a standalone app'
-                      : language === 'de' ? 'Knowmesh als App installieren' : 'Install Knowmesh as an App'}
+                      ? language === 'de' ? 'Zuber ist als eigenständige App eingerichtet' : 'Zuber is installed as a standalone app'
+                      : language === 'de' ? 'Zuber als App installieren' : 'Install Zuber as an App'}
                   </strong>
                   <p className="pwa-desc">
                     {isInstalledApp
@@ -1324,8 +1324,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         ? 'Die App läuft im eigenständigen WebAPK-Fenster mit schnellem Zugriff und Offline-Cache.'
                         : 'The app runs in a standalone window with quick access and offline caching.'
                       : language === 'de'
-                        ? 'Installiere Knowmesh auf deinem Smartphone, Chromebook oder Desktop für sofortigen Start im Flugmodus.'
-                        : 'Install Knowmesh on your phone, Chromebook, or desktop for instant startup in airplane mode.'}
+                        ? 'Installiere Zuber auf deinem Smartphone, Chromebook oder Desktop für sofortigen Start im Flugmodus.'
+                        : 'Install Zuber on your phone, Chromebook, or desktop for instant startup in airplane mode.'}
                   </p>
                 </div>
                 {!isInstalledApp && onInstallApp && (
@@ -1334,7 +1334,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="pwa-install-btn btn-primary"
                     onClick={onInstallApp}
                   >
-                    📲 {language === 'de' ? 'Knowmesh als App installieren' : 'Install Knowmesh App'}
+                    📲 {language === 'de' ? 'Zuber als App installieren' : 'Install Zuber App'}
                   </button>
                 )}
               </div>
@@ -1434,7 +1434,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="text"
                             value={gitConfig.userName}
                             onChange={(e) => setGitConfig({ ...gitConfig, userName: e.target.value })}
-                            placeholder="Knowmesh User"
+                            placeholder="Zuber User"
                             required
                           />
                         </div>

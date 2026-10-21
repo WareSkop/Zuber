@@ -29,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[Knowmesh ErrorBoundary] Uncaught render error caught by boundary:', error, errorInfo);
+    console.error('[Zuber ErrorBoundary] Uncaught render error caught by boundary:', error, errorInfo);
     this.setState({
       error,
       errorInfo,
@@ -82,10 +82,10 @@ export class ErrorBoundary extends Component<Props, State> {
             }}
           >
             <div style={{ marginBottom: '16px' }}>
-              <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'contain' }} />
+              <img src="/knowmesh_icon.png" alt="Zuber" style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'contain' }} />
             </div>
             <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#f0f6fc', margin: '0 0 12px 0' }}>
-              Knowmesh konnte nicht normal gestartet werden
+              Zuber konnte nicht normal gestartet werden
             </h2>
             <p style={{ fontSize: '14px', color: '#8b949e', margin: '0 0 20px 0', lineHeight: 1.5 }}>
               Ein unerwarteter Fehler ist beim Laden der Anwendung aufgetreten. Ihre lokal gespeicherten Notizen in der

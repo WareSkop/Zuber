@@ -1,22 +1,22 @@
 services:
-  knowmesh:
-    image: codeberg.org/waring/knowmesh:latest
-    container_name: knowmesh
+  zuber:
+    image: codeberg.org/waring/zuber:latest
+    container_name: zuber
     restart: unless-stopped
     ports:
       - "3443:3443"
     environment:
+      - NODE_ENV=production
       - PORT=3443
       - ENABLE_HTTPS=false
       - TRUST_PROXY=true
       - FORCE_AUTH=true
-      - CONFIG_PATH=/data/config/server-config.json
       - VAULT_DIR=/data/vault
+      - CONFIG_PATH=/data/config/server-config.json
+      - PASSWORD=dein_sicheres_passwort
+      - SESSION_SECRET=bitte_hier_einen_langen_zufaelligen_string_eintragen
       - MAX_UPLOAD_MB=100
-      # - SESSION_SECRET=your-random-32-byte-hex-string
-      # - KNOWMESH_PASSWORD=your-initial-secure-vault-password
-      # - OBSIDIAN_WEB_PASSWORD=your-initial-secure-vault-password
-      # - ALLOWED_ORIGINS=https://knowmesh.example.com
+      # - ALLOWED_ORIGINS=https://zuber.example.com
     volumes:
       - ./vault:/data/vault
       - ./config:/data/config

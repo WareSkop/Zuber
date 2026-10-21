@@ -4,13 +4,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION=$(node -p "require('./package.json').version")
-IMAGE_BASE="codeberg.org/waring/knowmesh"
+IMAGE_BASE="codeberg.org/waring/zuber"
 IMAGE_LATEST="${IMAGE_BASE}:latest"
 IMAGE_VERSION="${IMAGE_BASE}:v${VERSION}"
 IMAGE_V22="${IMAGE_BASE}:v2.2"
 
 echo "=========================================================="
-echo "🚀 Building Knowmesh Docker Image: ${IMAGE_LATEST}, ${IMAGE_VERSION} & ${IMAGE_V22}"
+echo "🚀 Building Zuber Docker Image: ${IMAGE_LATEST}, ${IMAGE_VERSION} & ${IMAGE_V22}"
 echo "=========================================================="
 
 docker build -t "${IMAGE_LATEST}" -t "${IMAGE_VERSION}" -t "${IMAGE_V22}" .

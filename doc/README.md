@@ -1,6 +1,6 @@
-# Knowmesh – Technische Dokumentation & LLM-Handbuch
+# Zuber – Technische Dokumentation & LLM-Handbuch
 
-Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Knowmesh** (ehemals „Basalt“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
+Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation von **Zuber** (ehemals „Knowmesh“ / „Basalt“). Die Dokumentation ist speziell darauf ausgelegt, dass ein **LLM (Large Language Model / Coding-Agent)** das Projekt sofort vollständig versteht, sicher erweitern und fehlerfrei warten kann, ohne erst den gesamten Quellcode durchsuchen zu müssen.
 
 ---
 
@@ -21,12 +21,12 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 
 ## 1. Projektziel & Kernfunktionen
 
-**Knowmesh** stellt einen lokalen Markdown-Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx` – kompatibel zur Wiki-Link- und YAML-Frontmatter-Syntax) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
+**Zuber** stellt einen lokalen Markdown-Vault (Verzeichnis mit Markdown-Dateien `.md` sowie Anhängen wie `.png`, `.jpg`, `.svg`, `.pdf`, `.xlsx` – kompatibel zur Wiki-Link- und YAML-Frontmatter-Syntax) über eine **TLS/HTTPS-verschlüsselte Web-Applikation und Progressive Web App (PWA)** im Browser bereit – optimiert für Desktop, Chromebooks und Smartphones.
 
 ### Hauptmerkmale
 - **Progressive Web App (PWA) & Offline-App-Shell:**
   - Service Worker (`public/sw.js`) und Web-Manifest (`public/manifest.webmanifest`) ermöglichen Standalone-Installation und sofortigen Start selbst bei getrennter Netzwerkverbindung.
-- **Knowmesh Markdown-Editor mit 3 Modi (`live`, `reading`, `source`):**
+- **Zuber Markdown-Editor mit 3 Modi (`live`, `reading`, `source`):**
   - **Live-Preview (Standard):** CodeMirror 6 Editor, der Markdown-Syntax (`# Überschriften`, `**Fett**`, `==Highlight==`, `` `Code` ``, `- [ ] Aufgaben`, `[[Wiki-Links]]`, `[Links](pfad)`, `![[Einbettungen]]`, `![Bilder](pfad)`, `> [!callouts]`, `#tags` und `| Markdown | Tabellen |`) visuell rendert, sobald sich der Cursor außerhalb der betreffenden Zeile bzw. Tabelle befindet.
   - **Lese-Modus (`reading`):** Vollständig gerenderte HTML-Ansicht (GFM inkl. Tabellen, Callouts, Bildern, klickbaren Wiki-Links und Tags).
   - **Quellcode-Modus (`source`):** Direkte Bearbeitung des kompletten Roh-Markdown-Dokuments inklusive `---` YAML-Frontmatter-Block.
@@ -74,7 +74,7 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 │   └── LLM_DEVELOPER_GUIDE.md
 ├── shared/                       # Geteilter Code zwischen Backend (Node.js) und Frontend (Browser)
 │   ├── types.ts                  # Zentrale TypeScript-Interfaces (NoteData, GraphData, FileTreeNode, ...)
-│   ├── canvasTypes.ts            # JSON Canvas Spec 1.0 Typen + Knowmesh Workflow-/Netzwerk-Erweiterungen
+│   ├── canvasTypes.ts            # JSON Canvas Spec 1.0 Typen + Zuber Workflow-/Netzwerk-Erweiterungen
 │   └── markdownUtils.ts          # Frontmatter-YAML-Parser/Serializer, Link-/Canvas-/Tag-Extraktoren
 ├── server/                       # Node.js + Express + WebSocket Backend
 │   ├── index.ts                  # Express-App, REST-Endpunkte, HTTPS-Server, WebSocket-Server
@@ -140,7 +140,7 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 
 ## 5. Deployment mit Docker, Codeberg & Nginx Proxy Manager (NPM)
 
-Knowmesh ist vollständig für den Betrieb als Docker-Container hinter einem Reverse Proxy wie dem **Nginx Proxy Manager (NPM)** gehärtet.
+Zuber ist vollständig für den Betrieb als Docker-Container hinter einem Reverse Proxy wie dem **Nginx Proxy Manager (NPM)** gehärtet.
 
 ### 5.1 Docker Compose Schnellstart
 
@@ -148,9 +148,9 @@ Erstelle eine `docker-compose.yml` (bzw. nutze die im Repository enthaltene Date
 
 ```yaml
 services:
-  knowmesh:
-    image: codeberg.org/waring/knowmesh:latest
-    container_name: knowmesh
+  zuber:
+    image: codeberg.org/waring/zuber:latest
+    container_name: zuber
     restart: unless-stopped
     ports:
       - "3443:3443"
@@ -161,7 +161,9 @@ services:
       - TRUST_PROXY=true          # Echte Client-IP für Rate-Limiting & X-Forwarded-Proto
       - FORCE_AUTH=true           # Deaktivieren des Passwortschutzes über Web-UI sperren
       - MAX_UPLOAD_MB=100         # Maximales Upload-Limit für Anhänge
-      - KNOWMESH_PASSWORD=        # Optionales Initialpasswort (Standard: knowmesh)
+      - PASSWORD=                 # Optionales Initialpasswort (Standard: zuber)
+      # - ZUBER_PASSWORD=         # Fallback
+      # - KNOWMESH_PASSWORD=      # Legacy-Fallback
       # - OBSIDIAN_WEB_PASSWORD=  # Legacy-Fallback
     volumes:
       - ./vault:/data/vault       # Markdown-Notizen und Anhänge
@@ -177,9 +179,9 @@ docker compose up -d
 
 Lege im Nginx Proxy Manager einen neuen **Proxy Host** an:
 
-- **Domain Names:** z. B. `knowmesh.deinedomain.de`
+- **Domain Names:** z. B. `zuber.deinedomain.de`
 - **Scheme:** `http` (da `ENABLE_HTTPS=false` im Docker-Container)
-- **Forward Hostname / IP:** `knowmesh` (bei gemeinsamem Docker-Netzwerk) oder IP des Docker-Hosts
+- **Forward Hostname / IP:** `zuber` (bei gemeinsamem Docker-Netzwerk) oder IP des Docker-Hosts
 - **Forward Port:** `3443`
 - **Cache Assets:** Deaktiviert (oder nur für statische Assets; Service Worker regelt App-Shell-Caching)
 - **Block Common Exploits:** **Aktiviert**
@@ -193,6 +195,6 @@ Lege im Nginx Proxy Manager einen neuen **Proxy Host** an:
 ### 5.3 Codeberg Container Registry & CI/CD
 
 Das Image wird automatisiert über Forgejo / Codeberg Actions bei jedem Push auf `main` gebaut:
-- Registry: `codeberg.org/waring/knowmesh:latest`
+- Registry: `codeberg.org/waring/zuber:latest`
 - Lokaler Build & Push: `./scripts/publish-codeberg.sh`
 

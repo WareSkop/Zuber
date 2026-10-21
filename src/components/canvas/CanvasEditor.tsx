@@ -81,7 +81,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   // Configurable Grid and Snap settings
   const [gridConfig, setGridConfig] = useState<CanvasGridConfig>(() => {
     try {
-      const stored = localStorage.getItem('knowmesh_canvas_grid');
+      const stored = localStorage.getItem('zuber_canvas_grid') || localStorage.getItem('knowmesh_canvas_grid');
       if (stored) {
         const parsed = JSON.parse(stored);
         return {
@@ -102,7 +102,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
   useEffect(() => {
     try {
-      localStorage.setItem('knowmesh_canvas_grid', JSON.stringify(gridConfig));
+      localStorage.setItem('zuber_canvas_grid', JSON.stringify(gridConfig));
     } catch {}
   }, [gridConfig]);
 

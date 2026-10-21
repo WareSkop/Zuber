@@ -144,7 +144,7 @@ export const App: React.FC = () => {
   // Resizable Sidebars (State & localStorage persistence)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem('knowmesh_sidebar_widths');
+      const raw = localStorage.getItem('zuber_sidebar_widths') || localStorage.getItem('knowmesh_sidebar_widths');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (typeof parsed.left === 'number') {
@@ -157,7 +157,7 @@ export const App: React.FC = () => {
 
   const [rightSidebarWidth, setRightSidebarWidth] = useState<number>(() => {
     try {
-      const raw = localStorage.getItem('knowmesh_sidebar_widths');
+      const raw = localStorage.getItem('zuber_sidebar_widths') || localStorage.getItem('knowmesh_sidebar_widths');
       if (raw) {
         const parsed = JSON.parse(raw);
         if (typeof parsed.right === 'number') {
@@ -194,7 +194,7 @@ export const App: React.FC = () => {
       document.removeEventListener('mouseup', handleMouseUp);
       try {
         localStorage.setItem(
-          'knowmesh_sidebar_widths',
+          'zuber_sidebar_widths',
           JSON.stringify({ left: leftSidebarWidthRef.current, right: rightSidebarWidthRef.current })
         );
       } catch {}
@@ -222,7 +222,7 @@ export const App: React.FC = () => {
       document.removeEventListener('mouseup', handleMouseUp);
       try {
         localStorage.setItem(
-          'knowmesh_sidebar_widths',
+          'zuber_sidebar_widths',
           JSON.stringify({ left: leftSidebarWidthRef.current, right: rightSidebarWidthRef.current })
         );
       } catch {}
@@ -236,7 +236,7 @@ export const App: React.FC = () => {
   const [scrollToLine, setScrollToLine] = useState<number | null>(null);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [wsConnected, setWsConnected] = useState(false);
-  const [theme, setTheme] = useState<string>(() => localStorage.getItem('knowmesh_theme') || localStorage.getItem('basalt_theme') || 'knowmesh');
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem('zuber_theme') || localStorage.getItem('knowmesh_theme') || localStorage.getItem('basalt_theme') || 'zuber');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('offline');
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
@@ -281,7 +281,7 @@ export const App: React.FC = () => {
         setIsInstalledApp(true);
       }
     } else {
-      alert('Tipp: Um Knowmesh als WebAPK auf Android/Chromebook oder Desktop zu installieren, tippe im Browser-Menü auf „App installieren“ oder „Zum Startbildschirm hinzufügen“.');
+      alert('Tipp: Um Zuber als WebAPK auf Android/Chromebook oder Desktop zu installieren, tippe im Browser-Menü auf „App installieren“ oder „Zum Startbildschirm hinzufügen“.');
     }
   }, [installPrompt]);
 
@@ -473,7 +473,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.style.colorScheme = theme.startsWith('light') ? 'light' : 'dark';
-    localStorage.setItem('knowmesh_theme', theme);
+    localStorage.setItem('zuber_theme', theme);
   }, [theme]);
 
   const manualSaveRef = useRef<(() => void) | null>(null);
@@ -607,7 +607,7 @@ export const App: React.FC = () => {
         treeRes: {
           tree: reconciled.tree,
           files: reconciled.files,
-          vaultPath: 'Knowmesh Vault (Offline)',
+          vaultPath: 'Zuber Vault (Offline)',
         },
         graphRes: cachedGraph,
       };
@@ -620,7 +620,7 @@ export const App: React.FC = () => {
       setAllFiles(emptyFiles);
       setGraphData(emptyGraph);
       return {
-        treeRes: { tree: emptyTree, files: emptyFiles, vaultPath: 'Knowmesh Vault (Offline)' },
+        treeRes: { tree: emptyTree, files: emptyFiles, vaultPath: 'Zuber Vault (Offline)' },
         graphRes: emptyGraph,
       };
     }
@@ -834,7 +834,7 @@ export const App: React.FC = () => {
         }
         return sharedPath;
       } catch (err) {
-        console.error('[Knowmesh Share] Failed to process incoming shares:', err);
+        console.error('[Zuber Share] Failed to process incoming shares:', err);
         return null;
       } finally {
         isProcessingSharesRef.current = false;
@@ -1956,18 +1956,18 @@ export const App: React.FC = () => {
       },
       {
         id: 'theme-dark',
-        title: 'Darstellung: Theme „Knowmesh Dark“ (Standard)',
+        title: 'Darstellung: Theme „Zuber Dark“ (Standard)',
         category: 'Einstellungen',
         icon: <Palette size={16} />,
-        keywords: ['theme', 'dark', 'dunkel', 'knowmesh', 'basalt'],
-        action: () => setTheme('knowmesh'),
+        keywords: ['theme', 'dark', 'dunkel', 'zuber', 'knowmesh', 'basalt'],
+        action: () => setTheme('zuber'),
       },
       {
         id: 'theme-light',
-        title: 'Darstellung: Theme „Knowmesh Hell“',
+        title: 'Darstellung: Theme „Zuber Hell“',
         category: 'Einstellungen',
         icon: <Palette size={16} />,
-        keywords: ['theme', 'light', 'hell', 'weiß', 'knowmesh'],
+        keywords: ['theme', 'light', 'hell', 'weiß', 'zuber', 'knowmesh'],
         action: () => setTheme('light-cold'),
       },
       {
@@ -2006,7 +2006,7 @@ export const App: React.FC = () => {
   ]);
 
   if (!authChecked) {
-    return <div className="loading-screen">Lade Knowmesh...</div>;
+    return <div className="loading-screen">Lade Zuber...</div>;
   }
 
   if (!authenticated) {
@@ -2038,13 +2038,13 @@ export const App: React.FC = () => {
           type="button"
           className="ribbon-btn ribbon-brand-btn"
           onClick={() => setSettingsOpen(true)}
-          title="Knowmesh"
-          aria-label="Knowmesh"
+          title="Zuber"
+          aria-label="Zuber"
           style={{ padding: 0 }}
         >
           <img
             src="/knowmesh_icon.png"
-            alt="Knowmesh"
+            alt="Zuber"
             style={{ width: 22, height: 22, borderRadius: 5, display: 'block', objectFit: 'contain' }}
           />
         </button>
@@ -2232,7 +2232,7 @@ export const App: React.FC = () => {
               </>
             ) : (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <img src="/knowmesh_icon.png" alt="Knowmesh" style={{ width: 15, height: 15, borderRadius: 3, verticalAlign: 'middle' }} />
+                <img src="/knowmesh_icon.png" alt="Zuber" style={{ width: 15, height: 15, borderRadius: 3, verticalAlign: 'middle' }} />
                 {t('header.noNoteSelected')}
               </span>
             )}

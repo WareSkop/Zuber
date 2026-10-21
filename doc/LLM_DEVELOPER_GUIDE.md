@@ -85,7 +85,7 @@ Dieses Dokument richtet sich direkt an **LLM-Coding-Agenten**, die diese Softwar
 *(Beispiel: Du sollst ein Theme 'solarized-dark' ergänzen)*
 
 1. **CSS-Variablen in `src/styles.css` anlegen:**
-   Erstelle den Selektor `[data-theme='solarized-dark']` mit allen Knowmesh-Variablen (`--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--text-primary`, `--accent-color`, `--accent-secondary`, `--border-color`).
+   Erstelle den Selektor `[data-theme='solarized-dark']` mit allen Zuber-Variablen (`--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--text-primary`, `--accent-color`, `--accent-secondary`, `--border-color`).
 2. **Theme-Auswahl in `src/components/SettingsModal.tsx` eintragen:**
    Füge das neue Theme mit Name, Farbwerten und Beschreibung in das `themes`-Array ein.
 

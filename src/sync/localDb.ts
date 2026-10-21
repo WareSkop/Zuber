@@ -31,7 +31,7 @@ export class LocalDb {
   private initPromise: Promise<IDBDatabase> | null = null;
 
   constructor(profileId: string = 'default') {
-    this.dbName = `knowmesh_cache_${profileId.replace(/[^\w-]/g, '_')}`;
+    this.dbName = `zuber_cache_${profileId.replace(/[^\w-]/g, '_')}`;
   }
 
   private async openDb(): Promise<IDBDatabase> {
@@ -62,8 +62,12 @@ export class LocalDb {
         }
       };
 
-      request.onsuccess = () => {
+      request.onsuccess = async () => {
         this.db = request.result;
+        try {
+          const profileId = this.dbName.replace(/^zuber_cache_/, '');
+          await this.migrateFromLegacyDb(profileId);
+        } catch {}
         resolve(this.db);
       };
 
@@ -73,6 +77,118 @@ export class LocalDb {
     });
 
     return this.initPromise;
+  }
+
+  private async migrateFromLegacyDb(profileId: string): Promise<void> {
+    if (!this.db || typeof indexedDB === 'undefined') return;
+    const legacyName = `knowmesh_cache_${profileId.replace(/[^\w-]/g, '_')}`;
+
+    const currentNotesCount = await new Promise<number>((res) => {
+      try {
+        const tx = this.db!.transaction('notes', 'readonly');
+        const req = tx.objectStore('notes').count();
+        req.onsuccess = () => res(req.result || 0);
+        req.onerror = () => res(0);
+      } catch {
+        res(0);
+      }
+    });
+
+    if (currentNotesCount > 0) return;
+
+    const legacyDb = await new Promise<IDBDatabase | null>((res) => {
+      const openReq = indexedDB.open(legacyName);
+      openReq.onsuccess = () => {
+        const db = openReq.result;
+        if (db.objectStoreNames.length === 0) {
+          db.close();
+          try { indexedDB.deleteDatabase(legacyName); } catch {}
+          res(null);
+        } else {
+          res(db);
+        }
+      };
+      openReq.onerror = () => res(null);
+    });
+
+    if (!legacyDb) return;
+
+    try {
+      if (legacyDb.objectStoreNames.contains('meta')) {
+        const metaEntries = await new Promise<{ key: string; value: any }[]>((res) => {
+          const tx = legacyDb.transaction('meta', 'readonly');
+          const store = tx.objectStore('meta');
+          const keyReq = store.getAllKeys();
+          keyReq.onsuccess = () => {
+            const keys = keyReq.result;
+            const valReq = store.getAll();
+            valReq.onsuccess = () => {
+              const vals = valReq.result;
+              res(keys.map((k, i) => ({ key: String(k), value: vals[i] })));
+            };
+            valReq.onerror = () => res([]);
+          };
+          keyReq.onerror = () => res([]);
+        });
+        if (metaEntries.length > 0) {
+          const tx = this.db.transaction('meta', 'readwrite');
+          const store = tx.objectStore('meta');
+          for (const { key, value } of metaEntries) {
+            store.put(value, key);
+          }
+        }
+      }
+
+      if (legacyDb.objectStoreNames.contains('notes')) {
+        const notes = await new Promise<any[]>((res) => {
+          const tx = legacyDb.transaction('notes', 'readonly');
+          const req = tx.objectStore('notes').getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        });
+        if (notes.length > 0) {
+          const tx = this.db.transaction('notes', 'readwrite');
+          const store = tx.objectStore('notes');
+          for (const note of notes) {
+            store.put(note);
+          }
+        }
+      }
+
+      if (legacyDb.objectStoreNames.contains('attachments')) {
+        const attachments = await new Promise<any[]>((res) => {
+          const tx = legacyDb.transaction('attachments', 'readonly');
+          const req = tx.objectStore('attachments').getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        });
+        if (attachments.length > 0) {
+          const tx = this.db.transaction('attachments', 'readwrite');
+          const store = tx.objectStore('attachments');
+          for (const att of attachments) {
+            store.put(att);
+          }
+        }
+      }
+
+      if (legacyDb.objectStoreNames.contains('outbox')) {
+        const mutations = await new Promise<any[]>((res) => {
+          const tx = legacyDb.transaction('outbox', 'readonly');
+          const req = tx.objectStore('outbox').getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => res([]);
+        });
+        if (mutations.length > 0) {
+          const tx = this.db.transaction('outbox', 'readwrite');
+          const store = tx.objectStore('outbox');
+          for (const m of mutations) {
+            store.put(m);
+          }
+        }
+      }
+    } finally {
+      legacyDb.close();
+    }
   }
 
   // --- Meta Store ---

@@ -135,7 +135,7 @@ describe('VaultService & Sync Engine', () => {
     );
     expect(res.newPath).toBe('Projekte/System-Architektur.md');
 
-    const welcome = service.getNote('Willkommen in Knowmesh.md');
+    const welcome = service.getNote('Willkommen in Zuber.md');
     expect(welcome.body).toContain('[[System-Architektur]]');
   });
 
@@ -231,7 +231,8 @@ describe('ConfigService & Dynamic Security Settings', () => {
   it('creates initial server-config.json and verifies default password', () => {
     const cfg = new ConfigService(configPath);
     expect(cfg.isAuthRequired()).toBe(true);
-    expect(cfg.verifyPassword('knowmesh')).toBe(true);
+    expect(cfg.verifyPassword('zuber')).toBe(true);
+    expect(cfg.verifyPassword('knowmesh')).toBe(false);
     expect(cfg.verifyPassword('wrong-password')).toBe(false);
   });
 
@@ -240,7 +241,7 @@ describe('ConfigService & Dynamic Security Settings', () => {
     cfg.updateSecurity(true, 'neues-sicheres-passwort-123');
 
     expect(cfg.verifyPassword('neues-sicheres-passwort-123')).toBe(true);
-    expect(cfg.verifyPassword('knowmesh')).toBe(false);
+    expect(cfg.verifyPassword('zuber')).toBe(false);
 
     // Disable auth
     cfg.updateSecurity(false);
@@ -248,26 +249,50 @@ describe('ConfigService & Dynamic Security Settings', () => {
     expect(cfg.verifyPassword('beliebig')).toBe(true);
   });
 
-  it('respects KNOWMESH_PASSWORD and falls back to OBSIDIAN_WEB_PASSWORD', () => {
+  it('respects PASSWORD, ZUBER_PASSWORD, KNOWMESH_PASSWORD and falls back to OBSIDIAN_WEB_PASSWORD', () => {
+    const origPassword = process.env.PASSWORD;
+    const origZuber = process.env.ZUBER_PASSWORD;
     const origKnowmesh = process.env.KNOWMESH_PASSWORD;
     const origObsidian = process.env.OBSIDIAN_WEB_PASSWORD;
 
     try {
-      // 1. Both set -> KNOWMESH_PASSWORD takes priority
+      // 1. PASSWORD takes highest priority
+      process.env.PASSWORD = 'pw-from-password-var';
+      process.env.ZUBER_PASSWORD = 'pw-from-zuber-var';
       process.env.KNOWMESH_PASSWORD = 'super-secret-knowmesh';
       process.env.OBSIDIAN_WEB_PASSWORD = 'old-obsidian-pw';
+      const testPath0 = path.join(tmpConfigDir, 'config0.json');
+      const cfg0 = new ConfigService(testPath0);
+      expect(cfg0.verifyPassword('pw-from-password-var')).toBe(true);
+      expect(cfg0.verifyPassword('pw-from-zuber-var')).toBe(false);
+
+      // 2. ZUBER_PASSWORD takes priority when PASSWORD is not set
+      delete process.env.PASSWORD;
       const testPath1 = path.join(tmpConfigDir, 'config1.json');
       const cfg1 = new ConfigService(testPath1);
-      expect(cfg1.verifyPassword('super-secret-knowmesh')).toBe(true);
-      expect(cfg1.verifyPassword('old-obsidian-pw')).toBe(false);
+      expect(cfg1.verifyPassword('pw-from-zuber-var')).toBe(true);
+      expect(cfg1.verifyPassword('super-secret-knowmesh')).toBe(false);
 
-      // 2. Only OBSIDIAN_WEB_PASSWORD set -> fallback succeeds
-      delete process.env.KNOWMESH_PASSWORD;
+      // 3. KNOWMESH_PASSWORD takes priority when PASSWORD & ZUBER_PASSWORD are not set
+      delete process.env.ZUBER_PASSWORD;
       const testPath2 = path.join(tmpConfigDir, 'config2.json');
       const cfg2 = new ConfigService(testPath2);
-      expect(cfg2.verifyPassword('old-obsidian-pw')).toBe(true);
-      expect(cfg2.verifyPassword('knowmesh')).toBe(false);
+      expect(cfg2.verifyPassword('super-secret-knowmesh')).toBe(true);
+      expect(cfg2.verifyPassword('old-obsidian-pw')).toBe(false);
+
+      // 4. OBSIDIAN_WEB_PASSWORD fallback
+      delete process.env.KNOWMESH_PASSWORD;
+      const testPath3 = path.join(tmpConfigDir, 'config3.json');
+      const cfg3 = new ConfigService(testPath3);
+      expect(cfg3.verifyPassword('old-obsidian-pw')).toBe(true);
+      expect(cfg3.verifyPassword('zuber')).toBe(false);
     } finally {
+      if (origPassword !== undefined) process.env.PASSWORD = origPassword;
+      else delete process.env.PASSWORD;
+
+      if (origZuber !== undefined) process.env.ZUBER_PASSWORD = origZuber;
+      else delete process.env.ZUBER_PASSWORD;
+
       if (origKnowmesh !== undefined) process.env.KNOWMESH_PASSWORD = origKnowmesh;
       else delete process.env.KNOWMESH_PASSWORD;
 
@@ -295,8 +320,8 @@ describe('Offline Sync Structures & Conflict Resolution Utilities', () => {
   it('generates predictable database names per profile id', () => {
     const db1 = new LocalDb('default');
     const db2 = new LocalDb('Heimserver:3443');
-    expect((db1 as any).dbName).toBe('knowmesh_cache_default');
-    expect((db2 as any).dbName).toBe('knowmesh_cache_Heimserver_3443');
+    expect((db1 as any).dbName).toBe('zuber_cache_default');
+    expect((db2 as any).dbName).toBe('zuber_cache_Heimserver_3443');
   });
 });
 

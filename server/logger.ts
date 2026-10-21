@@ -19,7 +19,7 @@ export class ServerLogger {
   private logFilePath: string;
 
   constructor() {
-    this.logFilePath = path.join(configService.getConfigDir(), 'knowmesh.log');
+    this.logFilePath = path.join(configService.getConfigDir(), 'zuber.log');
   }
 
   public getLevel(): LogLevel {
@@ -97,7 +97,7 @@ export class ServerLogger {
     this.appendToLogFile(entry);
 
     // Also forward to console for container stdout visibility
-    const consolePrefix = `[Knowmesh Server] [${entry.level.toUpperCase()}] [${entry.category}]`;
+    const consolePrefix = `[Zuber Server] [${entry.level.toUpperCase()}] [${entry.category}]`;
     if (level === 'error') {
       console.error(consolePrefix, message, detailsStr ?? '');
     } else if (level === 'warn') {

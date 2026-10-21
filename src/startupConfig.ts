@@ -8,8 +8,8 @@ export interface StartupConfig {
   dailyFolder?: string;      // Optionaler Zielordner für 'daily' (z.B. "" oder "Tägliche Notizen")
 }
 
-export const STARTUP_CONFIG_KEY = 'knowmesh_startup_config';
-export const LAST_ACTIVE_NOTE_KEY = 'knowmesh_last_active_note';
+export const STARTUP_CONFIG_KEY = 'zuber_startup_config';
+export const LAST_ACTIVE_NOTE_KEY = 'zuber_last_active_note';
 
 export const DEFAULT_STARTUP_CONFIG: StartupConfig = {
   behavior: 'last',
@@ -19,7 +19,7 @@ export const DEFAULT_STARTUP_CONFIG: StartupConfig = {
 export function getStartupConfig(): StartupConfig {
   if (typeof window === 'undefined') return DEFAULT_STARTUP_CONFIG;
   try {
-    const raw = localStorage.getItem(STARTUP_CONFIG_KEY);
+    const raw = localStorage.getItem(STARTUP_CONFIG_KEY) || localStorage.getItem('knowmesh_startup_config');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && (parsed.behavior === 'last' || parsed.behavior === 'daily' || parsed.behavior === 'specific')) {
@@ -91,7 +91,7 @@ export async function resolveStartupNotePath(
   // 3. Last opened note behavior (default)
   if (config.behavior === 'last') {
     try {
-      const last = localStorage.getItem(LAST_ACTIVE_NOTE_KEY);
+      const last = localStorage.getItem(LAST_ACTIVE_NOTE_KEY) || localStorage.getItem('knowmesh_last_active_note');
       if (last) {
         const found = mdFiles.find((f) => f.path === last);
         if (found) return found.path;

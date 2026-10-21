@@ -17,8 +17,8 @@ const DEFAULT_CONFIG_FILE = path.resolve(process.cwd(), 'server-config.json');
 
 export const DEFAULT_GIT_CONFIG: GitConfig = {
   enabled: false,
-  userName: 'Knowmesh Server',
-  userEmail: 'knowmesh@local',
+  userName: 'Zuber Server',
+  userEmail: 'zuber@local',
   autoCommitOnClose: true,
   remote: {
     enabled: false,
@@ -79,11 +79,16 @@ export class ConfigService {
         }
       }
     } catch (err) {
-      console.warn(`[Knowmesh] Failed to read ${this.configPath}, creating fresh config:`, err);
+      console.warn(`[Zuber] Failed to read ${this.configPath}, creating fresh config:`, err);
     }
 
     // Create initial config from environment or default password
-    const initialPassword = process.env.KNOWMESH_PASSWORD || process.env.OBSIDIAN_WEB_PASSWORD || 'knowmesh';
+    const initialPassword =
+      process.env.PASSWORD ||
+      process.env.ZUBER_PASSWORD ||
+      process.env.KNOWMESH_PASSWORD ||
+      process.env.OBSIDIAN_WEB_PASSWORD ||
+      'zuber';
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = this.hashPassword(initialPassword, salt);
     const initialConfig: ServerConfig = {
@@ -100,7 +105,7 @@ export class ConfigService {
       this.ensureDirExists();
       fs.writeFileSync(this.configPath, JSON.stringify(initialConfig, null, 2), 'utf-8');
     } catch (err) {
-      console.error(`[Knowmesh] Failed to write initial ${this.configPath}:`, err);
+      console.error(`[Zuber] Failed to write initial ${this.configPath}:`, err);
     }
 
     return initialConfig;

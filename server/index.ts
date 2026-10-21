@@ -848,7 +848,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   // Initialize repository if enabled in config
   gitService.initIfNeeded().catch((err) => {
-    console.warn('[Knowmesh Git] Auto-init error:', err);
+    console.warn('[Zuber Git] Auto-init error:', err);
   });
 
   const app = createApp(vaultService, gitService);
@@ -879,7 +879,7 @@ if (process.env.NODE_ENV !== 'test') {
     const cookieMatch = cookieHeader
       .split(';')
       .map((c) => c.trim())
-      .find((c) => c.startsWith(`${COOKIE_NAME}=`) || c.startsWith('basalt_session=') || c.startsWith('obsidian_vault_session='));
+      .find((c) => c.startsWith(`${COOKIE_NAME}=`) || c.startsWith('knowmesh_session=') || c.startsWith('basalt_session=') || c.startsWith('obsidian_vault_session='));
     const cookieToken = cookieMatch ? decodeURIComponent(cookieMatch.split('=')[1]) : null;
 
     if (!verifySessionToken(queryToken || cookieToken)) {
@@ -915,7 +915,7 @@ if (process.env.NODE_ENV !== 'test') {
                   await gitService.push();
                 }
               } catch (err) {
-                console.warn('[Knowmesh Git] Auto-commit on session end error:', err);
+                console.warn('[Zuber Git] Auto-commit on session end error:', err);
               }
             }
           }
@@ -941,7 +941,7 @@ if (process.env.NODE_ENV !== 'test') {
   });
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Knowmesh Server läuft auf:`);
+    console.log(`🚀 Zuber Server läuft auf:`);
     console.log(`   - Lokal:    ${protocolLabel}://localhost:${PORT}`);
     const localIps = getLocalIpAddresses().filter((ip) => ip !== '127.0.0.1');
     for (const ip of localIps) {
