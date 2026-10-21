@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type {
+  AttachmentKind,
   BacklinkItem,
   FileTreeNode,
   FrontmatterProperty,
@@ -411,12 +412,20 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
         addName(f.basename.toLowerCase(), f.path);
       }
     }
-    // Prefer markdown notes, then the shortest path (Obsidian behaviour)
+    // Fallback for canvas files without .canvas extension (only if no .md note matches)
+    for (const f of this.files.values()) {
+      if (f.extension === 'canvas') {
+        const withoutExt = f.path.toLowerCase().replace(/\.canvas$/, '');
+        if (!this.lowerPathIndex.has(withoutExt)) {
+          this.lowerPathIndex.set(withoutExt, f.path);
+        }
+      }
+    }
+    // Prefer markdown notes, then canvas files, then the shortest path (Obsidian behaviour)
     for (const list of this.nameIndex.values()) {
       list.sort((a, b) => {
-        const am = a.endsWith('.md') ? 0 : 1;
-        const bm = b.endsWith('.md') ? 0 : 1;
-        return am - bm || a.length - b.length;
+        const getPriority = (p: string) => (p.endsWith('.md') ? 0 : p.endsWith('.canvas') ? 1 : 2);
+        return getPriority(a) - getPriority(b) || a.length - b.length;
       });
     }
 
@@ -613,12 +622,16 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
           .replace(/^\/+/, '');
         const relMatch = this.lowerPathIndex.get(relCandidate.toLowerCase());
         if (relMatch) return relMatch;
+        const relCanvas = this.lowerPathIndex.get(`${relCandidate.toLowerCase()}.canvas`);
+        if (relCanvas) return relCanvas;
       }
     }
 
-    // 1. Exact path (with or without .md)
+    // 1. Exact path (with or without .md / .canvas)
     const exact = this.lowerPathIndex.get(lower);
     if (exact) return exact;
+    const exactCanvas = this.lowerPathIndex.get(`${lower}.canvas`);
+    if (exactCanvas) return exactCanvas;
 
     // 2. File name / basename (if fromNotePath is given, prefer matches in same folder subtree)
     const byName = this.nameIndex.get(lower);
@@ -646,16 +659,36 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
         const scopedMatch = candidates.find(
           (p) =>
             p.toLowerCase().startsWith(noteDir + '/') &&
-            (p.toLowerCase().endsWith(`/${lower}`) || p.toLowerCase().endsWith(`/${lower}.md`))
+            (p.toLowerCase().endsWith(`/${lower}`) ||
+              p.toLowerCase().endsWith(`/${lower}.md`) ||
+              p.toLowerCase().endsWith(`/${lower}.canvas`))
         );
         if (scopedMatch) return scopedMatch;
       }
       const match = candidates.find(
-        (p) => p.toLowerCase().endsWith(`/${lower}`) || p.toLowerCase().endsWith(`/${lower}.md`)
+        (p) =>
+          p.toLowerCase().endsWith(`/${lower}`) ||
+          p.toLowerCase().endsWith(`/${lower}.md`) ||
+          p.toLowerCase().endsWith(`/${lower}.canvas`)
       );
       if (match) return match;
     }
     return null;
+  }
+
+  /**
+   * Resolves a target with its classified AttachmentKind ('markdown', 'canvas', 'image', 'pdf', etc.).
+   */
+  public resolveWikiTargetWithKind(
+    target: string,
+    fromNotePath?: string
+  ): { path: string; kind: AttachmentKind } | null {
+    const resolved = this.resolveWikiTarget(target, fromNotePath);
+    if (!resolved) return null;
+    return {
+      path: resolved,
+      kind: getAttachmentKind(resolved),
+    };
   }
 
   public getNote(relPath: string): NoteData {

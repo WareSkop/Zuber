@@ -128,6 +128,45 @@ describe('VaultService & Sync Engine', () => {
     ).toBe('attachments/pasted-image-1729110000.png');
   });
 
+  it('resolves .canvas files when linked without extension or with extension', () => {
+    const canvasDir = path.join(tmpDir, 'Diagramme');
+    fs.mkdirSync(canvasDir, { recursive: true });
+    const canvasPath = path.join(canvasDir, 'Flow.canvas');
+    fs.writeFileSync(canvasPath, JSON.stringify({ nodes: [], edges: [] }));
+    service.indexFile('Diagramme/Flow.canvas');
+
+    // Resolve without extension -> resolves to Diagramme/Flow.canvas
+    expect(service.resolveWikiTarget('Flow')).toBe('Diagramme/Flow.canvas');
+    expect(service.resolveWikiTarget('Flow.canvas')).toBe('Diagramme/Flow.canvas');
+    expect(service.resolveWikiTarget('Diagramme/Flow')).toBe('Diagramme/Flow.canvas');
+
+    // resolveWikiTargetWithKind
+    const resolvedWithKind = service.resolveWikiTargetWithKind('Flow');
+    expect(resolvedWithKind).toEqual({
+      path: 'Diagramme/Flow.canvas',
+      kind: 'canvas',
+    });
+
+    // When both .md and .canvas exist with the same name, .md takes precedence
+    const mdPath = path.join(canvasDir, 'Flow.md');
+    fs.writeFileSync(mdPath, '# Flow note');
+    service.indexFile('Diagramme/Flow.md');
+
+    expect(service.resolveWikiTarget('Flow')).toBe('Diagramme/Flow.md');
+    const resolvedBoth = service.resolveWikiTargetWithKind('Flow');
+    expect(resolvedBoth).toEqual({
+      path: 'Diagramme/Flow.md',
+      kind: 'markdown',
+    });
+
+    // But explicit Flow.canvas still resolves to Flow.canvas
+    expect(service.resolveWikiTarget('Flow.canvas')).toBe('Diagramme/Flow.canvas');
+    expect(service.resolveWikiTargetWithKind('Flow.canvas')).toEqual({
+      path: 'Diagramme/Flow.canvas',
+      kind: 'canvas',
+    });
+  });
+
   it('updates WikiLinks across the vault when a note is renamed', () => {
     const res = service.renameOrMove(
       'Projekte/Projekt-Architektur.md',

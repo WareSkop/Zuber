@@ -1449,6 +1449,65 @@ code {
   font-size: 13px;
 }
 
+/* CodeMirror 6 Autocomplete Tooltip Container */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--bg-secondary, #161c24) !important;
+  border: 1px solid var(--border-color, #2d3748) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45) !important;
+  overflow: hidden !important;
+  padding: 4px 0 !important;
+}
+
+.cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: inherit !important;
+  max-height: 260px !important;
+}
+
+/* Einzelne Listeneinträge */
+.cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: 6px 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: var(--text-primary, #e6edf3) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  transition: background 0.1s ease !important;
+}
+
+/* Hervorhebung bei Auswahl / Hover */
+.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected="true"],
+.cm-tooltip.cm-tooltip-autocomplete > ul > li:hover {
+  background: var(--bg-tertiary, #1f2937) !important;
+  color: var(--accent-color, #d4af37) !important;
+}
+
+/* Notizname / Hauptlabel */
+.cm-completionLabel {
+  font-weight: 500 !important;
+  color: var(--text-primary, #e6edf3) !important;
+}
+
+li[aria-selected="true"] .cm-completionLabel {
+  color: var(--accent-color, #d4af37) !important;
+}
+
+/* Übereinstimmender Text (Match) */
+.cm-completionMatchedText {
+  color: var(--accent-color, #d4af37) !important;
+  font-weight: 700 !important;
+  text-decoration: underline !important;
+}
+
+/* Dateipfad / Detail-Informationen rechts */
+.cm-completionDetail {
+  font-size: 11.5px !important;
+  color: var(--text-muted, #8b949e) !important;
+  font-style: italic !important;
+  margin-left: auto !important;
+}
+
 /* Live-Preview & Reading Mode Tables */
 .cm-lp-table-host-line {
   padding-top: 6px !important;
@@ -5864,17 +5923,20 @@ input:checked + .slider:before {
 }
 
 /* Canvas Embed Containers (Markdown Inline & Reading) */
+.cm-lp-canvas-embed,
+.embedded-canvas-container,
 .cm-canvas-embed-wrapper,
 .canvas-embed-container {
   display: block;
-  width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 16px auto !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
   min-height: 380px;
   height: 480px;
-  margin: 14px 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  overflow: hidden;
   position: relative;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
 }

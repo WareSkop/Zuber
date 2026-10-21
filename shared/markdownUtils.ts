@@ -271,6 +271,13 @@ export function getAttachmentKind(filePath: string): AttachmentKind {
 }
 
 /**
+ * Resolves the classified AttachmentKind for a given file path or wiki target.
+ */
+export function resolveWikiTargetKind(filePath: string): AttachmentKind {
+  return getAttachmentKind(filePath);
+}
+
+/**
  * Parses JSON Canvas (.canvas) content and extracts all outbound file links,
  * internal [[Wiki-Links]], and #tags from text, file, and group nodes.
  */

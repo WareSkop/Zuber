@@ -349,7 +349,8 @@ class EmbedWidget extends WidgetType {
     readonly width?: number,
     readonly align?: 'left' | 'center' | 'right',
     readonly range?: { from: number; to: number },
-    readonly onUpdateTag?: (newTag: string, from: number, to: number) => void
+    readonly onUpdateTag?: (newTag: string, from: number, to: number) => void,
+    readonly allNotes?: { path: string; name: string; basename: string }[]
   ) {
     super();
   }
@@ -368,17 +369,37 @@ class EmbedWidget extends WidgetType {
 
   toDOM() {
     const cleanTarget = this.target.split('#')[0].trim();
-    const isCanvas = cleanTarget.toLowerCase().endsWith('.canvas');
+    let isCanvas = cleanTarget.toLowerCase().endsWith('.canvas');
+    let effectiveCanvasPath = cleanTarget;
+
+    if (!isCanvas && this.allNotes) {
+      const lower = cleanTarget.toLowerCase();
+      const canvasMatch = this.allNotes.find(
+        (n) =>
+          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+          n.path.toLowerCase().endsWith('.canvas')
+      );
+      const mdMatch = this.allNotes.find(
+        (n) =>
+          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+          n.path.toLowerCase().endsWith('.md')
+      );
+      if (canvasMatch && !mdMatch) {
+        isCanvas = true;
+        effectiveCanvasPath = canvasMatch.path;
+      }
+    }
 
     if (isCanvas) {
       const container = document.createElement('div');
-      container.className = 'cm-embed-widget cm-canvas-embed-wrapper';
+      container.className = 'cm-embed-widget cm-canvas-embed-wrapper cm-lp-canvas-embed';
       const root = createRoot(container);
       (container as any)._reactRoot = root;
       root.render(
         <CanvasEmbedWidget
-          canvasPath={cleanTarget}
+          canvasPath={effectiveCanvasPath}
           onOpenNote={this.onNavigate}
+          allNotes={this.allNotes}
         />
       );
       return container;
@@ -601,7 +622,8 @@ function buildLivePreviewDecorations(
   notePath: string,
   onNavigate: (target: string) => void,
   onSelectTag: (tag: string) => void,
-  onUpdateTag: (newTag: string, from: number, to: number) => void
+  onUpdateTag: (newTag: string, from: number, to: number) => void,
+  allNotes?: { path: string; name: string; basename: string }[]
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
@@ -827,7 +849,8 @@ function buildLivePreviewDecorations(
               imgWidth,
               imgAlign,
               { from: fullStart, to: fullEnd },
-              onUpdateTag
+              onUpdateTag,
+              allNotes
             ),
           }),
         });
@@ -864,7 +887,8 @@ function buildLivePreviewDecorations(
               undefined,
               undefined,
               { from: fullStart, to: fullEnd },
-              onUpdateTag
+              onUpdateTag,
+              allNotes
             ),
           }),
         });
@@ -918,7 +942,8 @@ function buildLivePreviewDecorations(
               width,
               align,
               { from: fullStart, to: fullEnd },
-              onUpdateTag
+              onUpdateTag,
+              allNotes
             ),
           }),
         });
@@ -1543,18 +1568,34 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     if (!container) return;
 
     const wikiCompletion = (context: CompletionContext): CompletionResult | null => {
-      // 1. [[WikiLink]] completion
+      // 1. [[WikiLink]] and ![[Embed]] completion
       const wikiBefore = context.matchBefore(/\[\[[^\]|\n]*$/);
       if (wikiBefore) {
         const query = wikiBefore.text.slice(2).toLowerCase();
         const options = callbacksRef.current.allNotes
-          .filter((n) => n.basename.toLowerCase().includes(query))
+          .filter((n) => {
+            const isCanvas = n.path.toLowerCase().endsWith('.canvas');
+            const targetName = isCanvas
+              ? (n.name.toLowerCase().endsWith('.canvas') ? n.name : `${n.basename}.canvas`)
+              : n.basename;
+            return (
+              n.basename.toLowerCase().includes(query) ||
+              targetName.toLowerCase().includes(query) ||
+              n.path.toLowerCase().includes(query)
+            );
+          })
           .slice(0, 60)
-          .map((n) => ({
-            label: n.basename,
-            detail: n.path,
-            apply: `${n.basename}]]`,
-          }));
+          .map((n) => {
+            const isCanvas = n.path.toLowerCase().endsWith('.canvas');
+            const targetName = isCanvas
+              ? (n.name.toLowerCase().endsWith('.canvas') ? n.name : `${n.basename}.canvas`)
+              : n.basename;
+            return {
+              label: targetName,
+              detail: n.path,
+              apply: `${targetName}]]`,
+            };
+          });
         return {
           from: wikiBefore.from + 2,
           options,
@@ -1602,7 +1643,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               callbacksRef.current.notePath,
               (t) => callbacksRef.current.onNavigateWikiLink(t),
               (tag) => callbacksRef.current.onSelectTag(tag),
-              onUpdateTag
+              onUpdateTag,
+              callbacksRef.current.allNotes
             );
           }
           update(update: ViewUpdate) {
@@ -1612,7 +1654,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
                 callbacksRef.current.notePath,
                 (t) => callbacksRef.current.onNavigateWikiLink(t),
                 (tag) => callbacksRef.current.onSelectTag(tag),
-                onUpdateTag
+                onUpdateTag,
+                callbacksRef.current.allNotes
               );
             }
           }
@@ -1780,7 +1823,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         markdown(),
         EditorView.lineWrapping,
         placeholder(
-          (typeof localStorage !== 'undefined' && localStorage.getItem('knowmesh_language') === 'de')
+          (typeof localStorage !== 'undefined' && (localStorage.getItem('zuber_language') === 'de' || localStorage.getItem('knowmesh_language') === 'de'))
             ? 'Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)'
             : 'Start writing your note... (Type [[ for wiki links or # for tags)'
         ),
@@ -1869,8 +1912,27 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (_match, targetRaw, altRaw) => {
         const target = String(targetRaw).trim();
         const alt = altRaw ? String(altRaw).trim() : target;
-        if (target.toLowerCase().endsWith('.canvas')) {
-          return `<div class="reading-canvas-embed" data-canvas-path="${target}" data-wikilink="${target}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        let isCanvas = target.toLowerCase().endsWith('.canvas');
+        let canvasPath = target;
+        if (!isCanvas) {
+          const lower = target.toLowerCase();
+          const canvasMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.canvas')
+          );
+          const mdMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.md')
+          );
+          if (canvasMatch && !mdMatch) {
+            isCanvas = true;
+            canvasPath = canvasMatch.path;
+          }
+        }
+        if (isCanvas) {
+          return `<div class="reading-canvas-embed" data-canvas-path="${canvasPath}" data-wikilink="${canvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
         }
         if (IMAGE_EXT_REGEX.test(target)) {
           const url = api.getAttachmentUrl(target, notePath);
@@ -1887,8 +1949,27 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (_match, altRaw, hrefRaw) => {
         const target = String(hrefRaw).trim();
         const alt = String(altRaw || target).trim();
-        if (target.toLowerCase().endsWith('.canvas')) {
-          return `<div class="reading-canvas-embed" data-canvas-path="${target}" data-wikilink="${target}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        let isCanvas = target.toLowerCase().endsWith('.canvas');
+        let canvasPath = target;
+        if (!isCanvas) {
+          const lower = target.toLowerCase();
+          const canvasMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.canvas')
+          );
+          const mdMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.md')
+          );
+          if (canvasMatch && !mdMatch) {
+            isCanvas = true;
+            canvasPath = canvasMatch.path;
+          }
+        }
+        if (isCanvas) {
+          return `<div class="reading-canvas-embed" data-canvas-path="${canvasPath}" data-wikilink="${canvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
         }
         const url = /^(https?:|data:)/i.test(target)
           ? target

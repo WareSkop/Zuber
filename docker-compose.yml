@@ -13,8 +13,8 @@ services:
       - FORCE_AUTH=true
       - VAULT_DIR=/data/vault
       - CONFIG_PATH=/data/config/server-config.json
-      - PASSWORD=dein_sicheres_passwort
-      - SESSION_SECRET=bitte_hier_einen_langen_zufaelligen_string_eintragen
+      - PASSWORD=secret_password
+      - SESSION_SECRET=loooooong_secret_password_even_longer_than this
       - MAX_UPLOAD_MB=100
       # - ALLOWED_ORIGINS=https://zuber.example.com
     volumes:

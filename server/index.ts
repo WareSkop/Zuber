@@ -25,6 +25,7 @@ import { VaultService } from './vaultService';
 import { GitService } from './gitService';
 import { serverLogger } from './logger';
 import type { LogLevel } from '../shared/types';
+import { getAttachmentKind } from '../shared/markdownUtils';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -395,7 +396,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     }
   });
 
-  app.get('/api/vault/resolve-wiki', requireAuth, (req, res) => {
+  const handleResolveWiki = (req: express.Request, res: express.Response) => {
     try {
       const target = String(req.query.target || '');
       const from = req.query.from ? String(req.query.from) : undefined;
@@ -404,11 +405,21 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
         return;
       }
       const resolved = vaultService.resolveWikiTarget(target, from);
-      res.json({ target, resolvedPath: resolved });
+      const kind = resolved ? getAttachmentKind(resolved) : undefined;
+      res.json({
+        target,
+        resolvedPath: resolved,
+        path: resolved,
+        exists: !!resolved,
+        kind,
+      });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
-  });
+  };
+
+  app.get('/api/vault/resolve', requireAuth, handleResolveWiki);
+  app.get('/api/vault/resolve-wiki', requireAuth, handleResolveWiki);
 
   // Serve embedded images/attachments from vault
   app.get('/api/vault/attachment', requireAuth, (req, res) => {

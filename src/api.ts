@@ -1,4 +1,5 @@
 import type {
+  AttachmentKind,
   BacklinkItem,
   FileTreeNode,
   FrontmatterProperty,
@@ -539,7 +540,7 @@ export const api = {
   resolveWikiLink(
     target: string,
     fromNotePath?: string
-  ): Promise<{ target: string; resolvedPath: string | null }> {
+  ): Promise<{ target: string; resolvedPath: string | null; path?: string | null; exists?: boolean; kind?: AttachmentKind }> {
     const params = new URLSearchParams({ target });
     if (fromNotePath) params.set('from', fromNotePath);
     return apiFetch(`/api/vault/resolve?${params.toString()}`);

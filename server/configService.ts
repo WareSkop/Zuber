@@ -258,7 +258,7 @@ export class ConfigService {
 
   private saveConfig(): void {
     this.ensureDirExists();
-    const tempPath = `${this.configPath}.tmp.${Date.now()}`;
+    const tempPath = `${this.configPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
     fs.writeFileSync(tempPath, JSON.stringify(this.config, null, 2), 'utf-8');
     fs.renameSync(tempPath, this.configPath);
   }
