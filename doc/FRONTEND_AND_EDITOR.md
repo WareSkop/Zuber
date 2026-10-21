@@ -79,7 +79,7 @@ const vpTo = Math.min(docLength, view.viewport.to + 1500);
 | **Horizontale Linie** (`---`, `***`) | Ersetzt durch `<hr class="cm-lp-hr" />` (`HrWidget`) | Rohes `---` sichtbar | Zeilen-Scan + `selectionTouchesLine` |
 | **Aufgabenlisten** (`- [ ] `, `- [x] `) | `- [ ]` wird durch interaktives `<input type="checkbox">` (`CheckboxWidget`) ersetzt. Klick schaltet `[ ]` $\leftrightarrow$ `[x]` direkt im Dokument um! | `- [ ]` als Text sichtbar | Zeilen-Scan + `CheckboxWidget` |
 | **Aufzählungslisten** (`- `, `* `, `+ `) | `-` wird durch einen gestylten Listenpunkt `•` (`BulletWidget`) ersetzt | `-` als Text sichtbar | Zeilen-Scan + `BulletWidget` |
-| **Codeblöcke** (` ```lang ... ``` `) | Alle Zeilen erhalten `.cm-lp-codeblock-line` (dunkler Hintergrund, Monospace) | Öffnende/schließende ` ``` `-Zeilen sind außerhalb gedimmt | Mehrzeilen-Zustandsautomat (`inCodeFence`) |
+| **Codeblöcke** (` ```lang ... ``` `) | Fences (```` ``` ````) werden ausgeblendet (`.cm-lp-codeblock-fence-hidden`), oben rechts wird ein Header-Widget (`CodeBlockHeaderWidget`) mit dezentem Sprach-Badge und Kopier-Button gerendert; Inhaltszeilen erhalten `.cm-lp-codeblock-content-line` mit vollem Syntax-Highlighting und abgerundetem Boden (`.cm-lp-codeblock-bottom-radius`). | Fences werden sichtbar mit `.cm-lp-formatting` (gedimmte Backticks) angezeigt, damit Sprache und Code frei editiert werden können. | Pre-Scan aller Blöcke + Zeilen-Dekorationen & `CodeBlockHeaderWidget` |
 | **Markdown-Tabellen** (`\| A \| B \|`) | Erste Zeile wird durch gerendertes HTML-`<table>` (`TableWidget`) ersetzt; Folgezeilen der Tabelle werden per `.cm-lp-table-collapsed-line` ausgeblendet. Klick auf die Tabelle setzt den Cursor hinein zum Bearbeiten. | Kompletter Markdown-Tabellenquelltext sichtbar (`.cm-lp-table-source-line`) | Mehrzeilen-Tabellen-Detektor (`isTableRow`, `isTableSeparator`) + `TableWidget` |
 | **Wiki-Embeds** (`![[bild.png\|400]]`, `![[doc.pdf]]`) | Ersetzt durch `EmbedWidget` (`<img>` mit Lazy-Loading, `<audio>`, `<video>`, PDF-Karte oder Notiz-Einbettung) | Roher Code `![[...]]` sichtbar | Regex `WIKI_REGEX` + `selectionTouches` |
 | **Wiki-Links** (`[[Ziel\|Alias]]`) | Ersetzt durch klickbares `WikiLinkWidget` (`<span class="cm-lp-wikilink">`). Klick öffnet die Zielnotiz! | Roher Code `[[Ziel\|Alias]]` sichtbar | Regex `WIKI_REGEX` + `WikiLinkWidget` |
@@ -96,6 +96,25 @@ const vpTo = Math.min(docLength, view.viewport.to + 1500);
 > **Wichtige CodeMirror-6-Einschränkung bei mehrzeiligen Dekorationen:**
 > Ein `ViewPlugin` darf in CodeMirror 6 **niemals** `Decoration.replace(...)` über Zeilenumbrüche (`\n`) hinweg verwenden (führt sofort zum Fehler `RangeError: Decorations that replace line breaks may not be specified via plugins`).
 > Deshalb rendert unser Tabellen-Detektor das `TableWidget` als `Decoration.widget({ widget: new TableWidget(tableLines) })` am Anfang der ersten Tabellenzeile und kollabiert die einzelnen Tabellenzeilen zeilenweise mit `Decoration.line({ class: 'cm-lp-table-collapsed-line' })` (`font-size: 0; line-height: 0; height: 0; overflow: hidden`).
+
+### 2.2.1 Codeblock-Architektur (Syntax-Highlighting, Header-Widget & Lese-Modus)
+
+Fenced Codeblöcke (```` ```language ... ``` ````) werden in Zuber auf zwei Ebenen für optimale Lesbarkeit und Produktivität optimiert:
+
+1. **CodeMirror 6 Live-Preview (`LivePreviewEditor.tsx`):**
+   - **Pre-Scan:** In `buildLivePreviewDecorations` werden alle Codeblock-Grenzen im Dokument erfasst.
+   - **Cursor außerhalb des Blocks:**
+     - Öffnende Zeile (` ```lang `): Erhält `Decoration.line({ class: 'cm-lp-codeblock-fence-hidden' })` und ein `CodeBlockHeaderWidget` am Zeilenanfang (`side: -1`). Das Widget rendert die Sprache (z. B. `PYTHON`, `SQL`) als dezentes Badge und bietet einen Kopier-Button mit Zwischenablagen-Feedback (`✓ Kopiert`).
+     - Inhaltszeilen: Erhalten `Decoration.line({ class: 'cm-lp-codeblock-content-line' })` mit seitlichen Rändern und Monospace-Font.
+     - Schließende Zeile (` ``` `): Erhält `Decoration.line({ class: 'cm-lp-codeblock-fence-hidden cm-lp-codeblock-bottom-radius' })` und bildet einen abgerundeten Abschluss des Code-Containers.
+   - **Cursor innerhalb des Blocks:** Fences werden mit `.cm-lp-formatting` sichtbar geschaltet, sodass Sprache und Code nahtlos editiert werden können.
+   - **Syntax-Highlighting:** CodeMirror 6 bindet `@codemirror/language-data` (143 Lezer-Parser) über `markdown({ codeLanguages: languages })` ein. Über `syntaxHighlighting(codeHighlighter)` werden Standard-Token (`.cm-keyword`, `.cm-string`, `.cm-number`, etc.) semantisch annotiert und themenspezifisch gestylt.
+
+2. **Lese-Modus (`mode === 'reading'`):**
+   - In `marked.use({ renderer: { code } })` wird `highlight.js` eingebunden (`hljs.highlight` / `hljs.highlightAuto`).
+   - Jeder Codeblock wird in einen `<div class="codeblock-container">` mit `<div class="codeblock-header">` (Sprach-Badge + Kopier-Button) und `<pre><code class="hljs">` gerendert.
+   - Per Event-Delegation in `handleReadingClick` wird der Code beim Klick auf den Kopier-Button in die Zwischenablage übertragen.
+   - `DOMPurify.sanitize` schützt den HTML-Ausgabestrom, belässt aber SVG-Icons und Buttons intakt.
 
 ### 2.3 Wiki-Link (`[[`) und Tag (`#`) Autovervollständigung
 

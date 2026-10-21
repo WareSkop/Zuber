@@ -16,6 +16,10 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
+import { languages } from '@codemirror/language-data';
+import { syntaxHighlighting } from '@codemirror/language';
+import { tagHighlighter, tags } from '@lezer/highlight';
+import hljs from 'highlight.js';
 import {
   autocompletion,
   startCompletion,
@@ -27,6 +31,60 @@ import DOMPurify from 'dompurify';
 import { createRoot, type Root } from 'react-dom/client';
 import { api } from '../api';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const codeHighlighter = tagHighlighter([
+  { tag: tags.keyword, class: 'cm-keyword' },
+  { tag: tags.string, class: 'cm-string' },
+  { tag: tags.special(tags.string), class: 'cm-string cm-string-special' },
+  { tag: tags.number, class: 'cm-number' },
+  { tag: tags.bool, class: 'cm-bool' },
+  { tag: tags.atom, class: 'cm-atom' },
+  { tag: tags.comment, class: 'cm-comment' },
+  { tag: tags.variableName, class: 'cm-variableName' },
+  { tag: tags.function(tags.variableName), class: 'cm-function' },
+  { tag: tags.typeName, class: 'cm-typeName' },
+  { tag: tags.className, class: 'cm-className' },
+  { tag: tags.operator, class: 'cm-operator' },
+  { tag: tags.punctuation, class: 'cm-punctuation' },
+  { tag: tags.propertyName, class: 'cm-propertyName' },
+  { tag: tags.definition(tags.variableName), class: 'cm-def' },
+  { tag: tags.attributeName, class: 'cm-attribute' },
+]);
+
+marked.use({
+  gfm: true,
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      const language = (lang || '').trim();
+      let highlightedCode = '';
+      if (language && hljs.getLanguage(language)) {
+        try {
+          highlightedCode = hljs.highlight(text, { language }).value;
+        } catch {
+          highlightedCode = escapeHtml(text);
+        }
+      } else {
+        try {
+          highlightedCode = hljs.highlightAuto(text).value;
+        } catch {
+          highlightedCode = escapeHtml(text);
+        }
+      }
+
+      const langDisplay = (language || 'code').toUpperCase();
+      return `<div class="codeblock-container"><div class="codeblock-header"><span class="codeblock-lang">${langDisplay}</span><button type="button" class="codeblock-copy-btn" title="Code kopieren"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-text">Kopieren</span></button></div><pre><code class="hljs${language ? ` language-${language}` : ''}">${highlightedCode}</code></pre></div>`;
+    },
+  },
+});
 
 export type EditorMode = 'live' | 'reading' | 'source';
 
@@ -617,6 +675,61 @@ class EmbedWidget extends WidgetType {
   }
 }
 
+class CodeBlockHeaderWidget extends WidgetType {
+  constructor(readonly language: string, readonly codeText: string) {
+    super();
+  }
+
+  eq(other: CodeBlockHeaderWidget) {
+    return this.language === other.language && this.codeText === other.codeText;
+  }
+
+  toDOM() {
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-lp-codeblock-header';
+    const langDisplay = (this.language || 'code').toUpperCase();
+    wrap.innerHTML = `
+      <span class="cm-lp-codeblock-lang">${langDisplay}</span>
+      <button type="button" class="cm-lp-codeblock-copy-btn" title="Code kopieren">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span class="copy-text">Kopieren</span>
+      </button>
+    `;
+    const btn = wrap.querySelector('.cm-lp-codeblock-copy-btn') as HTMLButtonElement | null;
+    if (btn) {
+      btn.onmousedown = (e) => e.preventDefault(); // Verhindert Fokus-Verlust in CM6
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(this.codeText);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = this.codeText;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        btn.classList.add('copied');
+        const textSpan = btn.querySelector('.copy-text');
+        if (textSpan) textSpan.textContent = 'Kopiert!';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          if (textSpan) textSpan.textContent = 'Kopieren';
+        }, 2000);
+      };
+    }
+    return wrap;
+  }
+
+  ignoreEvent(event: Event) {
+    return (event.target as HTMLElement)?.closest?.('.cm-lp-codeblock-copy-btn') != null;
+  }
+}
+
 function buildLivePreviewDecorations(
   view: EditorView,
   notePath: string,
@@ -649,11 +762,79 @@ function buildLivePreviewDecorations(
     maxLine = Math.min(doc.lines, lastVis + 60);
   }
 
-  // Track code fence state up to minLine
-  let inCodeFence = false;
-  for (let l = 1; l < minLine; l++) {
-    if (doc.line(l).text.trim().startsWith('```')) {
-      inCodeFence = !inCodeFence;
+  // Pre-scan all fenced code blocks in the document
+  interface CodeBlockInfo {
+    startLine: number;
+    endLine: number;
+    lang: string;
+    codeText: string;
+    hasCursor: boolean;
+  }
+  const codeBlocks: CodeBlockInfo[] = [];
+  let pendingStart = -1;
+  let pendingLang = '';
+
+  for (let l = 1; l <= doc.lines; l++) {
+    const lineText = doc.line(l).text;
+    const trimmed = lineText.trim();
+    if (trimmed.startsWith('```')) {
+      if (pendingStart === -1) {
+        pendingStart = l;
+        const match = trimmed.match(/^```([a-zA-Z0-9_\-+.]*)/);
+        pendingLang = match ? match[1].trim() : '';
+      } else {
+        const codeLines: string[] = [];
+        for (let cl = pendingStart + 1; cl < l; cl++) {
+          codeLines.push(doc.line(cl).text);
+        }
+        let hasCursor = false;
+        for (let cl = pendingStart; cl <= l; cl++) {
+          if (activeLines.has(cl)) {
+            hasCursor = true;
+            break;
+          }
+        }
+        codeBlocks.push({
+          startLine: pendingStart,
+          endLine: l,
+          lang: pendingLang,
+          codeText: codeLines.join('\n'),
+          hasCursor,
+        });
+        pendingStart = -1;
+        pendingLang = '';
+      }
+    }
+  }
+  if (pendingStart !== -1) {
+    const codeLines: string[] = [];
+    for (let cl = pendingStart + 1; cl <= doc.lines; cl++) {
+      codeLines.push(doc.line(cl).text);
+    }
+    let hasCursor = false;
+    for (let cl = pendingStart; cl <= doc.lines; cl++) {
+      if (activeLines.has(cl)) {
+        hasCursor = true;
+        break;
+      }
+    }
+    codeBlocks.push({
+      startLine: pendingStart,
+      endLine: doc.lines,
+      lang: pendingLang,
+      codeText: codeLines.join('\n'),
+      hasCursor,
+    });
+  }
+
+  const codeBlockByLine = new Map<number, { block: CodeBlockInfo; isStart: boolean; isEnd: boolean }>();
+  for (const cb of codeBlocks) {
+    codeBlockByLine.set(cb.startLine, { block: cb, isStart: true, isEnd: cb.startLine === cb.endLine });
+    for (let l = cb.startLine + 1; l < cb.endLine; l++) {
+      codeBlockByLine.set(l, { block: cb, isStart: false, isEnd: false });
+    }
+    if (cb.endLine > cb.startLine) {
+      codeBlockByLine.set(cb.endLine, { block: cb, isStart: false, isEnd: true });
     }
   }
 
@@ -662,14 +843,64 @@ function buildLivePreviewDecorations(
     const text = line.text;
     const isCursorOnLine = activeLines.has(lineNum);
 
-    if (text.trim().startsWith('```')) {
-      inCodeFence = !inCodeFence;
-      builder.add(line.from, line.from, Decoration.line({ class: 'cm-lp-codeblock-line' }));
-      continue;
-    }
-
-    if (inCodeFence) {
-      builder.add(line.from, line.from, Decoration.line({ class: 'cm-lp-codeblock-line' }));
+    const cbMeta = codeBlockByLine.get(lineNum);
+    if (cbMeta) {
+      const { block, isStart, isEnd } = cbMeta;
+      if (!block.hasCursor) {
+        if (isStart) {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({
+              class: isEnd
+                ? 'cm-lp-codeblock-fence-hidden cm-lp-codeblock-bottom-radius'
+                : 'cm-lp-codeblock-fence-hidden',
+            })
+          );
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.widget({
+              widget: new CodeBlockHeaderWidget(block.lang, block.codeText),
+              side: -1,
+            })
+          );
+        } else if (isEnd) {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({
+              class: 'cm-lp-codeblock-fence-hidden cm-lp-codeblock-bottom-radius',
+            })
+          );
+        } else {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({ class: 'cm-lp-codeblock-content-line' })
+          );
+        }
+      } else {
+        if (isStart || isEnd) {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({ class: 'cm-lp-codeblock-line' })
+          );
+          const match = text.match(/^(\s*```+)/);
+          if (match) {
+            const btFrom = line.from + text.indexOf(match[1]);
+            const btTo = btFrom + match[1].length;
+            builder.add(btFrom, btTo, Decoration.mark({ class: 'cm-lp-formatting' }));
+          }
+        } else {
+          builder.add(
+            line.from,
+            line.from,
+            Decoration.line({ class: 'cm-lp-codeblock-content-line' })
+          );
+        }
+      }
       continue;
     }
 
@@ -1820,7 +2051,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           ...historyKeymap,
           indentWithTab,
         ]),
-        markdown(),
+        markdown({ codeLanguages: languages }),
+        syntaxHighlighting(codeHighlighter),
         EditorView.lineWrapping,
         placeholder(
           (typeof localStorage !== 'undefined' && (localStorage.getItem('zuber_language') === 'de' || localStorage.getItem('knowmesh_language') === 'de'))
@@ -2025,7 +2257,28 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     // Add task-list-item class to <li> containing input checkbox for reliable styling
     rawHtml = rawHtml.replace(/<li(\s*[^>]*)>(?:\s*<p>)?\s*(<input\s+[^>]*type=["']checkbox["'][^>]*>)/gi, '<li$1 class="task-list-item">$2');
     return DOMPurify.sanitize(rawHtml, {
-      ADD_ATTR: ['href', 'target', 'rel', 'data-wiki-target', 'data-wikilink', 'data-canvas-path', 'data-tag', 'loading', 'decoding', 'align'],
+      ADD_TAGS: ['rect', 'path', 'svg', 'button'],
+      ADD_ATTR: [
+        'href',
+        'target',
+        'rel',
+        'data-wiki-target',
+        'data-wikilink',
+        'data-canvas-path',
+        'data-tag',
+        'loading',
+        'decoding',
+        'align',
+        'viewBox',
+        'fill',
+        'stroke',
+        'stroke-width',
+        'width',
+        'height',
+        'rx',
+        'ry',
+        'd',
+      ],
     });
   }, [body, mode, notePath]);
 
@@ -2034,6 +2287,38 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     if (extLink) {
       return;
     }
+
+    const copyBtn = (e.target as HTMLElement).closest(
+      '.codeblock-copy-btn, .cm-lp-codeblock-copy-btn'
+    ) as HTMLButtonElement | null;
+    if (copyBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const container = copyBtn.closest('.codeblock-container');
+      const code = container?.querySelector('code')?.textContent || '';
+      const copyText = async () => {
+        try {
+          await navigator.clipboard.writeText(code);
+        } catch {
+          const ta = document.createElement('textarea');
+          ta.value = code;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        copyBtn.classList.add('copied');
+        const textSpan = copyBtn.querySelector('.copy-text');
+        if (textSpan) textSpan.textContent = 'Kopiert!';
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          if (textSpan) textSpan.textContent = 'Kopieren';
+        }, 2000);
+      };
+      copyText();
+      return;
+    }
+
     const targetEl = (e.target as HTMLElement).closest('[data-wikilink], [data-tag]');
     if (!targetEl) return;
 

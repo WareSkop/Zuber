@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import './components/LivePreviewEditor';
 
 describe('Editor Improvements - Phase 2', () => {
   describe('Nested Task List Indentation & Bracket Pos', () => {
@@ -138,6 +139,56 @@ describe('Editor Improvements - Phase 2', () => {
       expect(checkGuards('[text](https://old.com/)', 15).inMarkdownLinkUrl).toBe(true);
       // Cursor outside: [text](https://old.com/) |
       expect(checkGuards('[text](https://old.com/) after', 26).inMarkdownLinkUrl).toBe(false);
+    });
+  });
+
+  describe('Code Block Enhancements (Syntax Highlighting, Language Badge & Copy Button)', () => {
+    it('renders codeblocks in marked with header, language badge, copy button and syntax highlighting', () => {
+      const markdown = '```python\ndef greet():\n    return "hello"\n```';
+      const html = marked.parse(markdown, { async: false, gfm: true }) as string;
+
+      expect(html).toContain('class="codeblock-container"');
+      expect(html).toContain('class="codeblock-header"');
+      expect(html).toContain('<span class="codeblock-lang">PYTHON</span>');
+      expect(html).toContain('class="codeblock-copy-btn"');
+      expect(html).toContain('Kopieren');
+      expect(html).toContain('hljs');
+      expect(html).toContain('hljs-keyword'); // def or return
+      expect(html).toContain('hljs-string'); // "hello"
+    });
+
+    it('defaults language label to CODE when none is provided in code fence', () => {
+      const markdown = '```\nplain text content\n```';
+      const html = marked.parse(markdown, { async: false, gfm: true }) as string;
+
+      expect(html).toContain('<span class="codeblock-lang">CODE</span>');
+      expect(html).toContain('class="codeblock-container"');
+      expect(html).toContain('content');
+    });
+
+    it('preserves codeblock containers, buttons and svgs after DOMPurify sanitization', async () => {
+      const { JSDOM } = await import('jsdom');
+      const dom = new JSDOM('');
+      const dompurifyModule = await import('dompurify');
+      const DOMPurify = (dompurifyModule.default as any)(dom.window);
+
+      const markdown = '```ts\nconst num: number = 42;\n```';
+      const html = marked.parse(markdown, { async: false, gfm: true }) as string;
+
+      const sanitized = DOMPurify.sanitize(html, {
+        ADD_TAGS: ['rect', 'path', 'svg', 'button'],
+        ADD_ATTR: [
+          'href', 'target', 'rel', 'data-wiki-target', 'data-wikilink',
+          'data-canvas-path', 'data-tag', 'loading', 'decoding', 'align',
+          'viewBox', 'fill', 'stroke', 'stroke-width', 'width', 'height', 'rx', 'ry', 'd',
+        ],
+      });
+
+      expect(sanitized).toContain('class="codeblock-container"');
+      expect(sanitized).toContain('class="codeblock-header"');
+      expect(sanitized).toContain('<button');
+      expect(sanitized).toContain('<svg');
+      expect(sanitized).toContain('<span class="codeblock-lang">TS</span>');
     });
   });
 });

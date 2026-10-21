@@ -1,4 +1,5 @@
 ### Added
+- Codeblock syntax highlighting, hidden backticks in preview, language badge and copy-to-clipboard button.
 - **Web Share Target API für Bilder, PDFs und Markdown-Dateien in `Inbox/` (`manifest.webmanifest`, `public/sw.js`, `src/sync/shareTargetService.ts` & `src/App.tsx`):**
   - Ermöglicht das direkte Teilen von Notizen, Bildern (`image/*`), PDFs (`application/pdf`) und Markdown-Dateien (`.md`, `text/markdown`, `text/plain`) aus dem nativen Android-/Browser-Share-Sheet in Knowmesh.
   - Der Service Worker fängt `POST /share-target` ab, serialisiert Dateidaten in die IndexedDB-Queue `knowmesh_shared_incoming` und leitet per HTTP 303 Redirect weiter.
