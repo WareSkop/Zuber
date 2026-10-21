@@ -853,16 +853,15 @@ function buildLivePreviewDecorations(
             line.from,
             Decoration.line({
               class: isEnd
-                ? 'cm-lp-codeblock-fence-hidden cm-lp-codeblock-bottom-radius'
-                : 'cm-lp-codeblock-fence-hidden',
+                ? 'cm-lp-codeblock-header-line cm-lp-codeblock-bottom-line'
+                : 'cm-lp-codeblock-header-line',
             })
           );
           builder.add(
             line.from,
-            line.from,
-            Decoration.widget({
+            line.to,
+            Decoration.replace({
               widget: new CodeBlockHeaderWidget(block.lang, block.codeText),
-              side: -1,
             })
           );
         } else if (isEnd) {
@@ -870,9 +869,12 @@ function buildLivePreviewDecorations(
             line.from,
             line.from,
             Decoration.line({
-              class: 'cm-lp-codeblock-fence-hidden cm-lp-codeblock-bottom-radius',
+              class: 'cm-lp-codeblock-bottom-line',
             })
           );
+          if (line.to > line.from) {
+            builder.add(line.from, line.to, Decoration.replace({}));
+          }
         } else {
           builder.add(
             line.from,

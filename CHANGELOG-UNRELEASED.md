@@ -22,6 +22,7 @@
   - **Dokumentation:** Vollständige Aktualisierung von `doc/README.md`, `doc/ARCHITECTURE.md`, `doc/API_AND_TYPES.md`, `doc/FRONTEND_AND_EDITOR.md` und `doc/LLM_DEVELOPER_GUIDE.md`.
 
 ### Fixed
+- Fixed code block header border alignment to eliminate left-side step offset.
 - **Canvas Autocomplete & Pfadauflösung (`src/components/LivePreviewEditor.tsx`, `server/vaultService.ts`, `shared/markdownUtils.ts` & `src/api.ts`):**
   - Autocomplete-Vorschläge behalten für `.canvas`-Dateien die Endung `.canvas` bei (z. B. `![[Diagramm.canvas]]` bzw. `[[Diagramm.canvas]]`), während `.md`-Dateien die Endung weiterhin sauber entfernen.
   - Wikilink-Auflösung (`resolveWikiTarget` / `resolveWikiTargetWithKind`) löst Wikilinks ohne Endung (z. B. `![[Diagramm]]`) automatisch auf `Diagramm.canvas` mit `kind: 'canvas'` auf, wenn keine `Diagramm.md` existiert. Bei Namensgleichheit behält `.md` wie spezifiziert Vorrang.
