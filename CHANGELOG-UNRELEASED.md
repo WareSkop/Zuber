@@ -1,4 +1,5 @@
 ### Added
+- Detaillierter Leitfaden zum YAML-Aufbau von Bases (`BASE_YAML_AUFBAU.md` & `doc/BASE_YAML_AUFBAU.md`) mit den 4 Hauptblöcken (`filters`, `formulas`, `properties`, `views`) und Copy-Paste-Vorlagen.
 - Umfassendes Handbuch & Referenzdokumentation für Obsidian Bases (`doc/BASE_ANLEITUNG.md` & `BASE_ANLEITUNG.md`):
   - Detaillierte Erklärung der YAML-Struktur (`filters`, `formulas`, `properties`, `views`).
   - Vollständige Referenz aller Datei- und Frontmatter-Attribute.
