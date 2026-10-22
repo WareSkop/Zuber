@@ -241,79 +241,87 @@ export class LocalDb {
   public async putNote(note: NoteData): Promise<void> {
     const db = await this.openDb();
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('notes', 'readwrite');
-      const store = tx.objectStore('notes');
-      const req = store.put(note);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
+      const tx = db.transaction(['notes', 'meta'], 'readwrite');
+      const notesStore = tx.objectStore('notes');
+      const metaStore = tx.objectStore('meta');
 
-    try {
+      notesStore.put(note);
+
       if (note.path.endsWith('.md')) {
-        const allNotes = (await this.getMeta<NoteSummary[]>('allNotes')) || [];
-        const name = note.name || note.path.split('/').pop() || '';
-        const folder = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
-        const summary: NoteSummary = {
-          path: note.path,
-          name,
-          basename: name.replace(/\.md$/i, ''),
-          folder,
-          frontmatter: note.frontmatter || {},
-          tags: note.tags || [],
-          mtime: Math.round(note.updatedAt || Date.now()),
-          extension: 'md',
-          isSendTarget: note.isSendTarget,
-          isTemplate: note.isTemplate,
+        const getReq = metaStore.get('allNotes');
+        getReq.onsuccess = () => {
+          const allNotes: NoteSummary[] = Array.isArray(getReq.result) ? [...getReq.result] : [];
+          const name = note.name || note.path.split('/').pop() || '';
+          const folder = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
+          const summary: NoteSummary = {
+            path: note.path,
+            name,
+            basename: name.replace(/\.md$/i, ''),
+            folder,
+            frontmatter: note.frontmatter || {},
+            tags: note.tags || [],
+            mtime: Math.round(note.updatedAt || Date.now()),
+            extension: 'md',
+            isSendTarget: note.isSendTarget,
+            isTemplate: note.isTemplate,
+          };
+          const idx = allNotes.findIndex((n) => n.path === note.path);
+          if (idx >= 0) {
+            allNotes[idx] = summary;
+          } else {
+            allNotes.push(summary);
+          }
+          metaStore.put(allNotes, 'allNotes');
         };
-        const idx = allNotes.findIndex((n) => n.path === note.path);
-        if (idx >= 0) {
-          allNotes[idx] = summary;
-        } else {
-          allNotes.push(summary);
-        }
-        await this.setMeta('allNotes', allNotes);
       }
-    } catch {}
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
   }
 
   public async putNotesBatch(notes: NoteData[]): Promise<void> {
     if (notes.length === 0) return;
     const db = await this.openDb();
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('notes', 'readwrite');
-      const store = tx.objectStore('notes');
+      const tx = db.transaction(['notes', 'meta'], 'readwrite');
+      const notesStore = tx.objectStore('notes');
+      const metaStore = tx.objectStore('meta');
+
       for (const note of notes) {
-        store.put(note);
+        notesStore.put(note);
       }
+
+      const getReq = metaStore.get('allNotes');
+      getReq.onsuccess = () => {
+        const allNotes: NoteSummary[] = Array.isArray(getReq.result) ? getReq.result : [];
+        const noteMap = new Map<string, NoteSummary>();
+        for (const n of allNotes) {
+          noteMap.set(n.path, n);
+        }
+        for (const note of notes) {
+          if (!note.path.endsWith('.md')) continue;
+          const name = note.name || note.path.split('/').pop() || '';
+          const folder = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
+          noteMap.set(note.path, {
+            path: note.path,
+            name,
+            basename: name.replace(/\.md$/i, ''),
+            folder,
+            frontmatter: note.frontmatter || {},
+            tags: note.tags || [],
+            mtime: Math.round(note.updatedAt || Date.now()),
+            extension: 'md',
+            isSendTarget: note.isSendTarget,
+            isTemplate: note.isTemplate,
+          });
+        }
+        metaStore.put(Array.from(noteMap.values()), 'allNotes');
+      };
+
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-
-    try {
-      const allNotes = (await this.getMeta<NoteSummary[]>('allNotes')) || [];
-      const noteMap = new Map<string, NoteSummary>();
-      for (const n of allNotes) {
-        noteMap.set(n.path, n);
-      }
-      for (const note of notes) {
-        if (!note.path.endsWith('.md')) continue;
-        const name = note.name || note.path.split('/').pop() || '';
-        const folder = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
-        noteMap.set(note.path, {
-          path: note.path,
-          name,
-          basename: name.replace(/\.md$/i, ''),
-          folder,
-          frontmatter: note.frontmatter || {},
-          tags: note.tags || [],
-          mtime: Math.round(note.updatedAt || Date.now()),
-          extension: 'md',
-          isSendTarget: note.isSendTarget,
-          isTemplate: note.isTemplate,
-        });
-      }
-      await this.setMeta('allNotes', Array.from(noteMap.values()));
-    } catch {}
   }
 
   public async deleteNote(path: string): Promise<void> {

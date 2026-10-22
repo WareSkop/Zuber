@@ -8,6 +8,7 @@ export interface ServerConfig {
   passwordHash: string;
   salt: string;
   sessionEpoch: number;
+  sessionSecret?: string;
   updatedAt: number;
   git?: GitConfig;
   logLevel?: LogLevel;
@@ -75,6 +76,12 @@ export class ConfigService {
           if (!parsed.logLevel) {
             parsed.logLevel = 'info';
           }
+          if (!parsed.sessionSecret || typeof parsed.sessionSecret !== 'string') {
+            parsed.sessionSecret = crypto.randomBytes(32).toString('hex');
+            try {
+              fs.writeFileSync(this.configPath, JSON.stringify(parsed, null, 2), { encoding: 'utf-8', mode: 0o600 });
+            } catch {}
+          }
           return parsed as ServerConfig;
         }
       }
@@ -91,11 +98,13 @@ export class ConfigService {
       'zuber';
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = this.hashPassword(initialPassword, salt);
+    const sessionSecret = crypto.randomBytes(32).toString('hex');
     const initialConfig: ServerConfig = {
       authEnabled: process.env.AUTH_ENABLED !== 'false',
       passwordHash,
       salt,
       sessionEpoch: 1,
+      sessionSecret,
       updatedAt: Date.now(),
       git: { ...DEFAULT_GIT_CONFIG, remote: { ...DEFAULT_GIT_CONFIG.remote } },
       logLevel: 'info',
@@ -103,7 +112,7 @@ export class ConfigService {
 
     try {
       this.ensureDirExists();
-      fs.writeFileSync(this.configPath, JSON.stringify(initialConfig, null, 2), 'utf-8');
+      fs.writeFileSync(this.configPath, JSON.stringify(initialConfig, null, 2), { encoding: 'utf-8', mode: 0o600 });
     } catch (err) {
       console.error(`[Zuber] Failed to write initial ${this.configPath}:`, err);
     }
@@ -128,6 +137,10 @@ export class ConfigService {
 
   public getSessionEpoch(): number {
     return this.config.sessionEpoch || 1;
+  }
+
+  public getSessionSecret(): string {
+    return process.env.SESSION_SECRET || this.config.sessionSecret || 'zuber-offline-vault-secret-key-change-me-in-prod';
   }
 
   public verifyPassword(password: string): boolean {
@@ -156,6 +169,7 @@ export class ConfigService {
     }
 
     this.config = {
+      ...this.config,
       authEnabled,
       passwordHash,
       salt,
@@ -259,7 +273,7 @@ export class ConfigService {
   private saveConfig(): void {
     this.ensureDirExists();
     const tempPath = `${this.configPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
-    fs.writeFileSync(tempPath, JSON.stringify(this.config, null, 2), 'utf-8');
+    fs.writeFileSync(tempPath, JSON.stringify(this.config, null, 2), { encoding: 'utf-8', mode: 0o600 });
     fs.renameSync(tempPath, this.configPath);
   }
 }

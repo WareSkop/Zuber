@@ -60,6 +60,7 @@ export class VaultService {
   private lowerPathIndex = new Map<string, string>();
   private nameIndex = new Map<string, string[]>();
   private aliasIndex = new Map<string, string>();
+  private backlinkIndex = new Map<string, Set<string>>();
   private lookupDirty = true;
   private treeCache: FileTreeNode[] | null = null;
   private graphCache: GraphData | null = null;
@@ -251,7 +252,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     const walk = (dir: string) => {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name.startsWith('.')) continue;
+        if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
         const fullPath = path.join(dir, entry.name);
         const relPath = this.toRelativePath(fullPath);
         if (entry.isDirectory()) {
@@ -277,12 +278,12 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     const absPath = path.join(this.vaultDir, relPath);
     let stat: fs.Stats;
     try {
-      stat = fs.statSync(absPath);
+      stat = fs.lstatSync(absPath);
     } catch {
       this.removeFromIndex(relPath);
       return false;
     }
-    if (!stat.isFile()) return false;
+    if (stat.isSymbolicLink() || !stat.isFile()) return false;
 
     const name = path.basename(relPath);
     const extension = path.extname(name).slice(1).toLowerCase();
@@ -417,7 +418,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     this.folders.add(relDir);
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name.startsWith('.')) continue;
+        if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
         const full = path.join(dir, entry.name);
         const rel = this.toRelativePath(full);
         if (entry.isDirectory()) {
@@ -486,6 +487,21 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
       }
     }
     this.lookupDirty = false;
+
+    this.backlinkIndex.clear();
+    for (const note of this.notes.values()) {
+      for (const link of note.links) {
+        const resolved = this.resolveWikiTarget(link, note.path);
+        if (resolved && resolved !== note.path) {
+          let set = this.backlinkIndex.get(resolved);
+          if (!set) {
+            set = new Set();
+            this.backlinkIndex.set(resolved, set);
+          }
+          set.add(note.path);
+        }
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -568,6 +584,25 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     const resolved = path.resolve(this.vaultDir, cleaned);
     if (resolved !== this.vaultDir && !resolved.startsWith(this.vaultDir + path.sep)) {
       throw new Error('Ungültiger Dateipfad außerhalb des Vaults.');
+    }
+    try {
+      const realVault = fs.realpathSync(this.vaultDir);
+      let checkPath = resolved;
+      while (!fs.existsSync(checkPath)) {
+        const parent = path.dirname(checkPath);
+        if (parent === checkPath) break;
+        checkPath = parent;
+      }
+      if (fs.existsSync(checkPath)) {
+        const realTarget = fs.realpathSync(checkPath);
+        if (realTarget !== realVault && !realTarget.startsWith(realVault + path.sep)) {
+          throw new Error('Ungültiger Dateipfad außerhalb des Vaults.');
+        }
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('außerhalb des Vaults')) {
+        throw err;
+      }
     }
     return resolved;
   }
@@ -886,17 +921,21 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     }
   ): boolean {
     const isCanvas = existing.path.endsWith('.canvas');
-    if (isCanvas) {
-      const incomingRaw = (incoming.rawContent ?? incoming.content ?? incoming.body ?? '').trim();
-      const existingRaw = (existing.rawContent || '').trim();
+    const isBase = existing.path.endsWith('.base');
+    if (isCanvas || isBase) {
+      const incomingRaw = (incoming.rawContent ?? incoming.content ?? incoming.body ?? '').replace(/\r\n/g, '\n').trim();
+      const existingRaw = (existing.rawContent || existing.body || '').replace(/\r\n/g, '\n').trim();
       if (incomingRaw === existingRaw) return true;
-      try {
-        const parsedIncoming = JSON.parse(incomingRaw);
-        const parsedExisting = JSON.parse(existingRaw);
-        return JSON.stringify(parsedIncoming) === JSON.stringify(parsedExisting);
-      } catch {
-        return incomingRaw === existingRaw;
+      if (isCanvas) {
+        try {
+          const parsedIncoming = JSON.parse(incomingRaw);
+          const parsedExisting = JSON.parse(existingRaw);
+          return JSON.stringify(parsedIncoming) === JSON.stringify(parsedExisting);
+        } catch {
+          return incomingRaw === existingRaw;
+        }
       }
+      return false;
     }
 
     // Markdown note:
@@ -997,6 +1036,8 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     if (stat.isFile()) {
       if (oldRelPath.endsWith('.canvas') && !finalNewRel.endsWith('.canvas')) {
         finalNewRel += '.canvas';
+      } else if (oldRelPath.endsWith('.base') && !finalNewRel.endsWith('.base')) {
+        finalNewRel += '.base';
       } else if (oldRelPath.endsWith('.md') && !finalNewRel.endsWith('.md')) {
         finalNewRel += '.md';
       }
@@ -1036,6 +1077,8 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
       if (stat.isFile()) {
         if (oldRelPath.endsWith('.canvas') && !finalNewRel.endsWith('.canvas')) {
           finalNewRel += '.canvas';
+        } else if (oldRelPath.endsWith('.base') && !finalNewRel.endsWith('.base')) {
+          finalNewRel += '.base';
         } else if (oldRelPath.endsWith('.md') && !finalNewRel.endsWith('.md')) {
           finalNewRel += '.md';
         }
@@ -1263,17 +1306,19 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     const target = this.notes.get(targetPath);
     if (!target) return { linked: [], unlinked: [] };
 
+    this.ensureLookups();
+
     const linked: BacklinkItem[] = [];
     const unlinked: BacklinkItem[] = [];
-    const linkingSources = new Set<string>();
+    const linkingSources = this.backlinkIndex.get(targetPath) ?? new Set<string>();
 
-    for (const note of this.notes.values()) {
-      if (note.path === targetPath) continue;
+    for (const sourcePath of linkingSources) {
+      const note = this.notes.get(sourcePath);
+      if (!note || note.path === targetPath) continue;
       const matchingRaw = note.links.filter(
         (l) => this.resolveWikiTarget(l, note.path) === targetPath
       );
       if (matchingRaw.length === 0) continue;
-      linkingSources.add(note.path);
       const needles = matchingRaw.map((l) => `[[${l.toLowerCase()}`);
       const lines = note.body.split(/\r?\n/);
       let foundInLines = false;

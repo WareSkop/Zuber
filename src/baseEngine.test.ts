@@ -191,6 +191,14 @@ views:
       const res = evaluateFormula('round(cost * 1.1923)', record);
       expect(res).toBe(119);
     });
+
+    it('blocks access to global scope, constructor, and prototype in formulas and conditions (SEC-02)', () => {
+      expect(evaluateFormula('window', record)).toBe('');
+      expect(evaluateFormula('globalThis', record)).toBe('');
+      expect(evaluateFormula('cost.constructor', record)).toBe('');
+      expect(evaluateCondition('window != null', record)).toBe(false);
+      expect(evaluateCondition('status.constructor != null', record)).toBe(false);
+    });
   });
 
   describe('executeBaseQuery', () => {

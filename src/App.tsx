@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import {
   BookOpen,
   Check,
@@ -78,14 +78,23 @@ import {
   type EditorMode,
   type LivePreviewEditorRef,
 } from './components/LivePreviewEditor';
-import { CanvasEditor } from './components/canvas/CanvasEditor';
-import { GraphView } from './components/GraphView';
-import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { SendToTargetModal } from './components/SendToTargetModal';
-import { BaseEditor } from './components/BaseEditor';
 import { TemplateSelectModal } from './components/TemplateSelectModal';
+
+const CanvasEditor = React.lazy(() =>
+  import('./components/canvas/CanvasEditor').then((m) => ({ default: m.CanvasEditor }))
+);
+const GraphView = React.lazy(() =>
+  import('./components/GraphView').then((m) => ({ default: m.GraphView }))
+);
+const SettingsModal = React.lazy(() =>
+  import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+const BaseEditor = React.lazy(() =>
+  import('./components/BaseEditor').then((m) => ({ default: m.BaseEditor }))
+);
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
@@ -626,9 +635,8 @@ export const App: React.FC = () => {
         const [treeRes, graphRes] = await Promise.all([rawApi.getTree(), api.getGraph()]);
         await syncEngine.getLocalDb().setMeta('tree', treeRes.tree);
         await syncEngine.getLocalDb().setMeta('files', treeRes.files);
-        if (treeRes.notes) {
-          await syncEngine.getLocalDb().setMeta('allNotes', treeRes.notes);
-        }
+        const notesMeta = treeRes.notes ?? (treeRes.files || []).filter((f: any) => f.extension === 'md');
+        await syncEngine.getLocalDb().setMeta('allNotes', notesMeta);
         await syncEngine.getLocalDb().setMeta('graph', graphRes);
 
         const remainingOutbox = await syncEngine.getLocalDb().getOutbox();
@@ -2871,55 +2879,59 @@ export const App: React.FC = () => {
             <section className="editor-pane-container">
               {isCanvasNote && activeNote ? (
                 <div className="canvas-workspace-pane">
-                  <CanvasEditor
-                    filePath={activeNote.path}
-                    rawContent={activeNote.rawContent || activeNote.body || '{}'}
-                    onChange={(newJson) => {
-                      if (!activeNote) return;
-                      setActiveNote({
-                        ...activeNote,
-                        rawContent: newJson,
-                        body: newJson,
-                      });
-                      scheduleSave(activeNote.path, {
-                        rawContent: newJson,
-                        body: newJson,
-                      });
-                    }}
-                    onOpenNote={(targetPath) => {
-                      handleNavigateWikiLink(targetPath);
-                      if (isMobile) setLeftSidebarOpen(false);
-                    }}
-                    onSelectTag={(tag) => {
-                      setSelectedTagFilter(tag.replace(/^#+/, ''));
-                      setLeftSidebarOpen(true);
-                    }}
-                    allNotes={allNotesForEditor}
-                  />
+                  <Suspense fallback={<div className="empty-state">Lade Canvas…</div>}>
+                    <CanvasEditor
+                      filePath={activeNote.path}
+                      rawContent={activeNote.rawContent || activeNote.body || '{}'}
+                      onChange={(newJson) => {
+                        if (!activeNote) return;
+                        setActiveNote({
+                          ...activeNote,
+                          rawContent: newJson,
+                          body: newJson,
+                        });
+                        scheduleSave(activeNote.path, {
+                          rawContent: newJson,
+                          body: newJson,
+                        });
+                      }}
+                      onOpenNote={(targetPath) => {
+                        handleNavigateWikiLink(targetPath);
+                        if (isMobile) setLeftSidebarOpen(false);
+                      }}
+                      onSelectTag={(tag) => {
+                        setSelectedTagFilter(tag.replace(/^#+/, ''));
+                        setLeftSidebarOpen(true);
+                      }}
+                      allNotes={allNotesForEditor}
+                    />
+                  </Suspense>
                 </div>
               ) : isBaseNote && activeNote ? (
                 <div className="base-workspace-pane">
-                  <BaseEditor
-                    filePath={activeNote.path}
-                    rawContent={activeNote.rawContent || activeNote.body || ''}
-                    onChange={(newYaml) => {
-                      if (!activeNote) return;
-                      setActiveNote({
-                        ...activeNote,
-                        rawContent: newYaml,
-                        body: newYaml,
-                      });
-                      scheduleSave(activeNote.path, {
-                        rawContent: newYaml,
-                        body: newYaml,
-                      });
-                    }}
-                    onSelectNote={(targetPath) => {
-                      handleNavigateWikiLink(targetPath);
-                      if (isMobile) setLeftSidebarOpen(false);
-                    }}
-                    allFiles={allFiles}
-                  />
+                  <Suspense fallback={<div className="empty-state">Lade Base…</div>}>
+                    <BaseEditor
+                      filePath={activeNote.path}
+                      rawContent={activeNote.rawContent || activeNote.body || ''}
+                      onChange={(newYaml) => {
+                        if (!activeNote) return;
+                        setActiveNote({
+                          ...activeNote,
+                          rawContent: newYaml,
+                          body: newYaml,
+                        });
+                        scheduleSave(activeNote.path, {
+                          rawContent: newYaml,
+                          body: newYaml,
+                        });
+                      }}
+                      onSelectNote={(targetPath) => {
+                        handleNavigateWikiLink(targetPath);
+                        if (isMobile) setLeftSidebarOpen(false);
+                      }}
+                      allFiles={allFiles}
+                    />
+                  </Suspense>
                 </div>
               ) : (
                 <>
@@ -3012,25 +3024,27 @@ export const App: React.FC = () => {
 
           {(workspaceView === 'graph' || workspaceView === 'split') && (
             <section className="graph-pane">
-              <GraphView
-                graphData={graphData}
-                activeNotePath={activeNote?.path ?? null}
-                isLocalGraph={false}
-                onSelectNote={(pathOrTitle, isUnresolved) => {
-                  if (isUnresolved) {
-                    handleNavigateWikiLink(pathOrTitle);
-                  } else {
-                    openNoteByPath(pathOrTitle);
-                    if (workspaceView === 'graph') {
-                      setWorkspaceView('editor');
+              <Suspense fallback={<div className="empty-state">Lade Graph…</div>}>
+                <GraphView
+                  graphData={graphData}
+                  activeNotePath={activeNote?.path ?? null}
+                  isLocalGraph={false}
+                  onSelectNote={(pathOrTitle, isUnresolved) => {
+                    if (isUnresolved) {
+                      handleNavigateWikiLink(pathOrTitle);
+                    } else {
+                      openNoteByPath(pathOrTitle);
+                      if (workspaceView === 'graph') {
+                        setWorkspaceView('editor');
+                      }
                     }
-                  }
-                }}
-                onSelectTag={(tag) => {
-                  setSelectedTagFilter(tag);
-                  setLeftSidebarOpen(true);
-                }}
-              />
+                  }}
+                  onSelectTag={(tag) => {
+                    setSelectedTagFilter(tag);
+                    setLeftSidebarOpen(true);
+                  }}
+                />
+              </Suspense>
             </section>
           )}
         </div>
@@ -3173,22 +3187,24 @@ export const App: React.FC = () => {
 
           {rightTab === 'local-graph' && (
             <div className="right-sidebar-graph-wrapper">
-              <GraphView
-                graphData={graphData}
-                activeNotePath={activeNote?.path ?? null}
-                isLocalGraph={true}
-                onSelectNote={(pathOrTitle, isUnresolved) => {
-                  if (isUnresolved) {
-                    handleNavigateWikiLink(pathOrTitle);
-                  } else {
-                    openNoteByPath(pathOrTitle);
-                  }
-                }}
-                onSelectTag={(tag) => {
-                  setSelectedTagFilter(tag);
-                  setLeftSidebarOpen(true);
-                }}
-              />
+              <Suspense fallback={<div className="empty-state">Lade Graph…</div>}>
+                <GraphView
+                  graphData={graphData}
+                  activeNotePath={activeNote?.path ?? null}
+                  isLocalGraph={true}
+                  onSelectNote={(pathOrTitle, isUnresolved) => {
+                    if (isUnresolved) {
+                      handleNavigateWikiLink(pathOrTitle);
+                    } else {
+                      openNoteByPath(pathOrTitle);
+                    }
+                  }}
+                  onSelectTag={(tag) => {
+                    setSelectedTagFilter(tag);
+                    setLeftSidebarOpen(true);
+                  }}
+                />
+              </Suspense>
             </div>
           )}
         </aside>
@@ -3281,16 +3297,20 @@ export const App: React.FC = () => {
 
 
       {/* Settings Modal (Theme, Security, Profiles, Sync) */}
-      <SettingsModal
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        currentTheme={theme}
-        onThemeChange={(newTheme) => setTheme(newTheme)}
-        fileTree={tree}
-        onInstallApp={handleInstallApp}
-        isInstalledApp={isInstalledApp}
-        onFontSettingsChange={setFontSettings}
-      />
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsModal
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            currentTheme={theme}
+            onThemeChange={(newTheme) => setTheme(newTheme)}
+            fileTree={tree}
+            onInstallApp={handleInstallApp}
+            isInstalledApp={isInstalledApp}
+            onFontSettingsChange={setFontSettings}
+          />
+        </Suspense>
+      )}
 
       {/* Interactive Conflict Resolution Modal */}
       <ConflictModal

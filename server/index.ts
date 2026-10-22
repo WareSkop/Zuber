@@ -156,7 +156,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     });
   });
 
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', requireAuth, (req, res) => {
     const { revokeAll } = req.body as { revokeAll?: boolean };
     if (revokeAll) {
       configService.revokeAllSessions();
@@ -233,8 +233,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     try {
       const tree = vaultService.getFileTree();
       const files = vaultService.getAllFiles();
-      const notes = vaultService.getAllNotes();
-      res.json({ tree, files, notes });
+      res.json({ tree, files });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

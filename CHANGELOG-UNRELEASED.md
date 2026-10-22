@@ -96,10 +96,26 @@
 - Neuer Backend-Batch-Move-Endpunkt `POST /api/vault/move-batch` mit konsolidiertem WebSocket-Event (`vault:changed`).
 
 ### Changed
+- Performance- & Bundle-Optimierungen (`OPT-02` bis `OPT-04`):
+  - Code-Splitting (`React.lazy` & dynamischer Import) für `GraphView` (`cytoscape`), `CanvasEditor`, `BaseEditor`, `SettingsModal` und `mermaid` eingeführt (Reduktion des initialen Haupt-Bundles um über 700 kB).
+  - Inkrementeller Backlink-Index (`backlinkIndex`) im `VaultService` für $O(k)$ statt $O(N \cdot L)$ bei `getBacklinks()`-Abfragen.
+  - Redundante doppelte Übertragung von `notes` neben `files` in `GET /api/vault/tree` entfernt.
 - Fehleranfällige Zwischenspeicher-Funktion „Cut / Ausschneiden“ aus dem Dateibaum-Kontextmenü entfernt und durch den modalen Verschiebe-Workflow ersetzt.
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Sicherheits-Härtung & Bugfixes gemäß Prüfbericht (`checkreport.md`):
+  - **SEC-01:** `POST /api/auth/logout` durch `requireAuth`-Middleware gegen unauthentifizierte globale Session-Invalidierung geschützt.
+  - **SEC-02:** `new Function(...)` in `src/base/baseEngine.ts` (`evaluateFormula`, `evaluateStringExpression`) vollständig durch einen sicheren, deterministischen Expression-Parser ohne Zugriff auf `window`, `globalThis`, `constructor` oder `prototype` ersetzt.
+  - **SEC-03 & SEC-04:** Strikte HTML-Attribut-Maskierung (`escapeHtml`) bei der Wikilink-/Embed-Vorverarbeitung im Lesemodus, erzwungene `iframe`-Sandbox (`sandbox="allow-scripts"` ohne `allow-same-origin`) via DOMPurify-Hook sowie Mermaid-Initialisierung mit `securityLevel: 'strict'` und SVG-Sanitisierung.
+  - **SEC-05:** IP-Ermittlung im Rate-Limiter (`server/rateLimiter.ts`) auf `req.ip` umgestellt (kein unkontrolliertes Vertrauen in Client-seitige `X-Forwarded-For`-Header) und Map-Größenlimit (`MAX_TRACKED_IPS = 10000`) ergänzt.
+  - **SEC-06 & SEC-09:** Automatische Generierung und Persistierung eines kryptografisch zufälligen 32-Byte-`sessionSecret` in `server-config.json` (falls `SESSION_SECRET` nicht gesetzt ist) sowie restriktive Dateiberechtigungen (`mode: 0o600`).
+  - **SEC-07 & BUG-06:** Leeren des Service-Worker-Attachment-Caches beim Logout sowie automatisches Freigeben von `blob:`-URLs (`URL.revokeObjectURL`) in `SyncEngine`.
+  - **SEC-08:** Schutz vor Symlink-Traversal im Vault durch Ausfiltern symbolischer Links beim Scannen/Indizieren und `fs.realpathSync`-Prüfung in `resolveSafePath`.
+  - **BUG-01:** Datenverlust-Bug in `ConfigService.updateSecurity()` behoben, sodass `git`-Konfiguration (inkl. Remote-Token) und `logLevel` bei Passwortänderungen erhalten bleiben.
+  - **BUG-02 & BUG-03:** Vollständige Unterstützung für `.base`-Dateien beim Umbenennen/Verschieben ohne Dateiendung (`renameOrMove`, `moveBatch`), beim Offline-Speichern (`syncEngine.saveNote`), beim Duplizieren (`copyEntry`), beim Offline-Download und beim Konfliktabgleich (`isContentIdentical`).
+  - **BUG-04:** Atomare IndexedDB-Transaktion über `['notes', 'meta']` in `localDb.putNote()` und `putNotesBatch()` zur Vermeidung von Read-Modify-Write Race-Conditions.
+  - **BUG-05:** Timeout in `apiFetch` für Datei-Uploads, Archiv-Importe und Git-Operationen von 6 Sekunden auf 120 Sekunden erhöht.
 - Base-Query-Optimierungen & Deduplizierung (`src/base/baseEngine.ts`):
   - `.base`-Dateien und `currentBasePath` werden standardmäßig aus Base-Abfragen ausgeschlossen (sofern nicht explizit `file.ext == "base"` abgefragt wird).
   - Strikte Pfad-Deduplizierung von Kandidaten-Notizen und Abfrageergebnissen nach `file.path`.

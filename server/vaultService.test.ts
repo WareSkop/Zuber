@@ -1436,6 +1436,55 @@ Weitere Punkte folgen.`,
       expect(fs.existsSync(path.join(tmpDir, 'Projects.base'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, 'Projects.base.md'))).toBe(false);
     });
+
+    it('preserves .base extension when renaming or moving without extension (BUG-02)', () => {
+      const initialYaml = 'views:\n  - type: table\n    name: Overview\n';
+      service.saveNote('Projects.base', { body: initialYaml, rawContent: initialYaml });
+
+      const renamed = service.renameOrMove('Projects.base', 'Tasks');
+      expect(renamed.newPath).toBe('Tasks.base');
+      expect(fs.existsSync(path.join(tmpDir, 'Tasks.base'))).toBe(true);
+
+      const batchMoved = service.moveBatch([{ oldPath: 'Tasks.base', newPath: 'Projekte/Board' }]);
+      expect(batchMoved.results[0].newPath).toBe('Projekte/Board.base');
+      expect(fs.existsSync(path.join(tmpDir, 'Projekte', 'Board.base'))).toBe(true);
+    });
+
+    it('preserves git and logLevel configuration when updating security password (BUG-01 & SEC-06)', () => {
+      const cfgPath = path.join(tmpDir, 'test-server-config.json');
+      const cfgService = new ConfigService(cfgPath);
+
+      cfgService.updateGitConfig({
+        enabled: true,
+        userName: 'Test User',
+        remote: { enabled: true, url: 'https://example.com/repo.git', token: 'secret-pat', username: 'git', branch: 'main', lastPushTime: null, lastPushError: null },
+      });
+      cfgService.setLogLevel('debug');
+      const initialSecret = cfgService.getSessionSecret();
+      expect(initialSecret.length).toBeGreaterThanOrEqual(32);
+
+      cfgService.updateSecurity(true, 'newStrongPassword123');
+
+      expect(cfgService.verifyPassword('newStrongPassword123')).toBe(true);
+      expect(cfgService.getLogLevel()).toBe('debug');
+      expect(cfgService.getGitConfig().userName).toBe('Test User');
+      expect(cfgService.getGitConfig().remote.token).toBe('secret-pat');
+      expect(cfgService.getSessionSecret()).toBe(initialSecret);
+    });
+
+    it('rejects symlinks pointing outside the vault in resolveSafePath and indexFile (SEC-08)', () => {
+      const outsideFile = path.join(os.tmpdir(), `zuber-outside-${Date.now()}.txt`);
+      fs.writeFileSync(outsideFile, 'outside secret', 'utf-8');
+      const symlinkPath = path.join(tmpDir, 'evil-link.md');
+      try {
+        fs.symlinkSync(outsideFile, symlinkPath);
+        expect(service.indexFile('evil-link.md')).toBe(false);
+        expect(() => service.resolveSafePath('evil-link.md')).toThrow(/außerhalb des Vaults/);
+      } finally {
+        try { fs.unlinkSync(symlinkPath); } catch {}
+        try { fs.unlinkSync(outsideFile); } catch {}
+      }
+    });
   });
 });
 

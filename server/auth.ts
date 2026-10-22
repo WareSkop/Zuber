@@ -5,7 +5,7 @@ import { configService } from './configService';
 const COOKIE_NAME = 'zuber_session';
 
 function getSecret(): string {
-  return process.env.SESSION_SECRET || 'zuber-offline-vault-secret-key-change-me-in-prod';
+  return configService.getSessionSecret();
 }
 
 export function createSessionToken(): string {

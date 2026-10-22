@@ -31,23 +31,45 @@ import {
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { createRoot, type Root } from 'react-dom/client';
-import mermaid from 'mermaid';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { Target } from 'lucide-react';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 import { BaseView } from './BaseView';
 
-let mermaidInitialized = false;
-function initMermaid(isDark: boolean) {
+let mermaidModulePromise: Promise<typeof import('mermaid').default> | null = null;
+async function loadAndInitMermaid(isDark: boolean) {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import('mermaid').then((m) => m.default);
+  }
+  const mermaid = await mermaidModulePromise;
   mermaid.initialize({
     startOnLoad: false,
-    securityLevel: 'loose',
+    securityLevel: 'strict',
     theme: isDark ? 'dark' : 'default',
     fontFamily: 'inherit',
     suppressErrorRendering: true,
   });
-  mermaidInitialized = true;
+  return mermaid;
+}
+
+if (typeof window !== 'undefined' && typeof DOMPurify?.addHook === 'function') {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'IFRAME') {
+      const isPdfFrame = node.classList?.contains('cm-lp-pdf-frame');
+      if (isPdfFrame) {
+        node.removeAttribute('srcdoc');
+        const src = node.getAttribute('src') || '';
+        if (/^\s*(javascript|vbscript|data):/i.test(src)) {
+          node.removeAttribute('src');
+        }
+      } else {
+        // Enforce strict isolated sandbox without allow-same-origin for HTML previews
+        node.setAttribute('sandbox', 'allow-scripts');
+        node.removeAttribute('src');
+      }
+    }
+  });
 }
 
 export const setBlockModeEffect = StateEffect.define<{ pos: number; mode: 'preview' | 'code' }>();
@@ -937,11 +959,15 @@ class InteractiveCodeBlockWidget extends WidgetType {
            window.matchMedia('(prefers-color-scheme: dark)').matches ||
            document.documentElement.classList.contains('dark'));
 
-        initMermaid(isDark);
         const renderId = 'mermaid-' + Math.random().toString(36).slice(2, 9);
-        mermaid.render(renderId, this.codeText || 'graph TD\n  Start')
+        loadAndInitMermaid(isDark)
+          .then((mermaid) => mermaid.render(renderId, this.codeText || 'graph TD\n  Start'))
           .then(({ svg }) => {
-            previewEl.innerHTML = svg;
+            previewEl.innerHTML = DOMPurify.sanitize(svg, {
+              USE_PROFILES: { svg: true, svgFilters: true },
+              ADD_TAGS: ['foreignObject', 'style'],
+              ADD_ATTR: ['style', 'class', 'transform', 'viewBox', 'xmlns'],
+            });
             const svgEl = previewEl.querySelector('svg');
             if (svgEl) {
               svgEl.style.maxWidth = '100%';
@@ -2763,10 +2789,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           }
         }
         if (isCanvas) {
-          return `<div class="reading-canvas-embed" data-canvas-path="${canvasPath}" data-wikilink="${canvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+          const safeCanvasPath = escapeHtml(canvasPath);
+          const safeAlt = escapeHtml(alt);
+          return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
         }
         if (target.toLowerCase().endsWith('.pdf')) {
-          const url = api.getAttachmentUrl(target, notePath);
+          const url = escapeHtml(api.getAttachmentUrl(target, notePath));
           const fileName = target.split('/').pop() || target;
           let height = '550px';
           if (/^\d+$/.test(alt)) {
@@ -2775,11 +2803,11 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
         }
         if (IMAGE_EXT_REGEX.test(target)) {
-          const url = api.getAttachmentUrl(target, notePath);
+          const url = escapeHtml(api.getAttachmentUrl(target, notePath));
           const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
-          return `<span class="reading-image-embed"><img src="${url}" alt="${alt}" loading="lazy" decoding="async"${styleAttr} /></span>`;
+          return `<span class="reading-image-embed"><img src="${url}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${styleAttr} /></span>`;
         }
-        return `<div class="reading-note-embed" data-wikilink="${target}">📄 Eingebettete Notiz: <strong>${alt}</strong></div>`;
+        return `<div class="reading-note-embed" data-wikilink="${escapeHtml(target)}">📄 Eingebettete Notiz: <strong>${escapeHtml(alt)}</strong></div>`;
       }
     );
 
@@ -2809,10 +2837,13 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           }
         }
         if (isCanvas) {
-          return `<div class="reading-canvas-embed" data-canvas-path="${canvasPath}" data-wikilink="${canvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+          const safeCanvasPath = escapeHtml(canvasPath);
+          const safeAlt = escapeHtml(alt);
+          return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
         }
         if (target.toLowerCase().endsWith('.pdf')) {
-          const url = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);
+          const rawUrl = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);
+          const url = escapeHtml(rawUrl);
           const fileName = target.split('/').pop() || target;
           let height = '550px';
           if (/^\d+$/.test(alt)) {
@@ -2820,10 +2851,10 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           }
           return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
         }
-        const url = /^(https?:|data:)/i.test(target)
+        const rawUrl = /^(https?:|data:)/i.test(target)
           ? target
           : api.getAttachmentUrl(target, notePath);
-        return `<span class="reading-image-embed"><img src="${url}" alt="${alt}" loading="lazy" decoding="async" /></span>`;
+        return `<span class="reading-image-embed"><img src="${escapeHtml(rawUrl)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" /></span>`;
       }
     );
 
@@ -2845,9 +2876,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         const href = String(hrefRaw).trim();
         const label = String(labelRaw).trim();
         if (/^(https?:|mailto:)/i.test(href)) {
-          return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="external-link">${label}</a>`;
+          return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="external-link">${escapeHtml(label)}</a>`;
         }
-        return `<a href="#" class="reading-wikilink" data-wikilink="${href}">${label}</a>`;
+        return `<a href="#" class="reading-wikilink" data-wikilink="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
       }
     );
 
@@ -2857,7 +2888,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (_match, targetRaw, _heading, aliasRaw) => {
         const target = String(targetRaw).trim();
         const display = aliasRaw ? String(aliasRaw).trim() : target;
-        return `<a href="#" class="reading-wikilink" data-wikilink="${target}">${display}</a>`;
+        return `<a href="#" class="reading-wikilink" data-wikilink="${escapeHtml(target)}">${escapeHtml(display)}</a>`;
       }
     );
 
@@ -2916,9 +2947,10 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       (document.documentElement.getAttribute('data-theme') === 'dark' ||
         window.matchMedia('(prefers-color-scheme: dark)').matches ||
         document.documentElement.classList.contains('dark'));
-    initMermaid(isDark);
 
     const mermaidBlocks = container.querySelectorAll<HTMLElement>('.reading-mermaid-container');
+    if (mermaidBlocks.length === 0) return;
+
     mermaidBlocks.forEach((block) => {
       const rawCode = decodeURIComponent(block.dataset.code || '');
       const svgContainer = block.querySelector<HTMLElement>('.reading-mermaid-svg');
@@ -2926,10 +2958,14 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
       svgContainer.setAttribute('data-rendered', 'true');
       const renderId = 'reading-mermaid-' + Math.random().toString(36).slice(2, 9);
-      mermaid
-        .render(renderId, rawCode || 'graph TD\n  Start')
+      loadAndInitMermaid(isDark)
+        .then((mermaid) => mermaid.render(renderId, rawCode || 'graph TD\n  Start'))
         .then(({ svg }) => {
-          svgContainer.innerHTML = svg;
+          svgContainer.innerHTML = DOMPurify.sanitize(svg, {
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['foreignObject', 'style'],
+            ADD_ATTR: ['style', 'class', 'transform', 'viewBox', 'xmlns'],
+          });
           const svgEl = svgContainer.querySelector('svg');
           if (svgEl) {
             svgEl.style.maxWidth = '100%';

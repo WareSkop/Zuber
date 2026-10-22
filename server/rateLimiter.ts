@@ -22,6 +22,7 @@ export class InMemoryRateLimiter {
   // General API Limit: max 600 requests per 1 minute per IP
   private readonly API_MAX_REQUESTS = 600;
   private readonly API_WINDOW_MS = 60 * 1000; // 1 min
+  private readonly MAX_TRACKED_IPS = 10000;
 
   constructor() {
     const timer = setInterval(() => this.cleanup(), 5 * 60 * 1000);
@@ -29,14 +30,7 @@ export class InMemoryRateLimiter {
   }
 
   public getClientIp(req: Request): string {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length > 0) {
-      return forwarded.split(',')[0].trim();
-    }
-    if (Array.isArray(forwarded) && forwarded.length > 0) {
-      return forwarded[0].trim();
-    }
-    return req.ip || req.socket.remoteAddress || 'unknown';
+    return req.ip || req.socket?.remoteAddress || 'unknown';
   }
 
   public checkLoginAllowed(ip: string): { allowed: boolean; retryAfterSeconds?: number } {
@@ -77,6 +71,14 @@ export class InMemoryRateLimiter {
       record.blockedUntil = now + this.LOGIN_BLOCK_MS;
     }
 
+    if (!this.loginAttempts.has(ip) && this.loginAttempts.size >= this.MAX_TRACKED_IPS) {
+      this.cleanup();
+      if (this.loginAttempts.size >= this.MAX_TRACKED_IPS) {
+        const oldestKey = this.loginAttempts.keys().next().value;
+        if (oldestKey) this.loginAttempts.delete(oldestKey);
+      }
+    }
+
     this.loginAttempts.set(ip, record);
   }
 
@@ -98,6 +100,14 @@ export class InMemoryRateLimiter {
       record.windowStart = now;
     } else {
       record.count += 1;
+    }
+
+    if (!this.apiRequests.has(ip) && this.apiRequests.size >= this.MAX_TRACKED_IPS) {
+      this.cleanup();
+      if (this.apiRequests.size >= this.MAX_TRACKED_IPS) {
+        const oldestKey = this.apiRequests.keys().next().value;
+        if (oldestKey) this.apiRequests.delete(oldestKey);
+      }
     }
 
     this.apiRequests.set(ip, record);

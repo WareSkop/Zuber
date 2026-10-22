@@ -35,6 +35,7 @@ import {
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
   isNoteSendTarget,
+  isNoteTemplate,
 } from '../../shared/markdownUtils';
 
 export type SyncState = 'online' | 'offline' | 'syncing' | 'synced' | 'conflict';
@@ -104,7 +105,17 @@ class SyncEngine {
     this.checkConnectionAndSync();
   }
 
+  private revokeAllBlobUrls() {
+    for (const url of this.blobUrls.values()) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    }
+    this.blobUrls.clear();
+  }
+
   public switchProfile(profileId: string) {
+    this.revokeAllBlobUrls();
     this.currentProfile = getActiveProfile();
     this.localDb = new LocalDb(profileId);
     this.activeConflicts = [];
@@ -166,17 +177,21 @@ class SyncEngine {
     serverNote: NoteData
   ): boolean {
     const isCanvas = serverNote.path.endsWith('.canvas');
-    if (isCanvas) {
-      const incomingRaw = (localBody || '').trim();
-      const existingRaw = (serverNote.rawContent || serverNote.body || '').trim();
+    const isBase = serverNote.path.endsWith('.base');
+    if (isCanvas || isBase) {
+      const incomingRaw = (localBody || '').replace(/\r\n/g, '\n').trim();
+      const existingRaw = (serverNote.rawContent || serverNote.body || '').replace(/\r\n/g, '\n').trim();
       if (incomingRaw === existingRaw) return true;
-      try {
-        const parsedIncoming = JSON.parse(incomingRaw);
-        const parsedExisting = JSON.parse(existingRaw);
-        return JSON.stringify(parsedIncoming) === JSON.stringify(parsedExisting);
-      } catch {
-        return incomingRaw === existingRaw;
+      if (isCanvas) {
+        try {
+          const parsedIncoming = JSON.parse(incomingRaw);
+          const parsedExisting = JSON.parse(existingRaw);
+          return JSON.stringify(parsedIncoming) === JSON.stringify(parsedExisting);
+        } catch {
+          return incomingRaw === existingRaw;
+        }
       }
+      return false;
     }
 
     const normLocal = (localBody || '').replace(/\r\n/g, '\n').trim();
@@ -399,9 +414,8 @@ class SyncEngine {
         const treeData = await rawApi.getTree();
         await this.localDb.setMeta('tree', treeData.tree);
         await this.localDb.setMeta('files', treeData.files);
-        if (treeData.notes) {
-          await this.localDb.setMeta('allNotes', treeData.notes);
-        }
+        const notesMeta = treeData.notes ?? (treeData.files || []).filter((f: any) => f.extension === 'md');
+        await this.localDb.setMeta('allNotes', notesMeta);
         if (remainingOutbox.length > 0) {
           await this.localDb.reconcileTreeWithLocalState();
         }
@@ -445,6 +459,13 @@ class SyncEngine {
           const res = await fetch(url);
           if (res.ok) {
             const blob = await res.blob();
+            const prevUrl = this.blobUrls.get(att.path);
+            if (prevUrl) {
+              try {
+                URL.revokeObjectURL(prevUrl);
+              } catch {}
+              this.blobUrls.delete(att.path);
+            }
             await this.localDb.putAttachment({
               path: att.path,
               blob,
@@ -541,12 +562,15 @@ class SyncEngine {
     explicitClear?: boolean;
   }): Promise<NoteData> {
     const isCanvas = payload.path.endsWith('.canvas');
+    const isBase = payload.path.endsWith('.base');
     const raw =
       typeof payload.rawContent === 'string'
         ? payload.rawContent
         : isCanvas
           ? (payload.body || '{}')
-          : serializeMarkdownWithFrontmatter(payload.properties || [], payload.body || '');
+          : isBase
+            ? (payload.body || '')
+            : serializeMarkdownWithFrontmatter(payload.properties || [], payload.body || '');
 
     let updatedNote: NoteData;
 
@@ -554,7 +578,7 @@ class SyncEngine {
       const { links, tags } = extractCanvasLinksAndTags(raw);
       updatedNote = {
         path: payload.path,
-        name: payload.path.split('/').pop()?.replace(/\.canvas$/, '') || payload.path,
+        name: payload.path.split('/').pop()?.replace(/\.canvas$/i, '') || payload.path,
         rawContent: raw,
         body: raw,
         frontmatter: {},
@@ -565,16 +589,31 @@ class SyncEngine {
         headings: [],
         updatedAt: Date.now(),
       };
+    } else if (isBase) {
+      updatedNote = {
+        path: payload.path,
+        name: payload.path.split('/').pop()?.replace(/\.base$/i, '') || payload.path,
+        rawContent: raw,
+        body: raw,
+        frontmatter: {},
+        properties: [],
+        links: [],
+        embeds: [],
+        tags: [],
+        headings: [],
+        updatedAt: Date.now(),
+      };
     } else {
       const parsed = parseMarkdownWithFrontmatter(raw);
       const { links, embeds } = extractLinksAndEmbeds(parsed.body);
       const tags = extractTags(parsed.properties, parsed.body);
       const headings = extractHeadings(parsed.body);
       const isSendTarget = isNoteSendTarget(parsed.frontmatter, parsed.properties);
+      const isTemplate = isNoteTemplate(parsed.frontmatter, parsed.properties);
 
       updatedNote = {
         path: payload.path,
-        name: payload.path.split('/').pop()?.replace(/\.md$/, '') || payload.path,
+        name: payload.path.split('/').pop()?.replace(/\.md$/i, '') || payload.path,
         rawContent: raw,
         body: parsed.body,
         frontmatter: parsed.frontmatter,
@@ -585,6 +624,7 @@ class SyncEngine {
         headings,
         updatedAt: Date.now(),
         isSendTarget,
+        isTemplate,
       };
     }
 
@@ -763,9 +803,11 @@ class SyncEngine {
     if (note) {
       const parts = sourcePath.split('/');
       const originalFileName = parts.pop() || '';
-      const originalBaseName = originalFileName.replace(/\.md$/, '');
+      const extMatch = originalFileName.match(/\.(md|canvas|base)$/i);
+      const ext = extMatch ? extMatch[0] : '.md';
+      const originalBaseName = originalFileName.replace(/\.(md|canvas|base)$/i, '');
       const folder = targetPath ?? parts.join('/');
-      const newName = `${originalBaseName} (Copy).md`;
+      const newName = `${originalBaseName} (Copy)${ext}`;
       const newPath = folder ? `${folder}/${newName}` : newName;
 
       const saved = await this.saveNote({
@@ -781,6 +823,13 @@ class SyncEngine {
   }
 
   public async deleteEntry(relPath: string): Promise<void> {
+    const prevUrl = this.blobUrls.get(relPath);
+    if (prevUrl) {
+      try {
+        URL.revokeObjectURL(prevUrl);
+      } catch {}
+      this.blobUrls.delete(relPath);
+    }
     // 1. Purge from local IndexedDB immediately
     await this.localDb.deleteEntry(relPath);
 
@@ -877,6 +926,7 @@ class SyncEngine {
   }
 
   public async clearCache() {
+    this.revokeAllBlobUrls();
     return this.localDb.clearCache();
   }
 

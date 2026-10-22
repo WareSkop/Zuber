@@ -203,6 +203,319 @@ function normalizeDurationLiterals(expr: string): string {
 }
 
 /**
+ * Safe, deterministic recursive-descent expression evaluator for Base formulas and filters.
+ * Never uses `eval` or `new Function`, preventing arbitrary code execution (XSS) and global scope access.
+ */
+type Token =
+  | { type: 'number'; value: number }
+  | { type: 'string'; value: string }
+  | { type: 'ident'; value: string }
+  | { type: 'op'; value: string }
+  | { type: 'punct'; value: string };
+
+const FORBIDDEN_PROPS = new Set(['constructor', '__proto__', 'prototype', 'window', 'document', 'globalThis', 'Function', 'eval']);
+
+function tokenizeExpression(input: string): Token[] {
+  const tokens: Token[] = [];
+  let i = 0;
+  const len = input.length;
+
+  while (i < len) {
+    const ch = input[i];
+    if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+
+    // String literal
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      i++;
+      let str = '';
+      while (i < len && input[i] !== quote) {
+        if (input[i] === '\\' && i + 1 < len) {
+          i++;
+          str += input[i];
+        } else {
+          str += input[i];
+        }
+        i++;
+      }
+      if (i < len && input[i] === quote) i++;
+      tokens.push({ type: 'string', value: str });
+      continue;
+    }
+
+    // Number literal
+    if (/\d/.test(ch) || (ch === '.' && i + 1 < len && /\d/.test(input[i + 1]))) {
+      let numStr = '';
+      while (i < len && /[\d.]/.test(input[i])) {
+        numStr += input[i++];
+      }
+      tokens.push({ type: 'number', value: Number(numStr) });
+      continue;
+    }
+
+    // Multi-char operators
+    const three = input.slice(i, i + 3);
+    if (three === '===' || three === '!==') {
+      tokens.push({ type: 'op', value: three });
+      i += 3;
+      continue;
+    }
+    const two = input.slice(i, i + 2);
+    if (two === '==' || two === '!=' || two === '<=' || two === '>=' || two === '&&' || two === '||') {
+      tokens.push({ type: 'op', value: two });
+      i += 2;
+      continue;
+    }
+
+    // Single-char operators
+    if ('+-*/%<>!='.includes(ch)) {
+      tokens.push({ type: 'op', value: ch });
+      i++;
+      continue;
+    }
+
+    // Punctuation
+    if ('().,?:[]'.includes(ch)) {
+      tokens.push({ type: 'punct', value: ch });
+      i++;
+      continue;
+    }
+
+    // Identifiers
+    if (/[a-zA-Z_$äöüÄÖÜß]/.test(ch)) {
+      let ident = '';
+      while (i < len && /[a-zA-Z0-9_$äöüÄÖÜß-]/.test(input[i])) {
+        ident += input[i++];
+      }
+      const lower = ident.toLowerCase();
+      if (lower === 'and') {
+        tokens.push({ type: 'op', value: '&&' });
+      } else if (lower === 'or') {
+        tokens.push({ type: 'op', value: '||' });
+      } else if (lower === 'not') {
+        tokens.push({ type: 'op', value: '!' });
+      } else {
+        tokens.push({ type: 'ident', value: ident });
+      }
+      continue;
+    }
+
+    throw new Error(`Unexpected character: ${ch}`);
+  }
+
+  return tokens;
+}
+
+function evaluateSafeExpression(expr: string, context: Record<string, any>): any {
+  const tokens = tokenizeExpression(expr);
+  let pos = 0;
+
+  const peek = (): Token | undefined => tokens[pos];
+  const consume = (): Token => tokens[pos++];
+
+  const parseTernary = (): any => {
+    const cond = parseOr();
+    if (peek()?.type === 'punct' && peek()?.value === '?') {
+      consume();
+      const thenVal = parseTernary();
+      if (peek()?.type === 'punct' && peek()?.value === ':') {
+        consume();
+      }
+      const elseVal = parseTernary();
+      return cond ? thenVal : elseVal;
+    }
+    return cond;
+  };
+
+  const parseOr = (): any => {
+    let left = parseAnd();
+    while (peek()?.type === 'op' && peek()?.value === '||') {
+      consume();
+      const right = parseAnd();
+      left = Boolean(left) || Boolean(right);
+    }
+    return left;
+  };
+
+  const parseAnd = (): any => {
+    let left = parseEquality();
+    while (peek()?.type === 'op' && peek()?.value === '&&') {
+      consume();
+      const right = parseEquality();
+      left = Boolean(left) && Boolean(right);
+    }
+    return left;
+  };
+
+  const parseEquality = (): any => {
+    let left = parseRelational();
+    while (peek()?.type === 'op' && ['==', '===', '!=', '!==', '='].includes(String(peek()!.value))) {
+      const op = String(consume().value);
+      const right = parseRelational();
+      if (op === '==' || op === '=' ) {
+        left = left == right;
+      } else if (op === '===') {
+        left = left === right;
+      } else if (op === '!=') {
+        left = left != right;
+      } else {
+        left = left !== right;
+      }
+    }
+    return left;
+  };
+
+  const parseRelational = (): any => {
+    let left = parseAdditive();
+    while (peek()?.type === 'op' && ['<', '<=', '>', '>='].includes(String(peek()!.value))) {
+      const op = String(consume().value);
+      const right = parseAdditive();
+      if (op === '<') left = left < right;
+      else if (op === '<=') left = left <= right;
+      else if (op === '>') left = left > right;
+      else if (op === '>=') left = left >= right;
+    }
+    return left;
+  };
+
+  const parseAdditive = (): any => {
+    let left = parseMultiplicative();
+    while (peek()?.type === 'op' && (peek()!.value === '+' || peek()!.value === '-')) {
+      const op = String(consume().value);
+      const right = parseMultiplicative();
+      if (op === '+') left = left + right;
+      else left = Number(left) - Number(right);
+    }
+    return left;
+  };
+
+  const parseMultiplicative = (): any => {
+    let left = parseUnary();
+    while (peek()?.type === 'op' && ['*', '/', '%'].includes(String(peek()!.value))) {
+      const op = String(consume().value);
+      const right = parseUnary();
+      if (op === '*') left = Number(left) * Number(right);
+      else if (op === '/') left = Number(left) / Number(right);
+      else left = Number(left) % Number(right);
+    }
+    return left;
+  };
+
+  const parseUnary = (): any => {
+    if (peek()?.type === 'op' && ['!', '-', '+'].includes(String(peek()!.value))) {
+      const op = String(consume().value);
+      const val = parseUnary();
+      if (op === '!') return !val;
+      if (op === '-') return -Number(val);
+      return +Number(val);
+    }
+    return parseMemberAndCall();
+  };
+
+  const parseMemberAndCall = (): any => {
+    let obj = parsePrimary();
+
+    while (peek()) {
+      if (peek()?.type === 'punct' && peek()?.value === '.') {
+        consume();
+        const propToken = consume();
+        if (!propToken || propToken.type !== 'ident') {
+          throw new Error('Expected property identifier after dot');
+        }
+        const propName = propToken.value;
+        if (FORBIDDEN_PROPS.has(propName)) {
+          throw new Error(`Forbidden property access: ${propName}`);
+        }
+        if (obj == null) {
+          obj = undefined;
+        } else if (peek()?.type === 'punct' && peek()?.value === '(') {
+          // Method call on obj
+          consume(); // '('
+          const args: any[] = [];
+          if (!(peek()?.type === 'punct' && peek()?.value === ')')) {
+            args.push(parseTernary());
+            while (peek()?.type === 'punct' && peek()?.value === ',') {
+              consume();
+              args.push(parseTernary());
+            }
+          }
+          if (peek()?.type === 'punct' && peek()?.value === ')') consume();
+          const fn = obj[propName];
+          if (typeof fn === 'function') {
+            obj = fn.apply(obj, args);
+          } else {
+            obj = undefined;
+          }
+        } else {
+          obj = Object.prototype.hasOwnProperty.call(obj, propName) || propName === 'length'
+            ? obj[propName]
+            : undefined;
+        }
+      } else if (peek()?.type === 'punct' && peek()?.value === '(') {
+        consume(); // '('
+        const args: any[] = [];
+        if (!(peek()?.type === 'punct' && peek()?.value === ')')) {
+          args.push(parseTernary());
+          while (peek()?.type === 'punct' && peek()?.value === ',') {
+            consume();
+            args.push(parseTernary());
+          }
+        }
+        if (peek()?.type === 'punct' && peek()?.value === ')') consume();
+        if (typeof obj === 'function') {
+          obj = obj(...args);
+        } else {
+          throw new Error('Attempted to call non-function');
+        }
+      } else {
+        break;
+      }
+    }
+
+    return obj;
+  };
+
+  const parsePrimary = (): any => {
+    const tok = consume();
+    if (!tok) throw new Error('Unexpected end of expression');
+
+    if (tok.type === 'number' || tok.type === 'string') {
+      return tok.value;
+    }
+
+    if (tok.type === 'punct' && tok.value === '(') {
+      const val = parseTernary();
+      if (peek()?.type === 'punct' && peek()?.value === ')') {
+        consume();
+      }
+      return val;
+    }
+
+    if (tok.type === 'ident') {
+      if (tok.value === 'true') return true;
+      if (tok.value === 'false') return false;
+      if (tok.value === 'null') return null;
+      if (tok.value === 'undefined') return undefined;
+      if (FORBIDDEN_PROPS.has(tok.value)) {
+        throw new Error(`Forbidden identifier: ${tok.value}`);
+      }
+      return Object.prototype.hasOwnProperty.call(context, tok.value) ? context[tok.value] : undefined;
+    }
+
+    throw new Error(`Unexpected token: ${tok.value}`);
+  };
+
+  const result = parseTernary();
+  if (pos < tokens.length) {
+    throw new Error('Unexpected trailing tokens');
+  }
+  return result;
+}
+
+/**
  * Evaluates a single formula expression against a record.
  */
 export function evaluateFormula(formula: string, record: BaseRecord, formulasSoFar: Record<string, any> = {}): any {
@@ -235,27 +548,27 @@ export function evaluateFormula(formula: string, record: BaseRecord, formulasSoF
     return Math.round(num * factor) / factor;
   };
 
-  const reservedWords = new Set([
-    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
-    'default', 'delete', 'do', 'else', 'export', 'extends', 'finally',
-    'for', 'function', 'if', 'import', 'in', 'instanceof', 'new',
-    'return', 'super', 'switch', 'this', 'throw', 'try', 'typeof',
-    'var', 'void', 'while', 'with', 'yield', 'enum', 'await'
-  ]);
-
   const context: Record<string, any> = {
     file: record.file,
     date: dateFn,
     today: todayFn,
     now: nowFn,
     __if: (cond: any, thenVal: any, elseVal: any) => (cond ? thenVal : elseVal),
+    if: (cond: any, thenVal: any, elseVal: any) => (cond ? thenVal : elseVal),
     round: roundFn,
     floor: Math.floor,
     ceil: Math.ceil,
     abs: Math.abs,
     min: Math.min,
     max: Math.max,
-    Math,
+    Math: {
+      round: Math.round,
+      floor: Math.floor,
+      ceil: Math.ceil,
+      abs: Math.abs,
+      min: Math.min,
+      max: Math.max,
+    },
     formula: formulasSoFar,
     ...formulasSoFar,
   };
@@ -263,19 +576,15 @@ export function evaluateFormula(formula: string, record: BaseRecord, formulasSoF
   const noteObj: Record<string, any> = {};
   for (const [k, v] of Object.entries(record.properties)) {
     const rawKey = k.replace(/^note\./, '');
-    noteObj[rawKey] = v;
-    if (!reservedWords.has(rawKey) && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawKey)) {
+    if (!FORBIDDEN_PROPS.has(rawKey)) {
+      noteObj[rawKey] = v;
       context[rawKey] = v;
     }
   }
   context.note = noteObj;
 
   try {
-    const keys = Object.keys(context);
-    const values = Object.values(context);
-    // Wrap in function with keys as arguments
-    const fn = new Function(...keys, `return (${cleanFormula});`);
-    const result = fn(...values);
+    const result = evaluateSafeExpression(cleanFormula, context);
     return result !== undefined && result !== null ? result : '';
   } catch {
     return '';
@@ -307,26 +616,14 @@ function evaluateStringExpression(expr: string, record: BaseRecord): boolean {
     return record.file.hasLink(hasLinkMatch[1]);
   }
 
-  // 4. Comparison expression (e.g. status == "done", priority > 2, file.ext == "md")
-  // Replace single '=' with '==' if not already '==' or '!='
-  let safeExpr = trimmed;
-  // Convert standard word operators
-  safeExpr = safeExpr.replace(/\band\b/gi, '&&').replace(/\bor\b/gi, '||').replace(/\bnot\b/gi, '!');
-
+  // 4. Safe sandboxed comparison / boolean expression
   const noteObj: Record<string, any> = {};
   const validProps: Record<string, any> = {};
-  const reservedWords = new Set([
-    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
-    'default', 'delete', 'do', 'else', 'export', 'extends', 'finally',
-    'for', 'function', 'if', 'import', 'in', 'instanceof', 'new',
-    'return', 'super', 'switch', 'this', 'throw', 'try', 'typeof',
-    'var', 'void', 'while', 'with', 'yield', 'enum', 'await'
-  ]);
 
   for (const [k, v] of Object.entries(record.properties)) {
     const rawKey = k.replace(/^note\./, '');
-    noteObj[rawKey] = v;
-    if (!reservedWords.has(rawKey) && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawKey)) {
+    if (!FORBIDDEN_PROPS.has(rawKey)) {
+      noteObj[rawKey] = v;
       validProps[rawKey] = v;
     }
   }
@@ -339,12 +636,8 @@ function evaluateStringExpression(expr: string, record: BaseRecord): boolean {
   };
 
   try {
-    const keys = Object.keys(context);
-    const values = Object.values(context);
-    const fn = new Function(...keys, `return Boolean(${safeExpr});`);
-    return Boolean(fn(...values));
+    return Boolean(evaluateSafeExpression(trimmed, context));
   } catch {
-    // Fallback: simple key-value comparison
     return false;
   }
 }

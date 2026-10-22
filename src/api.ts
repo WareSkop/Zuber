@@ -251,12 +251,19 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     ? path
     : `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
 
-  // Default timeout of 6s to avoid hanging indefinitely on dead connections
+  // Default timeout of 6s for normal requests; 120s for file uploads, archive imports, and remote Git sync
+  const isLongRunning =
+    options.body instanceof FormData ||
+    path.includes('/api/vault/upload') ||
+    path.includes('/api/vault/import') ||
+    path.includes('/api/vault/git/');
+  const defaultTimeoutMs = isLongRunning ? 120000 : 6000;
+
   let timeoutId: any;
   let signal = options.signal;
   if (!signal) {
     const controller = new AbortController();
-    timeoutId = setTimeout(() => controller.abort(), 6000);
+    timeoutId = setTimeout(() => controller.abort(), defaultTimeoutMs);
     signal = controller.signal;
   }
 
@@ -443,6 +450,12 @@ export const api = {
       // Offline logout succeeds locally
     } finally {
       setStoredToken(null);
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          await caches.delete('knowmesh-attachments-v1');
+          await caches.delete('zuber-attachments-v1');
+        } catch {}
+      }
     }
   },
 
@@ -751,12 +764,16 @@ export const api = {
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
-      if (!isDirectory && (path.endsWith('.md') || path.endsWith('.canvas')) && offlineSyncDelegate?.getNote) {
+      if (!isDirectory && (path.endsWith('.md') || path.endsWith('.canvas') || path.endsWith('.base')) && offlineSyncDelegate?.getNote) {
         try {
           const note = await offlineSyncDelegate.getNote(path);
           if (note && note.rawContent !== undefined) {
             const content = note.rawContent;
-            const mimeType = path.endsWith('.canvas') ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8';
+            const mimeType = path.endsWith('.canvas')
+              ? 'application/json;charset=utf-8'
+              : path.endsWith('.base')
+                ? 'text/yaml;charset=utf-8'
+                : 'text/markdown;charset=utf-8';
             const blob = new Blob([content], { type: mimeType });
             const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
