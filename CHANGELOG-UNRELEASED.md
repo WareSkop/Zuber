@@ -1,4 +1,10 @@
 ### Added
+- Umfassendes Handbuch & Referenzdokumentation für Obsidian Bases (`doc/BASE_ANLEITUNG.md` & `BASE_ANLEITUNG.md`):
+  - Detaillierte Erklärung der YAML-Struktur (`filters`, `formulas`, `properties`, `views`).
+  - Vollständige Referenz aller Datei- und Frontmatter-Attribute.
+  - Dokumentation aller Filter-Ausdrücke, logischer Operatoren und Datei-Hilfsfunktionen (`file.inFolder`, `file.hasTag`, `file.hasLink`).
+  - Formelberechnungen: Arithmetik, Runden, Datumsberechnung mit Dauer-Literalen (`'1 day'`), String-Konkatenation (`+`) und bedingte Ausdrücke (`if(...)` / ternärer Operator).
+  - Tabellengestaltung: Spaltenbreiten (`columnSize`), Spaltentitel (`displayName`), Reihenfolge (`order`), deklarative und interaktive Sortierung (`sort`), Gruppierung (`groupBy`) und Inline-Bearbeitung.
 - Vollständiges Frontmatter-Caching im Frontend-Speicher und IndexedDB:
   - `NoteSummary` um `frontmatter: Record<string, any>`, `tags: string[]`, `folder: string` und `mtime: number` erweitert.
   - Server-Endpunkte `/api/vault/tree` und `/api/vault/overview` liefern vollständige Notizen-Metadaten direkt aus dem In-Memory-Index aus.
