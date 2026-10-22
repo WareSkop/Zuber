@@ -348,6 +348,36 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     }
   });
 
+  app.post('/api/vault/move-batch', requireAuth, (req, res) => {
+    try {
+      let moves: Array<{ oldPath: string; newPath: string }> = [];
+      if (Array.isArray(req.body.moves)) {
+        moves = req.body.moves;
+      } else if (Array.isArray(req.body.sources) && typeof req.body.targetFolder === 'string') {
+        const targetFolder = req.body.targetFolder.trim().replace(/^[/\\]+/, '').replace(/\\/g, '/');
+        moves = req.body.sources.map((src: string) => {
+          const fileName = src.split('/').pop() || '';
+          const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+          return { oldPath: src, newPath };
+        });
+      } else {
+        res.status(400).json({ error: 'moves Array oder sources + targetFolder erforderlich.' });
+        return;
+      }
+
+      if (moves.length === 0) {
+        res.json({ ok: true, results: [] });
+        return;
+      }
+
+      const result = vaultService.moveBatch(moves);
+      res.json({ ok: true, results: result.results });
+    } catch (err) {
+      console.error('[move-batch] Error:', err);
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   app.post('/api/vault/folder', requireAuth, (req, res) => {
     try {
       const { path: folderPath } = req.body as { path?: string };
@@ -596,6 +626,9 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
         }
 
         vaultService.invalidateCaches(true);
+        for (const p of uploadedPaths) {
+          vaultService.notifyChange(p, true);
+        }
 
         res.json({
           success: true,

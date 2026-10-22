@@ -75,6 +75,9 @@
     "newNoteInFolder": "Neue Notiz in diesem Ordner",
     "newFolderInFolder": "Neuer Unterordner in diesem Ordner",
     "moveTo": "Verschieben nach...",
+    "moveItems": "{{count}} Elemente verschieben nach...",
+    "deleteItems": "{{count}} Elemente löschen",
+    "deleteItemsConfirm": "Möchtest du die {{count}} ausgewählten Elemente wirklich löschen?",
     "moveOrCut": "Verschieben / Ausschneiden",
     "pasteIntoFolder": "In „{{name}}“ einfügen",
     "pasteIntoRoot": "In Vault-Wurzel einfügen",
@@ -90,6 +93,14 @@
     "uploadSuccess": "{{count}} Datei(en) erfolgreich hochgeladen",
     "uploading": "Lade hoch...",
     "versionHistory": "Versionsverlauf"
+  },
+  "moveToModal": {
+    "title": "Verschieben nach...",
+    "titleCount": "{{count}} Elemente verschieben",
+    "searchPlaceholder": "Ordner suchen oder auswählen...",
+    "rootFolder": "/ (Vault-Wurzelverzeichnis)",
+    "noFoldersFound": "Keine passenden Ordner gefunden",
+    "moving": "Wird verschoben..."
   },
   "editor": {
     "placeholder": "Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)",

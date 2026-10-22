@@ -75,6 +75,9 @@
     "newNoteInFolder": "New note in folder",
     "newFolderInFolder": "New subfolder in folder",
     "moveTo": "Move to...",
+    "moveItems": "Move {{count}} items to...",
+    "deleteItems": "Delete {{count}} items",
+    "deleteItemsConfirm": "Are you sure you want to delete {{count}} selected items?",
     "moveOrCut": "Move / Cut",
     "pasteIntoFolder": "Paste into \"{{name}}\"",
     "pasteIntoRoot": "Paste into Vault Root",
@@ -90,6 +93,14 @@
     "uploadSuccess": "Successfully uploaded {{count}} file(s)",
     "uploading": "Uploading...",
     "versionHistory": "Version History"
+  },
+  "moveToModal": {
+    "title": "Move to...",
+    "titleCount": "Move {{count}} items",
+    "searchPlaceholder": "Search or select folder...",
+    "rootFolder": "/ (Vault Root)",
+    "noFoldersFound": "No matching folders found",
+    "moving": "Moving..."
   },
   "editor": {
     "placeholder": "Start writing your note... (Type [[ for wiki links or # for tags)",

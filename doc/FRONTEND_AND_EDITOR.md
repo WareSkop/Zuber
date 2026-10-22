@@ -397,20 +397,30 @@ In `SettingsModal.tsx` existiert der dedizierte Bereich **„Editor & Files“**
 
 ---
 
-## 14. Kontextmenü & Bereinigung im Dateibaum (`FileSidebar.tsx`)
+## 14. Dateibaum: Multi-Select, Drag & Drop, „Verschieben nach…“-Dialog & Kontextmenü (`FileSidebar.tsx`)
 
-Zur Vermeidung von versehentlichem Löschen auf Touchscreens und für eine aufgeräumte Optik:
-- **Bereinigte Zeilenansicht:** Alle dauerhaft sichtbaren Inline-Icons für Bearbeiten (Stift) und Löschen (Mülleimer) wurden entfernt.
-- **Kontextmenü-Auslösung:**
-  - **Desktop:** Rechtsklick (`onContextMenu`) auf jeden Datei- oder Ordner-Eintrag.
-  - **Touch/Mobile:** Langer Druck (~500 ms Long-Press) sowie ein berührungsfreundlicher `⋮`-Aktionsbutton (`.tree-item-more-btn`) am rechten Rand des aktiven Eintrags.
-  - **Leere Fläche:** Rechtsklick in den freien Bereich des Dateibaums öffnet das Root-Kontextmenü („Neue Notiz“, „Neuer Ordner“, „In Vault-Root einfügen“).
-- **Verfügbare Aktionen:**
-  - **Kopieren:** Merkt den Pfad in der Zwischenablage (`action: 'copy'`).
-  - **Verschieben / Ausschneiden:** Merkt den Pfad zum Verschieben (`action: 'cut'`).
-  - **Einfügen:** Fügt die gemerkte Notiz/den Ordner in den gewählten Zielordner oder ins Vault-Root ein. Bei Namensgleichheit wird automatisch ein Duplikat mit Suffix ` (Copy)` oder ` (Copy 2)` erstellt.
-  - **Umbenennen:** Öffnet den Umbenennen-Dialog und passt WikiLinks vault-weit automatisch an.
-  - **Löschen:** Öffnet eine Sicherheitsabfrage. Bricht vor dem Löschen alle ausstehenden Autosave-Timer ab und entfernt den Eintrag sofort konsistent aus Dateisystem, Backend-Index und lokalem IndexedDB-Cache.
+Für maximale Effizienz bei der Dateiorganisation bietet der Dateibaum umfassende Interaktionsmöglichkeiten:
+- **Eindeutige Zeilenmarkierung über relative Pfade:**
+  Der Abgleich aktiver und selektierter Einträge erfolgt strikt über `node.path` (`activePath === node.path`, `selectedPaths.has(node.path)`), um Fehlmarkierungen gleichnamiger Dateien in unterschiedlichen Verzeichnissen auszuschließen.
+- **Vollwertige Mehrfachauswahl (Multi-Select):**
+  - **Einfacher Klick:** Setzt die Auswahl auf genau dieses Element und öffnet die Datei bzw. klappt den Ordner um.
+  - **`Ctrl` + Klick / `Cmd` + Klick:** Schaltet das angeklickte Element in `selectedPaths` ein/aus (Toggle), ohne die aktive Notiz im Editor umzuschalten.
+  - **`Shift` + Klick:** Wählt alle sichtbaren Dateibaum-Einträge zwischen dem Anker-Element (`lastClickedPath`) und dem Ziel-Element aus (Bereichsauswahl).
+  - **`Escape` oder Klick in den leeren Bereich:** Hebt die Mehrfachauswahl vollständig auf.
+  - **Optisches Feedback:** Markierte Zeilen erhalten die CSS-Klasse `.tree-item.is-selected`.
+- **Internes & Externes Drag & Drop:**
+  - **Interner Drag:** Zieht einzelne oder alle per Multi-Select markierten Dateien/Ordner (`application/x-knowmesh-paths`). Zirkuläre Verschiebungen (Ordner in sich selbst oder eigene Unterordner) werden strikt verhindert.
+  - **Externer Datei-Upload:** Ziehen von Dateien (`.md`, `.canvas`, Bildern, PDFs etc.) aus dem Betriebssystem lädt diese direkt in den markierten Zielordner oder ins Vault-Root hoch und klappt den Zielordner auf.
+  - **Drop-Ziele & Auto-Expand:** Ordner werden beim Ziehen als Ziel hervorgehoben (`.tree-folder.is-drop-target`). Verweilt die Maus länger als 500 ms über einem geschlossenen Ordner, klappt dieser automatisch auf.
+- **„Verschieben nach…“-Dialog (`MoveToModal.tsx`):**
+  - Das frühere, fehleranfällige „Cut / Ausschneiden“ im Zwischenspeicher wurde vollständig entfernt.
+  - Klick auf **„Move to…“ / „Verschieben nach…“** (bzw. bei Mehrfachauswahl „X Elemente verschieben nach…“) öffnet ein schnelles, tastaturbedienbares Modal mit Autofokus auf das Suchfeld.
+  - Listet das Wurzelverzeichnis (`/ (Root)`) sowie alle gültigen Ordner auf. Navigation per Pfeiltasten `↑`/`↓` und Bestätigung per `Enter`.
+- **Bereinigtes & dynamisches Kontextmenü:**
+  - **Desktop:** Rechtsklick (`onContextMenu`) auf Datei- oder Ordner-Zeilen.
+  - **Touch/Mobile:** Langer Druck (~500 ms Long-Press) sowie `⋮`-Aktionsbutton (`.tree-item-more-btn`).
+  - **Mehrfachauswahl-Aktionen:** Bei mehr als 1 markiertem Element passt sich das Menü dynamisch an („X Elemente verschieben nach…“, „X Elemente löschen“).
+  - **Einzeldatei-Aktionen:** „Inhalt kopieren“, „Verschieben nach…“, „In diesen Ordner einfügen“, „Umbenennen“, „Löschen“, „Herunterladen“ und „Versionsverlauf“.
 
 ---
 

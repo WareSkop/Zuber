@@ -16,7 +16,6 @@ import {
   MoreVertical,
   Pencil,
   RefreshCw,
-  Scissors,
   Search,
   Star,
   Trash2,
@@ -29,6 +28,7 @@ import type { FileTreeNode } from '../../shared/types';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
+import { MoveToModal } from './MoveToModal';
 import {
   loadFavorites,
   saveFavorites,
@@ -39,11 +39,22 @@ import {
 
 export type { FavoriteItem } from '../utils/vaultNavigation';
 
+function getVisiblePaths(nodes: FileTreeNode[], expanded: Record<string, boolean>): string[] {
+  const result: string[] = [];
+  for (const node of nodes) {
+    result.push(node.path);
+    if (node.type === 'folder' && expanded[node.path] && node.children) {
+      result.push(...getVisiblePaths(node.children, expanded));
+    }
+  }
+  return result;
+}
+
 export interface ClipboardItem {
   path: string;
   name: string;
   type: 'file' | 'folder';
-  mode: 'copy' | 'move';
+  mode: 'copy';
 }
 
 interface ContextMenuState {
@@ -178,6 +189,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const isFavorite = (path: string) => favorites.some((f) => f.path === path);
+
+  // Multi-Select state
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const lastClickedPathRef = useRef<string | null>(null);
+
+  // Drag & Drop state
+  const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // MoveToModal state
+  const [moveToModalPaths, setMoveToModalPaths] = useState<string[] | null>(null);
 
   // Clipboard & Context menu states
   const [clipboard, setClipboard] = useState<ClipboardItem | null>(null);
@@ -317,6 +339,30 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     });
   }, [activePath]);
 
+  // Synchronize activePath with selectedPaths if single selection
+  useEffect(() => {
+    if (activePath) {
+      setSelectedPaths((prev) => {
+        if (prev.size <= 1 && !prev.has(activePath)) {
+          return new Set([activePath]);
+        }
+        return prev;
+      });
+      lastClickedPathRef.current = activePath;
+    }
+  }, [activePath]);
+
+  // Global Escape key listener to clear selection
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedPaths(new Set());
+      }
+    };
+    document.addEventListener('keydown', handleGlobalKeyDown);
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   useEffect(() => {
     if (activeTab !== 'search' && !selectedTagFilter) return;
 
@@ -343,6 +389,18 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const openContextMenu = (node: FileTreeNode | null, clientX: number, clientY: number) => {
+    if (node) {
+      setSelectedPaths((prev) => {
+        if (!prev.has(node.path)) {
+          lastClickedPathRef.current = node.path;
+          return new Set([node.path]);
+        }
+        return prev;
+      });
+    } else {
+      setSelectedPaths(new Set());
+    }
+
     const menuWidth = 230;
     const menuHeight = 360;
     const x = Math.max(10, Math.min(clientX, window.innerWidth - menuWidth - 10));
@@ -366,6 +424,52 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   };
 
+  const handleItemClick = (e: React.MouseEvent, node: FileTreeNode) => {
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    if (isCtrlOrCmd) {
+      setSelectedPaths((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.path)) {
+          next.delete(node.path);
+        } else {
+          next.add(node.path);
+        }
+        return next;
+      });
+      lastClickedPathRef.current = node.path;
+      return;
+    }
+
+    if (isShift && lastClickedPathRef.current) {
+      const visible = getVisiblePaths(tree, expandedFolders);
+      const anchorIdx = visible.indexOf(lastClickedPathRef.current);
+      const targetIdx = visible.indexOf(node.path);
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const start = Math.min(anchorIdx, targetIdx);
+        const end = Math.max(anchorIdx, targetIdx);
+        const range = visible.slice(start, end + 1);
+        setSelectedPaths(new Set(range));
+        return;
+      }
+    }
+
+    // Normal click
+    setSelectedPaths(new Set([node.path]));
+    lastClickedPathRef.current = node.path;
+
+    if (node.type === 'folder') {
+      toggleFolder(node.path);
+    } else {
+      if (node.extension === 'md' || node.extension === 'canvas' || node.path.endsWith('.canvas')) {
+        onSelectNote(node.path);
+      } else {
+        window.open(api.getAttachmentUrl(node.path), '_blank');
+      }
+    }
+  };
+
   const handleCopy = (node: FileTreeNode) => {
     const displayName =
       node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
@@ -380,25 +484,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     setContextMenu(null);
   };
 
-  const handleCut = (node: FileTreeNode) => {
-    const displayName =
-      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
-        ? node.name.replace(/\.(md|canvas)$/i, '')
-        : node.name;
-    setClipboard({
-      path: node.path,
-      name: displayName,
-      type: node.type,
-      mode: 'move',
-    });
-    setContextMenu(null);
-  };
-
   const handlePaste = async (targetNode: FileTreeNode | null) => {
     if (!clipboard) return;
     setContextMenu(null);
 
-    // Determine destination folder
     let targetFolder = '';
     if (targetNode) {
       if (targetNode.type === 'folder') {
@@ -414,14 +503,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     const destinationPath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
 
     try {
-      if (clipboard.mode === 'move') {
-        if (clipboard.path === destinationPath) return;
-        await api.renameEntry(clipboard.path, destinationPath);
-        notifyVaultEntryRenamed(clipboard.path, destinationPath);
-        setClipboard(null);
-      } else {
-        await api.copyEntry(clipboard.path, destinationPath);
-      }
+      await api.copyEntry(clipboard.path, destinationPath);
       onRefresh();
     } catch (err) {
       console.error('[Zuber] Paste error:', err);
@@ -429,15 +511,201 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   };
 
+  const handleDeleteSelected = async () => {
+    const paths = Array.from(selectedPaths);
+    if (paths.length === 0) return;
+    const confirmed = window.confirm(
+      t('sidebar.deleteItemsConfirm', {
+        count: paths.length,
+        defaultValue: `Möchtest du die ${paths.length} ausgewählten Elemente wirklich löschen?`,
+      })
+    );
+    if (!confirmed) return;
+
+    for (const p of paths) {
+      try {
+        await api.deleteEntry(p);
+      } catch (err) {
+        console.error(`[Zuber] Delete error for ${p}:`, err);
+      }
+    }
+    setSelectedPaths(new Set());
+    onRefresh();
+  };
+
+  const handleMoveTo = async (targetFolder: string) => {
+    if (!moveToModalPaths || moveToModalPaths.length === 0) return;
+
+    const validMoves = moveToModalPaths.filter((srcPath) => {
+      const currentParent = getParentFolder(srcPath);
+      if (currentParent === targetFolder) return false;
+      if (targetFolder === srcPath || targetFolder.startsWith(`${srcPath}/`)) return false;
+      return true;
+    });
+
+    if (validMoves.length === 0) return;
+
+    const moves = validMoves.map((srcPath) => {
+      const fileName = srcPath.split('/').pop() || '';
+      const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+      return { oldPath: srcPath, newPath };
+    });
+
+    await api.moveBatch(moves);
+    for (const m of moves) {
+      notifyVaultEntryRenamed(m.oldPath, m.newPath);
+    }
+    if (targetFolder) {
+      setExpandedFolders((prev) => ({ ...prev, [targetFolder]: true }));
+    }
+    setSelectedPaths(new Set());
+    onRefresh();
+  };
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, node: FileTreeNode) => {
+    let pathsToMove: string[];
+    if (selectedPaths.has(node.path)) {
+      pathsToMove = Array.from(selectedPaths);
+    } else {
+      pathsToMove = [node.path];
+      setSelectedPaths(new Set([node.path]));
+      lastClickedPathRef.current = node.path;
+    }
+
+    e.dataTransfer.setData('application/x-knowmesh-paths', JSON.stringify(pathsToMove));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOverItem = (e: React.DragEvent, node: FileTreeNode) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const targetFolder = node.type === 'folder' ? node.path : getParentFolder(node.path);
+    if (dropTargetFolder !== targetFolder) {
+      setDropTargetFolder(targetFolder);
+    }
+
+    if (node.type === 'folder' && !expandedFolders[node.path]) {
+      if (!hoverTimerRef.current) {
+        hoverTimerRef.current = setTimeout(() => {
+          setExpandedFolders((prev) => ({ ...prev, [node.path]: true }));
+          hoverTimerRef.current = null;
+        }, 500);
+      }
+    } else {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
+      }
+    }
+
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragOverScroller = (e: React.DragEvent) => {
+    if ((e.target as HTMLElement).closest('.tree-item')) return;
+    e.preventDefault();
+    if (dropTargetFolder !== '') {
+      setDropTargetFolder('');
+    }
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragLeave = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetFolder: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDropTargetFolder(null);
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+
+    // Case A: Internal move
+    if (e.dataTransfer.types.includes('application/x-knowmesh-paths')) {
+      try {
+        const raw = e.dataTransfer.getData('application/x-knowmesh-paths');
+        const pathsToMove: string[] = JSON.parse(raw);
+        if (!Array.isArray(pathsToMove) || pathsToMove.length === 0) return;
+
+        const validMoves = pathsToMove.filter((srcPath) => {
+          const currentParent = getParentFolder(srcPath);
+          if (currentParent === targetFolder) return false;
+          if (targetFolder === srcPath || targetFolder.startsWith(`${srcPath}/`)) return false;
+          return true;
+        });
+
+        if (validMoves.length === 0) return;
+
+        const moves = validMoves.map((srcPath) => {
+          const fileName = srcPath.split('/').pop() || '';
+          const newPath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+          return { oldPath: srcPath, newPath };
+        });
+
+        await api.moveBatch(moves);
+        for (const m of moves) {
+          notifyVaultEntryRenamed(m.oldPath, m.newPath);
+        }
+        if (targetFolder) {
+          setExpandedFolders((prev) => ({ ...prev, [targetFolder]: true }));
+        }
+        setSelectedPaths(new Set());
+        onRefresh();
+      } catch (err) {
+        console.error('[Zuber] Drag drop internal move error:', err);
+        alert((err as Error).message || 'Fehler beim Verschieben');
+      }
+      return;
+    }
+
+    // Case B: External file upload from OS
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      try {
+        setUploadStatus(t('sidebar.uploading'));
+        const res = await api.uploadEntries(targetFolder, files);
+        if (targetFolder) {
+          setExpandedFolders((prev) => ({ ...prev, [targetFolder]: true }));
+        }
+        onRefresh();
+        setUploadStatus(t('sidebar.uploadSuccess', { count: res.count }));
+        setTimeout(() => setUploadStatus(null), 3500);
+      } catch (err: unknown) {
+        console.error('[Zuber] Drop upload error:', err);
+        alert((err as Error).message || 'Fehler beim Hochladen.');
+        setUploadStatus(null);
+      }
+    }
+  };
+
   const renderTreeNode = (node: FileTreeNode, depth = 0) => {
     if (node.type === 'folder') {
       const isExpanded = Boolean(expandedFolders[node.path]);
+      const isSelected = selectedPaths.has(node.path);
+      const isDropTarget = dropTargetFolder === node.path;
       return (
         <div key={node.path} className="tree-folder-group">
           <div
-            className="tree-item tree-folder-item"
+            className={`tree-item tree-folder-item ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''}`}
             style={{ paddingLeft: `${10 + depth * 14}px` }}
-            onClick={() => toggleFolder(node.path)}
+            draggable={true}
+            onDragStart={(e) => handleDragStart(e, node)}
+            onDragOver={(e) => handleDragOverItem(e, node)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, node.path)}
+            onClick={(e) => handleItemClick(e, node)}
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -485,6 +753,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       node.path.endsWith('.canvas') ||
       node.attachmentKind === 'canvas';
     const isActive = activePath === node.path;
+    const isSelected = selectedPaths.has(node.path);
+    const isDropTarget = dropTargetFolder === getParentFolder(node.path);
     const displayName = isMd
       ? node.name.replace(/\.md$/i, '')
       : isCanvas
@@ -494,15 +764,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     return (
       <div
         key={node.path}
-        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${!isMd && !isCanvas ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''}`}
+        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''} ${!isMd && !isCanvas ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''}`}
         style={{ paddingLeft: `${26 + depth * 14}px` }}
-        onClick={() => {
-          if (isMd || isCanvas) {
-            onSelectNote(node.path);
-          } else {
-            window.open(api.getAttachmentUrl(node.path), '_blank');
-          }
-        }}
+        draggable={true}
+        onDragStart={(e) => handleDragStart(e, node)}
+        onDragOver={(e) => handleDragOverItem(e, node)}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => handleDrop(e, getParentFolder(node.path))}
+        onClick={(e) => handleItemClick(e, node)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -812,7 +1081,15 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           )}
 
           <div
-            className="file-tree-scroller scroller"
+            className={`file-tree-scroller scroller ${dropTargetFolder === '' ? 'is-drop-target' : ''}`}
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest('.tree-item')) {
+                setSelectedPaths(new Set());
+              }
+            }}
+            onDragOver={handleDragOverScroller}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, '')}
             onContextMenu={(e) => {
               if ((e.target as HTMLElement).closest('.tree-item')) return;
               e.preventDefault();
@@ -1059,79 +1336,113 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 </button>
                 <div className="tree-context-separator" />
 
-                {/* Copy */}
-                <button
-                  type="button"
-                  className="tree-context-item"
-                  onClick={() => handleCopy(contextMenu.node!)}
-                >
-                  <Copy size={15} />
-                  <span>{t('common.copy')}</span>
-                </button>
+                {/* If multiple items are selected and clicked node is among them */}
+                {selectedPaths.has(contextMenu.node.path) && selectedPaths.size > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => {
+                        setMoveToModalPaths(Array.from(selectedPaths));
+                        setContextMenu(null);
+                      }}
+                    >
+                      <FolderPlus size={15} />
+                      <span>{t('sidebar.moveItems', { count: selectedPaths.size })}</span>
+                    </button>
+                    <div className="tree-context-separator" />
+                    <button
+                      type="button"
+                      className="tree-context-item danger"
+                      onClick={() => {
+                        handleDeleteSelected();
+                        setContextMenu(null);
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      <span>{t('sidebar.deleteItems', { count: selectedPaths.size })}</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Copy */}
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => handleCopy(contextMenu.node!)}
+                    >
+                      <Copy size={15} />
+                      <span>{t('common.copy')}</span>
+                    </button>
 
-                {/* Move / Cut */}
-                <button
-                  type="button"
-                  className="tree-context-item"
-                  onClick={() => handleCut(contextMenu.node!)}
-                >
-                  <Scissors size={15} />
-                  <span>{t('sidebar.moveOrCut')}</span>
-                </button>
+                    {/* Move to... */}
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => {
+                        setMoveToModalPaths([contextMenu.node!.path]);
+                        setContextMenu(null);
+                      }}
+                    >
+                      <FolderPlus size={15} />
+                      <span>{t('sidebar.moveTo')}</span>
+                    </button>
 
-                {/* Paste */}
-                {clipboard && (
-                  <button
-                    type="button"
-                    className="tree-context-item"
-                    onClick={() => handlePaste(contextMenu.node)}
-                  >
-                    <Clipboard size={15} />
-                    <span>
-                      {contextMenu.node.type === 'folder'
-                        ? t('sidebar.pasteIntoFolder', { name: contextMenu.node.name })
-                        : t('common.paste')}
-                    </span>
-                  </button>
+                    {/* Paste */}
+                    {clipboard && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => handlePaste(contextMenu.node)}
+                      >
+                        <Clipboard size={15} />
+                        <span>
+                          {contextMenu.node.type === 'folder'
+                            ? t('sidebar.pasteIntoFolder', { name: contextMenu.node.name })
+                            : t('common.paste')}
+                        </span>
+                      </button>
+                    )}
+
+                    {/* Rename */}
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => {
+                        const node = contextMenu.node!;
+                        const displayName =
+                          node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
+                            ? node.name.replace(/\.(md|canvas)$/i, '')
+                            : node.name;
+                        onRenameEntry(node.path, displayName);
+                        setContextMenu(null);
+                      }}
+                    >
+                      <Pencil size={15} />
+                      <span>{t('common.rename')}</span>
+                    </button>
+
+                    <div className="tree-context-separator" />
+
+                    {/* Delete */}
+                    <button
+                      type="button"
+                      className="tree-context-item danger"
+                      onClick={() => {
+                        const node = contextMenu.node!;
+                        const displayName =
+                          node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
+                            ? node.name.replace(/\.(md|canvas)$/i, '')
+                            : node.name;
+                        onDeleteEntry(node.path, displayName);
+                        setContextMenu(null);
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      <span>{t('common.delete')}</span>
+                    </button>
+                  </>
                 )}
-
-                {/* Rename */}
-                <button
-                  type="button"
-                  className="tree-context-item"
-                  onClick={() => {
-                    const node = contextMenu.node!;
-                    const displayName =
-                      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
-                        ? node.name.replace(/\.(md|canvas)$/i, '')
-                        : node.name;
-                    onRenameEntry(node.path, displayName);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Pencil size={15} />
-                  <span>{t('common.rename')}</span>
-                </button>
-
-                <div className="tree-context-separator" />
-
-                {/* Delete */}
-                <button
-                  type="button"
-                  className="tree-context-item danger"
-                  onClick={() => {
-                    const node = contextMenu.node!;
-                    const displayName =
-                      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
-                        ? node.name.replace(/\.(md|canvas)$/i, '')
-                        : node.name;
-                    onDeleteEntry(node.path, displayName);
-                    setContextMenu(null);
-                  }}
-                >
-                  <Trash2 size={15} />
-                  <span>{t('common.delete')}</span>
-                </button>
               </>
             ) : (
               /* Context menu on root / empty space */
@@ -1246,6 +1557,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           onMouseDown={onLeftResizeStart}
         />
       )}
+      {/* MoveTo Modal */}
+      <MoveToModal
+        isOpen={moveToModalPaths !== null}
+        sourcePaths={moveToModalPaths || []}
+        tree={tree}
+        onClose={() => setMoveToModalPaths(null)}
+        onMove={handleMoveTo}
+      />
     </aside>
   );
 };

@@ -20,6 +20,9 @@ import {
   getAttachmentKind,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
+  refactorMarkdownContent,
+  refactorCanvasContent,
+  type RenameMapping,
 } from '../shared/markdownUtils';
 
 export interface VaultChangeBatch {
@@ -888,39 +891,87 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     if (stat.isDirectory()) this.indexDirectory(finalNewRel);
     else this.indexFile(finalNewRel);
 
-    // If a markdown note was renamed, update [[OldName]] wiki-links across the vault
-    if (stat.isFile() && oldRelPath.endsWith('.md')) {
-      const oldBase = path.basename(oldRelPath, '.md');
-      const newBase = path.basename(finalNewRel, '.md');
-      if (oldBase !== newBase) {
-        this.updateWikiLinksOnRename(oldBase, newBase);
-      }
-    }
+    const mapping: RenameMapping = {
+      oldPath: oldRelPath,
+      newPath: finalNewRel,
+      isDirectory: stat.isDirectory(),
+    };
+    this.refactorVaultLinks([mapping]);
+    this.invalidate(true);
+    this.queueNotification(finalNewRel, true);
 
     return { newPath: finalNewRel };
   }
 
-  private updateWikiLinksOnRename(oldBase: string, newBase: string): void {
-    const escaped = oldBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const wikiRegex = new RegExp(
-      `(\\[\\[)(?:[^\\]|#]*\\/)?${escaped}((?:#[^\\]|]+)?(?:\\|[^\\]]+)?\\]\\])`,
-      'gi'
-    );
-    const oldLower = oldBase.toLowerCase();
+  public moveBatch(moves: Array<{ oldPath: string; newPath: string }>): { results: Array<{ oldPath: string; newPath: string }> } {
+    const results: Array<{ oldPath: string; newPath: string }> = [];
+    const mappings: RenameMapping[] = [];
 
-    // Only touch notes whose (cached) link list references the old name
-    for (const note of Array.from(this.notes.values())) {
-      const references = note.links.some((l) => {
-        const ll = l.toLowerCase();
-        return ll === oldLower || ll.endsWith(`/${oldLower}`) || ll === `${oldLower}.md`;
+    for (const move of moves) {
+      const oldRelPath = move.oldPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+      const oldAbs = this.resolveSafePath(oldRelPath);
+      if (!fs.existsSync(oldAbs)) continue;
+
+      const stat = fs.statSync(oldAbs);
+      let finalNewRel = move.newPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+      if (stat.isFile()) {
+        if (oldRelPath.endsWith('.canvas') && !finalNewRel.endsWith('.canvas')) {
+          finalNewRel += '.canvas';
+        } else if (oldRelPath.endsWith('.md') && !finalNewRel.endsWith('.md')) {
+          finalNewRel += '.md';
+        }
+      }
+
+      const newAbs = this.resolveSafePath(finalNewRel);
+      fs.mkdirSync(path.dirname(newAbs), { recursive: true });
+      fs.renameSync(oldAbs, newAbs);
+
+      this.removeFromIndex(oldRelPath);
+      if (stat.isDirectory()) this.indexDirectory(finalNewRel);
+      else this.indexFile(finalNewRel);
+
+      mappings.push({
+        oldPath: oldRelPath,
+        newPath: finalNewRel,
+        isDirectory: stat.isDirectory(),
       });
-      if (!references) continue;
-      const updated = note.rawContent.replace(wikiRegex, `$1${newBase}$2`);
+      results.push({ oldPath: oldRelPath, newPath: finalNewRel });
+    }
+
+    if (mappings.length > 0) {
+      this.refactorVaultLinks(mappings);
+      this.invalidate(true);
+      for (const res of results) {
+        this.pendingPaths.add(res.newPath);
+      }
+      this.pendingStructural = true;
+      this.queueNotification(results[0]?.newPath || '', true);
+    }
+
+    return { results };
+  }
+
+  private refactorVaultLinks(mappings: RenameMapping[]): void {
+    if (!mappings || mappings.length === 0) return;
+
+    for (const note of Array.from(this.notes.values())) {
+      const isCanvas = note.path.endsWith('.canvas');
+      const isMd = note.path.endsWith('.md');
+      if (!isMd && !isCanvas) continue;
+
+      const updated = isCanvas
+        ? refactorCanvasContent(note.rawContent, mappings)
+        : refactorMarkdownContent(note.rawContent, mappings);
+
       if (updated !== note.rawContent) {
         fs.writeFileSync(path.join(this.vaultDir, note.path), updated, 'utf-8');
         this.indexFile(note.path);
       }
     }
+  }
+
+  public notifyChange(relPath: string, structural = false): void {
+    this.queueNotification(relPath, structural);
   }
 
   public copyEntry(sourcePath: string, targetPath?: string): { newPath: string } {

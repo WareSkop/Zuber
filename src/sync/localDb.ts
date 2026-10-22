@@ -422,6 +422,7 @@ export class LocalDb {
           } else if (key.startsWith(oldPrefix)) {
             const val = cursor.value;
             val.path = newPrefix + key.slice(oldPrefix.length);
+            val.name = val.path.split('/').pop()?.replace(/\.md$/, '') || val.path;
             store.delete(key);
             store.put(val);
           }
@@ -433,32 +434,44 @@ export class LocalDb {
       req.onerror = () => reject(req.error);
     });
 
-    // 2. Update tree in meta
+    // 2. Rename attachments in IndexedDB
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('attachments', 'readwrite');
+      const store = tx.objectStore('attachments');
+      const req = store.openCursor();
+      req.onsuccess = () => {
+        const cursor = req.result;
+        if (cursor) {
+          const key = cursor.key as string;
+          if (key === oldPath) {
+            const val = cursor.value;
+            val.path = newPath;
+            val.name = newPath.split('/').pop() || newPath;
+            store.delete(key);
+            store.put(val);
+          } else if (key.startsWith(oldPrefix)) {
+            const val = cursor.value;
+            val.path = newPrefix + key.slice(oldPrefix.length);
+            val.name = val.path.split('/').pop() || val.path;
+            store.delete(key);
+            store.put(val);
+          }
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+
+    // 3. Update tree in meta
     try {
       const tree = await this.getMeta<FileTreeNode[]>('tree');
       if (tree) {
-        const updateTree = (nodes: FileTreeNode[]): FileTreeNode[] => {
-          return nodes.map((node) => {
-            let updatedNode = { ...node };
-            if (node.path === oldPath) {
-              updatedNode.path = newPath;
-              updatedNode.name = newPath.split('/').pop() || newPath;
-              if (updatedNode.type === 'file' && updatedNode.name.includes('.')) {
-                updatedNode.extension = updatedNode.name.split('.').pop();
-              }
-            } else if (node.path.startsWith(oldPrefix)) {
-              updatedNode.path = newPrefix + node.path.slice(oldPrefix.length);
-            }
-            if (updatedNode.children) {
-              updatedNode.children = updateTree(updatedNode.children);
-            }
-            return updatedNode;
-          });
-        };
-        await this.setMeta('tree', sortTreeNodes(updateTree(tree)));
+        await this.setMeta('tree', moveOrRenameNodeInTree(tree, oldPath, newPath));
       }
 
-      // 3. Update allNotes in meta
+      // 4. Update allNotes in meta
       const allNotes = await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes');
       if (allNotes) {
         const updatedNotes = allNotes.map((n) => {
@@ -475,7 +488,7 @@ export class LocalDb {
         await this.setMeta('allNotes', updatedNotes);
       }
 
-      // 4. Update files in meta
+      // 5. Update files in meta
       const files = await this.getMeta<any[]>('files');
       if (files) {
         const updatedFiles = files.map((f) => {
@@ -494,7 +507,7 @@ export class LocalDb {
         await this.setMeta('files', updatedFiles);
       }
 
-      // 5. Update folders in meta
+      // 6. Update folders in meta
       const folders = await this.getMeta<string[]>('folders');
       if (folders) {
         const updatedFolders = folders.map((p) => {
@@ -701,6 +714,112 @@ export class LocalDb {
       tx.onerror = () => reject(tx.error);
     });
   }
+}
+
+export function moveOrRenameNodeInTree(
+  nodes: FileTreeNode[],
+  oldPath: string,
+  newPath: string
+): FileTreeNode[] {
+  let extractedNode: FileTreeNode | null = null;
+
+  function extract(list: FileTreeNode[]): FileTreeNode[] {
+    const nextList: FileTreeNode[] = [];
+    for (const item of list) {
+      if (item.path === oldPath) {
+        extractedNode = { ...item };
+      } else {
+        if (item.children) {
+          nextList.push({
+            ...item,
+            children: extract(item.children),
+          });
+        } else {
+          nextList.push(item);
+        }
+      }
+    }
+    return nextList;
+  }
+
+  const treeWithoutOld = extract(nodes);
+  if (!extractedNode) {
+    return nodes;
+  }
+
+  const oldPrefix = `${oldPath}/`;
+  const newPrefix = `${newPath}/`;
+
+  function updateDescendants(node: FileTreeNode): FileTreeNode {
+    let p = node.path;
+    if (p === oldPath) {
+      p = newPath;
+    } else if (p.startsWith(oldPrefix)) {
+      p = newPrefix + p.slice(oldPrefix.length);
+    }
+    const nm = p.split('/').pop() || p;
+    const ext = node.type === 'file' && nm.includes('.') ? nm.split('.').pop() : node.extension;
+    const kind = node.type === 'file' ? getAttachmentKind(p) : undefined;
+    return {
+      ...node,
+      path: p,
+      name: nm,
+      extension: ext,
+      attachmentKind: kind,
+      children: node.children ? node.children.map(updateDescendants) : undefined,
+    };
+  }
+
+  const updatedNode = updateDescendants(extractedNode);
+
+  const destParts = newPath.split('/').filter(Boolean);
+  destParts.pop(); // Remove target file/folder name to get parent folder parts
+
+  if (destParts.length === 0) {
+    // Placed at root
+    return sortTreeNodes([...treeWithoutOld, updatedNode]);
+  }
+
+  function insertIntoParent(list: FileTreeNode[], remainingParts: string[], currentAcc: string): FileTreeNode[] {
+    const [currentFolder, ...rest] = remainingParts;
+    const folderPath = currentAcc ? `${currentAcc}/${currentFolder}` : currentFolder;
+
+    let found = false;
+    const result = list.map((item) => {
+      if (item.name === currentFolder && item.type === 'folder') {
+        found = true;
+        if (rest.length === 0) {
+          const children = item.children || [];
+          return {
+            ...item,
+            children: sortTreeNodes([...children.filter((c) => c.path !== updatedNode.path), updatedNode]),
+          };
+        } else {
+          return {
+            ...item,
+            children: insertIntoParent(item.children || [], rest, folderPath),
+          };
+        }
+      }
+      return item;
+    });
+
+    if (!found) {
+      const newFolder: FileTreeNode = {
+        name: currentFolder,
+        path: folderPath,
+        type: 'folder',
+        children: rest.length === 0
+          ? [updatedNode]
+          : insertIntoParent([], rest, folderPath),
+        updatedAt: Date.now(),
+      };
+      return sortTreeNodes([...list, newFolder]);
+    }
+    return result;
+  }
+
+  return sortTreeNodes(insertIntoParent(treeWithoutOld, destParts, ''));
 }
 
 export function insertNodeIntoTree(

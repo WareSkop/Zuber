@@ -306,6 +306,7 @@ export interface OfflineSyncDelegate {
   }): Promise<NoteData>;
   createFolder(path: string): Promise<{ ok: boolean; path: string }>;
   renameEntry?(oldPath: string, newPath: string): Promise<{ newPath: string }>;
+  moveBatch?(moves: Array<{ oldPath: string; newPath: string }>): Promise<{ ok: boolean; results: Array<{ oldPath: string; newPath: string }> }>;
   deleteEntry?(path: string): Promise<{ ok: boolean } | void>;
   copyEntry?(sourcePath: string, targetPath?: string): Promise<{ newPath: string }>;
 }
@@ -355,6 +356,13 @@ export const rawApi = {
     return apiFetch('/api/vault/rename', {
       method: 'POST',
       body: JSON.stringify({ oldPath, newPath }),
+    });
+  },
+
+  moveBatch(moves: Array<{ oldPath: string; newPath: string }>): Promise<{ ok: boolean; results: Array<{ oldPath: string; newPath: string }> }> {
+    return apiFetch('/api/vault/move-batch', {
+      method: 'POST',
+      body: JSON.stringify({ moves }),
     });
   },
 
@@ -495,6 +503,13 @@ export const api = {
       return offlineSyncDelegate.renameEntry(oldPath, newPath);
     }
     return rawApi.renameEntry(oldPath, newPath);
+  },
+
+  moveBatch(moves: Array<{ oldPath: string; newPath: string }>): Promise<{ ok: boolean; results: Array<{ oldPath: string; newPath: string }> }> {
+    if (offlineSyncDelegate?.moveBatch) {
+      return offlineSyncDelegate.moveBatch(moves);
+    }
+    return rawApi.moveBatch(moves);
   },
 
   copyEntry(sourcePath: string, targetPath?: string): Promise<{ newPath: string }> {

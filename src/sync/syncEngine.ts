@@ -711,6 +711,38 @@ class SyncEngine {
     return { newPath };
   }
 
+  public async moveBatch(moves: Array<{ oldPath: string; newPath: string }>): Promise<{ ok: boolean; results: Array<{ oldPath: string; newPath: string }> }> {
+    // 1. Locally rename in DB and tree for each move
+    for (const m of moves) {
+      await this.localDb.renameEntryInTree(m.oldPath, m.newPath);
+    }
+
+    // 2. If online, call server API
+    if (navigator.onLine && this.syncState !== 'offline') {
+      try {
+        const res = await rawApi.moveBatch(moves);
+        return res;
+      } catch (err: any) {
+        console.warn(`[Knowmesh Sync] Server unreachable during moveBatch, queueing in outbox:`, err);
+        this.setSyncState('offline');
+      }
+    }
+
+    // 3. Queue in outbox if offline
+    for (const m of moves) {
+      const mutation: OutboxMutation = {
+        id: generateMutationId('rename', m.oldPath),
+        type: 'rename',
+        path: m.oldPath,
+        newPath: m.newPath,
+        timestamp: Date.now(),
+      };
+      await this.localDb.addOutboxMutation(mutation);
+    }
+
+    return { ok: true, results: moves };
+  }
+
   public async copyEntry(sourcePath: string, targetPath?: string): Promise<{ newPath: string }> {
     if (navigator.onLine && this.syncState !== 'offline') {
       try {

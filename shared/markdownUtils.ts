@@ -277,6 +277,316 @@ export function resolveWikiTargetKind(filePath: string): AttachmentKind {
   return getAttachmentKind(filePath);
 }
 
+export interface RenameMapping {
+  oldPath: string;
+  newPath: string;
+  isDirectory?: boolean;
+}
+
+/**
+ * Protect code blocks (``` fenced and ` inline code) during link refactoring.
+ */
+function protectCodeBlocks(content: string): { text: string; restore: (s: string) => string } {
+  const blocks: string[] = [];
+  const text = content.replace(/(```[\s\S]*?```|`[^`\r\n]+`)/g, (m) => {
+    const idx = blocks.length;
+    blocks.push(m);
+    return `\x00CODE_BLOCK_${idx}\x00`;
+  });
+  return {
+    text,
+    restore: (s: string) => s.replace(/\x00CODE_BLOCK_(\d+)\x00/g, (_, idx) => blocks[Number(idx)] ?? ''),
+  };
+}
+
+/**
+ * Refactors all matching wiki-links, embeds, markdown links/images, and HTML img tags
+ * across a markdown document.
+ */
+export function refactorMarkdownContent(content: string, mappings: RenameMapping[]): string {
+  if (!mappings || mappings.length === 0) return content;
+
+  // Protect code fences
+  const { text: protectedContent, restore } = protectCodeBlocks(content);
+
+  let updated = protectedContent;
+
+  for (const mapping of mappings) {
+    const oldPath = mapping.oldPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    const newPath = mapping.newPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    if (!oldPath || !newPath || oldPath === newPath) continue;
+
+    const isDir = Boolean(mapping.isDirectory);
+    const oldPrefix = oldPath.endsWith('/') ? oldPath : `${oldPath}/`;
+    const newPrefix = newPath.endsWith('/') ? newPath : `${newPath}/`;
+
+    const oldName = oldPath.split('/').pop() || '';
+    const newName = newPath.split('/').pop() || '';
+    const oldExt = oldName.includes('.') ? oldName.split('.').pop()?.toLowerCase() || '' : '';
+
+    const oldBaseNoExt = oldName.replace(/\.(md|canvas)$/i, '');
+    const newBaseNoExt = newName.replace(/\.(md|canvas)$/i, '');
+
+    const oldPathNoExt = oldPath.replace(/\.(md|canvas)$/i, '');
+    const newPathNoExt = newPath.replace(/\.(md|canvas)$/i, '');
+
+    // 1. Refactor Wiki-links and Wiki-embeds:
+    // Pattern: (!?)[[(target)(#subpath)?(|alias)?]]
+    const wikiRegex = /(!?)\[\[([^\]|#\r\n]+)(#[^\]|\r\n]*)?(\|[^\]\r\n]*)?\]\]/g;
+    updated = updated.replace(wikiRegex, (match, isEmbed, rawTarget, subpath = '', alias = '') => {
+      let cleanTarget = rawTarget.trim();
+      let wasUrlEncoded = false;
+      try {
+        const decoded = decodeURIComponent(cleanTarget);
+        if (decoded !== cleanTarget) {
+          wasUrlEncoded = true;
+          cleanTarget = decoded;
+        }
+      } catch {}
+
+      const normTarget = cleanTarget.replace(/^\.?\//, '').replace(/\\/g, '/');
+      let targetReplaced: string | null = null;
+
+      if (isDir) {
+        if (normTarget === oldPath) {
+          targetReplaced = newPath;
+        } else if (normTarget.startsWith(oldPrefix)) {
+          targetReplaced = newPrefix + normTarget.slice(oldPrefix.length);
+        }
+      } else {
+        // Exact full path match
+        if (normTarget === oldPath) {
+          targetReplaced = newPath;
+        } else if ((oldExt === 'md' || oldExt === 'canvas') && normTarget === oldPathNoExt) {
+          targetReplaced = newPathNoExt;
+        } else if (normTarget.includes('/')) {
+          // Path with folders: check if it's a suffix match
+          if (oldPath.endsWith('/' + normTarget)) {
+            targetReplaced = newPath;
+          } else if ((oldExt === 'md' || oldExt === 'canvas') && oldPathNoExt.endsWith('/' + normTarget)) {
+            targetReplaced = newPathNoExt;
+          }
+        } else {
+          // Short name match (no slashes in target)
+          if (normTarget === oldName) {
+            targetReplaced = newName;
+          } else if ((oldExt === 'md' || oldExt === 'canvas') && normTarget === oldBaseNoExt) {
+            targetReplaced = newBaseNoExt;
+          }
+        }
+      }
+
+      if (!targetReplaced) return match;
+
+      if (wasUrlEncoded) {
+        targetReplaced = encodeURI(targetReplaced);
+      }
+
+      return `${isEmbed}[[${targetReplaced}${subpath}${alias}]]`;
+    });
+
+    // 2. Refactor Standard Markdown Links and Images:
+    // Pattern: (!?)[label](href)
+    const mdLinkRegex = /(!?)\[([^\]\r\n]*)\]\((\s*<[^>]+>|[^)\r\n]+)\)/g;
+    updated = updated.replace(mdLinkRegex, (match, isEmbed, label, rawHref) => {
+      let innerHref = rawHref.trim();
+      let hasAngleBrackets = false;
+      if (innerHref.startsWith('<') && innerHref.endsWith('>')) {
+        hasAngleBrackets = true;
+        innerHref = innerHref.slice(1, -1).trim();
+      }
+
+      // Check external URLs
+      if (/^(https?:|mailto:|tel:|data:|#)/i.test(innerHref)) {
+        return match;
+      }
+
+      // Split into url, hash/subpath, and optional title
+      const parts = innerHref.match(/^([^\s#?]+)(#[^\s]*)?(\s+["'].*["'])?$/);
+      if (!parts) return match;
+
+      const rawUrl = parts[1];
+      const hash = parts[2] || '';
+      const title = parts[3] || '';
+
+      let cleanUrl = rawUrl;
+      let wasUrlEncoded = false;
+      try {
+        const decoded = decodeURIComponent(cleanUrl);
+        if (decoded !== cleanUrl) {
+          wasUrlEncoded = true;
+          cleanUrl = decoded;
+        }
+      } catch {}
+
+      const normUrl = cleanUrl.replace(/^\.?\//, '').replace(/\\/g, '/');
+      let urlReplaced: string | null = null;
+
+      if (isDir) {
+        if (normUrl === oldPath) {
+          urlReplaced = newPath;
+        } else if (normUrl.startsWith(oldPrefix)) {
+          urlReplaced = newPrefix + normUrl.slice(oldPrefix.length);
+        }
+      } else {
+        if (normUrl === oldPath) {
+          urlReplaced = newPath;
+        } else if ((oldExt === 'md' || oldExt === 'canvas') && normUrl === oldPathNoExt) {
+          urlReplaced = newPathNoExt;
+        } else if (normUrl === oldName) {
+          urlReplaced = newName;
+        } else if ((oldExt === 'md' || oldExt === 'canvas') && normUrl === oldBaseNoExt) {
+          urlReplaced = newBaseNoExt;
+        }
+      }
+
+      if (!urlReplaced) return match;
+
+      if (wasUrlEncoded) {
+        urlReplaced = encodeURI(urlReplaced);
+      }
+
+      const finalHref = hasAngleBrackets
+        ? `<${urlReplaced}${hash}${title}>`
+        : `${urlReplaced}${hash}${title}`;
+
+      return `${isEmbed}[${label}](${finalHref})`;
+    });
+
+    // 3. Refactor HTML <img src="..."> tags
+    const htmlImgRegex = /(<img\b[^>]*\bsrc=["'])([^"']+)(["'][^>]*>)/gi;
+    updated = updated.replace(htmlImgRegex, (match, prefix, srcValue, suffix) => {
+      if (/^(https?:|data:|blob:)/i.test(srcValue)) return match;
+
+      let cleanSrc = srcValue.trim();
+      let wasUrlEncoded = false;
+      try {
+        const decoded = decodeURIComponent(cleanSrc);
+        if (decoded !== cleanSrc) {
+          wasUrlEncoded = true;
+          cleanSrc = decoded;
+        }
+      } catch {}
+
+      const normSrc = cleanSrc.replace(/^\.?\//, '').replace(/\\/g, '/');
+      let srcReplaced: string | null = null;
+
+      if (isDir) {
+        if (normSrc === oldPath) {
+          srcReplaced = newPath;
+        } else if (normSrc.startsWith(oldPrefix)) {
+          srcReplaced = newPrefix + normSrc.slice(oldPrefix.length);
+        }
+      } else {
+        if (normSrc === oldPath) {
+          srcReplaced = newPath;
+        } else if (normSrc === oldName) {
+          srcReplaced = newName;
+        }
+      }
+
+      if (!srcReplaced) return match;
+
+      if (wasUrlEncoded) {
+        srcReplaced = encodeURI(srcReplaced);
+      }
+
+      return `${prefix}${srcReplaced}${suffix}`;
+    });
+  }
+
+  return restore(updated);
+}
+
+/**
+ * Refactors all file references, wiki-links, and embeds inside a JSON Canvas (.canvas) document.
+ */
+export function refactorCanvasContent(rawJson: string, mappings: RenameMapping[]): string {
+  if (!mappings || mappings.length === 0) return rawJson;
+
+  try {
+    const doc = JSON.parse(rawJson);
+    if (!doc || typeof doc !== 'object') return rawJson;
+    let modified = false;
+
+    for (const mapping of mappings) {
+      const oldPath = mapping.oldPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+      const newPath = mapping.newPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+      if (!oldPath || !newPath || oldPath === newPath) continue;
+
+      const isDir = Boolean(mapping.isDirectory);
+      const oldPrefix = oldPath.endsWith('/') ? oldPath : `${oldPath}/`;
+      const newPrefix = newPath.endsWith('/') ? newPath : `${newPath}/`;
+
+      // 1. Process Nodes
+      if (Array.isArray(doc.nodes)) {
+        for (const node of doc.nodes) {
+          if (!node || typeof node !== 'object') continue;
+
+          // type === 'file': node.file
+          if (node.type === 'file' && typeof node.file === 'string') {
+            const cleanFile = node.file.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+            if (isDir) {
+              if (cleanFile === oldPath) {
+                node.file = newPath;
+                modified = true;
+              } else if (cleanFile.startsWith(oldPrefix)) {
+                node.file = newPrefix + cleanFile.slice(oldPrefix.length);
+                modified = true;
+              }
+            } else {
+              if (cleanFile === oldPath) {
+                node.file = newPath;
+                modified = true;
+              }
+            }
+          }
+
+          // node.text
+          if (typeof node.text === 'string' && node.text) {
+            const nextText = refactorMarkdownContent(node.text, [mapping]);
+            if (nextText !== node.text) {
+              node.text = nextText;
+              modified = true;
+            }
+          }
+
+          // node.label
+          if (typeof node.label === 'string' && node.label) {
+            const nextLabel = refactorMarkdownContent(node.label, [mapping]);
+            if (nextLabel !== node.label) {
+              node.label = nextLabel;
+              modified = true;
+            }
+          }
+        }
+      }
+
+      // 2. Process Edges
+      if (Array.isArray(doc.edges)) {
+        for (const edge of doc.edges) {
+          if (!edge || typeof edge !== 'object') continue;
+          if (typeof edge.label === 'string' && edge.label) {
+            const nextLabel = refactorMarkdownContent(edge.label, [mapping]);
+            if (nextLabel !== edge.label) {
+              edge.label = nextLabel;
+              modified = true;
+            }
+          }
+        }
+      }
+    }
+
+    if (modified) {
+      return JSON.stringify(doc, null, 2);
+    }
+  } catch {
+    // Return unmodified on parse errors
+  }
+
+  return rawJson;
+}
+
 /**
  * Parses JSON Canvas (.canvas) content and extracts all outbound file links,
  * internal [[Wiki-Links]], and #tags from text, file, and group nodes.

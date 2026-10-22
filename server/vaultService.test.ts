@@ -7,13 +7,15 @@ import {
   extractTags,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
+  refactorMarkdownContent,
+  refactorCanvasContent,
 } from '../shared/markdownUtils';
 import { VaultService } from './vaultService';
 import { ensureTlsCredentials } from './tls';
 import { ConfigService } from './configService';
 import { createSessionToken, verifySessionToken } from './auth';
 import { rateLimiter } from './rateLimiter';
-import { insertNodeIntoTree, generateMutationId } from '../src/sync/localDb';
+import { insertNodeIntoTree, moveOrRenameNodeInTree, generateMutationId } from '../src/sync/localDb';
 
 describe('Knowmesh - Markdown & Frontmatter Utils', () => {
   it('parses frontmatter into visual properties and separates body from YAML', () => {
@@ -1035,6 +1037,180 @@ describe('Knowmesh - Vault Entry Operations (copyEntry & deleteEntry)', () => {
     const loadedRenamed = service.getNote('Diagramme/Netzwerk-Plan.canvas');
     expect(loadedRenamed.path).toBe('Diagramme/Netzwerk-Plan.canvas');
     expect(loadedRenamed.rawContent).toContain('DB Server');
+  });
+
+  describe('Phase 1 - Full Link Refactoring & Batch Moves', () => {
+    it('refactors wiki-links with headings, aliases, and markdown links when renaming/moving notes', () => {
+      // 1. Create target note
+      service.saveNote('Projekte/Plan.md', {
+        body: '# Meilensteine\n\nPhase 1 und Phase 2.',
+      });
+
+      // 2. Create referencing note
+      service.saveNote('Übersicht.md', {
+        body: `Hier ist [[Projekte/Plan#Meilensteine|Unser Meilensteinplan]].
+Auch ein Kurzlink auf [[Plan]] und ein Markdown-Link [Dokumentation](Projekte/Plan.md#sec).
+Und ein geschützter Codeblock:
+\`\`\`markdown
+Hier bleibt [[Projekte/Plan]] unverändert!
+\`\`\``,
+      });
+
+      // 3. Move and rename note to Archiv/Masterplan.md
+      const result = service.renameOrMove('Projekte/Plan.md', 'Archiv/Masterplan.md');
+      expect(result.newPath).toBe('Archiv/Masterplan.md');
+
+      // 4. Verify referencing note
+      const refNote = service.getNote('Übersicht.md');
+      expect(refNote.body).toContain('[[Archiv/Masterplan#Meilensteine|Unser Meilensteinplan]]');
+      expect(refNote.body).toContain('[[Masterplan]]');
+      expect(refNote.body).toContain('[Dokumentation](Archiv/Masterplan.md#sec)');
+      // Verify code block was protected
+      expect(refNote.body).toContain('Hier bleibt [[Projekte/Plan]] unverändert!');
+    });
+
+    it('refactors attachment embeds, size aliases, standard markdown images and <img> tags', () => {
+      // 1. Create attachment files
+      const attachDir = path.join(tmpDir, 'attachments');
+      fs.mkdirSync(attachDir, { recursive: true });
+      fs.writeFileSync(path.join(attachDir, 'screenshot.png'), 'fake-image-bytes');
+      fs.writeFileSync(path.join(attachDir, 'manual.pdf'), 'fake-pdf-bytes');
+      service.indexFile('attachments/screenshot.png');
+      service.indexFile('attachments/manual.pdf');
+
+      // 2. Create note with various attachment link formats
+      service.saveNote('Dokument.md', {
+        body: `Bild-Einbettung: ![[attachments/screenshot.png|400]]
+Kurz-Einbettung: ![[screenshot.png]]
+PDF-Einbettung: ![[attachments/manual.pdf]]
+Markdown-Bild: ![Foto](attachments/screenshot.png "Mein Screenshot")
+HTML-Bild: <img src="attachments/screenshot.png" width="300" />`,
+      });
+
+      // 3. Move attachment files
+      service.renameOrMove('attachments/screenshot.png', 'media/images/app-screen.png');
+      service.renameOrMove('attachments/manual.pdf', 'docs/handbuch.pdf');
+
+      // 4. Verify link updates
+      const updatedNote = service.getNote('Dokument.md');
+      expect(updatedNote.body).toContain('![[media/images/app-screen.png|400]]');
+      expect(updatedNote.body).toContain('![[app-screen.png]]');
+      expect(updatedNote.body).toContain('![[docs/handbuch.pdf]]');
+      expect(updatedNote.body).toContain('![Foto](media/images/app-screen.png "Mein Screenshot")');
+      expect(updatedNote.body).toContain('<img src="media/images/app-screen.png" width="300" />');
+    });
+
+    it('refactors references inside .canvas documents (file nodes, text nodes, and edge labels)', () => {
+      // 1. Create source notes & attachments
+      service.saveNote('KnotenA.md', { body: '# Knoten A' });
+      const imgPath = path.join(tmpDir, 'assets', 'icon.svg');
+      fs.mkdirSync(path.dirname(imgPath), { recursive: true });
+      fs.writeFileSync(imgPath, '<svg></svg>');
+      service.indexFile('assets/icon.svg');
+
+      // 2. Create Canvas referencing both
+      const canvasDoc = {
+        nodes: [
+          { id: '1', type: 'file', file: 'KnotenA.md', x: 0, y: 0, width: 200, height: 100 },
+          { id: '2', type: 'file', file: 'assets/icon.svg', x: 250, y: 0, width: 100, height: 100 },
+          {
+            id: '3',
+            type: 'text',
+            text: 'Textknoten mit [[KnotenA#Header|Mein Knoten]] und ![[assets/icon.svg|50]]',
+            x: 0,
+            y: 200,
+            width: 300,
+            height: 120,
+          },
+        ],
+        edges: [
+          {
+            id: 'e1',
+            fromNode: '1',
+            toNode: '2',
+            label: 'Verweist auf [[KnotenA]]',
+          },
+        ],
+      };
+
+      service.saveNote('Diagramme/Architektur.canvas', {
+        body: JSON.stringify(canvasDoc, null, 2),
+      });
+
+      // 3. Move target note and attachment
+      service.renameOrMove('KnotenA.md', 'Archiv/KnotenA-Alt.md');
+      service.renameOrMove('assets/icon.svg', 'media/branding/logo.svg');
+
+      // 4. Verify canvas contents
+      const updatedCanvas = service.getNote('Diagramme/Architektur.canvas');
+      const parsed = JSON.parse(updatedCanvas.rawContent);
+
+      expect(parsed.nodes[0].file).toBe('Archiv/KnotenA-Alt.md');
+      expect(parsed.nodes[1].file).toBe('media/branding/logo.svg');
+      expect(parsed.nodes[2].text).toContain('[[Archiv/KnotenA-Alt#Header|Mein Knoten]]');
+      expect(parsed.nodes[2].text).toContain('![[media/branding/logo.svg|50]]');
+      expect(parsed.edges[0].label).toContain('[[Archiv/KnotenA-Alt]]');
+    });
+
+    it('performs batch moves and consolidates link refactoring across the vault', () => {
+      // 1. Create two notes and a referencing note
+      service.saveNote('Thema1.md', { body: '# Thema 1' });
+      service.saveNote('Thema2.md', { body: '# Thema 2' });
+      service.saveNote('Sammelnotiz.md', {
+        body: 'Verweise auf [[Thema1]] sowie [[Thema2]].',
+      });
+
+      // 2. Execute batch move
+      const batchResult = service.moveBatch([
+        { oldPath: 'Thema1.md', newPath: 'Wissen/Thema1.md' },
+        { oldPath: 'Thema2.md', newPath: 'Wissen/Thema2.md' },
+      ]);
+
+      expect(batchResult.results).toHaveLength(2);
+      expect(batchResult.results[0].newPath).toBe('Wissen/Thema1.md');
+      expect(batchResult.results[1].newPath).toBe('Wissen/Thema2.md');
+
+      // 3. Verify Sammelnotiz was updated with new paths
+      const updated = service.getNote('Sammelnotiz.md');
+      expect(updated.body).toContain('[[Wissen/Thema1]]');
+      expect(updated.body).toContain('[[Wissen/Thema2]]');
+    });
+
+    it('refactors links when an entire directory is moved', () => {
+      service.saveNote('AltOrdner/Sub/Note1.md', { body: '# Sub Note' });
+      service.saveNote('Referenz.md', {
+        body: 'Link zu [[AltOrdner/Sub/Note1]] und [Link](AltOrdner/Sub/Note1.md).',
+      });
+
+      service.renameOrMove('AltOrdner', 'NeuOrdner');
+
+      const updated = service.getNote('Referenz.md');
+      expect(updated.body).toContain('[[NeuOrdner/Sub/Note1]]');
+      expect(updated.body).toContain('[Link](NeuOrdner/Sub/Note1.md)');
+    });
+
+    it('moves nodes cleanly in localDb tree without leaving ghost entries', () => {
+      let tree: any[] = [];
+      tree = insertNodeIntoTree(tree, ['OrdnerA', 'Test.md'], 'OrdnerA/Test.md', 'file');
+      tree = insertNodeIntoTree(tree, ['OrdnerB'], 'OrdnerB', 'folder');
+
+      const folderA = tree.find((n) => n.path === 'OrdnerA');
+      const folderB = tree.find((n) => n.path === 'OrdnerB');
+      expect(folderA?.children).toHaveLength(1);
+      expect(folderB?.children).toHaveLength(0);
+
+      // Move Test.md from OrdnerA to OrdnerB
+      const updatedTree = moveOrRenameNodeInTree(tree, 'OrdnerA/Test.md', 'OrdnerB/Test.md');
+
+      const newFolderA = updatedTree.find((n) => n.path === 'OrdnerA');
+      const newFolderB = updatedTree.find((n) => n.path === 'OrdnerB');
+
+      // OrdnerA must be empty (NO ghost entry!)
+      expect(newFolderA?.children).toHaveLength(0);
+      // OrdnerB must contain Test.md
+      expect(newFolderB?.children).toHaveLength(1);
+      expect(newFolderB?.children?.[0].path).toBe('OrdnerB/Test.md');
+    });
   });
 });
 
