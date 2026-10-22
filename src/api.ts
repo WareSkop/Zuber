@@ -291,7 +291,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 export interface OfflineSyncDelegate {
   getTreeData?(): Promise<{
     tree: FileTreeNode[];
-    files: { path: string; name: string; basename: string; extension: string }[];
+    files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
     vaultPath: string;
   }>;
   getNote?(path: string): Promise<NoteData>;
@@ -320,7 +320,7 @@ export function registerOfflineSyncDelegate(delegate: OfflineSyncDelegate | null
 export const rawApi = {
   getTree(): Promise<{
     tree: FileTreeNode[];
-    files: { path: string; name: string; basename: string; extension: string }[];
+    files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
     vaultPath: string;
   }> {
     return apiFetch('/api/vault/tree');
@@ -460,7 +460,7 @@ export const api = {
 
   getTree(): Promise<{
     tree: FileTreeNode[];
-    files: { path: string; name: string; basename: string; extension: string }[];
+    files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
     vaultPath: string;
   }> {
     if (offlineSyncDelegate?.getTreeData && typeof navigator !== 'undefined' && !navigator.onLine) {

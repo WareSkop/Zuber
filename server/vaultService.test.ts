@@ -9,6 +9,7 @@ import {
   serializeMarkdownWithFrontmatter,
   refactorMarkdownContent,
   refactorCanvasContent,
+  isNoteSendTarget,
 } from '../shared/markdownUtils';
 import { VaultService } from './vaultService';
 import { ensureTlsCredentials } from './tls';
@@ -1210,6 +1211,180 @@ HTML-Bild: <img src="attachments/screenshot.png" width="300" />`,
       // OrdnerB must contain Test.md
       expect(newFolderB?.children).toHaveLength(1);
       expect(newFolderB?.children?.[0].path).toBe('OrdnerB/Test.md');
+    });
+  });
+
+  describe('Send to Target Note Workflow & Metadata (sendtarget: true)', () => {
+    let tmpDir: string;
+    let service: VaultService;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zuber-sendtarget-test-'));
+      service = new VaultService(tmpDir);
+    });
+
+    afterEach(() => {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {}
+    });
+
+    it('correctly detects sendtarget flag in frontmatter (boolean and string)', () => {
+      const boolTarget = parseMarkdownWithFrontmatter(`---
+sendtarget: true
+---
+# Zielnotiz`);
+      expect(isNoteSendTarget(boolTarget.frontmatter, boolTarget.properties)).toBe(true);
+
+      const strTarget = parseMarkdownWithFrontmatter(`---
+sendtarget: "true"
+---
+# Zielnotiz 2`);
+      expect(isNoteSendTarget(strTarget.frontmatter, strTarget.properties)).toBe(true);
+
+      const falseTarget = parseMarkdownWithFrontmatter(`---
+sendtarget: false
+---
+# Keine Zielnotiz`);
+      expect(isNoteSendTarget(falseTarget.frontmatter, falseTarget.properties)).toBe(false);
+
+      const emptyNote = parseMarkdownWithFrontmatter('# Notiz ohne Frontmatter');
+      expect(isNoteSendTarget(emptyNote.frontmatter, emptyNote.properties)).toBe(false);
+    });
+
+    it('exposes isSendTarget flag on NoteData, FileTreeNode, and getAllFiles()', () => {
+      service.saveNote('Projekte/Roadmap.md', {
+        rawContent: `---
+sendtarget: true
+---
+# Projekt Roadmap`,
+      });
+
+      service.saveNote('Ideen.md', {
+        body: '# Nur Ideen',
+      });
+
+      const noteData = service.getNote('Projekte/Roadmap.md');
+      expect(noteData.isSendTarget).toBe(true);
+
+      const normalNote = service.getNote('Ideen.md');
+      expect(normalNote.isSendTarget).toBe(false);
+
+      const allFiles = service.getAllFiles();
+      const roadmapFile = allFiles.find((f) => f.path === 'Projekte/Roadmap.md');
+      const ideenFile = allFiles.find((f) => f.path === 'Ideen.md');
+      expect(roadmapFile?.isSendTarget).toBe(true);
+      expect(ideenFile?.isSendTarget).toBeFalsy();
+
+      const tree = service.getFileTree();
+      const projekteFolder = tree.find((n) => n.path === 'Projekte');
+      const roadmapNode = projekteFolder?.children?.find((n) => n.path === 'Projekte/Roadmap.md');
+      const ideenNode = tree.find((n) => n.path === 'Ideen.md');
+      expect(roadmapNode?.isSendTarget).toBe(true);
+      expect(ideenNode?.isSendTarget).toBeFalsy();
+    });
+
+    it('toggles sendtarget flag and updates the vault index cleanly', () => {
+      service.saveNote('SprintPlan.md', {
+        body: '# Sprint Plan',
+      });
+
+      let note = service.getNote('SprintPlan.md');
+      expect(note.isSendTarget).toBeFalsy();
+
+      // Set as send target
+      service.saveNote('SprintPlan.md', {
+        body: note.body,
+        properties: [{ key: 'sendtarget', value: true, type: 'checkbox' }],
+        forceOverwrite: true,
+      });
+
+      note = service.getNote('SprintPlan.md');
+      expect(note.isSendTarget).toBe(true);
+
+      let allFiles = service.getAllFiles();
+      expect(allFiles.find((f) => f.path === 'SprintPlan.md')?.isSendTarget).toBe(true);
+
+      // Remove as send target
+      service.saveNote('SprintPlan.md', {
+        body: note.body,
+        properties: [],
+        forceOverwrite: true,
+      });
+
+      note = service.getNote('SprintPlan.md');
+      expect(note.isSendTarget).toBe(false);
+
+      allFiles = service.getAllFiles();
+      expect(allFiles.find((f) => f.path === 'SprintPlan.md')?.isSendTarget).toBeFalsy();
+    });
+
+    it('executes full send-to-target workflow with replacement backlink, timestamped header and bidirectional backlinks', () => {
+      // 1. Setup target note with sendtarget: true
+      service.saveNote('Projekte/Projekt Alpha.md', {
+        rawContent: `---
+sendtarget: true
+---
+# Projekt Alpha
+
+Projektbeschreibung...`,
+      });
+
+      // 2. Setup source note with meeting notes
+      service.saveNote('Meetings/2026-10-22-Kunde.md', {
+        body: `# Kundengespräch
+
+Wir haben die folgenden Anforderungen besprochen:
+Wichtige Entscheidung für Alpha: API v2 muss bis Q1 fertig sein.
+
+Weitere Punkte folgen.`,
+      });
+
+      // 3. Simulate selection & send workflow:
+      const selectedBlock = 'Wichtige Entscheidung für Alpha: API v2 muss bis Q1 fertig sein.';
+      const targetPath = 'Projekte/Projekt Alpha.md';
+      const sourcePath = 'Meetings/2026-10-22-Kunde.md';
+
+      const sourceNote = service.getNote(sourcePath);
+      const updatedSourceBody = sourceNote.body.replace(
+        selectedBlock,
+        '→ Verschoben nach [[Projekt Alpha]]'
+      );
+
+      service.saveNote(sourcePath, {
+        body: updatedSourceBody,
+        properties: sourceNote.properties,
+        forceOverwrite: true,
+      });
+
+      // Append to target note
+      const targetNote = service.getNote(targetPath);
+      const timestamp = '2026-10-22 14:30';
+      const header = `### ${timestamp} – Aus [[2026-10-22-Kunde]]`;
+      const updatedTargetBody = `${targetNote.body.trimEnd()}\n\n${header}\n\n${selectedBlock}\n`;
+
+      service.saveNote(targetPath, {
+        body: updatedTargetBody,
+        properties: targetNote.properties,
+        forceOverwrite: true,
+      });
+
+      // Verify content in both notes
+      const finalSource = service.getNote(sourcePath);
+      expect(finalSource.body).toContain('→ Verschoben nach [[Projekt Alpha]]');
+      expect(finalSource.links).toContain('Projekt Alpha');
+
+      const finalTarget = service.getNote(targetPath);
+      expect(finalTarget.body).toContain('### 2026-10-22 14:30 – Aus [[2026-10-22-Kunde]]');
+      expect(finalTarget.body).toContain(selectedBlock);
+      expect(finalTarget.links).toContain('2026-10-22-Kunde');
+
+      // Verify bidirectional backlinks
+      const targetBacklinks = service.getBacklinks(targetPath);
+      expect(targetBacklinks.linked.some((b) => b.sourcePath === sourcePath)).toBe(true);
+
+      const sourceBacklinks = service.getBacklinks(sourcePath);
+      expect(sourceBacklinks.linked.some((b) => b.sourcePath === targetPath)).toBe(true);
     });
   });
 });

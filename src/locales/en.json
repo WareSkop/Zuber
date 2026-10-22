@@ -92,7 +92,10 @@
     "downloadVault": "Download entire vault (.zip)",
     "uploadSuccess": "Successfully uploaded {{count}} file(s)",
     "uploading": "Uploading...",
-    "versionHistory": "Version History"
+    "versionHistory": "Version History",
+    "setAsSendTarget": "Set as Send Target 🎯",
+    "removeAsSendTarget": "Remove as Send Target 🎯",
+    "sendTargetBadge": "Send Target Note"
   },
   "moveToModal": {
     "title": "Move to...",
@@ -101,6 +104,18 @@
     "rootFolder": "/ (Vault Root)",
     "noFoldersFound": "No matching folders found",
     "moving": "Moving..."
+  },
+  "sendToTargetModal": {
+    "title": "Send to Target Note…",
+    "searchPlaceholder": "Search target note...",
+    "noTargetsFound": "No target notes found. Right-click a note in the file tree and choose 'Set as Send Target'.",
+    "onlySelfIsTarget": "The currently active note is the only target note. Please set another note as a target.",
+    "noMatchingTargets": "No matching target notes found.",
+    "sending": "Sending..."
+  },
+  "commands": {
+    "sendToTarget": "Send selection to target note…",
+    "editorCategory": "Editor"
   },
   "editor": {
     "placeholder": "Start writing your note... (Type [[ for wiki links or # for tags)",
@@ -115,9 +130,12 @@
     "diagram": "Diagram",
     "code": "Code",
     "preview": "Preview",
-    "openPdfInNewTab": "Open in new tab"
+    "openPdfInNewTab": "Open in new tab",
+    "sendToTargetNote": "Send to Target Note…",
+    "noTextSelected": "Please select a text block in the editor first."
   },
   "toolbar": {
+    "sendToTargetNote": "Send to Target Note…",
     "bold": "Bold (Ctrl+B)",
     "italic": "Italic (Ctrl+I)",
     "strikethrough": "Strikethrough (Ctrl+Shift+X)",

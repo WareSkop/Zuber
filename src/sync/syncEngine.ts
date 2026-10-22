@@ -34,6 +34,7 @@ import {
   extractCanvasLinksAndTags,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
+  isNoteSendTarget,
 } from '../../shared/markdownUtils';
 
 export type SyncState = 'online' | 'offline' | 'syncing' | 'synced' | 'conflict';
@@ -566,6 +567,7 @@ class SyncEngine {
       const { links, embeds } = extractLinksAndEmbeds(parsed.body);
       const tags = extractTags(parsed.properties, parsed.body);
       const headings = extractHeadings(parsed.body);
+      const isSendTarget = isNoteSendTarget(parsed.frontmatter, parsed.properties);
 
       updatedNote = {
         path: payload.path,
@@ -579,12 +581,13 @@ class SyncEngine {
         tags,
         headings,
         updatedAt: Date.now(),
+        isSendTarget,
       };
     }
 
     // Optimistically update local database
     await this.localDb.putNote(updatedNote);
-    await this.localDb.addEntryToTree(payload.path, 'file');
+    await this.localDb.addEntryToTree(payload.path, 'file', updatedNote.isSendTarget);
 
     // If online, try to persist to server directly
     if (navigator.onLine && this.syncState !== 'offline') {

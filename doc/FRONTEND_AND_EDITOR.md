@@ -884,5 +884,35 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
 - **In-Memory-Deduplizierung & 5-Sekunden-Guard (`isRecentDuplicateNote`):** Schützt vor doppelten Android-Share-Intents. Wenn innerhalb von 5 Sekunden eine Notiz mit identischem Titel und Textinhalt empfangen wird, wird kein neues Dokument erstellt, sondern die zuvor erstellte Notiz wiederverwendet und geöffnet.
 - **Deterministische Dateinamen:** Verwendet `item.timestamp` anstelle des fluktuierenden `Date.now()`.
 
+---
+
+## 26. „Send to Target Note“-Workflow (`sendtarget: true` mit Backlink & Zeitstempel-Header)
+
+### 26.1 Kennzeichnung von Ziel-Notizen
+- **Frontmatter-Flag:** Eine Notiz gilt als Sende-Ziel, wenn in ihren Frontmatter-Properties `sendtarget: true` gesetzt ist (Boolean `true` oder String `'true'`). Im `PropertiesEditor.tsx` wird `sendtarget` als Checkbox-Eigenschaft vorgeschlagen und verwaltet.
+- **Schnell-Toggle im Dateibaum:** Ein Rechtsklick auf eine `.md`-Datei im Dateibaum (`FileSidebar.tsx`) bietet die Option *„Als Sende-Ziel festlegen 🎯“* bzw. *„Als Sende-Ziel entfernen 🎯“*. Die Änderung wird über `syncEngine.saveNote` persistiert und im lokalen IndexedDB-Store (`meta.tree`, `meta.files`, `meta.allNotes`) aktualisiert.
+- **Visuelles Badge:** Neben Notizen mit aktivem `isSendTarget` wird im Dateibaum ein dezentes 🎯 Ziel-Icon gerendert.
+
+### 26.2 Auslöser im Editor
+- **Rechtsklick-Kontextmenü (`LivePreviewEditor.tsx`):** Wenn im Editor Text markiert ist (`!selection.empty`) und die rechte Maustaste gedrückt wird, erscheint ein kompaktes Kontextmenü mit der Option *„An Ziel-Notiz senden…“*.
+- **Formatierungs-Toolbar (`EditorToolbar.tsx`):** Ein Button mit Ziel-Icon (Target), der bei Textselektion aktivierbar ist.
+- **Befehlspalette (`CommandPalette.tsx`):** Neuer Befehl *„Markierten Text an Ziel-Notiz senden…“* (`id: 'editor-send-to-target'`).
+
+### 26.3 Ziel-Auswahl-Modal (`SendToTargetModal.tsx`)
+- Such- und Filterfeld mit automatischem Fokus beim Öffnen.
+- Listet alle `.md`-Notizen im Vault auf, die `sendtarget: true` gesetzt haben (exklusive der aktuell geöffneten Notiz).
+- Vollständige Tastatur-Bedienung (`Pfeil nach oben/unten`, `Enter` zur Bestätigung, `Escape` zum Schließen) sowie Mausklick.
+- Aussagekräftiger Leer-Zustand, falls noch keine Ziel-Notizen definiert sind, mit Hinweistext zur Einrichtung via Dateibaum.
+
+### 26.4 Atomare Workflow-Ausführung
+1. **Ursprungsnotiz:** Der markierte Textblock wird an Ort und Stelle durch `→ Verschoben nach [[Ziel-Notiz]]` (DE) bzw. `→ Moved to [[Target Note]]` (EN) ersetzt.
+2. **Ziel-Notiz:** An das Ende des Textkörpers (`body`) wird – getrennt durch zwei Zeilenumbrüche – ein Zeitstempel-Header mit Rückverweis und dem ausgeschnittenen Textblock angehängt:
+   ```markdown
+   ### YYYY-MM-DD HH:mm – Aus [[Ursprungsnotiz]]
+
+   <Ausgeschnittener Textblock>
+   ```
+3. **Index & Backlinks:** Beide Notizen werden gespeichert (`syncEngine.saveNote`), Vault-Index und Backlinks sofort aktualisiert (wodurch die bidirektionale Verknüpfung im Graphen und in der Backlink-Seitenleiste unmittelbar sichtbar ist), und eine Toast-Benachrichtigung bestätigt den Erfolg.
+
 
 

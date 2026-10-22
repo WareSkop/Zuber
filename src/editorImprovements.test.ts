@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import {
+  isNoteSendTarget,
+  inferPropertyType,
+  normalizePropertyValue,
+  parseMarkdownWithFrontmatter,
+} from '../shared/markdownUtils';
 import './components/LivePreviewEditor';
 
 describe('Editor Improvements - Phase 2', () => {
@@ -292,6 +298,49 @@ describe('Editor Improvements - Phase 2', () => {
       expect(result).toContain('📄 specs.pdf');
       expect(result).toContain('style="height: 750px;"');
       expect(result).toContain('#toolbar=1&view=FitH');
+    });
+  });
+
+  describe('Send to Target Note Logic & Formatting', () => {
+    it('infers sendtarget as checkbox type and normalizes correctly', () => {
+      expect(inferPropertyType('sendtarget', true)).toBe('checkbox');
+      expect(inferPropertyType('sendTarget', 'true')).toBe('checkbox');
+      expect(normalizePropertyValue('sendtarget', 'true', 'checkbox')).toBe(true);
+      expect(normalizePropertyValue('sendtarget', 'false', 'checkbox')).toBe(false);
+      expect(normalizePropertyValue('sendtarget', true, 'checkbox')).toBe(true);
+    });
+
+    it('identifies sendtarget in various frontmatter representations', () => {
+      expect(isNoteSendTarget({ sendtarget: true }, [])).toBe(true);
+      expect(isNoteSendTarget({ sendtarget: 'true' }, [])).toBe(true);
+      expect(isNoteSendTarget({ sendTarget: 'TRUE' }, [])).toBe(true);
+      expect(isNoteSendTarget({ sendtarget: false }, [])).toBe(false);
+      expect(isNoteSendTarget({}, [{ key: 'sendtarget', value: true, type: 'checkbox' }])).toBe(true);
+      expect(isNoteSendTarget({}, [{ key: 'sendtarget', value: 'true', type: 'checkbox' }])).toBe(true);
+      expect(isNoteSendTarget({}, [{ key: 'sendtarget', value: false, type: 'checkbox' }])).toBe(false);
+    });
+
+    it('formats source replacement text and target append block correctly', () => {
+      const targetName = 'Projekt Alpha';
+      const originName = 'Kundengespräch';
+      const selectedBlock = 'Budgetfreigabe für Q4 erteilt.';
+      const timestamp = '2026-10-22 15:45';
+
+      // Source replacement
+      const sourceReplacementDe = `→ Verschoben nach [[${targetName}]]`;
+      const sourceReplacementEn = `→ Moved to [[${targetName}]]`;
+      expect(sourceReplacementDe).toBe('→ Verschoben nach [[Projekt Alpha]]');
+      expect(sourceReplacementEn).toBe('→ Moved to [[Projekt Alpha]]');
+
+      // Target append
+      const targetHeaderDe = `### ${timestamp} – Aus [[${originName}]]`;
+      const targetAppendDe = `\n\n${targetHeaderDe}\n\n${selectedBlock}\n`;
+      expect(targetAppendDe).toContain('### 2026-10-22 15:45 – Aus [[Kundengespräch]]');
+      expect(targetAppendDe).toContain('Budgetfreigabe für Q4 erteilt.');
+
+      const targetHeaderEn = `### ${timestamp} – From [[${originName}]]`;
+      const targetAppendEn = `\n\n${targetHeaderEn}\n\n${selectedBlock}\n`;
+      expect(targetAppendEn).toContain('### 2026-10-22 15:45 – From [[Kundengespräch]]');
     });
   });
 });

@@ -5,6 +5,9 @@ const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
 export function inferPropertyType(key: string, value: unknown): PropertyType {
   const lowerKey = key.toLowerCase();
+  if (lowerKey === 'sendtarget' || lowerKey === 'send-target' || lowerKey === 'send_target') {
+    return 'checkbox';
+  }
   if (lowerKey === 'tags' || lowerKey === 'tag' || lowerKey === 'aliases' || lowerKey === 'alias' || lowerKey === 'cssclasses') {
     return 'list';
   }
@@ -42,6 +45,9 @@ export function normalizePropertyValue(key: string, value: unknown, type: Proper
     return [];
   }
   if (type === 'checkbox') {
+    if (typeof value === 'string') {
+      return value.trim().toLowerCase() === 'true';
+    }
     return Boolean(value);
   }
   if (type === 'number') {
@@ -55,6 +61,27 @@ export function normalizePropertyValue(key: string, value: unknown, type: Proper
     return value ? String(value) : '';
   }
   return value === null || value === undefined ? '' : String(value);
+}
+
+export function isNoteSendTarget(
+  frontmatter?: Record<string, unknown> | null,
+  properties?: FrontmatterProperty[] | null
+): boolean {
+  if (frontmatter) {
+    const val = frontmatter.sendtarget ?? frontmatter.sendTarget;
+    if (val === true || String(val).trim().toLowerCase() === 'true') {
+      return true;
+    }
+  }
+  if (properties && Array.isArray(properties)) {
+    const prop = properties.find((p) => p.key.toLowerCase() === 'sendtarget');
+    if (prop) {
+      if (prop.value === true || String(prop.value).trim().toLowerCase() === 'true') {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 export function parseMarkdownWithFrontmatter(rawContent: string): {

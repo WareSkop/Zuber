@@ -15,6 +15,7 @@ export interface FileTreeNode {
   attachmentKind?: AttachmentKind;
   children?: FileTreeNode[];
   updatedAt?: number;
+  isSendTarget?: boolean;
 }
 
 export interface NoteHeading {
@@ -43,6 +44,15 @@ export interface NoteData {
   tags: string[];
   headings: NoteHeading[];
   updatedAt: number;
+  isSendTarget?: boolean;
+}
+
+export interface NoteSummary {
+  path: string;
+  name: string;
+  basename: string;
+  extension?: string;
+  isSendTarget?: boolean;
 }
 
 export interface NoteSaveRequest {

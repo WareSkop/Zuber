@@ -1,4 +1,18 @@
 ### Added
+- „Send to Target Note“-Workflow (`sendtarget: true`):
+  - Frontmatter-Eigenschaft `sendtarget: true` (Boolean `true` oder String `'true'`), mit automatischer Erkennung als Checkbox-Eigenschaft in `PropertiesEditor.tsx`.
+  - Schnell-Toggle im Dateibaum-Kontextmenü für `.md`-Notizen („Als Sende-Ziel festlegen 🎯“ / „Als Sende-Ziel entfernen 🎯“).
+  - Dezentes 🎯 Ziel-Icon-Badge im Dateibaum (`FileSidebar.tsx`) neben Notizen, die als Sende-Ziel markiert sind.
+  - Bereitstellung des `isSendTarget`-Flags in `FileTreeNode`, `NoteData`, `getAllFiles()` und im lokalen IndexedDB-Cache (`meta.tree`, `meta.files`, `meta.allNotes`).
+  - Editor-Kontextmenü bei markiertem Text (`!selection.empty`) mit der Aktion „An Ziel-Notiz senden…“ / „Send to Target Note…“.
+  - Formatierungs-Toolbar-Button (`EditorToolbar.tsx`) mit Ziel-Icon zum Senden der aktuellen Auswahl.
+  - Neuer Befehl in der Befehlspalette (`CommandPalette.tsx`): „Markierten Text an Ziel-Notiz senden…“ / „Send selection to target note…“.
+  - Schnelles Ziel-Auswahl-Modal (`SendToTargetModal.tsx`) mit Tastaturnavigation (Pfeiltasten + Enter), Autofokus-Suchfeld und erklärendem Leer-Zustand.
+  - Atomare Ausführung des Sende-Vorgangs:
+    - Ursprungsnotiz: Ersetzt die Textauswahl durch `→ Verschoben nach [[Ziel-Notiz]]` bzw. `→ Moved to [[Target Note]]`.
+    - Zielnotiz: Hängt `### YYYY-MM-DD HH:mm – Aus [[Ursprungsnotiz]]` bzw. `### YYYY-MM-DD HH:mm – From [[Origin Note]]` gefolgt vom ausgeschnittenen Textblock an das Notizende an.
+    - Sofortige bidirektionale Backlink- und Graph-Aktualisierung im Vault-Index.
+    - Dezente Toast-Benachrichtigung bei erfolgreichem Versand.
 - Erweitertes Editor Drag & Drop in `LivePreviewEditor.tsx`:
   - Exakte Drop-Positionsberechnung über `view.posAtCoords`.
   - Reines Client-Side-Auslesen für Textdateien (`.txt`, `.md`, `.csv`, `.json`, `.log`, `.yaml`, `.xml` etc.) mit direkter Texteinfügung (bei Mehrfachauswahl getrennt durch `\n\n`) ohne Anhang-Upload.

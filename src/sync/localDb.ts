@@ -366,11 +366,11 @@ export class LocalDb {
     } catch {}
   }
 
-  public async addEntryToTree(relPath: string, type: 'file' | 'folder'): Promise<void> {
+  public async addEntryToTree(relPath: string, type: 'file' | 'folder', isSendTarget?: boolean): Promise<void> {
     try {
       const tree = (await this.getMeta<FileTreeNode[]>('tree')) || [];
       const parts = relPath.split('/').filter(Boolean);
-      const updatedTree = insertNodeIntoTree(tree, parts, relPath, type);
+      const updatedTree = insertNodeIntoTree(tree, parts, relPath, type, isSendTarget);
       await this.setMeta('tree', updatedTree);
 
       if (type === 'file') {
@@ -378,15 +378,23 @@ export class LocalDb {
         const basename = fileName.replace(/\.[^/.]+$/, '');
         const extension = fileName.includes('.') ? fileName.split('.').pop() : 'md';
 
-        const allNotes = (await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes')) || [];
-        if (!allNotes.some((n) => n.path === relPath)) {
-          allNotes.push({ path: relPath, name: fileName, basename });
+        const allNotes = (await this.getMeta<{ path: string; name: string; basename: string; isSendTarget?: boolean }[]>('allNotes')) || [];
+        const existingNoteIdx = allNotes.findIndex((n) => n.path === relPath);
+        if (existingNoteIdx < 0) {
+          allNotes.push({ path: relPath, name: fileName, basename, isSendTarget });
+          await this.setMeta('allNotes', allNotes);
+        } else if (isSendTarget !== undefined && allNotes[existingNoteIdx].isSendTarget !== isSendTarget) {
+          allNotes[existingNoteIdx].isSendTarget = isSendTarget;
           await this.setMeta('allNotes', allNotes);
         }
 
         const files = (await this.getMeta<any[]>('files')) || [];
-        if (!files.some((f) => f.path === relPath)) {
-          files.push({ path: relPath, name: fileName, basename, extension });
+        const existingFileIdx = files.findIndex((f) => f.path === relPath);
+        if (existingFileIdx < 0) {
+          files.push({ path: relPath, name: fileName, basename, extension, isSendTarget });
+          await this.setMeta('files', files);
+        } else if (isSendTarget !== undefined && files[existingFileIdx].isSendTarget !== isSendTarget) {
+          files[existingFileIdx].isSendTarget = isSendTarget;
           await this.setMeta('files', files);
         }
       } else if (type === 'folder') {
@@ -397,6 +405,50 @@ export class LocalDb {
         }
       }
     } catch {}
+  }
+
+  public async updateNodeSendTarget(relPath: string, isSendTarget: boolean): Promise<void> {
+    try {
+      // 1. Update tree
+      const updateTreeRec = (nodes: FileTreeNode[]): FileTreeNode[] =>
+        nodes.map((n) => {
+          if (n.path === relPath) {
+            return { ...n, isSendTarget };
+          }
+          if (n.children) {
+            return { ...n, children: updateTreeRec(n.children) };
+          }
+          return n;
+        });
+
+      const tree = await this.getMeta<FileTreeNode[]>('tree');
+      if (tree) {
+        await this.setMeta('tree', updateTreeRec(tree));
+      }
+
+      // 2. Update files
+      const files = await this.getMeta<any[]>('files');
+      if (files) {
+        const updatedFiles = files.map((f) => (f.path === relPath ? { ...f, isSendTarget } : f));
+        await this.setMeta('files', updatedFiles);
+      }
+
+      // 3. Update allNotes
+      const allNotes = await this.getMeta<any[]>('allNotes');
+      if (allNotes) {
+        const updatedNotes = allNotes.map((n) => (n.path === relPath ? { ...n, isSendTarget } : n));
+        await this.setMeta('allNotes', updatedNotes);
+      }
+
+      // 4. Update cached note in notes store
+      const note = await this.getNote(relPath);
+      if (note) {
+        note.isSendTarget = isSendTarget;
+        await this.putNote(note);
+      }
+    } catch (err) {
+      console.warn('Failed to update node send target in localDb:', err);
+    }
   }
 
   public async renameEntryInTree(oldPath: string, newPath: string): Promise<void> {
@@ -616,11 +668,11 @@ export class LocalDb {
 
   public async reconcileTreeWithLocalState(): Promise<{
     tree: FileTreeNode[];
-    files: { path: string; name: string; basename: string; extension: string }[];
+    files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
   }> {
     const rawTree = (await this.getMeta<FileTreeNode[]>('tree')) || [];
     const rawFiles =
-      (await this.getMeta<{ path: string; name: string; basename: string; extension: string }[]>(
+      (await this.getMeta<{ path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[]>(
         'files'
       )) || [];
     const rawFolders = (await this.getMeta<string[]>('folders')) || [];
@@ -663,13 +715,22 @@ export class LocalDb {
     }
 
     // Ensure all local notes and outbox save_note mutations are in the tree and files list
+    const localNoteMap = new Map<string, NoteData>();
+    for (const n of localNotes) {
+      if (n.path) localNoteMap.set(n.path, n);
+    }
+
     const fileMap = new Map<
       string,
-      { path: string; name: string; basename: string; extension: string }
+      { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }
     >();
     for (const f of rawFiles) {
       if (f?.path && !isDeleted(f.path)) {
-        fileMap.set(f.path, f);
+        const localNote = localNoteMap.get(f.path);
+        fileMap.set(f.path, {
+          ...f,
+          isSendTarget: localNote?.isSendTarget ?? (f as any).isSendTarget,
+        });
       }
     }
 
@@ -686,13 +747,17 @@ export class LocalDb {
     }
 
     for (const filePath of notePaths) {
+      const localNote = localNoteMap.get(filePath);
+      const isSendTarget = localNote?.isSendTarget;
       const parts = filePath.split('/').filter(Boolean);
-      currentTree = insertNodeIntoTree(currentTree, parts, filePath, 'file');
+      currentTree = insertNodeIntoTree(currentTree, parts, filePath, 'file', isSendTarget);
       const fileName = filePath.split('/').pop() || filePath;
       const basename = fileName.replace(/\.[^/.]+$/, '');
       const extension = fileName.includes('.') ? fileName.split('.').pop() || 'md' : 'md';
       if (!fileMap.has(filePath)) {
-        fileMap.set(filePath, { path: filePath, name: fileName, basename, extension });
+        fileMap.set(filePath, { path: filePath, name: fileName, basename, extension, isSendTarget });
+      } else if (isSendTarget !== undefined) {
+        fileMap.get(filePath)!.isSendTarget = isSendTarget;
       }
     }
 
@@ -826,7 +891,8 @@ export function insertNodeIntoTree(
   nodes: FileTreeNode[],
   parts: string[],
   fullPath: string,
-  type: 'file' | 'folder'
+  type: 'file' | 'folder',
+  isSendTarget?: boolean
 ): FileTreeNode[] {
   if (parts.length === 0) return nodes;
   const [currentPart, ...remaining] = parts;
@@ -837,6 +903,11 @@ export function insertNodeIntoTree(
       (n) => n.path === fullPath || (n.name === currentPart && n.type === type)
     );
     if (existingLeafIdx >= 0) {
+      if (isSendTarget !== undefined && nodes[existingLeafIdx].isSendTarget !== isSendTarget) {
+        const updated = [...nodes];
+        updated[existingLeafIdx] = { ...nodes[existingLeafIdx], isSendTarget };
+        return updated;
+      }
       return nodes;
     }
     const newNode: FileTreeNode = {
@@ -847,6 +918,7 @@ export function insertNodeIntoTree(
       attachmentKind: type === 'file' ? getAttachmentKind(fullPath) : undefined,
       children: type === 'folder' ? [] : undefined,
       updatedAt: Date.now(),
+      isSendTarget,
     };
     const updated = [...nodes, newNode];
     return sortTreeNodes(updated);
@@ -880,7 +952,8 @@ export function insertNodeIntoTree(
     targetFolder.children || [],
     remaining,
     fullPath,
-    type
+    type,
+    isSendTarget
   );
 
   nextNodes[existingFolderIdx] = {

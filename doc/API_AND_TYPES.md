@@ -21,6 +21,7 @@ export interface FileNode {
   size?: number;              // Dateigröße in Bytes
   mtime?: number;             // Letzte Änderung (Unix Timestamp in ms)
   children?: FileNode[];      // Nur bei type === 'folder' (Ordner zuerst, dann alphabetisch)
+  isSendTarget?: boolean;     // True wenn in Frontmatter `sendtarget: true` gesetzt ist
 }
 ```
 
@@ -39,6 +40,7 @@ export interface FrontmatterProperty {
 ```
 
 **Automatische Typ-Erkennung beim Parsen ([`inferPropertyType`](../shared/markdownUtils.ts)):**
+- Schlüssel `sendtarget` / `send-target` / `send_target` $\rightarrow$ `'checkbox'`
 - Schlüssel `tags` oder `tag` $\rightarrow$ `'tags'` (Wert wird immer zu `string[]` normalisiert)
 - Schlüssel `aliases` oder `alias` $\rightarrow$ `'list'` (Wert wird immer zu `string[]` normalisiert)
 - `Array.isArray(val)` $\rightarrow$ `'list'`
@@ -46,6 +48,9 @@ export interface FrontmatterProperty {
 - `typeof val === 'number'` $\rightarrow$ `'number'`
 - String im Format `YYYY-MM-DD` (oder mit Zeitstempel) $\rightarrow$ `'date'`
 - Alles andere $\rightarrow$ `'text'`
+
+**Ziel-Notiz-Erkennung ([`isNoteSendTarget`](../shared/markdownUtils.ts)):**
+Prüft, ob in `frontmatter` oder `properties` das Flag `sendtarget` auf `true` gesetzt ist (akzeptiert Boolean `true` sowie String `'true'`).
 
 ### 1.3 Notiz-Nutzdaten (`NotePayload` & `NoteSaveRequest`)
 

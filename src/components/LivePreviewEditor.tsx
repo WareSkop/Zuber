@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from 'react';
 import {
   EditorState,
   RangeSetBuilder,
@@ -34,6 +34,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import mermaid from 'mermaid';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
+import { Target } from 'lucide-react';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 
 let mermaidInitialized = false;
@@ -186,6 +187,8 @@ export interface LivePreviewEditorRef {
   insertImageEmbed: (embedTag: string) => void;
   insertExternalLink: (linkText?: string, linkUrl?: string) => void;
   getSelectedText: () => string;
+  hasSelection: () => boolean;
+  replaceSelection: (newText: string) => void;
   focus: () => void;
 }
 
@@ -194,7 +197,7 @@ export interface LivePreviewEditorProps {
   body: string;
   rawContent: string;
   mode: EditorMode;
-  allNotes: { path: string; name: string; basename: string }[];
+  allNotes: { path: string; name: string; basename: string; isSendTarget?: boolean }[];
   allTags: string[];
   scrollToLine?: number | null;
   onChangeBody: (newBody: string) => void;
@@ -202,6 +205,7 @@ export interface LivePreviewEditorProps {
   onNavigateWikiLink: (target: string) => void;
   onSelectTag: (tag: string) => void;
   onUploadAttachment?: (file: File) => Promise<string>;
+  onSendToTargetNote?: () => void;
 }
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
@@ -1664,6 +1668,25 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const livePluginCompartment = useRef(new Compartment());
+  const [editorContextMenu, setEditorContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!editorContextMenu) return;
+    const handleDocClick = (e: MouseEvent) => {
+      if (editorContextMenuRef.current?.contains(e.target as Node)) return;
+      setEditorContextMenu(null);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEditorContextMenu(null);
+    };
+    document.addEventListener('mousedown', handleDocClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleDocClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [editorContextMenu]);
 
   const callbacksRef = useRef({
     onChangeBody,
@@ -1671,6 +1694,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onNavigateWikiLink,
     onSelectTag,
     onUploadAttachment: props.onUploadAttachment,
+    onSendToTargetNote: props.onSendToTargetNote,
+    setEditorContextMenu,
     mode,
     notePath,
     allNotes,
@@ -1683,6 +1708,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onNavigateWikiLink,
     onSelectTag,
     onUploadAttachment: props.onUploadAttachment,
+    onSendToTargetNote: props.onSendToTargetNote,
+    setEditorContextMenu,
     mode,
     notePath,
     allNotes,
@@ -2123,9 +2150,39 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
   const getSelectedText = (): string => {
     const view = viewRef.current;
-    if (!view) return '';
-    const sel = view.state.selection.main;
-    return view.state.sliceDoc(sel.from, sel.to);
+    if (view) {
+      const sel = view.state.selection.main;
+      return view.state.sliceDoc(sel.from, sel.to);
+    }
+    if (typeof window !== 'undefined') {
+      const sel = window.getSelection();
+      return sel ? sel.toString() : '';
+    }
+    return '';
+  };
+
+  const hasSelection = (): boolean => {
+    const view = viewRef.current;
+    if (view) {
+      return !view.state.selection.main.empty;
+    }
+    if (typeof window !== 'undefined') {
+      const sel = window.getSelection();
+      return !!sel && !sel.isCollapsed && !!sel.toString().trim();
+    }
+    return false;
+  };
+
+  const replaceSelection = (newText: string) => {
+    const view = viewRef.current;
+    if (view) {
+      const sel = view.state.selection.main;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: newText },
+        selection: { anchor: sel.from + newText.length },
+      });
+      view.focus();
+    }
   };
 
   const insertExternalLink = (linkText?: string, linkUrl?: string) => {
@@ -2173,6 +2230,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     insertImageEmbed,
     insertExternalLink,
     getSelectedText,
+    hasSelection,
+    replaceSelection,
     focus: () => viewRef.current?.focus(),
   }));
 
@@ -2503,6 +2562,17 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         })();
 
         return true;
+      },
+      contextmenu(event, view) {
+        const selection = view.state.selection.main;
+        if (!selection.empty) {
+          event.preventDefault();
+          const x = Math.min(event.clientX, window.innerWidth - 240);
+          const y = Math.min(event.clientY, window.innerHeight - 100);
+          callbacksRef.current.setEditorContextMenu({ x, y });
+          return true;
+        }
+        return false;
       },
     });
 
@@ -2903,17 +2973,60 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     }
   };
 
+  const handleReadingContextMenu = (e: React.MouseEvent) => {
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+    if (sel && !sel.isCollapsed && sel.toString().trim()) {
+      e.preventDefault();
+      const x = Math.min(e.clientX, window.innerWidth - 240);
+      const y = Math.min(e.clientY, window.innerHeight - 100);
+      setEditorContextMenu({ x, y });
+    }
+  };
+
+  const contextMenuElement = editorContextMenu && (
+    <div
+      ref={editorContextMenuRef}
+      className="editor-context-menu"
+      style={{
+        position: 'fixed',
+        top: `${editorContextMenu.y}px`,
+        left: `${editorContextMenu.x}px`,
+        zIndex: 9999,
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="editor-context-item"
+        onClick={() => {
+          setEditorContextMenu(null);
+          callbacksRef.current.onSendToTargetNote?.();
+        }}
+      >
+        <Target size={15} />
+        <span>{t('editor.sendToTargetNote') || 'An Ziel-Notiz senden…'}</span>
+      </button>
+    </div>
+  );
+
   if (mode === 'reading') {
     return (
       <div
         className="reading-view-container markdown-rendered"
         onClick={handleReadingClick}
+        onContextMenu={handleReadingContextMenu}
         dangerouslySetInnerHTML={{ __html: renderedHtml }}
-      />
+      >
+        {contextMenuElement}
+      </div>
     );
   }
 
-  return <div ref={editorContainerRef} className="codemirror-editor-wrapper" />;
+  return (
+    <div ref={editorContainerRef} className="codemirror-editor-wrapper">
+      {contextMenuElement}
+    </div>
+  );
 });
 
 LivePreviewEditor.displayName = 'LivePreviewEditor';

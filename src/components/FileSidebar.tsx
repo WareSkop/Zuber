@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  Target,
   Trash2,
   Upload,
   Download,
@@ -78,6 +79,7 @@ interface FileSidebarProps {
   onSelectTagFilter: (tag: string | null) => void;
   onClose?: () => void;
   onOpenVersionHistory?: (path: string) => void;
+  onToggleSendTarget?: (path: string, currentStatus: boolean) => Promise<void>;
   onLeftResizeStart?: (e: React.MouseEvent) => void;
   isResizingLeft?: boolean;
 }
@@ -97,6 +99,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onSelectTagFilter,
   onClose,
   onOpenVersionHistory,
+  onToggleSendTarget,
   onLeftResizeStart,
   isResizingLeft = false,
 }) => {
@@ -793,6 +796,11 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         <span className="tree-label" title={node.path}>
           {displayName}
         </span>
+        {node.isSendTarget && (
+          <span className="tree-send-target-badge" title={t('sidebar.sendTargetBadge') || 'Sende-Ziel Notiz'}>
+            <Target size={12} className="send-target-icon" />
+          </span>
+        )}
         {isCanvas && <span className="file-ext-badge canvas-badge">CANVAS</span>}
         {!isMd && !isCanvas && <span className="file-ext-badge">{node.extension}</span>}
         <button
@@ -1334,6 +1342,51 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       : t('sidebar.addToFavorites')}
                   </span>
                 </button>
+
+                {/* Send Target Quick-Toggle in Context Menu for .md notes */}
+                {contextMenu.node.type === 'file' &&
+                  (contextMenu.node.extension === 'md' || contextMenu.node.path.endsWith('.md')) && (
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={async () => {
+                        const node = contextMenu.node!;
+                        setContextMenu(null);
+                        if (onToggleSendTarget) {
+                          await onToggleSendTarget(node.path, !!node.isSendTarget);
+                        } else {
+                          try {
+                            const note = await api.getNote(node.path);
+                            const nextStatus = !node.isSendTarget;
+                            const existingProps = [...(note.properties || [])];
+                            const idx = existingProps.findIndex((p) => p.key.toLowerCase() === 'sendtarget');
+                            if (nextStatus) {
+                              if (idx >= 0) existingProps[idx] = { key: 'sendtarget', value: true, type: 'checkbox' };
+                              else existingProps.push({ key: 'sendtarget', value: true, type: 'checkbox' });
+                            } else {
+                              if (idx >= 0) existingProps.splice(idx, 1);
+                            }
+                            await api.saveNote({
+                              path: note.path,
+                              body: note.body,
+                              properties: existingProps,
+                              forceOverwrite: true,
+                            });
+                            onRefresh();
+                          } catch (err) {
+                            console.error('Failed to toggle sendtarget:', err);
+                          }
+                        }
+                      }}
+                    >
+                      <Target size={15} />
+                      <span>
+                        {contextMenu.node.isSendTarget
+                          ? (t('sidebar.removeAsSendTarget') || 'Als Sende-Ziel entfernen 🎯')
+                          : (t('sidebar.setAsSendTarget') || 'Als Sende-Ziel festlegen 🎯')}
+                      </span>
+                    </button>
+                  )}
                 <div className="tree-context-separator" />
 
                 {/* If multiple items are selected and clicked node is among them */}

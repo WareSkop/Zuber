@@ -92,7 +92,10 @@
     "downloadVault": "Gesamten Vault herunterladen (.zip)",
     "uploadSuccess": "{{count}} Datei(en) erfolgreich hochgeladen",
     "uploading": "Lade hoch...",
-    "versionHistory": "Versionsverlauf"
+    "versionHistory": "Versionsverlauf",
+    "setAsSendTarget": "Als Sende-Ziel festlegen 🎯",
+    "removeAsSendTarget": "Als Sende-Ziel entfernen 🎯",
+    "sendTargetBadge": "Sende-Ziel Notiz"
   },
   "moveToModal": {
     "title": "Verschieben nach...",
@@ -101,6 +104,18 @@
     "rootFolder": "/ (Vault-Wurzelverzeichnis)",
     "noFoldersFound": "Keine passenden Ordner gefunden",
     "moving": "Wird verschoben..."
+  },
+  "sendToTargetModal": {
+    "title": "An Ziel-Notiz senden…",
+    "searchPlaceholder": "Ziel-Notiz suchen...",
+    "noTargetsFound": "Keine Ziel-Notizen gefunden. Rechtsklicke im Dateibaum auf eine Notiz und wähle ‚Als Sende-Ziel festlegen‘.",
+    "onlySelfIsTarget": "Die aktuell geöffnete Notiz ist die einzige Ziel-Notiz. Bitte lege eine weitere Notiz als Ziel fest.",
+    "noMatchingTargets": "Keine passenden Ziel-Notizen gefunden.",
+    "sending": "Wird gesendet..."
+  },
+  "commands": {
+    "sendToTarget": "Markierten Text an Ziel-Notiz senden…",
+    "editorCategory": "Editor"
   },
   "editor": {
     "placeholder": "Beginne mit deiner Notiz... (Tippe [[ für Wiki-Links oder # für Tags)",
@@ -115,9 +130,12 @@
     "diagram": "Diagramm",
     "code": "Code",
     "preview": "Vorschau",
-    "openPdfInNewTab": "In neuem Tab öffnen"
+    "openPdfInNewTab": "In neuem Tab öffnen",
+    "sendToTargetNote": "An Ziel-Notiz senden…",
+    "noTextSelected": "Bitte markiere zuerst einen Textbereich im Editor."
   },
   "toolbar": {
+    "sendToTargetNote": "An Ziel-Notiz senden…",
     "bold": "Fett (Strg+B)",
     "italic": "Kursiv (Strg+I)",
     "strikethrough": "Durchgestrichen (Strg+Shift+X)",

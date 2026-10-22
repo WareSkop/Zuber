@@ -22,6 +22,7 @@ import {
   serializeMarkdownWithFrontmatter,
   refactorMarkdownContent,
   refactorCanvasContent,
+  isNoteSendTarget,
   type RenameMapping,
 } from '../shared/markdownUtils';
 
@@ -38,6 +39,7 @@ interface FileEntry {
   extension: string;
   mtimeMs: number;
   size: number;
+  isSendTarget?: boolean;
 }
 
 export class VaultService {
@@ -281,14 +283,6 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     const name = path.basename(relPath);
     const extension = path.extname(name).slice(1).toLowerCase();
     const isNew = !this.files.has(relPath);
-    this.files.set(relPath, {
-      path: relPath,
-      name,
-      basename: name.replace(/\.[^.]+$/, ''),
-      extension,
-      mtimeMs: stat.mtimeMs,
-      size: stat.size,
-    });
 
     // Register parent folders
     let parent = path.posix.dirname(relPath);
@@ -297,12 +291,16 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
       parent = path.posix.dirname(parent);
     }
 
+    let noteSendTarget: boolean | undefined = undefined;
+
     if (extension === 'md') {
-      const cached = this.notes.get(relPath);
+      let cached = this.notes.get(relPath);
       if (!cached || cached.updatedAt !== stat.mtimeMs) {
         const rawContent = fs.readFileSync(absPath, 'utf-8');
-        this.notes.set(relPath, this.parseNote(relPath, rawContent, stat.mtimeMs));
+        cached = this.parseNote(relPath, rawContent, stat.mtimeMs);
+        this.notes.set(relPath, cached);
       }
+      noteSendTarget = cached.isSendTarget;
     } else if (extension === 'canvas') {
       const cached = this.notes.get(relPath);
       if (!cached || cached.updatedAt !== stat.mtimeMs) {
@@ -311,6 +309,16 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
       }
     }
 
+    this.files.set(relPath, {
+      path: relPath,
+      name,
+      basename: name.replace(/\.[^.]+$/, ''),
+      extension,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      isSendTarget: noteSendTarget,
+    });
+
     this.invalidate(isNew);
     return true;
   }
@@ -318,6 +326,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
   private parseNote(relPath: string, rawContent: string, mtimeMs: number): NoteData {
     const { frontmatter, properties, body } = parseMarkdownWithFrontmatter(rawContent);
     const { links, embeds } = extractLinksAndEmbeds(body);
+    const isSendTarget = isNoteSendTarget(frontmatter, properties);
     return {
       path: relPath,
       name: path.basename(relPath).replace(/\.md$/i, ''),
@@ -330,6 +339,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
       tags: extractTags(properties, body),
       headings: extractHeadings(body),
       updatedAt: mtimeMs,
+      isSendTarget,
     };
   }
 
@@ -563,6 +573,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
         extension: f.extension,
         attachmentKind: getAttachmentKind(f.path),
         updatedAt: f.mtimeMs,
+        isSendTarget: f.isSendTarget,
       });
     }
 
@@ -579,11 +590,25 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     return root;
   }
 
-  public listAllFiles(): { path: string; name: string; basename: string; extension: string; mtimeMs: number }[] {
+  public listAllFiles(): {
+    path: string;
+    name: string;
+    basename: string;
+    extension: string;
+    mtimeMs: number;
+    isSendTarget?: boolean;
+  }[] {
     return Array.from(this.files.values());
   }
 
-  public getAllFiles(): { path: string; name: string; basename: string; extension: string; mtimeMs: number }[] {
+  public getAllFiles(): {
+    path: string;
+    name: string;
+    basename: string;
+    extension: string;
+    mtimeMs: number;
+    isSendTarget?: boolean;
+  }[] {
     return this.listAllFiles();
   }
 

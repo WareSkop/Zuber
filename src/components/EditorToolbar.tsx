@@ -33,6 +33,7 @@ import {
   HelpCircle,
   AlertTriangle,
   Flame,
+  Target,
 } from 'lucide-react';
 import type { LivePreviewEditorRef } from './LivePreviewEditor';
 import { useTranslation } from '../i18n';
@@ -41,6 +42,8 @@ interface EditorToolbarProps {
   editorRef: React.RefObject<LivePreviewEditorRef | null>;
   onUploadImage: (file: File) => Promise<string | void>;
   visible?: boolean;
+  onSendToTarget?: () => void;
+  hasSelection?: boolean;
 }
 
 type OpenMenuType = 'heading' | 'table' | 'callout' | 'image' | 'link' | null;
@@ -49,6 +52,8 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   editorRef,
   onUploadImage,
   visible = true,
+  onSendToTarget,
+  hasSelection,
 }) => {
   const { t } = useTranslation();
   const [openMenu, setOpenMenu] = useState<OpenMenuType>(null);
@@ -365,6 +370,17 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           title={t('toolbar.tag')}
         >
           <Hash size={16} />
+        </button>
+
+        <button
+          type="button"
+          className={`toolbar-btn toolbar-btn-target ${hasSelection === false ? 'disabled' : ''}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onSendToTarget?.()}
+          title={t('toolbar.sendToTargetNote') || 'An Ziel-Notiz senden…'}
+          aria-label={t('toolbar.sendToTargetNote') || 'An Ziel-Notiz senden…'}
+        >
+          <Target size={16} />
         </button>
 
         <div className="toolbar-separator" />

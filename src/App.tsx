@@ -40,6 +40,7 @@ import {
   Maximize2,
   Minimize2,
   History,
+  Target,
 } from 'lucide-react';
 import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
 import {
@@ -79,6 +80,7 @@ import { GraphView } from './components/GraphView';
 import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { SendToTargetModal } from './components/SendToTargetModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
@@ -113,7 +115,7 @@ export const App: React.FC = () => {
 
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [allFiles, setAllFiles] = useState<
-    { path: string; name: string; basename: string; extension: string }[]
+    { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[]
   >([]);
   const allFilesRef = useRef(allFiles);
   allFilesRef.current = allFiles;
@@ -140,6 +142,17 @@ export const App: React.FC = () => {
   const [rightTab, setRightTab] = useState<RightSidebarTab>('backlinks');
   const [zenMode, setZenMode] = useState(false);
   const [versionHistoryPath, setVersionHistoryPath] = useState<string | null>(null);
+  const [isSendToTargetModalOpen, setIsSendToTargetModalOpen] = useState(false);
+  const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastNotification(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastNotification(null);
+    }, 3500);
+  }, []);
 
   // Resizable Sidebars (State & localStorage persistence)
   const [leftSidebarWidth, setLeftSidebarWidth] = useState<number>(() => {
@@ -614,7 +627,7 @@ export const App: React.FC = () => {
     } catch (innerErr) {
       console.warn('Could not load from IndexedDB cache:', innerErr);
       const emptyTree: FileTreeNode[] = [];
-      const emptyFiles: { path: string; name: string; basename: string; extension: string }[] = [];
+      const emptyFiles: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[] = [];
       const emptyGraph: GraphData = { nodes: [], edges: [], tags: [] };
       setTree(emptyTree);
       setAllFiles(emptyFiles);
@@ -756,10 +769,121 @@ export const App: React.FC = () => {
     () =>
       allFiles
         .filter((f) => f.extension === 'md' || f.extension === 'canvas')
-        .map((f) => ({ path: f.path, name: f.name, basename: f.basename })),
+        .map((f) => ({
+          path: f.path,
+          name: f.name,
+          basename: f.basename,
+          isSendTarget: f.isSendTarget,
+        })),
     [allFiles]
   );
   const allTagNames = useMemo(() => graphData.tags.map((t) => t.tag), [graphData.tags]);
+
+  const handleOpenSendToTarget = useCallback(() => {
+    const selectedText = editorRef.current?.getSelectedText();
+    if (!selectedText || !selectedText.trim()) {
+      showToast(t('editor.noTextSelected') || 'Bitte markiere zuerst einen Textbereich im Editor.');
+      return;
+    }
+    setIsSendToTargetModalOpen(true);
+  }, [showToast, t]);
+
+  const handleToggleSendTarget = useCallback(
+    async (path: string, currentStatus?: boolean) => {
+      try {
+        let noteToUpdate: NoteData;
+        if (activeNoteRef.current && activeNoteRef.current.path === path) {
+          noteToUpdate = activeNoteRef.current;
+        } else {
+          noteToUpdate = await syncEngine.getNote(path);
+        }
+        const willBeTarget = currentStatus !== undefined ? !currentStatus : !noteToUpdate.isSendTarget;
+        const existingProps = [...(noteToUpdate.properties || [])];
+        const idx = existingProps.findIndex((p) => p.key.toLowerCase() === 'sendtarget');
+        if (willBeTarget) {
+          if (idx >= 0) existingProps[idx] = { key: 'sendtarget', value: true, type: 'checkbox' };
+          else existingProps.push({ key: 'sendtarget', value: true, type: 'checkbox' });
+        } else {
+          if (idx >= 0) existingProps.splice(idx, 1);
+        }
+
+        const saved = await syncEngine.saveNote({
+          path: noteToUpdate.path,
+          body: noteToUpdate.body,
+          properties: existingProps,
+          forceOverwrite: true,
+        });
+
+        if (activeNoteRef.current && activeNoteRef.current.path === path) {
+          setActiveNote(saved);
+        }
+        await syncEngine.getLocalDb().updateNodeSendTarget(path, willBeTarget);
+        loadVaultIndex().catch(() => {});
+      } catch (err) {
+        console.error('Failed to toggle sendtarget:', err);
+      }
+    },
+    [loadVaultIndex]
+  );
+
+  const handleSendToTarget = useCallback(
+    async (targetPath: string) => {
+      const selectedText = editorRef.current?.getSelectedText();
+      if (!selectedText || !selectedText.trim()) {
+        showToast(t('editor.noTextSelected') || 'Bitte markiere zuerst einen Textbereich im Editor.');
+        return;
+      }
+      if (!activeNoteRef.current) return;
+
+      const originPath = activeNoteRef.current.path;
+      const originName = originPath.split('/').pop()?.replace(/\.md$/, '') || originPath;
+      const targetName = targetPath.split('/').pop()?.replace(/\.md$/, '') || targetPath;
+
+      const isDe =
+        typeof localStorage !== 'undefined' &&
+        (localStorage.getItem('zuber_language') === 'de' ||
+          localStorage.getItem('knowmesh_language') === 'de');
+      const replacementText = isDe ? `→ Verschoben nach [[${targetName}]]` : `→ Moved to [[${targetName}]]`;
+
+      // 1. In source note: replace selection with backlink
+      editorRef.current?.replaceSelection(replacementText);
+
+      // 2. In target note: load, append timestamped block, save
+      try {
+        const targetNote = await syncEngine.getNote(targetPath);
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        const headerPrefix = isDe ? 'Aus' : 'From';
+        const header = `### ${timestamp} – ${headerPrefix} [[${originName}]]`;
+        const trimmedTargetBody = (targetNote.body || '').trimEnd();
+        const separator = trimmedTargetBody.length > 0 ? '\n\n' : '';
+        const newTargetBody = `${trimmedTargetBody}${separator}${header}\n\n${selectedText.trim()}\n`;
+
+        await syncEngine.saveNote({
+          path: targetNote.path,
+          body: newTargetBody,
+          properties: targetNote.properties,
+          forceOverwrite: true,
+        });
+
+        loadVaultIndex().catch(() => {});
+        refreshBacklinks(originPath).catch(() => {});
+
+        showToast(
+          isDe
+            ? `Text erfolgreich an [[${targetName}]] gesendet.`
+            : `Text successfully sent to [[${targetName}]].`
+        );
+      } catch (err) {
+        console.error('Failed to send text to target note:', err);
+        showToast(
+          isDe ? 'Fehler beim Senden an die Ziel-Notiz' : 'Failed to send text to target note'
+        );
+      }
+    },
+    [loadVaultIndex, refreshBacklinks, showToast, t]
+  );
 
   const sidebarHandlers = useMemo(
     () => ({
@@ -799,6 +923,7 @@ export const App: React.FC = () => {
       },
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
       onOpenVersionHistory: (path: string) => setVersionHistoryPath(path),
+      onToggleSendTarget: handleToggleSendTarget,
     }),
     [
       openNoteByPath,
@@ -806,6 +931,7 @@ export const App: React.FC = () => {
       openCreateCanvasDialog,
       openCreateFolderDialog,
       loadVaultIndex,
+      handleToggleSendTarget,
       isMobile,
       t,
       tree,
@@ -1598,6 +1724,16 @@ export const App: React.FC = () => {
 
   const commands: CommandItem[] = useMemo(() => {
     return [
+      {
+        id: 'editor-send-to-target',
+        title: t('commands.sendToTarget') || 'Markierten Text an Ziel-Notiz senden…',
+        category: 'Editor',
+        icon: <Target size={16} />,
+        keywords: ['send', 'target', 'ziel', 'verschieben', 'move', 'backlink'],
+        action: () => {
+          handleOpenSendToTarget();
+        },
+      },
       // Formatting
       {
         id: 'format-bold',
@@ -2003,6 +2139,8 @@ export const App: React.FC = () => {
     handleUploadImageClick,
     handleManualSave,
     handleDownloadNote,
+    handleOpenSendToTarget,
+    t,
   ]);
 
   if (!authChecked) {
@@ -2400,6 +2538,7 @@ export const App: React.FC = () => {
                     <EditorToolbar
                       editorRef={editorRef}
                       onUploadImage={handleUploadImageFile}
+                      onSendToTarget={handleOpenSendToTarget}
                     />
                   )}
 
@@ -2438,6 +2577,7 @@ export const App: React.FC = () => {
                             setLeftSidebarOpen(true);
                           }}
                           onUploadAttachment={handleUploadImageFile}
+                          onSendToTargetNote={handleOpenSendToTarget}
                         />
                       </div>
                     ) : (
@@ -2767,6 +2907,24 @@ export const App: React.FC = () => {
         onClose={() => setVersionHistoryPath(null)}
         onRestore={handleVersionRestored}
       />
+
+      {/* Send to Target Note Modal */}
+      <SendToTargetModal
+        isOpen={isSendToTargetModalOpen}
+        onClose={() => setIsSendToTargetModalOpen(false)}
+        activePath={activeNote?.path ?? null}
+        allNotes={allNotesForEditor}
+        onSelectTarget={handleSendToTarget}
+      />
+
+      {/* Toast Notification */}
+      {toastNotification && (
+        <div className="app-toast-container">
+          <div className="app-toast">
+            <span>{toastNotification}</span>
+          </div>
+        </div>
+      )}
 
       {/* Command Palette (Strg+P) */}
       <CommandPalette
