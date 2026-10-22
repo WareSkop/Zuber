@@ -90,5 +90,6 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Behebung des Selektions-Bugs im Dateibaum (`FileSidebar.tsx`): Klick-Handler für Dateien und Ordner entkoppelt mit `e.stopPropagation()`, Ordnerklick wählt keine Kind-Dateien mehr rekursiv aus, normaler Klick auf eine Einzeldatei setzt die Mehrfachauswahl sauber auf genau diese Datei zurück, und Strg/Cmd+Klick schaltet Zeilen selektiv um, ohne die aktive Notiz im Editor umzuschalten.
 - Strikte Pfad-basierte Zeilenmarkierung im Dateibaum (`node.path` statt `name`), um gleichzeitiges Markieren gleichnamiger Dateien in verschiedenen Ordnern auszuschließen.
 - Saubere Cache-Bereinigung in IndexedDB (`notes`, `attachments`, `meta.tree`, `meta.allNotes`, `meta.files`) beim Verschieben/Umbenennen (`moveOrRenameNodeInTree`), wodurch keine Geister-Einträge im alten Ordner zurückbleiben.

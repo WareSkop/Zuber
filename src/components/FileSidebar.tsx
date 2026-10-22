@@ -392,15 +392,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     });
   }, [activePath]);
 
-  // Synchronize activePath with selectedPaths if single selection
+  // Synchronize activePath with selectedPaths
   useEffect(() => {
     if (activePath) {
-      setSelectedPaths((prev) => {
-        if (prev.size <= 1 && !prev.has(activePath)) {
-          return new Set([activePath]);
-        }
-        return prev;
-      });
+      setSelectedPaths(new Set([activePath]));
       lastClickedPathRef.current = activePath;
     }
   }, [activePath]);
@@ -410,6 +405,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedPaths(new Set());
+        lastClickedPathRef.current = null;
       }
     };
     document.addEventListener('keydown', handleGlobalKeyDown);
@@ -477,7 +473,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   };
 
-  const handleItemClick = (e: React.MouseEvent, node: FileTreeNode) => {
+  const handleFolderClick = (e: React.MouseEvent, node: FileTreeNode) => {
+    e.stopPropagation();
+
     const isCtrlOrCmd = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
 
@@ -508,24 +506,59 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       }
     }
 
-    // Normal click
+    // Normal click on folder
+    toggleFolder(node.path);
+    setSelectedPaths(new Set([node.path]));
+    lastClickedPathRef.current = node.path;
+  };
+
+  const handleFileClick = (e: React.MouseEvent, node: FileTreeNode) => {
+    e.stopPropagation();
+
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    if (isCtrlOrCmd) {
+      setSelectedPaths((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.path)) {
+          next.delete(node.path);
+        } else {
+          next.add(node.path);
+        }
+        return next;
+      });
+      lastClickedPathRef.current = node.path;
+      return;
+    }
+
+    if (isShift && lastClickedPathRef.current) {
+      const visible = getVisiblePaths(sortedTree, expandedFolders);
+      const anchorIdx = visible.indexOf(lastClickedPathRef.current);
+      const targetIdx = visible.indexOf(node.path);
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const start = Math.min(anchorIdx, targetIdx);
+        const end = Math.max(anchorIdx, targetIdx);
+        const range = visible.slice(start, end + 1);
+        setSelectedPaths(new Set(range));
+        return;
+      }
+    }
+
+    // Normal click on file (without modifier)
     setSelectedPaths(new Set([node.path]));
     lastClickedPathRef.current = node.path;
 
-    if (node.type === 'folder') {
-      toggleFolder(node.path);
+    if (
+      node.extension === 'md' ||
+      node.extension === 'canvas' ||
+      node.path.endsWith('.canvas') ||
+      node.extension === 'base' ||
+      node.path.endsWith('.base')
+    ) {
+      onSelectNote(node.path);
     } else {
-      if (
-        node.extension === 'md' ||
-        node.extension === 'canvas' ||
-        node.path.endsWith('.canvas') ||
-        node.extension === 'base' ||
-        node.path.endsWith('.base')
-      ) {
-        onSelectNote(node.path);
-      } else {
-        window.open(api.getAttachmentUrl(node.path), '_blank');
-      }
+      window.open(api.getAttachmentUrl(node.path), '_blank');
     }
   };
 
@@ -765,7 +798,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             onDragOver={(e) => handleDragOverItem(e, node)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, node.path)}
-            onClick={(e) => handleItemClick(e, node)}
+            onClick={(e) => handleFolderClick(e, node)}
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -837,7 +870,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         onDragOver={(e) => handleDragOverItem(e, node)}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, getParentFolder(node.path))}
-        onClick={(e) => handleItemClick(e, node)}
+        onClick={(e) => handleFileClick(e, node)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1238,6 +1271,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             onClick={(e) => {
               if (!(e.target as HTMLElement).closest('.tree-item')) {
                 setSelectedPaths(new Set());
+                lastClickedPathRef.current = null;
               }
             }}
             onDragOver={handleDragOverScroller}
