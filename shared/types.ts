@@ -15,6 +15,7 @@ export interface FileTreeNode {
   attachmentKind?: AttachmentKind;
   children?: FileTreeNode[];
   updatedAt?: number;
+  mtimeMs?: number;
   isSendTarget?: boolean;
 }
 

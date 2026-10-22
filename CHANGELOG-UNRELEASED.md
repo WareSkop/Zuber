@@ -1,4 +1,19 @@
 ### Added
+- Dateibaum-Sortierung (`FileSidebar.tsx` & `src/utils/treeSort.ts`):
+  - Vier flexible Sortier-Modi: Name aufsteigend (`name-asc`), Name absteigend (`name-desc`), Änderungsdatum neueste zuerst (`mtime-desc`) und Änderungsdatum älteste zuerst (`mtime-asc`).
+  - Persistierung in `localStorage` unter `zuber_tree_sort` (mit Fallback auf `knowmesh_tree_sort`).
+  - Sortier-Button in der Sidebar-Kopfzeile mit Popover-Menü und aktiver Häkchen-Markierung.
+  - Hierarchische Sortierlogik mit Ordnern an oberster Stelle und rekursiver Zeitstempel-Ermittlung über alle Unterelemente bei Datums-Sortierung.
+- Vollständiges Daily-Note-System mit 10-Zeichen-Präfix-Suche (`handleOpenDailyNote`):
+  - Kalender-Button in der Sidebar-Kopfzeile (`sidebar.openDailyNote`) und globaler Befehl in der Befehlspalette (`open-daily-note`) mit Shortcut `Alt+D`.
+  - Intelligente 10-Zeichen-Präfix-Suche (`fileName.slice(0, 10) === todayPrefix` im lokalen Format `YYYY-MM-DD`): Erkennt existierende Notizen wie `2026-10-22.md`, `2026-10-22 Daily Standup.md` oder `2026-10-22-meeting.md` sofort im Zielordner oder als Vault-Fallback und öffnet sie ohne Neuanlage.
+  - Automatische Notiz-Erstellung bei Fehlen mit Template-Unterstützung: Platzhalter `{{date}}` (Datum) und `{{time}}` (Uhrzeit) werden in Body und Frontmatter-Eigenschaften dynamisch ersetzt.
+  - Fallback auf `# ${todayPrefix}\n\n` mit Standard-Eigenschaften, falls keine Vorlage konfiguriert ist.
+- Daily-Note-Konfiguration in den Einstellungen (`SettingsModal.tsx` & `src/startupConfig.ts`):
+  - Konfigurationsstruktur `DailyNoteConfig` (`dailyFolder`, `templatePath`), persistent in `localStorage` (`zuber_daily_config`).
+  - Eingabefeld für Zielordner mit Autovervollständigung aller bestehenden Vault-Ordner.
+  - Durchsuchbare Dropdown-Auswahl für Template-Dateien aus allen Markdown-Notizen des Vaults (inkl. Option „Keine Vorlage“).
+  - Synchronisation mit dem Startverhalten (Startup Note: Daily Note).
 - „Send to Target Note“-Workflow (`sendtarget: true`):
   - Frontmatter-Eigenschaft `sendtarget: true` (Boolean `true` oder String `'true'`), mit automatischer Erkennung als Checkbox-Eigenschaft in `PropertiesEditor.tsx`.
   - Schnell-Toggle im Dateibaum-Kontextmenü für `.md`-Notizen („Als Sende-Ziel festlegen 🎯“ / „Als Sende-Ziel entfernen 🎯“).

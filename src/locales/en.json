@@ -95,7 +95,13 @@
     "versionHistory": "Version History",
     "setAsSendTarget": "Set as Send Target 🎯",
     "removeAsSendTarget": "Remove as Send Target 🎯",
-    "sendTargetBadge": "Send Target Note"
+    "sendTargetBadge": "Send Target Note",
+    "sort": "Sort file tree",
+    "sortNameAsc": "Name (A to Z)",
+    "sortNameDesc": "Name (Z to A)",
+    "sortDateDesc": "Date modified (Newest first)",
+    "sortDateAsc": "Date modified (Oldest first)",
+    "openDailyNote": "Open / create daily note"
   },
   "moveToModal": {
     "title": "Move to...",
@@ -306,6 +312,12 @@
     "startupDailyDesc": "Opens YYYY-MM-DD.md for the current day (creates it if it doesn't exist).",
     "startupDailyFolder": "Daily notes folder (optional):",
     "startupDailyFolderPlaceholder": "e.g. Daily Notes or leave blank for root",
+    "dailySection": "Daily Notes",
+    "dailySectionDesc": "Configure target folder and template for daily notes.",
+    "dailyFolder": "Daily note folder",
+    "dailyFolderPlaceholder": "e.g. Daily Notes (empty for root)",
+    "dailyTemplate": "Daily note template",
+    "noTemplate": "No template (default heading)",
     "startupSpecific": "Open a specific note",
     "startupSpecificDesc": "Always start with the chosen note.",
     "startupSpecificPlaceholder": "Select a note from the vault...",

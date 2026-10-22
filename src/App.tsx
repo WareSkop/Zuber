@@ -41,6 +41,7 @@ import {
   Minimize2,
   History,
   Target,
+  Calendar,
 } from 'lucide-react';
 import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
 import {
@@ -87,7 +88,11 @@ import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine
 import { cleanShareUrlQuery } from './sync/shareTargetService';
 import { clientLogger } from './utils/logger';
 import { useTranslation } from './i18n';
-import { recordLastActiveNote, resolveStartupNotePath } from './startupConfig';
+import {
+  recordLastActiveNote,
+  resolveStartupNotePath,
+  getDailyNoteConfig,
+} from './startupConfig';
 import {
   getFontSettings,
   applyFontSettingsToDOM,
@@ -490,6 +495,7 @@ export const App: React.FC = () => {
   }, [theme]);
 
   const manualSaveRef = useRef<(() => void) | null>(null);
+  const handleOpenDailyNoteRef = useRef<(() => Promise<void>) | null>(null);
 
   // Global Keyboard shortcuts (Command Palette, Save, Settings, New Note, Sidebars)
   useEffect(() => {
@@ -537,6 +543,13 @@ export const App: React.FC = () => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
         e.preventDefault();
         openCreateNoteDialogRef.current();
+        return;
+      }
+
+      // Quick Daily Note (Alt+D)
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'd' || e.key === 'D' || e.code === 'KeyD')) {
+        e.preventDefault();
+        handleOpenDailyNoteRef.current?.();
         return;
       }
 
@@ -885,6 +898,102 @@ export const App: React.FC = () => {
     [loadVaultIndex, refreshBacklinks, showToast, t]
   );
 
+  const handleOpenDailyNote = useCallback(async () => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayPrefix = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    const config = getDailyNoteConfig();
+    const folder = (config.dailyFolder || '').trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
+
+    const mdFiles = allFilesRef.current.filter((f) => f.extension === 'md');
+
+    // Search 1: In the configured dailyFolder
+    let found = mdFiles.find((f) => {
+      const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '';
+      if (folder) {
+        if (dir.toLowerCase() !== folder.toLowerCase()) return false;
+      }
+      const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
+      return fname.slice(0, 10) === todayPrefix;
+    });
+
+    // Search 2: Fallback across the whole vault if not found in folder
+    if (!found && folder) {
+      found = mdFiles.find((f) => {
+        const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
+        return fname.slice(0, 10) === todayPrefix;
+      });
+    }
+
+    if (found) {
+      await openNoteByPath(found.path);
+      if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
+      if (isMobile) setLeftSidebarOpen(false);
+      return;
+    }
+
+    // Daily note does not exist yet: create new note
+    const targetFileName = `${todayPrefix}.md`;
+    const targetPath = folder ? `${folder}/${targetFileName}` : targetFileName;
+
+    let initialBody = `# ${todayPrefix}\n\n`;
+    let initialProps: FrontmatterProperty[] = [
+      { key: 'tags', type: 'list', value: ['daily'] },
+      { key: 'erstellt', type: 'date', value: todayPrefix },
+    ];
+
+    if (config.templatePath) {
+      try {
+        const templateNote = await syncEngine.getNote(config.templatePath);
+        if (templateNote) {
+          const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+          const replacePlaceholders = (text: string) =>
+            text.replace(/\{\{date\}\}/gi, todayPrefix).replace(/\{\{time\}\}/gi, timeStr);
+
+          initialBody = replacePlaceholders(templateNote.body || '');
+          if (templateNote.properties && templateNote.properties.length > 0) {
+            initialProps = templateNote.properties.map((p) => {
+              if (typeof p.value === 'string') {
+                return { ...p, value: replacePlaceholders(p.value) };
+              }
+              if (Array.isArray(p.value)) {
+                return {
+                  ...p,
+                  value: p.value.map((v) => (typeof v === 'string' ? replacePlaceholders(v) : v)),
+                };
+              }
+              return { ...p };
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load daily note template:', err);
+      }
+    }
+
+    try {
+      const created = await syncEngine.saveNote({
+        path: targetPath,
+        body: initialBody,
+        properties: initialProps,
+        forceOverwrite: true,
+      });
+      await loadVaultIndex();
+      setActiveNote(created);
+      setSaveState('saved');
+      recordLastActiveNote(created.path);
+      recordRecentNote(created.path);
+      if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
+      if (isMobile) setLeftSidebarOpen(false);
+    } catch (err) {
+      console.error('Failed to create daily note:', err);
+      showToast(`Fehler beim Erstellen der Tagesnotiz: ${String(err)}`);
+    }
+  }, [openNoteByPath, isMobile, loadVaultIndex, showToast]);
+
+  handleOpenDailyNoteRef.current = handleOpenDailyNote;
+
   const sidebarHandlers = useMemo(
     () => ({
       onSelectNote: (path: string) => {
@@ -924,6 +1033,7 @@ export const App: React.FC = () => {
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
       onOpenVersionHistory: (path: string) => setVersionHistoryPath(path),
       onToggleSendTarget: handleToggleSendTarget,
+      onOpenDailyNote: handleOpenDailyNote,
     }),
     [
       openNoteByPath,
@@ -932,9 +1042,10 @@ export const App: React.FC = () => {
       openCreateFolderDialog,
       loadVaultIndex,
       handleToggleSendTarget,
-      isMobile,
-      t,
+      handleOpenDailyNote,
       tree,
+      t,
+      isMobile,
     ]
   );
 
@@ -2001,6 +2112,17 @@ export const App: React.FC = () => {
         icon: <FilePlus size={16} />,
         keywords: ['neu', 'notiz', 'anlegen', 'erstellen'],
         action: () => openCreateNoteDialog(),
+      },
+      {
+        id: 'open-daily-note',
+        title: t('sidebar.openDailyNote') || 'Tagesnotiz öffnen / erstellen',
+        category: 'Vault',
+        shortcut: 'Alt+D',
+        icon: <Calendar size={16} />,
+        keywords: ['daily', 'tagesnotiz', 'heute', 'today', 'kalender', 'calendar'],
+        action: () => {
+          handleOpenDailyNote();
+        },
       },
       {
         id: 'vault-new-canvas',

@@ -14,6 +14,7 @@ import {
   Lock,
   Folder,
   FileText,
+  Calendar,
   Globe,
   Info,
   GitBranch,
@@ -49,6 +50,9 @@ import {
   saveStartupConfig,
   type StartupConfig,
   type StartupBehavior,
+  getDailyNoteConfig,
+  saveDailyNoteConfig,
+  type DailyNoteConfig,
 } from '../startupConfig';
 import {
   getFontSettings,
@@ -86,6 +90,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Startup configuration state
   const [startupConfig, setStartupConfigState] = useState<StartupConfig>(getStartupConfig);
+
+  // Daily note configuration state
+  const [dailyConfig, setDailyConfigState] = useState<DailyNoteConfig>(getDailyNoteConfig);
 
   // Font settings state
   const [fontSettings, setFontSettings] = useState<FontSettings>(getFontSettings);
@@ -314,6 +321,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     // Load Git configuration & status
     loadGitInfo();
 
+    // Reload startup and daily config
+    setStartupConfigState(getStartupConfig());
+    setDailyConfigState(getDailyNoteConfig());
+
     return () => unsub();
   }, [isOpen]);
 
@@ -323,6 +334,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const updated = { ...startupConfig, ...patch };
     setStartupConfigState(updated);
     saveStartupConfig(updated);
+    if (patch.dailyFolder !== undefined && dailyConfig.dailyFolder !== patch.dailyFolder) {
+      const updatedDaily = { ...dailyConfig, dailyFolder: patch.dailyFolder };
+      setDailyConfigState(updatedDaily);
+      saveDailyNoteConfig(updatedDaily);
+    }
+  };
+
+  const updateDailyConfig = (patch: Partial<DailyNoteConfig>) => {
+    const updated = { ...dailyConfig, ...patch };
+    setDailyConfigState(updated);
+    saveDailyNoteConfig(updated);
+    if (patch.dailyFolder !== undefined && startupConfig.dailyFolder !== patch.dailyFolder) {
+      const updatedStartup = { ...startupConfig, dailyFolder: patch.dailyFolder };
+      setStartupConfigState(updatedStartup);
+      saveStartupConfig(updatedStartup);
+    }
   };
 
   const themes = [
@@ -906,6 +933,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </label>
                           <input
                             type="text"
+                            list="daily-folder-options"
                             placeholder={t('settings.startupDailyFolderPlaceholder')}
                             value={startupConfig.dailyFolder || ''}
                             onChange={(e) => updateStartup({ dailyFolder: e.target.value })}
@@ -966,6 +994,82 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       )}
                     </div>
                   </label>
+                </div>
+              </div>
+
+              {/* Daily Note Settings */}
+              <div
+                style={{
+                  background: 'var(--bg-secondary)',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  marginBottom: '20px',
+                }}
+              >
+                <h4 style={{ margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={18} style={{ color: 'var(--accent-primary)' }} />
+                  <span>{t('settings.dailySection')}</span>
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--text-muted)' }}>
+                  {t('settings.dailySectionDesc')}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>
+                      {t('settings.dailyFolder')}
+                    </label>
+                    <input
+                      type="text"
+                      list="daily-folder-options"
+                      placeholder={t('settings.dailyFolderPlaceholder')}
+                      value={dailyConfig.dailyFolder}
+                      onChange={(e) => updateDailyConfig({ dailyFolder: e.target.value })}
+                      style={{
+                        width: '100%',
+                        maxWidth: '380px',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-primary)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <datalist id="daily-folder-options">
+                      {availableFolders.map((f) => (
+                        <option key={f} value={f} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px' }}>
+                      {t('settings.dailyTemplate')}
+                    </label>
+                    <select
+                      value={dailyConfig.templatePath || ''}
+                      onChange={(e) => updateDailyConfig({ templatePath: e.target.value })}
+                      style={{
+                        width: '100%',
+                        maxWidth: '380px',
+                        padding: '7px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-primary)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <option value="">{t('settings.noTemplate')}</option>
+                      {allMdNotes.map((n) => (
+                        <option key={n.path} value={n.path}>
+                          {n.path}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 

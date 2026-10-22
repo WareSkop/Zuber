@@ -8,12 +8,23 @@ export interface StartupConfig {
   dailyFolder?: string;      // Optionaler Zielordner für 'daily' (z.B. "" oder "Tägliche Notizen")
 }
 
+export interface DailyNoteConfig {
+  dailyFolder: string;          // Zielordner (z. B. "Tägliche Notizen" oder "" für Root)
+  templatePath?: string;        // Relativer Pfad zur Template-Datei (z. B. "Templates/Daily.md")
+}
+
 export const STARTUP_CONFIG_KEY = 'zuber_startup_config';
 export const LAST_ACTIVE_NOTE_KEY = 'zuber_last_active_note';
+export const DAILY_NOTE_CONFIG_KEY = 'zuber_daily_config';
 
 export const DEFAULT_STARTUP_CONFIG: StartupConfig = {
   behavior: 'last',
   dailyFolder: '',
+};
+
+export const DEFAULT_DAILY_NOTE_CONFIG: DailyNoteConfig = {
+  dailyFolder: '',
+  templatePath: '',
 };
 
 export function getStartupConfig(): StartupConfig {
@@ -34,6 +45,42 @@ export function saveStartupConfig(config: StartupConfig): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STARTUP_CONFIG_KEY, JSON.stringify(config));
+  } catch {}
+}
+
+export function getDailyNoteConfig(): DailyNoteConfig {
+  if (typeof window === 'undefined') return DEFAULT_DAILY_NOTE_CONFIG;
+  try {
+    const raw =
+      localStorage.getItem(DAILY_NOTE_CONFIG_KEY) ||
+      localStorage.getItem('knowmesh_daily_config');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return {
+          dailyFolder: typeof parsed.dailyFolder === 'string' ? parsed.dailyFolder : '',
+          templatePath: typeof parsed.templatePath === 'string' ? parsed.templatePath : '',
+        };
+      }
+    }
+  } catch {}
+  // Fallback to startup config's dailyFolder if present
+  const startup = getStartupConfig();
+  if (startup.dailyFolder) {
+    return { dailyFolder: startup.dailyFolder, templatePath: '' };
+  }
+  return DEFAULT_DAILY_NOTE_CONFIG;
+}
+
+export function saveDailyNoteConfig(config: DailyNoteConfig): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DAILY_NOTE_CONFIG_KEY, JSON.stringify(config));
+    // Keep startupConfig.dailyFolder in sync
+    const startup = getStartupConfig();
+    if (startup.dailyFolder !== config.dailyFolder) {
+      saveStartupConfig({ ...startup, dailyFolder: config.dailyFolder });
+    }
   } catch {}
 }
 
@@ -58,33 +105,84 @@ export async function resolveStartupNotePath(
     if (target) return target.path;
   }
 
-  // 2. Daily note behavior
+  // 2. Daily note behavior (with 10-char prefix search & template support)
   if (config.behavior === 'daily') {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-    const fileName = `${dateStr}.md`;
-    const folder = (config.dailyFolder || '').trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
-    const dailyPath = folder ? `${folder}/${fileName}` : fileName;
+    const dailyConfig = getDailyNoteConfig();
+    const folder = (dailyConfig.dailyFolder || config.dailyFolder || '').trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
 
-    const existing = mdFiles.find((f) => f.path.toLowerCase() === dailyPath.toLowerCase());
+    // Search 1: In the configured dailyFolder
+    let existing = mdFiles.find((f) => {
+      const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '';
+      if (folder) {
+        if (dir.toLowerCase() !== folder.toLowerCase()) return false;
+      }
+      const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
+      return fname.slice(0, 10) === dateStr;
+    });
+
+    // Search 2: Fallback in entire vault if not found in folder
+    if (!existing && folder) {
+      existing = mdFiles.find((f) => {
+        const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
+        return fname.slice(0, 10) === dateStr;
+      });
+    }
+
     if (existing) {
       return existing.path;
     }
 
     // Auto-create today's note if it does not exist
+    const fileName = `${dateStr}.md`;
+    const dailyPath = folder ? `${folder}/${fileName}` : fileName;
+
+    let initialBody = `# ${dateStr}\n\n`;
+    let initialProps: any[] = [
+      { key: 'tags', type: 'list', value: ['daily'] },
+      { key: 'erstellt', type: 'date', value: dateStr },
+    ];
+
+    if (dailyConfig.templatePath) {
+      try {
+        const templateNote = await syncEngine.getNote(dailyConfig.templatePath);
+        if (templateNote) {
+          const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+          const replacePlaceholders = (text: string) =>
+            text.replace(/\{\{date\}\}/gi, dateStr).replace(/\{\{time\}\}/gi, timeStr);
+
+          initialBody = replacePlaceholders(templateNote.body || '');
+          if (templateNote.properties && templateNote.properties.length > 0) {
+            initialProps = templateNote.properties.map((p) => {
+              if (typeof p.value === 'string') {
+                return { ...p, value: replacePlaceholders(p.value) };
+              }
+              if (Array.isArray(p.value)) {
+                return {
+                  ...p,
+                  value: p.value.map((v) => (typeof v === 'string' ? replacePlaceholders(v) : v)),
+                };
+              }
+              return { ...p };
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[Zuber] Failed to load daily startup template:', err);
+      }
+    }
+
     try {
       const created = await syncEngine.saveNote({
         path: dailyPath,
-        body: `# ${dateStr}\n\n`,
-        properties: [
-          { key: 'tags', type: 'list', value: ['daily'] },
-          { key: 'erstellt', type: 'date', value: dateStr },
-        ],
+        body: initialBody,
+        properties: initialProps,
       });
       return created.path;
     } catch (err) {
-      console.warn('[Knowmesh] Failed to auto-create daily startup note:', err);
+      console.warn('[Zuber] Failed to auto-create daily startup note:', err);
     }
   }
 

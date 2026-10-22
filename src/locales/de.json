@@ -95,7 +95,13 @@
     "versionHistory": "Versionsverlauf",
     "setAsSendTarget": "Als Sende-Ziel festlegen 🎯",
     "removeAsSendTarget": "Als Sende-Ziel entfernen 🎯",
-    "sendTargetBadge": "Sende-Ziel Notiz"
+    "sendTargetBadge": "Sende-Ziel Notiz",
+    "sort": "Dateibaum sortieren",
+    "sortNameAsc": "Name (A bis Z)",
+    "sortNameDesc": "Name (Z bis A)",
+    "sortDateDesc": "Änderungsdatum (Neueste zuerst)",
+    "sortDateAsc": "Änderungsdatum (Älteste zuerst)",
+    "openDailyNote": "Tagesnotiz öffnen / erstellen"
   },
   "moveToModal": {
     "title": "Verschieben nach...",
@@ -306,6 +312,12 @@
     "startupDailyDesc": "Öffnet YYYY-MM-DD.md für den heutigen Tag (wird automatisch angelegt, falls noch nicht vorhanden).",
     "startupDailyFolder": "Zielordner für Tagesnotizen (optional):",
     "startupDailyFolderPlaceholder": "z. B. Tägliche Notizen oder leer für Hauptverzeichnis",
+    "dailySection": "Tägliche Notizen",
+    "dailySectionDesc": "Standardordner und Vorlage für tägliche Notizen festlegen.",
+    "dailyFolder": "Zielordner für Tagesnotizen",
+    "dailyFolderPlaceholder": "z. B. Tägliche Notizen (leer für Hauptverzeichnis)",
+    "dailyTemplate": "Vorlage für Tagesnotizen",
+    "noTemplate": "Keine Vorlage (Standard-Überschrift)",
     "startupSpecific": "Bestimmte Notiz öffnen",
     "startupSpecificDesc": "Startet immer mit einer fest ausgewählten Notiz aus dem Vault.",
     "startupSpecificPlaceholder": "Notiz aus dem Vault auswählen...",

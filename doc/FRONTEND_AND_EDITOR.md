@@ -914,5 +914,45 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
    ```
 3. **Index & Backlinks:** Beide Notizen werden gespeichert (`syncEngine.saveNote`), Vault-Index und Backlinks sofort aktualisiert (wodurch die bidirektionale Verknüpfung im Graphen und in der Backlink-Seitenleiste unmittelbar sichtbar ist), und eine Toast-Benachrichtigung bestätigt den Erfolg.
 
+---
+
+## 27. Dateibaum-Sortierung & Daily-Note-System (Phase 4)
+
+### 27.1 Dateibaum-Sortierung (`src/components/FileSidebar.tsx` & `src/utils/treeSort.ts`)
+- **Vier flexible Sortier-Modi:**
+  - `name-asc`: Name alphabetisch aufsteigend (A bis Z)
+  - `name-desc`: Name alphabetisch absteigend (Z bis A)
+  - `mtime-desc`: Änderungsdatum neueste zuerst (Neueste zuerst)
+  - `mtime-asc`: Änderungsdatum älteste zuerst (Älteste zuerst)
+- **Persistenz:** Gespeichert unter `localStorage` (`zuber_tree_sort` mit Fallback auf `knowmesh_tree_sort`).
+- **UI-Steuerung:** Kompakter Sortier-Button (`ArrowUpDown`) in der Header-Aktionsleiste der Seitenleiste. Ein Klick öffnet ein Dropdown/Popover mit Indikator (✓) für den aktiven Modus.
+- **Hierarchische Sortier-Logik (`sortTreeNodes`):**
+  - Ordner verbleiben ausnahmslos an oberster Stelle und werden untereinander nach dem gewählten Kriterium sortiert.
+  - Bei Datumssortierung (`mtime-desc` / `mtime-asc`) ermittelt `getNodeTimestamp` für Ordner rekursiv den Maximal-Zeitstempel aller enthaltenen Dateien.
+  - Dateien werden nach `name` (via `localeCompare` mit natürlicher Zahlensortierung) bzw. `updatedAt` / `mtimeMs` sortiert.
+  - Auch die Bereichsauswahl (Shift+Klick) via `getVisiblePaths` nutzt die sortierten Knoten für konsistentes Verhalten.
+
+### 27.2 Daily Note System & 10-Zeichen-Präfix-Suche
+- **Sidebar-Button & Command Palette:**
+  - Kalender-Button (`Calendar`) direkt in der Sidebar-Aktionsleiste mit Tooltip `t('sidebar.openDailyNote')`.
+  - Globaler Command-Palette-Befehl `open-daily-note` mit Shortcut `Alt+D`.
+- **10-Zeichen-Präfix-Suche (`YYYY-MM-DD`):**
+  - Ermittelt das lokale Tagesdatum im Format `YYYY-MM-DD` (10 Zeichen).
+  - Sucht zuerst im konfigurierten `dailyFolder` nach Notizen mit `fileName.slice(0, 10) === todayPrefix` (z. B. `2026-10-22.md`, `2026-10-22 Daily Standup.md` oder `2026-10-22-meeting.md`).
+  - Fallback-Suche über das gesamte Vault, falls im Zielordner keine passende Notiz existiert.
+  - Existiert bereits eine Notiz, wird sie unmittelbar im Editor geöffnet.
+- **Template-Engine & Auto-Erstellung:**
+  - Existiert noch keine Tagesnotiz für das heutige Datum, wird eine neue Datei unter `${dailyFolder ? dailyFolder + '/' : ''}${todayPrefix}.md` angelegt.
+  - Ist in den Einstellungen ein `templatePath` gewählt, wird der Inhalt des Templates geladen und die Platzhalter `{{date}}` (durch `YYYY-MM-DD`) und `{{time}}` (durch `HH:mm`) sowohl im Textkörper als auch in den Frontmatter-Eigenschaften ersetzt.
+  - Ohne Vorlage wird die Notiz mit `# ${todayPrefix}\n\n` und Standard-Eigenschaften initialisiert.
+
+### 27.3 Einstellungen (`SettingsModal.tsx` & `src/startupConfig.ts`)
+- Neue Konfigurationsstruktur `DailyNoteConfig` (`dailyFolder`, `templatePath`), persistent in `localStorage` (`zuber_daily_config`).
+- Im Tab *Editor & Files*:
+  - **Zielordner:** Eingabefeld mit Datalist-Autovervollständigung aller bestehenden Vault-Ordner.
+  - **Vorlage:** Dropdown-Auswahl aller Markdown-Dateien des Vaults oder Option *Keine Vorlage*.
+  - Automatische Synchronisation mit dem Startverhalten (Startup Note: Daily Note).
+
+
 
 

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  ArrowUpDown,
+  Calendar,
   ChevronDown,
   ChevronRight,
   Clipboard,
@@ -30,6 +32,12 @@ import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
 import { MoveToModal } from './MoveToModal';
+import {
+  sortTreeNodes,
+  getTreeSortMode,
+  saveTreeSortMode,
+  type TreeSortMode,
+} from '../utils/treeSort';
 import {
   loadFavorites,
   saveFavorites,
@@ -80,6 +88,7 @@ interface FileSidebarProps {
   onClose?: () => void;
   onOpenVersionHistory?: (path: string) => void;
   onToggleSendTarget?: (path: string, currentStatus: boolean) => Promise<void>;
+  onOpenDailyNote?: () => void;
   onLeftResizeStart?: (e: React.MouseEvent) => void;
   isResizingLeft?: boolean;
 }
@@ -100,6 +109,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onClose,
   onOpenVersionHistory,
   onToggleSendTarget,
+  onOpenDailyNote,
   onLeftResizeStart,
   isResizingLeft = false,
 }) => {
@@ -144,6 +154,40 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const [favorites, setFavorites] = useState<FavoriteItem[]>(() => loadFavorites());
   const [recentNotesList, setRecentNotesList] = useState<string[]>(() => loadRecentNotes());
+
+  // File tree sorting state
+  const [treeSortMode, setTreeSortMode] = useState<TreeSortMode>(getTreeSortMode);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const sortBtnRef = useRef<HTMLButtonElement>(null);
+
+  const sortedTree = useMemo<FileTreeNode[]>(() => {
+    return sortTreeNodes(tree, treeSortMode);
+  }, [tree, treeSortMode]);
+
+  const handleSelectSortMode = (mode: TreeSortMode) => {
+    setTreeSortMode(mode);
+    saveTreeSortMode(mode);
+    setIsSortMenuOpen(false);
+  };
+
+  useEffect(() => {
+    if (!isSortMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        sortMenuRef.current &&
+        !sortMenuRef.current.contains(e.target as Node) &&
+        sortBtnRef.current &&
+        !sortBtnRef.current.contains(e.target as Node)
+      ) {
+        setIsSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSortMenuOpen]);
 
   const reloadFavorites = useCallback(() => {
     setFavorites(loadFavorites());
@@ -446,7 +490,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
 
     if (isShift && lastClickedPathRef.current) {
-      const visible = getVisiblePaths(tree, expandedFolders);
+      const visible = getVisiblePaths(sortedTree, expandedFolders);
       const anchorIdx = visible.indexOf(lastClickedPathRef.current);
       const targetIdx = visible.indexOf(node.path);
       if (anchorIdx !== -1 && targetIdx !== -1) {
@@ -911,6 +955,67 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
               <span>{t('sidebar.newNote')}</span>
             </button>
             <div className="sidebar-action-right">
+              {onOpenDailyNote && (
+                <button
+                  type="button"
+                  className="sidebar-icon-btn icon-only"
+                  title={t('sidebar.openDailyNote')}
+                  aria-label={t('sidebar.openDailyNote')}
+                  onClick={onOpenDailyNote}
+                >
+                  <Calendar size={15} />
+                </button>
+              )}
+              <div className="sidebar-sort-container">
+                <button
+                  ref={sortBtnRef}
+                  type="button"
+                  className={`sidebar-icon-btn icon-only ${isSortMenuOpen ? 'active' : ''}`}
+                  title={t('sidebar.sort')}
+                  aria-label={t('sidebar.sort')}
+                  onClick={() => setIsSortMenuOpen((prev) => !prev)}
+                >
+                  <ArrowUpDown size={15} />
+                </button>
+                {isSortMenuOpen && (
+                  <div className="tree-sort-menu" ref={sortMenuRef}>
+                    <div className="tree-sort-header">{t('sidebar.sort')}</div>
+                    <button
+                      type="button"
+                      className={`sort-menu-item ${treeSortMode === 'name-asc' ? 'active' : ''}`}
+                      onClick={() => handleSelectSortMode('name-asc')}
+                    >
+                      <span className="sort-menu-check">{treeSortMode === 'name-asc' ? '✓' : ''}</span>
+                      <span>{t('sidebar.sortNameAsc')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`sort-menu-item ${treeSortMode === 'name-desc' ? 'active' : ''}`}
+                      onClick={() => handleSelectSortMode('name-desc')}
+                    >
+                      <span className="sort-menu-check">{treeSortMode === 'name-desc' ? '✓' : ''}</span>
+                      <span>{t('sidebar.sortNameDesc')}</span>
+                    </button>
+                    <div className="sort-menu-divider" />
+                    <button
+                      type="button"
+                      className={`sort-menu-item ${treeSortMode === 'mtime-desc' ? 'active' : ''}`}
+                      onClick={() => handleSelectSortMode('mtime-desc')}
+                    >
+                      <span className="sort-menu-check">{treeSortMode === 'mtime-desc' ? '✓' : ''}</span>
+                      <span>{t('sidebar.sortDateDesc')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`sort-menu-item ${treeSortMode === 'mtime-asc' ? 'active' : ''}`}
+                      onClick={() => handleSelectSortMode('mtime-asc')}
+                    >
+                      <span className="sort-menu-check">{treeSortMode === 'mtime-asc' ? '✓' : ''}</span>
+                      <span>{t('sidebar.sortDateAsc')}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
               {onCreateCanvas && (
                 <button
                   type="button"
@@ -1104,7 +1209,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
               openContextMenu(null, e.clientX, e.clientY);
             }}
           >
-            {tree.map((node) => renderTreeNode(node, 0))}
+            {sortedTree.map((node) => renderTreeNode(node, 0))}
           </div>
         </>
       )}

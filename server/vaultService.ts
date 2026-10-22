@@ -573,6 +573,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
         extension: f.extension,
         attachmentKind: getAttachmentKind(f.path),
         updatedAt: f.mtimeMs,
+        mtimeMs: f.mtimeMs,
         isSendTarget: f.isSendTarget,
       });
     }
