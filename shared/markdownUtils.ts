@@ -84,6 +84,46 @@ export function isNoteSendTarget(
   return false;
 }
 
+export function isNoteTemplate(
+  arg1?: FrontmatterProperty[] | Record<string, unknown> | null,
+  arg2?: FrontmatterProperty[] | Record<string, unknown> | null
+): boolean {
+  const checkFrontmatter = (fm: Record<string, unknown>) => {
+    for (const [k, v] of Object.entries(fm)) {
+      if (k.toLowerCase() === 'istemplate') {
+        if (v === true || String(v).trim().toLowerCase() === 'true') {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const checkProps = (props: FrontmatterProperty[]) => {
+    const prop = props.find((p) => p && typeof p.key === 'string' && p.key.toLowerCase() === 'istemplate');
+    if (prop) {
+      if (prop.value === true || String(prop.value).trim().toLowerCase() === 'true') {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  if (Array.isArray(arg1)) {
+    if (checkProps(arg1)) return true;
+  } else if (arg1 && typeof arg1 === 'object') {
+    if (checkFrontmatter(arg1 as Record<string, unknown>)) return true;
+  }
+
+  if (Array.isArray(arg2)) {
+    if (checkProps(arg2)) return true;
+  } else if (arg2 && typeof arg2 === 'object') {
+    if (checkFrontmatter(arg2 as Record<string, unknown>)) return true;
+  }
+
+  return false;
+}
+
 export function parseMarkdownWithFrontmatter(rawContent: string): {
   frontmatter: Record<string, unknown>;
   properties: FrontmatterProperty[];
@@ -290,6 +330,7 @@ export function getAttachmentKind(filePath: string): AttachmentKind {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   if (ext === 'md') return 'markdown';
   if (ext === 'canvas') return 'canvas';
+  if (ext === 'base') return 'base';
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext)) return 'image';
   if (ext === 'pdf') return 'pdf';
   if (['mp3', 'wav', 'ogg', 'm4a', 'flac'].includes(ext)) return 'audio';
@@ -670,8 +711,54 @@ export function extractCanvasLinksAndTags(rawJson: string): {
     // Ignore JSON parsing errors for corrupted or empty canvas files
   }
 
-  return {
-    links: Array.from(linksSet),
-    tags: Array.from(tagsSet),
-  };
+    return {
+      links: Array.from(linksSet),
+      tags: Array.from(tagsSet),
+    };
+  }
+
+/**
+ * Refactors folder and note references inside an Obsidian Base (.base) YAML configuration.
+ * Handles file.inFolder("..."), file == "...", and string paths.
+ */
+export function refactorBaseContent(
+  rawYaml: string,
+  mappingsOrOldPath: RenameMapping[] | string,
+  maybeNewPath?: string
+): string {
+  if (!rawYaml || !mappingsOrOldPath) return rawYaml;
+  let mappings: RenameMapping[] = [];
+  if (typeof mappingsOrOldPath === 'string') {
+    mappings = [{ oldPath: mappingsOrOldPath, newPath: maybeNewPath || '' }];
+  } else if (Array.isArray(mappingsOrOldPath)) {
+    mappings = mappingsOrOldPath;
+  }
+  if (mappings.length === 0) return rawYaml;
+  let updated = rawYaml;
+
+  for (const mapping of mappings) {
+    const oldPath = mapping.oldPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    const newPath = mapping.newPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+    if (!oldPath || !newPath || oldPath === newPath) continue;
+
+    const oldFolderEscaped = oldPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // 1. file.inFolder("oldFolder") / file.inFolder('oldFolder')
+    const inFolderRegex = new RegExp(`(file\\.inFolder\\(\\s*["'])${oldFolderEscaped}(["']\\s*\\))`, 'g');
+    updated = updated.replace(inFolderRegex, `$1${newPath}$2`);
+
+    // 2. Exact file path quotes in filters or views: "oldPath" or "oldPath.md"
+    const oldPathNoExt = oldPath.replace(/\.(md|canvas|base)$/i, '');
+    const newPathNoExt = newPath.replace(/\.(md|canvas|base)$/i, '');
+    const oldPathNoExtEscaped = oldPathNoExt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Replace string references inside quotes
+    const strQuoteRegex = new RegExp(`(["'])${oldFolderEscaped}(["'])`, 'g');
+    updated = updated.replace(strQuoteRegex, `$1${newPath}$2`);
+
+    const strNoExtRegex = new RegExp(`(["'])${oldPathNoExtEscaped}(["'])`, 'g');
+    updated = updated.replace(strNoExtRegex, `$1${newPathNoExt}$2`);
+  }
+
+  return updated;
 }

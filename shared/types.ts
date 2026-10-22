@@ -1,5 +1,5 @@
 export type PropertyType = 'text' | 'list' | 'number' | 'checkbox' | 'date';
-export type AttachmentKind = 'markdown' | 'canvas' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
+export type AttachmentKind = 'markdown' | 'canvas' | 'base' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
 
 export interface FrontmatterProperty {
   key: string;
@@ -17,6 +17,7 @@ export interface FileTreeNode {
   updatedAt?: number;
   mtimeMs?: number;
   isSendTarget?: boolean;
+  isTemplate?: boolean;
 }
 
 export interface NoteHeading {
@@ -46,6 +47,7 @@ export interface NoteData {
   headings: NoteHeading[];
   updatedAt: number;
   isSendTarget?: boolean;
+  isTemplate?: boolean;
 }
 
 export interface NoteSummary {
@@ -54,6 +56,7 @@ export interface NoteSummary {
   basename: string;
   extension?: string;
   isSendTarget?: boolean;
+  isTemplate?: boolean;
 }
 
 export interface NoteSaveRequest {
@@ -205,6 +208,54 @@ export interface GitFileVersionResponse {
   content: string;        // Full raw file content at that commit
   currentContent: string; // Current raw file content on disk for diffing
 }
+
+// ==========================================
+// Obsidian Bases (.base / ```base) Data Types
+// ==========================================
+
+export interface BasePropertyConfig {
+  displayName?: string;
+  type?: string;
+  width?: number;
+}
+
+export interface BaseSortRule {
+  property: string;
+  direction?: 'ASC' | 'DESC' | 'asc' | 'desc';
+}
+
+export interface BaseGroupBy {
+  property: string;
+  direction?: 'ASC' | 'DESC' | 'asc' | 'desc';
+}
+
+export type BaseFilterCondition =
+  | string
+  | { and?: BaseFilterCondition[] }
+  | { or?: BaseFilterCondition[] }
+  | { not?: BaseFilterCondition | BaseFilterCondition[] }
+  | Record<string, unknown>;
+
+export interface BaseViewConfig {
+  type: 'table' | 'cards' | 'list' | string;
+  name?: string;
+  limit?: number;
+  order?: string[];
+  columnSize?: Record<string, number>;
+  filters?: BaseFilterCondition;
+  groupBy?: BaseGroupBy;
+  sort?: BaseSortRule[];
+  summaries?: Record<string, string>;
+}
+
+export interface BaseDefinition {
+  filters?: BaseFilterCondition;
+  formulas?: Record<string, string>;
+  properties?: Record<string, BasePropertyConfig>;
+  summaries?: Record<string, string>;
+  views?: BaseViewConfig[];
+}
+
 
 
 

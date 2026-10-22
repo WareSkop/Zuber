@@ -42,6 +42,8 @@ import {
   History,
   Target,
   Calendar,
+  Database,
+  LayoutTemplate,
 } from 'lucide-react';
 import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
 import {
@@ -82,6 +84,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { ConflictModal } from './components/ConflictModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { SendToTargetModal } from './components/SendToTargetModal';
+import { BaseEditor } from './components/BaseEditor';
+import { TemplateSelectModal } from './components/TemplateSelectModal';
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
 import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
@@ -120,7 +124,7 @@ export const App: React.FC = () => {
 
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [allFiles, setAllFiles] = useState<
-    { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[]
+    { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean; isTemplate?: boolean }[]
   >([]);
   const allFilesRef = useRef(allFiles);
   allFilesRef.current = allFiles;
@@ -148,6 +152,8 @@ export const App: React.FC = () => {
   const [zenMode, setZenMode] = useState(false);
   const [versionHistoryPath, setVersionHistoryPath] = useState<string | null>(null);
   const [isSendToTargetModalOpen, setIsSendToTargetModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateParentFolder, setTemplateParentFolder] = useState<string | undefined>(undefined);
   const [toastNotification, setToastNotification] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -640,7 +646,7 @@ export const App: React.FC = () => {
     } catch (innerErr) {
       console.warn('Could not load from IndexedDB cache:', innerErr);
       const emptyTree: FileTreeNode[] = [];
-      const emptyFiles: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[] = [];
+      const emptyFiles: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean; isTemplate?: boolean }[] = [];
       const emptyGraph: GraphData = { nodes: [], edges: [], tags: [] };
       setTree(emptyTree);
       setAllFiles(emptyFiles);
@@ -787,9 +793,21 @@ export const App: React.FC = () => {
           name: f.name,
           basename: f.basename,
           isSendTarget: f.isSendTarget,
+          isTemplate: f.isTemplate,
         })),
     [allFiles]
   );
+
+  const templateNotes = useMemo(() => {
+    return allFiles
+      .filter((f) => f.isTemplate && (f.extension === 'md' || f.path.endsWith('.md')))
+      .map((f) => ({
+        path: f.path,
+        name: f.name.replace(/\.md$/i, ''),
+        basename: f.basename,
+        folder: f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '',
+      }));
+  }, [allFiles]);
   const allTagNames = useMemo(() => graphData.tags.map((t) => t.tag), [graphData.tags]);
 
   const handleOpenSendToTarget = useCallback(() => {
@@ -837,6 +855,113 @@ export const App: React.FC = () => {
       }
     },
     [loadVaultIndex]
+  );
+
+  const handleToggleTemplate = useCallback(
+    async (path: string, currentStatus?: boolean) => {
+      try {
+        let noteToUpdate: NoteData;
+        if (activeNoteRef.current && activeNoteRef.current.path === path) {
+          noteToUpdate = activeNoteRef.current;
+        } else {
+          noteToUpdate = await syncEngine.getNote(path);
+        }
+        const willBeTemplate = currentStatus !== undefined ? !currentStatus : !noteToUpdate.isTemplate;
+        const existingProps = [...(noteToUpdate.properties || [])];
+        const idx = existingProps.findIndex((p) => p.key.toLowerCase() === 'istemplate');
+        if (willBeTemplate) {
+          if (idx >= 0) existingProps[idx] = { key: 'isTemplate', value: true, type: 'checkbox' };
+          else existingProps.push({ key: 'isTemplate', value: true, type: 'checkbox' });
+        } else {
+          if (idx >= 0) existingProps.splice(idx, 1);
+        }
+
+        const saved = await syncEngine.saveNote({
+          path: noteToUpdate.path,
+          body: noteToUpdate.body,
+          properties: existingProps,
+          forceOverwrite: true,
+        });
+
+        if (activeNoteRef.current && activeNoteRef.current.path === path) {
+          setActiveNote(saved);
+        }
+        await syncEngine.getLocalDb().updateNodeTemplate(path, willBeTemplate);
+        loadVaultIndex().catch(() => {});
+        showToast(
+          willBeTemplate
+            ? (t('sidebar.templateSetToast') || 'Notiz als Vorlage festgelegt 📄')
+            : (t('sidebar.templateRemovedToast') || 'Vorlage-Markierung entfernt')
+        );
+      } catch (err) {
+        console.error('Failed to toggle isTemplate:', err);
+      }
+    },
+    [loadVaultIndex, showToast, t]
+  );
+
+  const handleOpenTemplateModal = useCallback((parentFolder?: string) => {
+    setTemplateParentFolder(parentFolder);
+    setIsTemplateModalOpen(true);
+  }, []);
+
+  const handleSelectTemplate = useCallback(
+    async (templatePath: string) => {
+      setIsTemplateModalOpen(false);
+      try {
+        const defaultTitle = t('templates.newNoteDefaultTitle') || 'Neue Notiz';
+        const inputTitle = window.prompt(
+          t('templates.promptTitle') || 'Titel der neuen Notiz eingeben:',
+          defaultTitle
+        );
+        if (inputTitle === null) return;
+        const cleanTitle = inputTitle.trim() || defaultTitle;
+
+        const templateNote = await syncEngine.getNote(templatePath);
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
+
+        const replaceVars = (str: string) =>
+          str
+            .replace(/\{\{date\}\}/gi, dateStr)
+            .replace(/\{\{time\}\}/gi, timeStr)
+            .replace(/\{\{title\}\}/gi, cleanTitle);
+
+        const newBody = replaceVars(templateNote.body || '');
+
+        // Strip isTemplate property and substitute variables
+        const newProperties = (templateNote.properties || [])
+          .filter((p) => p.key.toLowerCase() !== 'istemplate')
+          .map((p) => {
+            if (typeof p.value === 'string') {
+              return { ...p, value: replaceVars(p.value) };
+            }
+            return p;
+          });
+
+        const parent = templateParentFolder ? templateParentFolder.replace(/\/+$/, '') : '';
+        const fileName = cleanTitle.toLowerCase().endsWith('.md') ? cleanTitle : `${cleanTitle}.md`;
+        const targetPath = parent ? `${parent}/${fileName}` : fileName;
+
+        await syncEngine.saveNote({
+          path: targetPath,
+          body: newBody,
+          properties: newProperties,
+          forceOverwrite: true,
+        });
+
+        await loadVaultIndex();
+        await openNoteByPath(targetPath);
+        showToast(t('templates.noteCreatedToast') || `Notiz "${cleanTitle}" aus Vorlage erstellt.`);
+      } catch (err) {
+        console.error('Failed to create note from template:', err);
+        alert((err as Error).message || 'Fehler beim Erstellen der Notiz aus Vorlage');
+      }
+    },
+    [templateParentFolder, openNoteByPath, loadVaultIndex, showToast, t]
   );
 
   const handleSendToTarget = useCallback(
@@ -1033,6 +1158,8 @@ export const App: React.FC = () => {
       onSelectTagFilter: (tag: string | null) => setSelectedTagFilter(tag),
       onOpenVersionHistory: (path: string) => setVersionHistoryPath(path),
       onToggleSendTarget: handleToggleSendTarget,
+      onToggleTemplate: handleToggleTemplate,
+      onOpenTemplateSelect: handleOpenTemplateModal,
       onOpenDailyNote: handleOpenDailyNote,
     }),
     [
@@ -1042,6 +1169,8 @@ export const App: React.FC = () => {
       openCreateFolderDialog,
       loadVaultIndex,
       handleToggleSendTarget,
+      handleToggleTemplate,
+      handleOpenTemplateModal,
       handleOpenDailyNote,
       tree,
       t,
@@ -2283,6 +2412,7 @@ export const App: React.FC = () => {
   const unlinkedMentions = activeNote ? backlinks.unlinked : [];
   const currentBacklinks = linkedMentions;
   const isCanvasNote = Boolean(activeNote?.path.endsWith('.canvas'));
+  const isBaseNote = Boolean(activeNote?.path.endsWith('.base'));
 
   const wordCount = activeNote
     ? activeNote.body
@@ -2505,6 +2635,11 @@ export const App: React.FC = () => {
                   <WorkflowCanvasIcon size={14} />
                   <span>Canvas</span>
                 </div>
+              ) : isBaseNote ? (
+                <div className="base-mode-indicator" title="Base Database & Table View">
+                  <Database size={14} />
+                  <span>Base</span>
+                </div>
               ) : (
                 <div className="editor-mode-switcher" role="group" aria-label={t('header.modeGroupAria')}>
                   <button
@@ -2651,6 +2786,30 @@ export const App: React.FC = () => {
                       setLeftSidebarOpen(true);
                     }}
                     allNotes={allNotesForEditor}
+                  />
+                </div>
+              ) : isBaseNote && activeNote ? (
+                <div className="base-workspace-pane">
+                  <BaseEditor
+                    filePath={activeNote.path}
+                    rawContent={activeNote.rawContent || activeNote.body || ''}
+                    onChange={(newYaml) => {
+                      if (!activeNote) return;
+                      setActiveNote({
+                        ...activeNote,
+                        rawContent: newYaml,
+                        body: newYaml,
+                      });
+                      scheduleSave(activeNote.path, {
+                        rawContent: newYaml,
+                        body: newYaml,
+                      });
+                    }}
+                    onSelectNote={(targetPath) => {
+                      handleNavigateWikiLink(targetPath);
+                      if (isMobile) setLeftSidebarOpen(false);
+                    }}
+                    allFiles={allFiles}
                   />
                 </div>
               ) : (
@@ -3037,6 +3196,14 @@ export const App: React.FC = () => {
         activePath={activeNote?.path ?? null}
         allNotes={allNotesForEditor}
         onSelectTarget={handleSendToTarget}
+      />
+
+      {/* Template Selection Modal */}
+      <TemplateSelectModal
+        isOpen={isTemplateModalOpen}
+        onClose={() => setIsTemplateModalOpen(false)}
+        templates={templateNotes}
+        onSelectTemplate={handleSelectTemplate}
       />
 
       {/* Toast Notification */}

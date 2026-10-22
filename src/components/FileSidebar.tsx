@@ -8,6 +8,7 @@ import {
   Clipboard,
   Clock,
   Copy,
+  Database,
   FilePlus,
   FileText,
   Folder,
@@ -15,6 +16,7 @@ import {
   FolderPlus,
   Hash,
   Image as ImageIcon,
+  LayoutTemplate,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -88,6 +90,8 @@ interface FileSidebarProps {
   onClose?: () => void;
   onOpenVersionHistory?: (path: string) => void;
   onToggleSendTarget?: (path: string, currentStatus: boolean) => Promise<void>;
+  onToggleTemplate?: (path: string, currentStatus: boolean) => Promise<void>;
+  onOpenTemplateSelect?: (parentFolder?: string) => void;
   onOpenDailyNote?: () => void;
   onLeftResizeStart?: (e: React.MouseEvent) => void;
   isResizingLeft?: boolean;
@@ -109,6 +113,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onClose,
   onOpenVersionHistory,
   onToggleSendTarget,
+  onToggleTemplate,
+  onOpenTemplateSelect,
   onOpenDailyNote,
   onLeftResizeStart,
   isResizingLeft = false,
@@ -509,7 +515,13 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     if (node.type === 'folder') {
       toggleFolder(node.path);
     } else {
-      if (node.extension === 'md' || node.extension === 'canvas' || node.path.endsWith('.canvas')) {
+      if (
+        node.extension === 'md' ||
+        node.extension === 'canvas' ||
+        node.path.endsWith('.canvas') ||
+        node.extension === 'base' ||
+        node.path.endsWith('.base')
+      ) {
         onSelectNote(node.path);
       } else {
         window.open(api.getAttachmentUrl(node.path), '_blank');
@@ -519,8 +531,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const handleCopy = (node: FileTreeNode) => {
     const displayName =
-      node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
-        ? node.name.replace(/\.(md|canvas)$/i, '')
+      node.type === 'file' &&
+      (node.extension === 'md' || node.extension === 'canvas' || node.extension === 'base')
+        ? node.name.replace(/\.(md|canvas|base)$/i, '')
         : node.name;
     setClipboard({
       path: node.path,
@@ -799,6 +812,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       node.extension === 'canvas' ||
       node.path.endsWith('.canvas') ||
       node.attachmentKind === 'canvas';
+    const isBase =
+      node.extension === 'base' ||
+      node.path.endsWith('.base') ||
+      node.attachmentKind === 'base';
     const isActive = activePath === node.path;
     const isSelected = selectedPaths.has(node.path);
     const isDropTarget = dropTargetFolder === getParentFolder(node.path);
@@ -806,12 +823,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       ? node.name.replace(/\.md$/i, '')
       : isCanvas
       ? node.name.replace(/\.canvas$/i, '')
+      : isBase
+      ? node.name.replace(/\.base$/i, '')
       : node.name;
 
     return (
       <div
         key={node.path}
-        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''} ${!isMd && !isCanvas ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''}`}
+        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''} ${!isMd && !isCanvas && !isBase ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''} ${isBase ? 'base-item' : ''}`}
         style={{ paddingLeft: `${26 + depth * 14}px` }}
         draggable={true}
         onDragStart={(e) => handleDragStart(e, node)}
@@ -831,6 +850,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         <span className="tree-icon">
           {isCanvas ? (
             <WorkflowCanvasIcon size={14} className="tree-canvas-icon" />
+          ) : isBase ? (
+            <Database size={14} className="tree-base-icon" />
           ) : isMd ? (
             <FileText size={14} />
           ) : (
@@ -845,8 +866,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             <Target size={12} className="send-target-icon" />
           </span>
         )}
+        {node.isTemplate && (
+          <span className="tree-template-badge" title={t('sidebar.templateBadge') || 'Vorlage'}>
+            <LayoutTemplate size={12} className="template-icon" />
+          </span>
+        )}
         {isCanvas && <span className="file-ext-badge canvas-badge">CANVAS</span>}
-        {!isMd && !isCanvas && <span className="file-ext-badge">{node.extension}</span>}
+        {isBase && <span className="file-ext-badge base-badge">BASE</span>}
+        {!isMd && !isCanvas && !isBase && <span className="file-ext-badge">{node.extension}</span>}
         <button
           type="button"
           className="tree-item-more-btn"
@@ -945,15 +972,28 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       {activeTab === 'files' && (
         <>
           <div className="sidebar-action-bar">
-            <button
-              type="button"
-              className="sidebar-icon-btn"
-              title={t('sidebar.newNoteTitle')}
-              onClick={() => onCreateNote()}
-            >
-              <FilePlus size={16} />
-              <span>{t('sidebar.newNote')}</span>
-            </button>
+            <div className="sidebar-action-left">
+              <button
+                type="button"
+                className="sidebar-icon-btn icon-only"
+                title={t('sidebar.newNoteTitle')}
+                aria-label={t('sidebar.newNote')}
+                onClick={() => onCreateNote()}
+              >
+                <FilePlus size={16} />
+              </button>
+              {onOpenTemplateSelect && (
+                <button
+                  type="button"
+                  className="sidebar-icon-btn icon-only"
+                  title={t('sidebar.newFromTemplate')}
+                  aria-label={t('sidebar.newFromTemplate')}
+                  onClick={() => onOpenTemplateSelect()}
+                >
+                  <LayoutTemplate size={15} />
+                </button>
+              )}
+            </div>
             <div className="sidebar-action-right">
               {onOpenDailyNote && (
                 <button
@@ -1325,6 +1365,21 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <FilePlus size={15} />
                       <span>{t('sidebar.newNoteInFolder')}</span>
                     </button>
+                    {onOpenTemplateSelect && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => {
+                          const path = contextMenu.node!.path;
+                          setExpandedFolders((prev) => ({ ...prev, [path]: true }));
+                          onOpenTemplateSelect(path);
+                          setContextMenu(null);
+                        }}
+                      >
+                        <LayoutTemplate size={15} />
+                        <span>{t('sidebar.newFromTemplate')}</span>
+                      </button>
+                    )}
                     {onCreateCanvas && (
                       <button
                         type="button"
@@ -1492,6 +1547,51 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       </span>
                     </button>
                   )}
+
+                {/* Template Quick-Toggle in Context Menu for .md notes */}
+                {contextMenu.node.type === 'file' &&
+                  (contextMenu.node.extension === 'md' || contextMenu.node.path.endsWith('.md')) && (
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={async () => {
+                        const node = contextMenu.node!;
+                        setContextMenu(null);
+                        if (onToggleTemplate) {
+                          await onToggleTemplate(node.path, !!node.isTemplate);
+                        } else {
+                          try {
+                            const note = await api.getNote(node.path);
+                            const nextStatus = !node.isTemplate;
+                            const existingProps = [...(note.properties || [])];
+                            const idx = existingProps.findIndex((p) => p.key.toLowerCase() === 'istemplate');
+                            if (nextStatus) {
+                              if (idx >= 0) existingProps[idx] = { key: 'isTemplate', value: true, type: 'checkbox' };
+                              else existingProps.push({ key: 'isTemplate', value: true, type: 'checkbox' });
+                            } else {
+                              if (idx >= 0) existingProps.splice(idx, 1);
+                            }
+                            await api.saveNote({
+                              path: note.path,
+                              body: note.body,
+                              properties: existingProps,
+                              forceOverwrite: true,
+                            });
+                            onRefresh();
+                          } catch (err) {
+                            console.error('Failed to toggle isTemplate:', err);
+                          }
+                        }
+                      }}
+                    >
+                      <LayoutTemplate size={15} />
+                      <span>
+                        {contextMenu.node.isTemplate
+                          ? (t('sidebar.removeAsTemplate') || 'Als Vorlage entfernen 📄')
+                          : (t('sidebar.setAsTemplate') || 'Als Vorlage festlegen 📄')}
+                      </span>
+                    </button>
+                  )}
                 <div className="tree-context-separator" />
 
                 {/* If multiple items are selected and clicked node is among them */}
@@ -1569,8 +1669,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       onClick={() => {
                         const node = contextMenu.node!;
                         const displayName =
-                          node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
-                            ? node.name.replace(/\.(md|canvas)$/i, '')
+                          node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas' || node.extension === 'base')
+                            ? node.name.replace(/\.(md|canvas|base)$/i, '')
                             : node.name;
                         onRenameEntry(node.path, displayName);
                         setContextMenu(null);
@@ -1589,8 +1689,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       onClick={() => {
                         const node = contextMenu.node!;
                         const displayName =
-                          node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas')
-                            ? node.name.replace(/\.(md|canvas)$/i, '')
+                          node.type === 'file' && (node.extension === 'md' || node.extension === 'canvas' || node.extension === 'base')
+                            ? node.name.replace(/\.(md|canvas|base)$/i, '')
                             : node.name;
                         onDeleteEntry(node.path, displayName);
                         setContextMenu(null);
@@ -1616,6 +1716,19 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   <FilePlus size={15} />
                   <span>{t('sidebar.newNote')}</span>
                 </button>
+                {onOpenTemplateSelect && (
+                  <button
+                    type="button"
+                    className="tree-context-item"
+                    onClick={() => {
+                      onOpenTemplateSelect();
+                      setContextMenu(null);
+                    }}
+                  >
+                    <LayoutTemplate size={15} />
+                    <span>{t('sidebar.newFromTemplate')}</span>
+                  </button>
+                )}
                 {onCreateCanvas && (
                   <button
                     type="button"

@@ -953,6 +953,55 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
   - **Vorlage:** Dropdown-Auswahl aller Markdown-Dateien des Vaults oder Option *Keine Vorlage*.
   - Automatische Synchronisation mit dem Startverhalten (Startup Note: Daily Note).
 
+---
+
+## 28. Icon-Only „Neue Notiz“-Button & „New from Template“-Workflow (`isTemplate: true`)
+
+### 28.1 Icon-Only „Neue Notiz“-Button (`FileSidebar.tsx`)
+- Das bisherige Textlabel „New Note“ wurde entfernt; der Button rendert nun als kompakter, quadratischer Icon-Button (`.sidebar-icon-btn.icon-only`) mit `FilePlus`-Icon.
+- Barrierefreiheit bleibt durch `title={t('sidebar.newNoteTitle')}` und `aria-label={t('sidebar.newNote')}` vollständig gewährleistet.
+
+### 28.2 „New from Template“-Workflow
+- **Template-Kennzeichnung (`isTemplate: true`):** Jede Markdown-Datei mit `isTemplate: true` in YAML-Frontmatter oder Properties gilt als Vorlage.
+- **Dateibaum-Integration:**
+  - Vorlagen-Notizen erhalten ein visuelles Badge (`.tree-template-badge`) mit `LayoutTemplate`-Icon.
+  - Rechtsklick-Kontextmenü für `.md`-Dateien: Dynamischer Toggle *„Als Vorlage festlegen 📄“* bzw. *„Als Vorlage entfernen 📄“*.
+  - Neuer Icon-Button *„Neue Notiz aus Vorlage erstellen…“* direkt neben dem „Neue Notiz“-Button in der Sidebar-Kopfzeile.
+  - Kontextmenü für Ordner und Wurzelverzeichnis: *„Neue Notiz aus Vorlage erstellen…“*.
+- **Vorlagenauswahl-Modal (`TemplateSelectModal.tsx`):**
+  - Durchsuchbares Modal mit Echtzeit-Filterung über Titel, Pfad und Ordner.
+  - Vollständige Tastaturnavigation (`Pfeiltasten`, `Enter` zur Auswahl, `Escape` zum Schließen).
+- **Instanziierungs-Logik:**
+  - Fragt nach dem Namen der neuen Notiz.
+  - **Kritischer Schutz:** Entfernt `isTemplate: true` vollständig aus den Frontmatter-Properties der neuen Notiz, sodass instanziierte Notizen niemals selbst Vorlagen sind.
+  - Ersetzt Variablen `{{date}}` (`YYYY-MM-DD`), `{{time}}` (`HH:mm`) und `{{title}}` im Textkörper und in String-Properties.
+  - Speichert die neue Notiz im Zielordner und öffnet sie sofort im Editor.
+
+---
+
+## 29. Obsidian Bases Integration (`.base` Dateien und ```` ```base ```` Blöcke)
+
+### 29.1 Übersicht & Abfrage-Engine (`src/base/baseEngine.ts`)
+- **Dateityp `.base`:** Registriert als `AttachmentKind: 'base'` in Backend (`VaultService`) und Frontend.
+- **Client-seitige Query-Engine:**
+  - YAML-Definition: Unterstützt `filters`, `formulas`, `properties`, `views`, `order`, `groupBy`, `sort`, `limit`.
+  - Filter-Funktionen: `file.inFolder("...")`, `file.hasTag("...")`, `file.hasLink("...")`, logische Verknüpfungen (`and`, `or`, `not`) und Vergleichsoperatoren (`==`, `!=`, `<`, `>`, `<=`, `>=`).
+  - Formeln: Berechnungen mit Feldern und Datumsangaben (`(date(deadline) - today()) / '1 day'`), `round()`, mathematische Funktionen.
+  - Sortierung & Gruppierung: Automatische Einteilung in Sektionen (nach Ordner oder Properties wie Status/Team) und Spaltensortierung.
+
+### 29.2 Standalone Base-Editor (`BaseEditor.tsx`)
+- Wird geöffnet, wenn eine `.base`-Datei im Dateibaum angeklickt wird.
+- Segment-Umschalter zwischen **Visueller Ansicht** (`BaseView.tsx`) und **YAML-Quelltext**.
+- **Tabelle & Karten:** Umschalten zwischen Tabellenansicht und Kartenraster.
+- **Interaktivität:**
+  - Klick auf den Notiztitel öffnet die entsprechende Markdown-Notiz.
+  - Inline-Bearbeitung von Eigenschaften direkt in den Tabellenzellen (Text, Zahlen, Checkboxen) mit automatischer Speicherung in den Frontmatter-Properties der jeweiligen Datei.
+
+### 29.3 Inline-Base-Codeblöcke (`LivePreviewEditor.tsx`)
+- Markdown-Codeblöcke mit Sprache ```` ```base ```` werden in Live-Preview und Lese-Modus interaktiv als `BaseView` dargestellt.
+- Umschalt-Schaltflächen `[ View | Code ]` ermöglichen den direkten Wechsel zwischen gerenderter Datenbank-Ansicht und dem YAML-Codeblock.
+- Automatisches Refactoring von Links und Pfadfiltern bei Umbenennung oder Verschieben von Notizen (`refactorBaseContent`).
+
 
 
 

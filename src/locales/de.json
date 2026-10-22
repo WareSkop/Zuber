@@ -101,7 +101,13 @@
     "sortNameDesc": "Name (Z bis A)",
     "sortDateDesc": "Änderungsdatum (Neueste zuerst)",
     "sortDateAsc": "Änderungsdatum (Älteste zuerst)",
-    "openDailyNote": "Tagesnotiz öffnen / erstellen"
+    "openDailyNote": "Tagesnotiz öffnen / erstellen",
+    "newFromTemplate": "Neue Notiz aus Vorlage erstellen…",
+    "setAsTemplate": "Als Vorlage festlegen 📄",
+    "removeAsTemplate": "Als Vorlage entfernen 📄",
+    "templateBadge": "Vorlage",
+    "templateSetToast": "Notiz als Vorlage festgelegt 📄",
+    "templateRemovedToast": "Vorlage-Markierung entfernt"
   },
   "moveToModal": {
     "title": "Verschieben nach...",
@@ -476,5 +482,24 @@
     "author": "Autor",
     "date": "Datum",
     "close": "Schließen"
+  },
+  "templates": {
+    "title": "Vorlage auswählen",
+    "searchPlaceholder": "Vorlagen durchsuchen...",
+    "noTemplates": "Keine Vorlagen gefunden. Markiere Notizen mit `isTemplate: true` in den Frontmatter-Eigenschaften.",
+    "newNoteDefaultTitle": "Neue Notiz",
+    "promptTitle": "Titel der neuen Notiz eingeben:",
+    "noteCreatedToast": "Notiz aus Vorlage erstellt.",
+    "selectHint": "Auswählen",
+    "navigateHint": "Navigieren",
+    "closeHint": "Schließen"
+  },
+  "base": {
+    "view": "Ansicht",
+    "visualView": "Visuelle Ansicht",
+    "sourceView": "YAML-Quelltext",
+    "recordsCount": "{{count}} Notizen",
+    "noRecordsFound": "Keine passenden Notizen gefunden.",
+    "syntaxError": "Syntaxfehler in Base-Definition"
   }
 }

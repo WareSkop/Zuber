@@ -1,4 +1,39 @@
 ### Added
+- Icon-Only "New Note" Button (`FileSidebar.tsx`, `styles.css`):
+  - Entfernen des Textlabels „New Note“ aus der Sidebar-Aktionsleiste für eine aufgeräumte, konsistente Icon-Kopfzeile.
+  - Kompaktes quadratisches Icon-Button-Design (`.sidebar-icon-btn.icon-only`) mit erhaltenem barrierefreiem Tooltip (`title`) und `aria-label`.
+- „New from Template“-Workflow (`isTemplate: true`):
+  - Notizen mit der YAML-Frontmatter-Eigenschaft `isTemplate: true` (oder `'true'`) werden als Vorlagen erkannt.
+  - Unterstützung in `PropertiesEditor.tsx` mit automatischer Erkennung und Typisierung als `checkbox`.
+  - Dynamischer Schnell-Toggle im Dateibaum-Kontextmenü für `.md`-Dateien: „Als Vorlage festlegen 📄“ bzw. „Als Vorlage entfernen 📄“.
+  - Visuelles Vorlagen-Badge (`.tree-template-badge`) mit `LayoutTemplate`-Icon im Dateibaum für sofortige Erkennbarkeit.
+  - Eigener Vorlagen-Erstell-Button in der Sidebar-Kopfzeile direkt neben „Neue Notiz“ mit Tooltip `sidebar.newFromTemplate`.
+  - Kontextmenü-Eintrag für Ordner und die Vault-Wurzel: „Neue Notiz aus Vorlage erstellen…“.
+  - Suchbares Vorlagenauswahl-Modal (`TemplateSelectModal.tsx`) mit Tastaturnavigation (`↑`/`↓`, `Enter`, `Escape`), Autofokus und leerem Zustandshinweis.
+  - Intelligente Vorlagen-Instanziierung:
+    - Automatisches und restloses Entfernen der Eigenschaft `isTemplate: true` aus Frontmatter und Properties, damit erstellte Notizen niemals selbst zu Vorlagen werden.
+    - Dynamische Ersetzung von `{{date}}` (`YYYY-MM-DD`), `{{time}}` (`HH:mm`) und `{{title}}` in Notiztext und Frontmatter-Eigenschaften.
+    - Sofortiges Öffnen der neu erstellten Notiz im Editor.
+- Obsidian Bases Integration (`.base`-Dateien und ```` ```base ```` Blöcke):
+  - Registrierung von `.base` als eigenständiger Dateityp (`AttachmentKind: 'base'`) in Backend (`VaultService`), Frontend (`api`, `syncEngine`, `localDb`) und Typdefinitionen.
+  - Client-seitige Abfrage-Engine (`src/base/baseEngine.ts`):
+    - Parsen von YAML-Base-Definitionen (`filters`, `formulas`, `properties`, `views`, `order`, `groupBy`, `sort`, `limit`).
+    - Funktionsunterstützung für `file.name`, `file.folder`, `file.ext`, `file.inFolder()`, `file.hasTag()`, `file.hasLink()`, logische Operatoren (`and`, `or`, `not`) und Property-Vergleiche (`==`, `!=`, `<`, `>`, `<=`, `>=`).
+    - Formel-Evaluation mit arithmetischen Operationen, Datumsberechnungen (`date()`, `today()`, `now()`, Differenzierung) und mathematischen Hilfsfunktionen (`round`, `floor`, `ceil`, `abs`, `min`, `max`).
+    - Automatische Gruppierung nach Properties oder Ordnern sowie Sortierregeln mit Auf-/Absteigend-Unterstützung.
+  - Standalone `.base`-Editor (`BaseEditor.tsx`):
+    - Umschalten zwischen visueller Base-Ansicht (`BaseView.tsx` mit Tabellen- und Karten-Layout) und YAML-Quelltext (`[ Visuelle Ansicht | YAML-Quelltext ]`).
+    - Klick auf den Notiznamen öffnet die Notiz im Workspace.
+    - Inline-Zellenbearbeitung in der Tabelle (Text, Zahlen, Checkboxen) mit automatischem Speichern in den Frontmatter-Properties der Zielnotiz via `api.saveNote()`.
+    - Spalten-Klick zur dynamischen Sortierung.
+  - Interaktive ```` ```base ````-Codeblöcke in Markdown-Notizen:
+    - Rendering im Live-Preview-Editor und im Lese-Modus (`mode === 'reading'`).
+    - Segment-Umschalter `[ View | Code ]` bzw. `[ Ansicht | Code ]` zum Wechseln zwischen Base-Tabelle/Karten und YAML-Definition.
+  - Dateibaum-Unterstützung:
+    - Eigenes Datenbank-/Tabellen-Icon (`Database`) für `.base`-Dateien im Dateibaum.
+    - Grünes `BASE`-Badge neben dem Dateinamen.
+    - Klick öffnet `.base`-Dateien direkt im Base-Editor.
+  - Vollständiges Refactoring von `.base`-Dateien bei Umbenennung oder Verschieben von Notizen/Ordnern (`refactorBaseContent`).
 - Dateibaum-Sortierung (`FileSidebar.tsx` & `src/utils/treeSort.ts`):
   - Vier flexible Sortier-Modi: Name aufsteigend (`name-asc`), Name absteigend (`name-desc`), Änderungsdatum neueste zuerst (`mtime-desc`) und Änderungsdatum älteste zuerst (`mtime-asc`).
   - Persistierung in `localStorage` unter `zuber_tree_sort` (mit Fallback auf `knowmesh_tree_sort`).

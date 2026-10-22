@@ -10,18 +10,19 @@ Dieses Dokument beschreibt sämtliche REST-Endpunkte ([`server/index.ts`](../ser
 
 ```ts
 export type FileNodeType = 'file' | 'folder';
-export type AttachmentKind = 'markdown' | 'canvas' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
+export type AttachmentKind = 'markdown' | 'canvas' | 'base' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
 
 export interface FileNode {
   name: string;               // Dateiname mit Endung (z.B. "Notiz.md" oder "image.png")
   path: string;               // Relativer Pfad zum Vault-Root mit "/" (z.B. "Projekte/Notiz.md")
   type: FileNodeType;         // 'file' | 'folder'
-  extension?: string;         // Dateiendung ohne Punkt in Kleinbuchstaben (z.B. "md", "png", "canvas")
+  extension?: string;         // Dateiendung ohne Punkt in Kleinbuchstaben (z.B. "md", "png", "canvas", "base")
   attachmentKind?: AttachmentKind;
   size?: number;              // Dateigröße in Bytes
   mtime?: number;             // Letzte Änderung (Unix Timestamp in ms)
   children?: FileNode[];      // Nur bei type === 'folder' (Ordner zuerst, dann alphabetisch)
   isSendTarget?: boolean;     // True wenn in Frontmatter `sendtarget: true` gesetzt ist
+  isTemplate?: boolean;       // True wenn in Frontmatter `isTemplate: true` gesetzt ist
 }
 ```
 
@@ -41,6 +42,7 @@ export interface FrontmatterProperty {
 
 **Automatische Typ-Erkennung beim Parsen ([`inferPropertyType`](../shared/markdownUtils.ts)):**
 - Schlüssel `sendtarget` / `send-target` / `send_target` $\rightarrow$ `'checkbox'`
+- Schlüssel `isTemplate` / `istemplate` $\rightarrow$ `'checkbox'`
 - Schlüssel `tags` oder `tag` $\rightarrow$ `'tags'` (Wert wird immer zu `string[]` normalisiert)
 - Schlüssel `aliases` oder `alias` $\rightarrow$ `'list'` (Wert wird immer zu `string[]` normalisiert)
 - `Array.isArray(val)` $\rightarrow$ `'list'`
@@ -51,6 +53,45 @@ export interface FrontmatterProperty {
 
 **Ziel-Notiz-Erkennung ([`isNoteSendTarget`](../shared/markdownUtils.ts)):**
 Prüft, ob in `frontmatter` oder `properties` das Flag `sendtarget` auf `true` gesetzt ist (akzeptiert Boolean `true` sowie String `'true'`).
+
+**Vorlagen-Erkennung ([`isNoteTemplate`](../shared/markdownUtils.ts)):**
+Prüft, ob in `frontmatter` oder `properties` das Flag `isTemplate` auf `true` gesetzt ist (akzeptiert Boolean `true` sowie String `'true'`). Beim Erstellen einer Notiz aus einer Vorlage wird `isTemplate` restlos gestrippt.
+
+### 1.2b Obsidian Bases Datentypen ([`shared/types.ts`](../shared/types.ts))
+
+```ts
+export interface BasePropertyConfig {
+  displayName?: string;
+  type?: string;
+  format?: string;
+}
+
+export interface BaseSortRule {
+  property: string;
+  direction?: 'ASC' | 'DESC' | 'asc' | 'desc';
+}
+
+export interface BaseGroupBy {
+  property: string;
+}
+
+export interface BaseViewConfig {
+  type: 'table' | 'cards' | 'list';
+  name?: string;
+  order?: string[];
+  groupBy?: BaseGroupBy;
+  sort?: BaseSortRule[];
+  limit?: number;
+}
+
+export interface BaseDefinition {
+  filters?: BaseFilterCondition;
+  formulas?: Record<string, string>;
+  properties?: Record<string, BasePropertyConfig>;
+  summaries?: Record<string, string>;
+  views?: BaseViewConfig[];
+}
+```
 
 ### 1.3 Notiz-Nutzdaten (`NotePayload` & `NoteSaveRequest`)
 

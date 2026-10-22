@@ -49,8 +49,8 @@ Deshalb liest `VaultService` den Vault **einmalig beim Start** (`rebuildIndex()`
 
 | Feld | Typ | Beschreibung |
 | :--- | :--- | :--- |
-| `files` | `Map<string, FileEntry>` | Alle Dateien im Vault (Markdown & Anhänge), geschlüsselt nach relativem Pfad (z. B. `"Projekte/Plan.md"`). Enthält `path`, `name`, `basename`, `extension`, `mtimeMs`. |
-| `notes` | `Map<string, NoteData>` | Alle geparsten `.md`-Notizen inkl. `frontmatter`, `properties`, `body`, `links`, `embeds`, `tags`, `headings` und `updatedAt` (`mtimeMs`). |
+| `files` | `Map<string, FileEntry>` | Alle Dateien im Vault (Markdown, Canvas, Bases & Anhänge), geschlüsselt nach relativem Pfad (z. B. `"Projekte/Plan.md"`). Enthält `path`, `name`, `basename`, `extension`, `mtimeMs`. |
+| `notes` | `Map<string, NoteData>` | Alle geparsten `.md`-Notizen und `.base`-Dateien inkl. `frontmatter`, `properties`, `body`, `links`, `embeds`, `tags`, `headings`, `isSendTarget`, `isTemplate` und `updatedAt` (`mtimeMs`). |
 | `folders` | `Set<string>` | Alle bekannten relativen Ordnerpfade im Vault (ohne versteckte Punkt-Ordner wie `.obsidian` oder `.git`). |
 | `lowerPathIndex` | `Map<string, string>` | $O(1)$-Lookup von kleingeschriebenem Pfad (mit und ohne `.md`-Endung) auf den exakten relativen Pfad in `files`. |
 | `nameIndex` | `Map<string, string[]>` | $O(1)$-Lookup von kleingeschriebenem Dateinamen bzw. Basename auf eine sortierte Liste passender Dateipfade (`.md`-Dateien zuerst, danach kürzester Pfad zuerst – analog zu Obsidian). |

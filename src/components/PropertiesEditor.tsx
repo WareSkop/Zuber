@@ -30,6 +30,7 @@ const PROPERTY_SUGGESTIONS = [
   'aliases',
   'status',
   'sendtarget',
+  'isTemplate',
   'erstellt',
   'autor',
   'kategorie',
@@ -86,7 +87,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
         ? 'list'
         : suggestion === 'erstellt' || suggestion === 'fällig'
           ? 'date'
-          : suggestion === 'favorit' || suggestion === 'sendtarget'
+          : suggestion === 'favorit' || suggestion === 'sendtarget' || suggestion === 'isTemplate'
             ? 'checkbox'
             : suggestion === 'priorität'
               ? 'number'

@@ -101,7 +101,13 @@
     "sortNameDesc": "Name (Z to A)",
     "sortDateDesc": "Date modified (Newest first)",
     "sortDateAsc": "Date modified (Oldest first)",
-    "openDailyNote": "Open / create daily note"
+    "openDailyNote": "Open / create daily note",
+    "newFromTemplate": "New note from template…",
+    "setAsTemplate": "Set as Template 📄",
+    "removeAsTemplate": "Remove as Template 📄",
+    "templateBadge": "Template",
+    "templateSetToast": "Note marked as template 📄",
+    "templateRemovedToast": "Template flag removed"
   },
   "moveToModal": {
     "title": "Move to...",
@@ -476,5 +482,24 @@
     "author": "Author",
     "date": "Date",
     "close": "Close"
+  },
+  "templates": {
+    "title": "Select Template",
+    "searchPlaceholder": "Search templates...",
+    "noTemplates": "No templates found. Set `isTemplate: true` in the frontmatter properties of notes.",
+    "newNoteDefaultTitle": "New Note",
+    "promptTitle": "Enter title for new note:",
+    "noteCreatedToast": "Note created from template.",
+    "selectHint": "Select",
+    "navigateHint": "Navigate",
+    "closeHint": "Close"
+  },
+  "base": {
+    "view": "View",
+    "visualView": "Visual View",
+    "sourceView": "YAML Source",
+    "recordsCount": "{{count}} notes",
+    "noRecordsFound": "No matching notes found.",
+    "syntaxError": "Syntax error in Base definition"
   }
 }

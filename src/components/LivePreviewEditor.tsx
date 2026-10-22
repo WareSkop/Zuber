@@ -36,6 +36,7 @@ import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { Target } from 'lucide-react';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
+import { BaseView } from './BaseView';
 
 let mermaidInitialized = false;
 function initMermaid(isDark: boolean) {
@@ -129,6 +130,18 @@ marked.use({
       if (langLower === 'mermaid') {
         const encodedCode = encodeURIComponent(text);
         return `<div class="codeblock-container reading-mermaid-container" data-code="${encodedCode}"><div class="codeblock-header"><span class="codeblock-lang">MERMAID</span><div class="codeblock-view-toggle"><button type="button" class="codeblock-toggle-btn active" data-action="diagram">Diagram</button><button type="button" class="codeblock-toggle-btn" data-action="code">Code</button></div><button type="button" class="codeblock-copy-btn" title="Code kopieren"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-text">Kopieren</span></button></div><div class="reading-mermaid-preview"><div class="reading-mermaid-svg"></div></div><pre class="reading-mermaid-code" style="display:none;"><code class="hljs language-mermaid">${escapeHtml(text)}</code></pre></div>`;
+      }
+
+      // Base Code Block (Reading Mode)
+      if (langLower === 'base') {
+        let highlightedCode = '';
+        try {
+          highlightedCode = hljs.highlight(text, { language: 'yaml' }).value;
+        } catch {
+          highlightedCode = escapeHtml(text);
+        }
+        const encodedCode = encodeURIComponent(text);
+        return `<div class="codeblock-container reading-base-container" data-code="${encodedCode}"><div class="codeblock-header"><span class="codeblock-lang">BASE</span><div class="codeblock-view-toggle"><button type="button" class="codeblock-toggle-btn active" data-action="preview">View</button><button type="button" class="codeblock-toggle-btn" data-action="code">Code</button></div><button type="button" class="codeblock-copy-btn" title="Code kopieren"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-text">Kopieren</span></button></div><div class="reading-base-preview"><div class="reading-base-mount"></div></div><pre class="reading-base-code" style="display:none;"><code class="hljs language-yaml">${highlightedCode}</code></pre></div>`;
       }
 
       // HTML Code Block (Reading Mode)
@@ -802,7 +815,8 @@ class InteractiveCodeBlockWidget extends WidgetType {
     readonly pos: number,
     readonly mode: 'preview' | 'code',
     readonly onToggleMode: (pos: number, mode: 'preview' | 'code') => void,
-    readonly t?: (key: string) => string
+    readonly t?: (key: string) => string,
+    readonly onNavigate?: (target: string) => void
   ) {
     super();
   }
@@ -819,9 +833,10 @@ class InteractiveCodeBlockWidget extends WidgetType {
   toDOM(_view: EditorView) {
     const isMermaid = this.language.toLowerCase() === 'mermaid';
     const isHtml = this.language.toLowerCase() === 'html' || this.language.toLowerCase() === 'htm';
+    const isBase = this.language.toLowerCase() === 'base';
 
     const wrap = document.createElement('div');
-    wrap.className = `cm-lp-interactive-block ${isMermaid ? 'cm-lp-mermaid-block' : 'cm-lp-html-block'}`;
+    wrap.className = `cm-lp-interactive-block ${isMermaid ? 'cm-lp-mermaid-block' : isHtml ? 'cm-lp-html-block' : 'cm-lp-base-block'}`;
 
     const header = document.createElement('div');
     header.className = 'cm-lp-codeblock-header';
@@ -832,12 +847,14 @@ class InteractiveCodeBlockWidget extends WidgetType {
     langSpan.textContent = langDisplay;
     header.appendChild(langSpan);
 
-    // Segmented toggle button [ Diagram | Code ] or [ Preview | Code ]
+    // Segmented toggle button [ Diagram | Code ] or [ View | Code ] or [ Preview | Code ]
     const toggleContainer = document.createElement('div');
     toggleContainer.className = 'cm-lp-codeblock-view-toggle';
 
     const primaryLabel = isMermaid
       ? (this.t ? this.t('editor.diagram') : 'Diagram')
+      : isBase
+      ? (this.t ? this.t('base.view') : 'View')
       : (this.t ? this.t('editor.preview') : 'Preview');
     const codeLabel = this.t ? this.t('editor.code') : 'Code';
 
@@ -961,6 +978,18 @@ class InteractiveCodeBlockWidget extends WidgetType {
           } catch {}
         };
         previewEl.appendChild(iframe);
+      } else if (isBase) {
+        const baseContainer = document.createElement('div');
+        baseContainer.className = 'cm-lp-base-container';
+        const root = createRoot(baseContainer);
+        (baseContainer as any)._reactRoot = root;
+        root.render(
+          <BaseView
+            definitionYaml={this.codeText}
+            onOpenNote={this.onNavigate}
+          />
+        );
+        previewEl.appendChild(baseContainer);
       }
 
       wrap.appendChild(previewEl);
@@ -969,10 +998,24 @@ class InteractiveCodeBlockWidget extends WidgetType {
     return wrap;
   }
 
+  destroy(dom: HTMLElement) {
+    const baseContainers = dom.querySelectorAll('.cm-lp-base-container');
+    baseContainers.forEach((el) => {
+      const root = (el as any)._reactRoot as Root | undefined;
+      if (root) {
+        setTimeout(() => {
+          try {
+            root.unmount();
+          } catch {}
+        }, 0);
+      }
+    });
+  }
+
   ignoreEvent(event: Event) {
     const target = event.target as HTMLElement;
     if (!target) return false;
-    return target.closest('.cm-lp-codeblock-copy-btn, .cm-lp-codeblock-view-toggle, .cm-lp-block-preview') != null;
+    return target.closest('.cm-lp-codeblock-copy-btn, .cm-lp-codeblock-view-toggle, .cm-lp-block-preview, .cm-lp-base-container') != null;
   }
 }
 
@@ -1151,7 +1194,7 @@ function buildLivePreviewDecorations(
     if (cbMeta) {
       const { block, isStart, isEnd } = cbMeta;
       const langLower = (block.lang || '').toLowerCase();
-      const isInteractive = langLower === 'mermaid' || langLower === 'html' || langLower === 'htm';
+      const isInteractive = langLower === 'mermaid' || langLower === 'html' || langLower === 'htm' || langLower === 'base';
 
       if (isInteractive) {
         const startLineObj = doc.line(block.startLine);
@@ -1176,7 +1219,8 @@ function buildLivePreviewDecorations(
                   startLineObj.from,
                   'preview',
                   onToggleMode,
-                  t
+                  t,
+                  onNavigate
                 ),
               })
             );
@@ -1211,7 +1255,8 @@ function buildLivePreviewDecorations(
                   startLineObj.from,
                   'code',
                   onToggleMode,
-                  t
+                  t,
+                  onNavigate
                 ),
               })
             );
@@ -2893,7 +2938,33 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           `;
         });
     });
-  }, [mode, renderedHtml]);
+    // Render Base blocks in Reading Mode
+    const baseBlocks = container.querySelectorAll<HTMLElement>('.reading-base-container');
+    const baseRoots: Root[] = [];
+    baseBlocks.forEach((block) => {
+      const rawCode = decodeURIComponent(block.dataset.code || '');
+      const mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
+      if (!mountContainer || mountContainer.hasAttribute('data-rendered')) return;
+
+      mountContainer.setAttribute('data-rendered', 'true');
+      const root = createRoot(mountContainer);
+      baseRoots.push(root);
+      root.render(
+        <BaseView
+          definitionYaml={rawCode}
+          onOpenNote={onNavigateWikiLink}
+        />
+      );
+    });
+
+    return () => {
+      baseRoots.forEach((r) => {
+        try {
+          r.unmount();
+        } catch {}
+      });
+    };
+  }, [mode, onNavigateWikiLink, renderedHtml]);
 
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const extLink = (e.target as HTMLElement).closest('a[target="_blank"]');
@@ -2912,8 +2983,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       buttons.forEach((b) => b.classList.remove('active'));
       toggleBtn.classList.add('active');
 
-      const previewEl = container.querySelector<HTMLElement>('.reading-mermaid-preview, .reading-html-preview');
-      const codeEl = container.querySelector<HTMLElement>('.reading-mermaid-code, .reading-html-code');
+      const previewEl = container.querySelector<HTMLElement>(
+        '.reading-mermaid-preview, .reading-html-preview, .reading-base-preview'
+      );
+      const codeEl = container.querySelector<HTMLElement>(
+        '.reading-mermaid-code, .reading-html-code, .reading-base-code'
+      );
 
       if (action === 'code') {
         if (previewEl) previewEl.style.display = 'none';
