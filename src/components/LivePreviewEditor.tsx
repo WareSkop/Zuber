@@ -3,6 +3,8 @@ import {
   EditorState,
   RangeSetBuilder,
   Compartment,
+  StateEffect,
+  StateField,
 } from '@codemirror/state';
 import {
   EditorView,
@@ -29,8 +31,63 @@ import {
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { createRoot, type Root } from 'react-dom/client';
+import mermaid from 'mermaid';
 import { api } from '../api';
+import { useTranslation } from '../i18n';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
+
+let mermaidInitialized = false;
+function initMermaid(isDark: boolean) {
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: isDark ? 'dark' : 'default',
+    fontFamily: 'inherit',
+    suppressErrorRendering: true,
+  });
+  mermaidInitialized = true;
+}
+
+export const setBlockModeEffect = StateEffect.define<{ pos: number; mode: 'preview' | 'code' }>();
+
+export const blockModesField = StateField.define<Map<number, 'preview' | 'code'>>({
+  create() {
+    return new Map();
+  },
+  update(modes, tr) {
+    let updated = modes;
+    if (tr.docChanged) {
+      updated = new Map();
+      for (const [pos, mode] of modes) {
+        const newPos = tr.changes.mapPos(pos);
+        updated.set(newPos, mode);
+      }
+    }
+    for (const effect of tr.effects) {
+      if (effect.is(setBlockModeEffect)) {
+        if (updated === modes) updated = new Map(modes);
+        updated.set(effect.value.pos, effect.value.mode);
+      }
+    }
+    return updated;
+  },
+});
+
+const TEXT_EXT_REGEX = /\.(txt|md|markdown|csv|json|log|yaml|yml|xml|toml|ini|env|sh|bash|zsh|bat|cmd|ps1|js|jsx|ts|tsx|py|rb|php|java|c|cpp|h|hpp|cs|go|rs|swift|kt|html|htm|css|scss|sass|less|sql)$/i;
+
+function isTextFile(file: File): boolean {
+  if (file.type && file.type.startsWith('text/')) return true;
+  if (
+    file.type === 'application/json' ||
+    file.type === 'application/xml' ||
+    file.type === 'application/javascript' ||
+    file.type === 'application/x-yaml' ||
+    file.type === 'application/x-sh'
+  ) {
+    return true;
+  }
+  return TEXT_EXT_REGEX.test(file.name);
+}
 
 function escapeHtml(str: string): string {
   return str
@@ -65,6 +122,27 @@ marked.use({
   renderer: {
     code({ text, lang }: { text: string; lang?: string }) {
       const language = (lang || '').trim();
+      const langLower = language.toLowerCase();
+
+      // Mermaid Code Block (Reading Mode)
+      if (langLower === 'mermaid') {
+        const encodedCode = encodeURIComponent(text);
+        return `<div class="codeblock-container reading-mermaid-container" data-code="${encodedCode}"><div class="codeblock-header"><span class="codeblock-lang">MERMAID</span><div class="codeblock-view-toggle"><button type="button" class="codeblock-toggle-btn active" data-action="diagram">Diagram</button><button type="button" class="codeblock-toggle-btn" data-action="code">Code</button></div><button type="button" class="codeblock-copy-btn" title="Code kopieren"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-text">Kopieren</span></button></div><div class="reading-mermaid-preview"><div class="reading-mermaid-svg"></div></div><pre class="reading-mermaid-code" style="display:none;"><code class="hljs language-mermaid">${escapeHtml(text)}</code></pre></div>`;
+      }
+
+      // HTML Code Block (Reading Mode)
+      if (langLower === 'html' || langLower === 'htm') {
+        let highlightedCode = '';
+        try {
+          highlightedCode = hljs.highlight(text, { language: 'html' }).value;
+        } catch {
+          highlightedCode = escapeHtml(text);
+        }
+        const encodedCode = encodeURIComponent(text);
+        const escapedSrcdoc = escapeHtml(text);
+        return `<div class="codeblock-container reading-html-container" data-code="${encodedCode}"><div class="codeblock-header"><span class="codeblock-lang">HTML</span><div class="codeblock-view-toggle"><button type="button" class="codeblock-toggle-btn active" data-action="preview">Preview</button><button type="button" class="codeblock-toggle-btn" data-action="code">Code</button></div><button type="button" class="codeblock-copy-btn" title="Code kopieren"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg><span class="copy-text">Kopieren</span></button></div><div class="reading-html-preview"><iframe srcdoc="${escapedSrcdoc}" sandbox="allow-scripts" class="reading-html-frame" style="width: 100%; height: 320px; border: none; border-radius: 6px; background: #fff;"></iframe></div><pre class="reading-html-code" style="display:none;"><code class="hljs language-html">${highlightedCode}</code></pre></div>`;
+      }
+
       let highlightedCode = '';
       if (language && hljs.getLanguage(language)) {
         try {
@@ -408,7 +486,8 @@ class EmbedWidget extends WidgetType {
     readonly align?: 'left' | 'center' | 'right',
     readonly range?: { from: number; to: number },
     readonly onUpdateTag?: (newTag: string, from: number, to: number) => void,
-    readonly allNotes?: { path: string; name: string; basename: string }[]
+    readonly allNotes?: { path: string; name: string; basename: string }[],
+    readonly t?: (key: string) => string
   ) {
     super();
   }
@@ -464,6 +543,27 @@ class EmbedWidget extends WidgetType {
     }
 
     const isImage = IMAGE_EXT_REGEX.test(cleanTarget);
+    const isPdf = cleanTarget.toLowerCase().endsWith('.pdf');
+
+    if (isPdf) {
+      const container = document.createElement('div');
+      container.className = 'cm-lp-pdf-embed';
+      const fileUrl = /^(https?:|data:)/i.test(cleanTarget)
+        ? cleanTarget
+        : api.getAttachmentUrl(cleanTarget, this.notePath);
+      const iframeSrc = `${fileUrl}#toolbar=1&view=FitH`;
+      const fileName = cleanTarget.split('/').pop() || cleanTarget;
+      const height = this.width ? `${this.width}px` : '550px';
+
+      container.innerHTML = `
+        <div class="cm-lp-pdf-header">
+          <span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span>
+          <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="${this.t ? this.t('editor.openPdfInNewTab') : 'In neuem Tab öffnen'}">↗</a>
+        </div>
+        <iframe src="${iframeSrc}" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe>
+      `;
+      return container;
+    }
 
     if (!isImage) {
       const wrapper = document.createElement('span');
@@ -592,6 +692,22 @@ class EmbedWidget extends WidgetType {
     });
     toolbar.appendChild(resetBtn);
 
+    // Delete Button (Papierkorb)
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'cm-image-btn cm-image-btn-delete';
+    deleteBtn.title = this.t ? this.t('editor.removeImage') : 'Bild entfernen';
+    deleteBtn.innerHTML =
+      '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+    deleteBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.range && this.onUpdateTag) {
+        this.onUpdateTag('', this.range.from, this.range.to);
+      }
+    });
+    toolbar.appendChild(deleteBtn);
+
     // Resize Handles
     const handleSE = document.createElement('span');
     handleSE.className = 'cm-image-resize-handle cm-image-resize-handle-se';
@@ -675,6 +791,187 @@ class EmbedWidget extends WidgetType {
   }
 }
 
+class InteractiveCodeBlockWidget extends WidgetType {
+  constructor(
+    readonly language: string,
+    readonly codeText: string,
+    readonly pos: number,
+    readonly mode: 'preview' | 'code',
+    readonly onToggleMode: (pos: number, mode: 'preview' | 'code') => void,
+    readonly t?: (key: string) => string
+  ) {
+    super();
+  }
+
+  eq(other: InteractiveCodeBlockWidget) {
+    return (
+      other.language === this.language &&
+      other.codeText === this.codeText &&
+      other.pos === this.pos &&
+      other.mode === this.mode
+    );
+  }
+
+  toDOM(_view: EditorView) {
+    const isMermaid = this.language.toLowerCase() === 'mermaid';
+    const isHtml = this.language.toLowerCase() === 'html' || this.language.toLowerCase() === 'htm';
+
+    const wrap = document.createElement('div');
+    wrap.className = `cm-lp-interactive-block ${isMermaid ? 'cm-lp-mermaid-block' : 'cm-lp-html-block'}`;
+
+    const header = document.createElement('div');
+    header.className = 'cm-lp-codeblock-header';
+
+    const langDisplay = (this.language || 'code').toUpperCase();
+    const langSpan = document.createElement('span');
+    langSpan.className = 'cm-lp-codeblock-lang';
+    langSpan.textContent = langDisplay;
+    header.appendChild(langSpan);
+
+    // Segmented toggle button [ Diagram | Code ] or [ Preview | Code ]
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'cm-lp-codeblock-view-toggle';
+
+    const primaryLabel = isMermaid
+      ? (this.t ? this.t('editor.diagram') : 'Diagram')
+      : (this.t ? this.t('editor.preview') : 'Preview');
+    const codeLabel = this.t ? this.t('editor.code') : 'Code';
+
+    const primaryBtn = document.createElement('button');
+    primaryBtn.type = 'button';
+    primaryBtn.className = `cm-lp-codeblock-view-btn ${this.mode === 'preview' ? 'active' : ''}`;
+    primaryBtn.textContent = primaryLabel;
+    primaryBtn.onmousedown = (e) => e.preventDefault();
+    primaryBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (this.mode !== 'preview') {
+        this.onToggleMode(this.pos, 'preview');
+      }
+    };
+
+    const codeBtn = document.createElement('button');
+    codeBtn.type = 'button';
+    codeBtn.className = `cm-lp-codeblock-view-btn ${this.mode === 'code' ? 'active' : ''}`;
+    codeBtn.textContent = codeLabel;
+    codeBtn.onmousedown = (e) => e.preventDefault();
+    codeBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (this.mode !== 'code') {
+        this.onToggleMode(this.pos, 'code');
+      }
+    };
+
+    toggleContainer.appendChild(primaryBtn);
+    toggleContainer.appendChild(codeBtn);
+    header.appendChild(toggleContainer);
+
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'cm-lp-codeblock-copy-btn';
+    copyBtn.title = 'Code kopieren';
+    copyBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span class="copy-text">Kopieren</span>
+    `;
+    copyBtn.onmousedown = (e) => e.preventDefault();
+    copyBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(this.codeText);
+      } catch {
+        const ta = document.createElement('textarea');
+        ta.value = this.codeText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      copyBtn.classList.add('copied');
+      const textSpan = copyBtn.querySelector('.copy-text');
+      if (textSpan) textSpan.textContent = 'Kopiert!';
+      setTimeout(() => {
+        copyBtn.classList.remove('copied');
+        if (textSpan) textSpan.textContent = 'Kopieren';
+      }, 2000);
+    };
+    header.appendChild(copyBtn);
+    wrap.appendChild(header);
+
+    // If in 'preview' mode, render the preview content
+    if (this.mode === 'preview') {
+      const previewEl = document.createElement('div');
+      previewEl.className = `cm-lp-block-preview ${isMermaid ? 'cm-lp-mermaid-preview' : 'cm-lp-html-preview'}`;
+
+      if (isMermaid) {
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light' &&
+          (document.documentElement.getAttribute('data-theme') === 'dark' ||
+           window.matchMedia('(prefers-color-scheme: dark)').matches ||
+           document.documentElement.classList.contains('dark'));
+
+        initMermaid(isDark);
+        const renderId = 'mermaid-' + Math.random().toString(36).slice(2, 9);
+        mermaid.render(renderId, this.codeText || 'graph TD\n  Start')
+          .then(({ svg }) => {
+            previewEl.innerHTML = svg;
+            const svgEl = previewEl.querySelector('svg');
+            if (svgEl) {
+              svgEl.style.maxWidth = '100%';
+              svgEl.style.height = 'auto';
+            }
+          })
+          .catch((err) => {
+            document.getElementById('d' + renderId)?.remove();
+            document.getElementById(renderId)?.remove();
+            previewEl.innerHTML = `
+              <div class="cm-lp-mermaid-error">
+                <span class="cm-lp-mermaid-error-icon">⚠️</span>
+                <span class="cm-lp-mermaid-error-title">Mermaid Syntax Error:</span>
+                <pre class="cm-lp-mermaid-error-msg">${escapeHtml(err?.message || String(err))}</pre>
+              </div>
+            `;
+          });
+      } else if (isHtml) {
+        const iframe = document.createElement('iframe');
+        iframe.className = 'cm-lp-html-frame';
+        iframe.sandbox.add('allow-scripts');
+        iframe.srcdoc = this.codeText;
+        iframe.style.width = '100%';
+        iframe.style.height = '320px';
+        iframe.style.border = 'none';
+        iframe.style.borderRadius = '6px';
+        iframe.style.background = '#ffffff';
+        iframe.loading = 'lazy';
+        iframe.onload = () => {
+          try {
+            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (doc) {
+              const h = Math.max(doc.body?.scrollHeight || 0, doc.documentElement?.scrollHeight || 0);
+              if (h > 0) {
+                iframe.style.height = `${Math.min(800, Math.max(120, h + 24))}px`;
+              }
+            }
+          } catch {}
+        };
+        previewEl.appendChild(iframe);
+      }
+
+      wrap.appendChild(previewEl);
+    }
+
+    return wrap;
+  }
+
+  ignoreEvent(event: Event) {
+    const target = event.target as HTMLElement;
+    if (!target) return false;
+    return target.closest('.cm-lp-codeblock-copy-btn, .cm-lp-codeblock-view-toggle, .cm-lp-block-preview') != null;
+  }
+}
+
 class CodeBlockHeaderWidget extends WidgetType {
   constructor(readonly language: string, readonly codeText: string) {
     super();
@@ -736,11 +1033,14 @@ function buildLivePreviewDecorations(
   onNavigate: (target: string) => void,
   onSelectTag: (tag: string) => void,
   onUpdateTag: (newTag: string, from: number, to: number) => void,
-  allNotes?: { path: string; name: string; basename: string }[]
+  onToggleMode: (pos: number, mode: 'preview' | 'code') => void,
+  allNotes?: { path: string; name: string; basename: string }[],
+  t?: (key: string) => string
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
   const selection = view.state.selection.main;
+  const blockModes = view.state.field(blockModesField, false) || new Map<number, 'preview' | 'code'>();
 
   // Determine which lines currently have the cursor/selection
   const activeLines = new Set<number>();
@@ -846,6 +1146,91 @@ function buildLivePreviewDecorations(
     const cbMeta = codeBlockByLine.get(lineNum);
     if (cbMeta) {
       const { block, isStart, isEnd } = cbMeta;
+      const langLower = (block.lang || '').toLowerCase();
+      const isInteractive = langLower === 'mermaid' || langLower === 'html' || langLower === 'htm';
+
+      if (isInteractive) {
+        const startLineObj = doc.line(block.startLine);
+        const mode = blockModes.get(startLineObj.from) ?? 'preview';
+
+        if (mode === 'preview') {
+          if (isStart) {
+            builder.add(
+              line.from,
+              line.from,
+              Decoration.line({
+                class: 'cm-lp-codeblock-header-line cm-lp-codeblock-host-line',
+              })
+            );
+            builder.add(
+              line.from,
+              line.to,
+              Decoration.replace({
+                widget: new InteractiveCodeBlockWidget(
+                  block.lang,
+                  block.codeText,
+                  startLineObj.from,
+                  'preview',
+                  onToggleMode,
+                  t
+                ),
+              })
+            );
+          } else {
+            builder.add(
+              line.from,
+              line.from,
+              Decoration.line({ class: 'cm-lp-codeblock-collapsed-line' })
+            );
+            if (line.to > line.from) {
+              builder.add(line.from, line.to, Decoration.replace({}));
+            }
+          }
+          continue;
+        } else {
+          // mode === 'code'
+          if (isStart) {
+            builder.add(
+              line.from,
+              line.from,
+              Decoration.line({
+                class: 'cm-lp-codeblock-header-line',
+              })
+            );
+            builder.add(
+              line.from,
+              line.to,
+              Decoration.replace({
+                widget: new InteractiveCodeBlockWidget(
+                  block.lang,
+                  block.codeText,
+                  startLineObj.from,
+                  'code',
+                  onToggleMode,
+                  t
+                ),
+              })
+            );
+          } else if (isEnd) {
+            builder.add(
+              line.from,
+              line.from,
+              Decoration.line({ class: 'cm-lp-codeblock-bottom-line' })
+            );
+            if (line.to > line.from) {
+              builder.add(line.from, line.to, Decoration.replace({}));
+            }
+          } else {
+            builder.add(
+              line.from,
+              line.from,
+              Decoration.line({ class: 'cm-lp-codeblock-content-line' })
+            );
+          }
+          continue;
+        }
+      }
+
       if (!block.hasCursor) {
         if (isStart) {
           builder.add(
@@ -1083,7 +1468,8 @@ function buildLivePreviewDecorations(
               imgAlign,
               { from: fullStart, to: fullEnd },
               onUpdateTag,
-              allNotes
+              allNotes,
+              t
             ),
           }),
         });
@@ -1121,7 +1507,8 @@ function buildLivePreviewDecorations(
               undefined,
               { from: fullStart, to: fullEnd },
               onUpdateTag,
-              allNotes
+              allNotes,
+              t
             ),
           }),
         });
@@ -1176,7 +1563,8 @@ function buildLivePreviewDecorations(
               align,
               { from: fullStart, to: fullEnd },
               onUpdateTag,
-              allNotes
+              allNotes,
+              t
             ),
           }),
         });
@@ -1272,6 +1660,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onSelectTag,
   } = props;
 
+  const { t } = useTranslation();
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const livePluginCompartment = useRef(new Compartment());
@@ -1286,6 +1675,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     notePath,
     allNotes,
     allTags,
+    t,
   });
   callbacksRef.current = {
     onChangeBody,
@@ -1297,6 +1687,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     notePath,
     allNotes,
     allTags,
+    t,
   };
 
   const applyFormat = (
@@ -1862,11 +2253,23 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         if (!v) return;
         const docLen = v.state.doc.length;
         const safeFrom = Math.max(0, Math.min(from, docLen));
-        const safeTo = Math.max(safeFrom, Math.min(to, docLen));
+        let safeTo = Math.max(safeFrom, Math.min(to, docLen));
+        if (newTag === '' && safeTo < docLen && v.state.doc.sliceString(safeTo, safeTo + 1) === '\n') {
+          safeTo += 1;
+        }
         v.dispatch({
           changes: { from: safeFrom, to: safeTo, insert: newTag },
         });
       };
+
+      const onToggleMode = (pos: number, mode: 'preview' | 'code') => {
+        const v = viewRef.current;
+        if (!v) return;
+        v.dispatch({
+          effects: setBlockModeEffect.of({ pos, mode }),
+        });
+      };
+
       return ViewPlugin.fromClass(
         class {
           decorations: DecorationSet;
@@ -1877,18 +2280,27 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               (t) => callbacksRef.current.onNavigateWikiLink(t),
               (tag) => callbacksRef.current.onSelectTag(tag),
               onUpdateTag,
-              callbacksRef.current.allNotes
+              onToggleMode,
+              callbacksRef.current.allNotes,
+              callbacksRef.current.t
             );
           }
           update(update: ViewUpdate) {
-            if (update.docChanged || update.selectionSet || update.viewportChanged) {
+            if (
+              update.docChanged ||
+              update.selectionSet ||
+              update.viewportChanged ||
+              update.transactions.some((tr) => tr.effects.some((e) => e.is(setBlockModeEffect)))
+            ) {
               this.decorations = buildLivePreviewDecorations(
                 update.view,
                 callbacksRef.current.notePath,
                 (t) => callbacksRef.current.onNavigateWikiLink(t),
                 (tag) => callbacksRef.current.onSelectTag(tag),
                 onUpdateTag,
-                callbacksRef.current.allNotes
+                onToggleMode,
+                callbacksRef.current.allNotes,
+                callbacksRef.current.t
               );
             }
           }
@@ -2004,40 +2416,100 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
         return false;
       },
-      drop(event, view) {
-        const files = event.dataTransfer?.files;
-        if (!files || files.length === 0) return false;
-        const imageFiles = Array.from(files).filter(
-          (f) => f.type.startsWith('image/') || IMAGE_EXT_REGEX.test(f.name)
-        );
-        if (imageFiles.length > 0) {
+      dragover(event, _view) {
+        if (
+          event.dataTransfer?.types.includes('Files') ||
+          event.dataTransfer?.types.includes('text/plain')
+        ) {
           event.preventDefault();
-          for (const file of imageFiles) {
-            const uploadPromise = callbacksRef.current.onUploadAttachment
-              ? callbacksRef.current.onUploadAttachment(file)
-              : api.uploadAttachment(file).then((res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`));
-
-            uploadPromise
-              .then((embedTag) => {
-                const pos = view.state.selection.main.head;
-                view.dispatch({
-                  changes: { from: pos, insert: `${embedTag}\n` },
-                  selection: { anchor: pos + embedTag.length + 1 },
-                });
-              })
-              .catch((err) => {
-                console.error('Fehler beim Drop des Bildes:', err);
-              });
-          }
+          event.dataTransfer.dropEffect = 'copy';
           return true;
         }
         return false;
+      },
+      drop(event, view) {
+        const dt = event.dataTransfer;
+        if (!dt) return false;
+
+        const dropPos =
+          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+          view.state.selection.main.head;
+
+        const files = dt.files ? Array.from(dt.files) : [];
+
+        // Fall D: Plain text drop (no files)
+        if (files.length === 0) {
+          const text = dt.getData('text/plain');
+          if (text) {
+            event.preventDefault();
+            view.dispatch({
+              changes: { from: dropPos, to: dropPos, insert: text },
+              selection: { anchor: dropPos + text.length },
+            });
+            view.focus();
+            return true;
+          }
+          return false;
+        }
+
+        event.preventDefault();
+
+        // Categorize files
+        const textFiles: File[] = [];
+        const uploadFiles: File[] = [];
+
+        for (const file of files) {
+          if (isTextFile(file)) {
+            textFiles.push(file);
+          } else {
+            // Images (Fall A) and binary files like PDF, ZIP, DOCX (Fall C)
+            uploadFiles.push(file);
+          }
+        }
+
+        (async () => {
+          const insertChunks: string[] = [];
+
+          // Process text files (Fall B) - read client-side directly
+          if (textFiles.length > 0) {
+            const contents = await Promise.all(textFiles.map((f) => f.text()));
+            insertChunks.push(contents.join('\n\n'));
+          }
+
+          // Process upload files (Fall A & C)
+          if (uploadFiles.length > 0) {
+            for (const file of uploadFiles) {
+              try {
+                const embedTag = callbacksRef.current.onUploadAttachment
+                  ? await callbacksRef.current.onUploadAttachment(file)
+                  : await api.uploadAttachment(file).then(
+                      (res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`)
+                    );
+                insertChunks.push(embedTag);
+              } catch (err) {
+                console.error('Fehler beim Upload des Anhangs:', err);
+              }
+            }
+          }
+
+          if (insertChunks.length > 0) {
+            const insertText = insertChunks.join('\n\n');
+            view.dispatch({
+              changes: { from: dropPos, to: dropPos, insert: insertText },
+              selection: { anchor: dropPos + insertText.length },
+            });
+            view.focus();
+          }
+        })();
+
+        return true;
       },
     });
 
     const state = EditorState.create({
       doc: activeDocText,
       extensions: [
+        blockModesField,
         history(),
         keymap.of([
           { key: 'Mod-b', run: () => { applyFormat('bold'); return true; } },
@@ -2168,6 +2640,15 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         if (isCanvas) {
           return `<div class="reading-canvas-embed" data-canvas-path="${canvasPath}" data-wikilink="${canvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
         }
+        if (target.toLowerCase().endsWith('.pdf')) {
+          const url = api.getAttachmentUrl(target, notePath);
+          const fileName = target.split('/').pop() || target;
+          let height = '550px';
+          if (/^\d+$/.test(alt)) {
+            height = `${alt}px`;
+          }
+          return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
+        }
         if (IMAGE_EXT_REGEX.test(target)) {
           const url = api.getAttachmentUrl(target, notePath);
           const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
@@ -2204,6 +2685,15 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         }
         if (isCanvas) {
           return `<div class="reading-canvas-embed" data-canvas-path="${canvasPath}" data-wikilink="${canvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${alt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        }
+        if (target.toLowerCase().endsWith('.pdf')) {
+          const url = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);
+          const fileName = target.split('/').pop() || target;
+          let height = '550px';
+          if (/^\d+$/.test(alt)) {
+            height = `${alt}px`;
+          }
+          return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
         }
         const url = /^(https?:|data:)/i.test(target)
           ? target
@@ -2259,7 +2749,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     // Add task-list-item class to <li> containing input checkbox for reliable styling
     rawHtml = rawHtml.replace(/<li(\s*[^>]*)>(?:\s*<p>)?\s*(<input\s+[^>]*type=["']checkbox["'][^>]*>)/gi, '<li$1 class="task-list-item">$2');
     return DOMPurify.sanitize(rawHtml, {
-      ADD_TAGS: ['rect', 'path', 'svg', 'button'],
+      ADD_TAGS: ['rect', 'path', 'svg', 'button', 'iframe'],
       ADD_ATTR: [
         'href',
         'target',
@@ -2268,6 +2758,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         'data-wikilink',
         'data-canvas-path',
         'data-tag',
+        'data-code',
+        'data-action',
+        'data-rendered',
+        'srcdoc',
+        'sandbox',
+        'style',
         'loading',
         'decoding',
         'align',
@@ -2284,9 +2780,78 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     });
   }, [body, mode, notePath]);
 
+  // Render Mermaid diagrams in Reading Mode
+  useEffect(() => {
+    if (mode !== 'reading') return;
+    const container = document.querySelector('.reading-view-container');
+    if (!container) return;
+
+    const isDark =
+      document.documentElement.getAttribute('data-theme') !== 'light' &&
+      (document.documentElement.getAttribute('data-theme') === 'dark' ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches ||
+        document.documentElement.classList.contains('dark'));
+    initMermaid(isDark);
+
+    const mermaidBlocks = container.querySelectorAll<HTMLElement>('.reading-mermaid-container');
+    mermaidBlocks.forEach((block) => {
+      const rawCode = decodeURIComponent(block.dataset.code || '');
+      const svgContainer = block.querySelector<HTMLElement>('.reading-mermaid-svg');
+      if (!svgContainer || svgContainer.hasAttribute('data-rendered')) return;
+
+      svgContainer.setAttribute('data-rendered', 'true');
+      const renderId = 'reading-mermaid-' + Math.random().toString(36).slice(2, 9);
+      mermaid
+        .render(renderId, rawCode || 'graph TD\n  Start')
+        .then(({ svg }) => {
+          svgContainer.innerHTML = svg;
+          const svgEl = svgContainer.querySelector('svg');
+          if (svgEl) {
+            svgEl.style.maxWidth = '100%';
+            svgEl.style.height = 'auto';
+          }
+        })
+        .catch((err) => {
+          document.getElementById('d' + renderId)?.remove();
+          document.getElementById(renderId)?.remove();
+          svgContainer.innerHTML = `
+            <div class="cm-lp-mermaid-error">
+              <span class="cm-lp-mermaid-error-icon">⚠️</span>
+              <span class="cm-lp-mermaid-error-title">Mermaid Syntax Error:</span>
+              <pre class="cm-lp-mermaid-error-msg">${escapeHtml(err?.message || String(err))}</pre>
+            </div>
+          `;
+        });
+    });
+  }, [mode, renderedHtml]);
+
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const extLink = (e.target as HTMLElement).closest('a[target="_blank"]');
     if (extLink) {
+      return;
+    }
+
+    const toggleBtn = (e.target as HTMLElement).closest('.codeblock-toggle-btn') as HTMLButtonElement | null;
+    if (toggleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const container = toggleBtn.closest('.codeblock-container');
+      if (!container) return;
+      const action = toggleBtn.getAttribute('data-action');
+      const buttons = container.querySelectorAll('.codeblock-toggle-btn');
+      buttons.forEach((b) => b.classList.remove('active'));
+      toggleBtn.classList.add('active');
+
+      const previewEl = container.querySelector<HTMLElement>('.reading-mermaid-preview, .reading-html-preview');
+      const codeEl = container.querySelector<HTMLElement>('.reading-mermaid-code, .reading-html-code');
+
+      if (action === 'code') {
+        if (previewEl) previewEl.style.display = 'none';
+        if (codeEl) codeEl.style.display = 'block';
+      } else {
+        if (previewEl) previewEl.style.display = 'block';
+        if (codeEl) codeEl.style.display = 'none';
+      }
       return;
     }
 

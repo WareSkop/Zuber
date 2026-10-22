@@ -454,7 +454,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
   // Serve embedded images/attachments from vault
   app.get('/api/vault/attachment', requireAuth, (req, res) => {
     try {
-      const target = String(req.query.target || '');
+      const target = String(req.query.target || req.query.path || '');
       const from = req.query.from ? String(req.query.from) : undefined;
       if (!target) {
         res.status(400).send('Target fehlt');
@@ -473,6 +473,9 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
 
       if (ext === '.svg') {
         res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'");
+      } else if (ext === '.pdf') {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${path.basename(absPath)}"`);
       } else if (!safeInlineTypes.has(ext)) {
         res.setHeader('Content-Security-Policy', 'sandbox');
         res.setHeader('Content-Disposition', `attachment; filename="${path.basename(absPath)}"`);

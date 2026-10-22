@@ -254,4 +254,32 @@ describe('Knowmesh - Upload & Download Endpoints (Multi-file, Directory structur
     expect(retrieved.rawContent).toBe(rawJson);
     expect(retrieved.body).toBe(rawJson);
   });
+
+  it('7. serves PDF attachments with Content-Type application/pdf and Content-Disposition inline via GET /api/vault/attachment', async () => {
+    // Upload a dummy PDF to attachments folder via endpoint so it gets indexed
+    const formData = new FormData();
+    formData.append('targetFolder', 'attachments');
+    formData.append('files', new Blob(['%PDF-1.4 dummy pdf content'], { type: 'application/pdf' }), 'sample-manual.pdf');
+    formData.append('paths', JSON.stringify(['sample-manual.pdf']));
+
+    const upRes = await fetch(`${baseUrl}/api/vault/upload-entries`, {
+      method: 'POST',
+      body: formData,
+    });
+    expect(upRes.status).toBe(200);
+
+    // Test with ?path=
+    const resPath = await fetch(`${baseUrl}/api/vault/attachment?path=attachments/sample-manual.pdf`);
+    expect(resPath.status).toBe(200);
+    expect(resPath.headers.get('content-type')).toContain('application/pdf');
+    expect(resPath.headers.get('content-disposition')).toBe('inline; filename="sample-manual.pdf"');
+    const contentPath = await resPath.text();
+    expect(contentPath).toBe('%PDF-1.4 dummy pdf content');
+
+    // Test with ?target=
+    const resTarget = await fetch(`${baseUrl}/api/vault/attachment?target=sample-manual.pdf`);
+    expect(resTarget.status).toBe(200);
+    expect(resTarget.headers.get('content-type')).toContain('application/pdf');
+    expect(resTarget.headers.get('content-disposition')).toBe('inline; filename="sample-manual.pdf"');
+  });
 });

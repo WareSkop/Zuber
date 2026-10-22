@@ -190,5 +190,108 @@ describe('Editor Improvements - Phase 2', () => {
       expect(sanitized).toContain('<svg');
       expect(sanitized).toContain('<span class="codeblock-lang">TS</span>');
     });
+
+    it('renders interactive mermaid code blocks with diagram/code toggle and preview container', () => {
+      const markdown = '```mermaid\ngraph TD\n    A[Start] --> B[Done]\n```';
+      const html = marked.parse(markdown, { async: false, gfm: true }) as string;
+
+      expect(html).toContain('class="codeblock-container reading-mermaid-container"');
+      expect(html).toContain('class="codeblock-header"');
+      expect(html).toContain('<span class="codeblock-lang">MERMAID</span>');
+      expect(html).toContain('class="codeblock-view-toggle"');
+      expect(html).toContain('data-action="diagram"');
+      expect(html).toContain('data-action="code"');
+      expect(html).toContain('class="reading-mermaid-preview"');
+      expect(html).toContain('class="reading-mermaid-code"');
+      expect(html).toContain('data-code="');
+      expect(html).toContain('class="codeblock-copy-btn"');
+    });
+
+    it('renders interactive html code blocks with preview/code toggle and sandboxed iframe preview', () => {
+      const markdown = '```html\n<div class="test-card"><h1>Hello</h1></div>\n```';
+      const html = marked.parse(markdown, { async: false, gfm: true }) as string;
+
+      expect(html).toContain('class="codeblock-container reading-html-container"');
+      expect(html).toContain('class="codeblock-header"');
+      expect(html).toContain('<span class="codeblock-lang">HTML</span>');
+      expect(html).toContain('class="codeblock-view-toggle"');
+      expect(html).toContain('data-action="preview"');
+      expect(html).toContain('data-action="code"');
+      expect(html).toContain('class="reading-html-preview"');
+      expect(html).toContain('<iframe srcdoc="');
+      expect(html).toContain('sandbox="allow-scripts"');
+      expect(html).toContain('class="reading-html-code"');
+    });
+
+    it('preserves html iframes, srcdoc, sandbox, and interactive toggle data attributes after DOMPurify sanitization', async () => {
+      const { JSDOM } = await import('jsdom');
+      const dom = new JSDOM('');
+      const dompurifyModule = await import('dompurify');
+      const DOMPurify = (dompurifyModule.default as any)(dom.window);
+
+      const markdown = '```html\n<p>Interactive Widget</p>\n```';
+      const html = marked.parse(markdown, { async: false, gfm: true }) as string;
+
+      const sanitized = DOMPurify.sanitize(html, {
+        ADD_TAGS: ['rect', 'path', 'svg', 'button', 'iframe'],
+        ADD_ATTR: [
+          'href', 'target', 'rel', 'data-wiki-target', 'data-wikilink',
+          'data-canvas-path', 'data-tag', 'data-code', 'data-action', 'data-rendered',
+          'srcdoc', 'sandbox', 'style', 'loading', 'decoding', 'align',
+          'viewBox', 'fill', 'stroke', 'stroke-width', 'width', 'height', 'rx', 'ry', 'd',
+        ],
+      });
+
+      expect(sanitized).toContain('class="codeblock-container reading-html-container"');
+      expect(sanitized).toContain('<iframe srcdoc="');
+      expect(sanitized).toContain('sandbox="allow-scripts"');
+      expect(sanitized).toContain('data-action="preview"');
+      expect(sanitized).toContain('data-action="code"');
+    });
+  });
+
+  describe('Inline PDF Viewer Syntax', () => {
+    function processPdfEmbed(markdown: string): string {
+      let processed = markdown;
+      // Mirror reading view transform for PDF embeds
+      processed = processed.replace(
+        /!\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
+        (_match, targetRaw, altRaw) => {
+          const target = String(targetRaw).trim();
+          const alt = altRaw ? String(altRaw).trim() : target;
+          if (target.toLowerCase().endsWith('.pdf')) {
+            const fileName = target.split('/').pop() || target;
+            let height = '550px';
+            if (/^\d+$/.test(alt)) {
+              height = `${alt}px`;
+            }
+            return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${fileName}</span><a href="/api/vault/attachment?target=${target}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="/api/vault/attachment?target=${target}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
+          }
+          return _match;
+        }
+      );
+      return processed;
+    }
+
+    it('transforms ![[dokument.pdf]] to interactive PDF viewer container with default 550px height', () => {
+      const markdown = 'Hier ist das Dokument:\n![[handbuch.pdf]]';
+      const result = processPdfEmbed(markdown);
+
+      expect(result).toContain('class="cm-lp-pdf-embed reading-pdf-embed"');
+      expect(result).toContain('class="cm-lp-pdf-header"');
+      expect(result).toContain('📄 handbuch.pdf');
+      expect(result).toContain('class="cm-lp-pdf-open-btn"');
+      expect(result).toContain('style="height: 550px;"');
+      expect(result).toContain('src="/api/vault/attachment?target=handbuch.pdf#toolbar=1&view=FitH"');
+    });
+
+    it('transforms ![[dokument.pdf|750]] to PDF viewer with custom height of 750px', () => {
+      const markdown = '![[attachments/specs.pdf|750]]';
+      const result = processPdfEmbed(markdown);
+
+      expect(result).toContain('📄 specs.pdf');
+      expect(result).toContain('style="height: 750px;"');
+      expect(result).toContain('#toolbar=1&view=FitH');
+    });
   });
 });

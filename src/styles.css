@@ -1474,6 +1474,181 @@ code {
   color: var(--text-muted, #8b949e);
 }
 
+/* Collapsed lines for interactive code blocks (Mermaid, HTML) */
+.cm-lp-codeblock-collapsed-line {
+  height: 0 !important;
+  min-height: 0 !important;
+  line-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  font-size: 0 !important;
+}
+
+.cm-lp-codeblock-host-line {
+  padding-bottom: 0 !important;
+}
+
+/* Interactive Code Block Container (Mermaid & HTML) */
+.cm-lp-interactive-block {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.cm-lp-codeblock-view-toggle,
+.codeblock-view-toggle {
+  display: inline-flex !important;
+  background: var(--bg-tertiary, #1e2632) !important;
+  border: 1px solid var(--border-color, #2d3748) !important;
+  border-radius: 6px !important;
+  padding: 2px !important;
+  gap: 2px !important;
+  margin-left: auto !important;
+  margin-right: 6px !important;
+}
+
+.cm-lp-codeblock-view-btn,
+.codeblock-toggle-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-muted, #8b949e) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.cm-lp-codeblock-view-btn:hover,
+.codeblock-toggle-btn:hover {
+  color: var(--text-primary, #e6edf3) !important;
+}
+
+.cm-lp-codeblock-view-btn.active,
+.codeblock-toggle-btn.active {
+  background: var(--accent-color, #3b82f6) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.cm-lp-block-preview {
+  background: var(--bg-secondary, #161c24);
+  border-left: 1px solid var(--border-color, #2d3748);
+  border-right: 1px solid var(--border-color, #2d3748);
+  border-bottom: 1px solid var(--border-color, #2d3748);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.cm-lp-mermaid-preview,
+.reading-mermaid-preview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80px;
+  background: var(--bg-secondary, #161c24);
+  overflow-x: auto;
+}
+
+.cm-lp-mermaid-preview svg,
+.reading-mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.cm-lp-mermaid-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  padding: 12px;
+  color: #ef4444;
+  font-size: 12.5px;
+  width: 100%;
+}
+
+.cm-lp-mermaid-error-title {
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.cm-lp-mermaid-error-msg {
+  margin: 6px 0 0 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  color: #fca5a5;
+}
+
+.cm-lp-html-frame,
+.reading-html-frame {
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: #ffffff;
+  display: block;
+}
+
+/* Inline PDF Embed Styles (Live-Preview & Reading Mode) */
+.cm-lp-pdf-embed,
+.reading-pdf-embed {
+  margin: 16px 0;
+  border: 1px solid var(--border-color, #2d3748);
+  border-radius: 8px;
+  background: var(--bg-secondary, #161c24);
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.cm-lp-pdf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--bg-tertiary, #1f2937);
+  border-bottom: 1px solid var(--border-color, #2d3748);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #e6edf3);
+}
+
+.cm-lp-pdf-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cm-lp-pdf-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #8b949e);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.cm-lp-pdf-open-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+  color: var(--accent-color, #3b82f6);
+}
+
+.cm-lp-pdf-frame {
+  width: 100%;
+  border: none;
+  display: block;
+  background: #ffffff;
+}
+
 /* Reading Mode Codeblock Container & Header */
 .codeblock-container {
   margin: 16px 0;
@@ -4034,6 +4209,15 @@ input:checked + .slider:before {
   padding: 2px 8px;
   border-left: 1px solid var(--border-color, #333);
   border-right: 1px solid var(--border-color, #333);
+}
+
+.cm-image-btn.cm-image-btn-delete {
+  color: var(--text-muted, #888);
+}
+
+.cm-image-btn.cm-image-btn-delete:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #ef4444 !important;
 }
 
 /* Resize Handles */

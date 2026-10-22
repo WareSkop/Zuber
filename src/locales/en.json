@@ -110,7 +110,12 @@
     "properties": "Properties",
     "outline": "Outline",
     "backlinks": "Backlinks",
-    "localGraph": "Local Graph"
+    "localGraph": "Local Graph",
+    "removeImage": "Remove image",
+    "diagram": "Diagram",
+    "code": "Code",
+    "preview": "Preview",
+    "openPdfInNewTab": "Open in new tab"
   },
   "toolbar": {
     "bold": "Bold (Ctrl+B)",

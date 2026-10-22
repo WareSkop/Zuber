@@ -81,7 +81,10 @@ const vpTo = Math.min(docLength, view.viewport.to + 1500);
 | **Aufzählungslisten** (`- `, `* `, `+ `) | `-` wird durch einen gestylten Listenpunkt `•` (`BulletWidget`) ersetzt | `-` als Text sichtbar | Zeilen-Scan + `BulletWidget` |
 | **Codeblöcke** (` ```lang ... ``` `) | Fences (```` ``` ````) werden ausgeblendet (`.cm-lp-codeblock-fence-hidden`), oben rechts wird ein Header-Widget (`CodeBlockHeaderWidget`) mit dezentem Sprach-Badge und Kopier-Button gerendert; Inhaltszeilen erhalten `.cm-lp-codeblock-content-line` mit vollem Syntax-Highlighting und abgerundetem Boden (`.cm-lp-codeblock-bottom-radius`). | Fences werden sichtbar mit `.cm-lp-formatting` (gedimmte Backticks) angezeigt, damit Sprache und Code frei editiert werden können. | Pre-Scan aller Blöcke + Zeilen-Dekorationen & `CodeBlockHeaderWidget` |
 | **Markdown-Tabellen** (`\| A \| B \|`) | Erste Zeile wird durch gerendertes HTML-`<table>` (`TableWidget`) ersetzt; Folgezeilen der Tabelle werden per `.cm-lp-table-collapsed-line` ausgeblendet. Klick auf die Tabelle setzt den Cursor hinein zum Bearbeiten. | Kompletter Markdown-Tabellenquelltext sichtbar (`.cm-lp-table-source-line`) | Mehrzeilen-Tabellen-Detektor (`isTableRow`, `isTableSeparator`) + `TableWidget` |
-| **Wiki-Embeds** (`![[bild.png\|400]]`, `![[doc.pdf]]`) | Ersetzt durch `EmbedWidget` (`<img>` mit Lazy-Loading, `<audio>`, `<video>`, PDF-Karte oder Notiz-Einbettung) | Roher Code `![[...]]` sichtbar | Regex `WIKI_REGEX` + `selectionTouches` |
+| **Interaktive Mermaid-Codeblöcke** (```` ```mermaid ````) | Standardmäßig wird das SVG-Diagramm gerendert; Fences und Quelltextzeilen werden zeilenweise kollabiert (`.cm-lp-codeblock-collapsed-line`). Der Header bietet einen `[ Diagram \| Code ]`-Toggle. | Beim Umschalten auf `Code` wird der CodeMirror-Quelltext mit Syntax-Highlighting voll editierbar; beim Umschalten auf `Diagram` wird das Diagramm atomar neu gerendert. | `InteractiveCodeBlockWidget` + `blockModesField` + `mermaid.render` mit Syntaxfehler-Boundary |
+| **Interaktive HTML-Codeblöcke** (```` ```html ````) | Standardmäßig wird eine isolierte Sandboxed-Iframe-Vorschau (`sandbox="allow-scripts"`) angezeigt; Fences und Quelltextzeilen sind kollabiert. Header mit `[ Preview \| Code ]`-Toggle. | Beim Umschalten auf `Code` wird der HTML-Code editierbar; beim Umschalten auf `Preview` wird die Vorschau aktualisiert. | `InteractiveCodeBlockWidget` + `blockModesField` + iframe `srcdoc` mit dynamischer Höhenanpassung |
+| **PDF-Einbettungen** (`![[dokument.pdf]]`, `![[dokument.pdf\|700]]`) | Ersetzt durch `EmbedWidget` als interaktiver `.cm-lp-pdf-embed`-Container mit Header (Dateiname + „In neuem Tab öffnen“-Button `↗`) und eingebettetem PDF-Iframe (`#toolbar=1&view=FitH`). Optionale Höhenangabe in Pixeln (Standard: `550px`). | Roher Code `![[...]]` sichtbar | Regex `WIKI_REGEX` / `MD_LINK_REGEX` + `EmbedWidget` |
+| **Wiki-Embeds** (`![[bild.png\|400]]`) | Ersetzt durch `EmbedWidget` (`<img>` mit Lazy-Loading, `<audio>`, `<video>` oder Notiz-Einbettung) | Roher Code `![[...]]` sichtbar | Regex `WIKI_REGEX` + `selectionTouches` |
 | **Wiki-Links** (`[[Ziel\|Alias]]`) | Ersetzt durch klickbares `WikiLinkWidget` (`<span class="cm-lp-wikilink">`). Klick öffnet die Zielnotiz! | Roher Code `[[Ziel\|Alias]]` sichtbar | Regex `WIKI_REGEX` + `WikiLinkWidget` |
 | **Markdown-Bilder** (`![alt](pfad.png)`) | Ersetzt durch `EmbedWidget` (übergibt auch `currentNotePath` für relative Pfade wie `attachments/img.png` und `decodeURIComponent` für `%20`) | Roher Code `![alt](pfad.png)` sichtbar | Regex `MD_LINK_REGEX` (`isEmbed === true`) |
 | **Markdown-Links** (`[Text](Ziel.md)` oder `[Web](https://...)`) | Ersetzt durch `WikiLinkWidget` (interne Links öffnen die Notiz/Datei; externe Links öffnen im neuen Browser-Tab mit `↗`) | Roher Code `[Text](...)` sichtbar | Regex `MD_LINK_REGEX` (`isEmbed === false`) |
@@ -97,24 +100,32 @@ const vpTo = Math.min(docLength, view.viewport.to + 1500);
 > Ein `ViewPlugin` darf in CodeMirror 6 **niemals** `Decoration.replace(...)` über Zeilenumbrüche (`\n`) hinweg verwenden (führt sofort zum Fehler `RangeError: Decorations that replace line breaks may not be specified via plugins`).
 > Deshalb rendert unser Tabellen-Detektor das `TableWidget` als `Decoration.widget({ widget: new TableWidget(tableLines) })` am Anfang der ersten Tabellenzeile und kollabiert die einzelnen Tabellenzeilen zeilenweise mit `Decoration.line({ class: 'cm-lp-table-collapsed-line' })` (`font-size: 0; line-height: 0; height: 0; overflow: hidden`).
 
-### 2.2.1 Codeblock-Architektur (Syntax-Highlighting, Header-Widget & Lese-Modus)
+### 2.2.1 Codeblock-Architektur (Syntax-Highlighting, Header-Widget, Interaktives Mermaid & HTML & Lese-Modus)
 
 Fenced Codeblöcke (```` ```language ... ``` ````) werden in Zuber auf zwei Ebenen für optimale Lesbarkeit und Produktivität optimiert:
 
-1. **CodeMirror 6 Live-Preview (`LivePreviewEditor.tsx`):**
-   - **Pre-Scan:** In `buildLivePreviewDecorations` werden alle Codeblock-Grenzen im Dokument erfasst.
-   - **Cursor außerhalb des Blocks:**
+1. **Standard-Codeblöcke (TypeScript, Python, Bash etc.):**
+   - **CodeMirror 6 Live-Preview (`LivePreviewEditor.tsx`):**
      - Öffnende Zeile (` ```lang `): Erhält `Decoration.line({ class: 'cm-lp-codeblock-fence-hidden' })` und ein `CodeBlockHeaderWidget` am Zeilenanfang (`side: -1`). Das Widget rendert die Sprache (z. B. `PYTHON`, `SQL`) als dezentes Badge und bietet einen Kopier-Button mit Zwischenablagen-Feedback (`✓ Kopiert`).
      - Inhaltszeilen: Erhalten `Decoration.line({ class: 'cm-lp-codeblock-content-line' })` mit seitlichen Rändern und Monospace-Font.
      - Schließende Zeile (` ``` `): Erhält `Decoration.line({ class: 'cm-lp-codeblock-fence-hidden cm-lp-codeblock-bottom-radius' })` und bildet einen abgerundeten Abschluss des Code-Containers.
-   - **Cursor innerhalb des Blocks:** Fences werden mit `.cm-lp-formatting` sichtbar geschaltet, sodass Sprache und Code nahtlos editiert werden können.
-   - **Syntax-Highlighting:** CodeMirror 6 bindet `@codemirror/language-data` (143 Lezer-Parser) über `markdown({ codeLanguages: languages })` ein. Über `syntaxHighlighting(codeHighlighter)` werden Standard-Token (`.cm-keyword`, `.cm-string`, `.cm-number`, etc.) semantisch annotiert und themenspezifisch gestylt.
+     - **Cursor innerhalb des Blocks:** Fences werden mit `.cm-lp-formatting` sichtbar geschaltet, sodass Sprache und Code nahtlos editiert werden können.
+     - **Syntax-Highlighting:** CodeMirror 6 bindet `@codemirror/language-data` (143 Lezer-Parser) über `markdown({ codeLanguages: languages })` ein. Über `syntaxHighlighting(codeHighlighter)` werden Standard-Token (`.cm-keyword`, `.cm-string`, `.cm-number`, etc.) semantisch annotiert und themenspezifisch gestylt.
+   - **Lese-Modus (`mode === 'reading'`):**
+     - In `marked.use({ renderer: { code } })` wird `highlight.js` eingebunden (`hljs.highlight` / `hljs.highlightAuto`).
+     - Jeder Codeblock wird in einen `<div class="codeblock-container">` mit `<div class="codeblock-header">` (Sprach-Badge + Kopier-Button) und `<pre><code class="hljs">` gerendert.
 
-2. **Lese-Modus (`mode === 'reading'`):**
-   - In `marked.use({ renderer: { code } })` wird `highlight.js` eingebunden (`hljs.highlight` / `hljs.highlightAuto`).
-   - Jeder Codeblock wird in einen `<div class="codeblock-container">` mit `<div class="codeblock-header">` (Sprach-Badge + Kopier-Button) und `<pre><code class="hljs">` gerendert.
-   - Per Event-Delegation in `handleReadingClick` wird der Code beim Klick auf den Kopier-Button in die Zwischenablage übertragen.
-   - `DOMPurify.sanitize` schützt den HTML-Ausgabestrom, belässt aber SVG-Icons und Buttons intakt.
+2. **Interaktive Mermaid- & HTML-Codeblöcke (` ```mermaid ` & ` ```html `):**
+   - **Standard-Vorschau:** Mermaid-Diagramme werden clientseitig über die `mermaid`-Bibliothek gerendert; HTML-Blöcke werden in einem isolierten `iframe` (`sandbox="allow-scripts"`) mit dynamischer Höhenanpassung dargestellt.
+   - **Header-Segment-Toggle:**
+     - Für Mermaid: `[ Diagram | Code ]` (`[ Diagramm | Code ]`)
+     - Für HTML: `[ Preview | Code ]` (`[ Vorschau | Code ]`)
+   - **Live-Editing:**
+     - Über das CodeMirror 6 `StateField` `blockModesField` wird der Ansichtsmodus atomar verwaltet.
+     - Im Modus `Code` werden die Inhaltszeilen im Editor eingeblendet und können mit voller Tastatur- und Cursor-Unterstützung live editiert werden.
+     - Im Modus `Diagram` / `Preview` werden die Quelltextzeilen per `.cm-lp-codeblock-collapsed-line` unsichtbar geschaltet und das SVG-Diagramm bzw. der Iframe wird mit den aktualisierten Code-Inhalten gerendert.
+   - **Robuste Fehlerbehandlung:** Bei Syntaxfehlern im Mermaid-Code fängt ein `try/catch`-Block den Fehler ab und visualisiert eine formatierte Fehlermeldung (`.cm-lp-mermaid-error`), ohne den CodeMirror-Editor oder React zu unterbrechen.
+   - **Lese-Ansicht:** Dieselben Umschalter (`[ Diagram | Code ]` bzw. `[ Preview | Code ]`) stehen auch in der Lese-Ansicht (`mode === 'reading'`) zur Verfügung.
 
 ### 2.3 Wiki-Link (`[[`) und Tag (`#`) Autovervollständigung
 
@@ -122,15 +133,23 @@ Die Funktion [`wikiLinkCompletion`](../src/components/LivePreviewEditor.tsx) ist
 - Tippt der Benutzer `[[` gefolgt von beliebigen Zeichen, durchsucht die Funktion `allNotesRef.current` nach passenden Notiznamen und Pfaden (bis zu 30 Vorschläge) und vervollständigt beim Bestätigen automatisch zu `[[Notizname]]`.
 - Tippt der Benutzer `#` nach einem Leerzeichen oder am Zeilenanfang, schlägt die Funktion existierende Tags aus `allTagsRef.current` vor.
 
-### 2.4 Drag & Drop, Zwischenablage-Upload und Bild-Einfügen in EditorToolbar
+### 2.4 Erweitertes Editor Drag & Drop, Zwischenablage-Upload und Bild-Einfügen
 
-Der `EditorView.domEventHandlers`-Hook fängt `drop`- und `paste`-Events ab; zusätzlich steht in der Formatierungs-Toolbar (`EditorToolbar`) der Button **Bild einfügen** (Dateiauswahl oder Kamera-Foto) zur Verfügung:
-- Sowohl Clipboard-Items (`event.clipboardData.items`), Clipboard-Dateien (`event.clipboardData.files`), Drag & Drop-Dateien (`event.dataTransfer.files`) als auch die Dateiauswahl per Button unterstützen Einzel- und Mehrfach-Uploads.
-- Bei Blobs aus der Zwischenablage ohne Dateiendung wird der MIME-Typ analysiert (`image/png`, `image/jpeg` etc.), sodass auf dem Server stets eine gültige Dateiendung vergeben wird.
-- Die Datei wird nach `/api/vault/upload?folder=attachments` hochgeladen und an der aktuellen Cursorposition bzw. am Ende der Notiz automatisch als fertiger Wiki-Embed-Tag `![[attachments/dateiname.png]]` eingefügt.
-- Die CodeMirror-Dekoration (`EmbedWidget`) erkennt die Bild-Syntax sofort und rendert die Grafik direkt im Live-Preview-Modus.
+Der `EditorView.domEventHandlers`-Hook fängt `dragover`-, `drop`- und `paste`-Events im Editor ab:
+1. **Exakte Drop-Position:**
+   Beim Fallenlassen wird die Dokumentposition über `view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head` exakt ermittelt.
+2. **Fall A – Bilddateien (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`):**
+   Werden nach `attachments/` hochgeladen und an `dropPos` als `![[attachments/dateiname.png]]` eingefügt.
+3. **Fall B – Textdateien (`.txt`, `.md`, `.csv`, `.json`, `.log`, `.yaml`, `.xml` etc.):**
+   Werden **nicht** als Anhang hochgeladen, sondern direkt clientseitig über `await file.text()` ausgelesen und an `dropPos` als Textinhalt eingefügt (bei mehreren Textdateien getrennt durch `\n\n`).
+4. **Fall C – Sonstige Binärdateien (`.pdf`, `.zip`, `.docx` etc.):**
+   Werden nach `attachments/` hochgeladen und an `dropPos` als `![[attachments/dateiname.pdf]]` eingefügt.
+5. **Fall D – Reiner Text:**
+   Wird markierter Text aus externen Fenstern oder innerhalb des Editors gezogen, wird der Text sauber an `dropPos` eingefügt.
+6. **Toolbar-Button:**
+   Zusätzlich steht in der Formatierungs-Toolbar (`EditorToolbar`) der Button **Bild einfügen** (Dateiauswahl oder Kamera-Foto) zur Verfügung.
 
-### 2.5 Interaktive Bildanpassung (Größenänderung per Maus & Ausrichtung via HTML-Attribute)
+### 2.5 Interaktive Bildanpassung (Größenänderung per Maus, Ausrichtung & Löschen-Button)
 
 Für maximale Kompatibilität mit Standard-Markdown-Readern, GitHub Flavored Markdown und Webviewern speichert Zuber Bildgrößen und -ausrichtungen nicht über proprietäre Syntax, sondern über Standard-HTML-Attribute:
 `<img src="attachments/beispiel.png" alt="Bildbeschreibung" width="450" align="center" />`
@@ -139,19 +158,31 @@ Für maximale Kompatibilität mit Standard-Markdown-Readern, GitHub Flavored Mar
 - **Größenänderung mit der Maus (Drag Handle):**
   - An den unteren Ecken (Südost `se-resize` und Südwest `sw-resize`) befinden sich Drag-Handles.
   - Beim Ziehen mit gedrückter Maustaste wird die Bildbreite in Echtzeit skaliert und als numerische Pixelanzeige im Badge visualisiert (unter Wahrung der Aspekt-Ratio).
-  - Beim Loslassen der Maustaste wird das Markdown-Dokument atomar aktualisiert (oder von Wiki-Embed `![[...]]` in `<img ... width="..." />` überführt).
+  - Beim Loslassen der Maustaste wird das Markdown-Dokument atomar aktualisiert.
 - **Ausrichtungs-Toolbar (`align`):**
   - **Links:** `align="left"` (Fließtext rechts um das Bild)
   - **Zentriert:** `align="center"` (zentrierter Block)
   - **Rechts:** `align="right"` (Fließtext links um das Bild)
   - **Inline:** entfernt das `align`-Attribut
   - **Größe zurücksetzen:** Setzt die Breite auf Originalgröße zurück.
+- **Löschen-Button (Papierkorb):**
+  - Am rechten Rand der schwebenden Bild-Toolbar befindet sich ein Löschen-Button mit Papierkorb-Icon (rote Hervorhebung bei Hover).
+  - Ein Klick entfernt den gesamten Bild-Tag (`![[...]]`, `![...](...)` oder `<img ... />` inkl. nachfolgendem Zeilenumbruch) atomar per CodeMirror-Transaktion aus der Notiz. Die Datei im Vault-Anhangsordner bleibt unberührt.
 - **Unterstützung im Lese-Modus (`reading`):**
   - Auch in `preprocessObsidianMarkdown` und `marked` werden `<img ... width="..." align="...">` Tags vollständig mit passendem CSS-Styling (Float bzw. zentrierte Blockdarstellung) gerendert.
 
-### 2.6 Lese-Ansicht (`mode === 'reading'`)
+### 2.6 Inline-PDF-Viewer (`![[dokument.pdf]]`) & Lese-Ansicht (`mode === 'reading'`)
 
-Im Lese-Modus wird anstelle von CodeMirror `marked` (mit aktiviertem GitHub Flavored Markdown `gfm: true` für Tabellen, Aufgabenlisten und Durchstreichungen) nach einer Vorverarbeitung durch [`preprocessObsidianMarkdown`](../src/components/LivePreviewEditor.tsx) gerendert. Klicks auf interne Links und Tags werden per Event-Delegation (`data-wiki-target`, `data-tag`) abgefangen.
+1. **Inline-PDF-Viewer:**
+   - Eingebettete PDF-Dateien (`![[dokument.pdf]]` oder `![Titel](dokument.pdf)`) werden im Live-Preview und im Lese-Modus als strukturierter `.cm-lp-pdf-embed`-Container gerendert.
+   - Der Container enthält eine Kopfzeile mit Dateinamen und einem externen Link-Button (`↗`), der die PDF-Datei in einem neuen Browser-Tab öffnet.
+   - Ein eingebetteter Iframe lädt die Datei über `/api/vault/attachment?path=...#toolbar=1&view=FitH` mit nativer PDF-Viewer-Steuerung.
+   - **Optionale Höhenangabe:** Über `![[dokument.pdf|700]]` kann die Höhe in Pixeln konfiguriert werden (Standardhöhe: `550px`).
+   - Das Backend liefert PDF-Dateien über `GET /api/vault/attachment` mit `Content-Type: application/pdf` und `Content-Disposition: inline` aus.
+2. **Lese-Ansicht:**
+   - Im Lese-Modus wird anstelle von CodeMirror `marked` (mit aktiviertem GitHub Flavored Markdown `gfm: true` für Tabellen, Aufgabenlisten und Durchstreichungen) nach einer Vorverarbeitung durch [`preprocessObsidianMarkdown`](../src/components/LivePreviewEditor.tsx) gerendert.
+   - Klicks auf interne Links, Tags, Kopier-Buttons und interaktive Mermaid-/HTML-Umschalter werden per Event-Delegation abgefangen.
+   - `DOMPurify.sanitize` schützt den Ausgabestrom unter Erhalt von interaktiven SVGs, Buttons und isolierten Preview-Iframes.
 
 ---
 
