@@ -53,8 +53,12 @@ export interface NoteData {
 export interface NoteSummary {
   path: string;
   name: string;
-  basename: string;
+  folder: string;
+  basename?: string;
   extension?: string;
+  frontmatter: Record<string, any>;
+  tags: string[];
+  mtime: number;
   isSendTarget?: boolean;
   isTemplate?: boolean;
 }
@@ -78,6 +82,8 @@ export interface SyncManifestEntry {
   type: 'markdown' | 'attachment';
   mtime: number;
   size: number;
+  frontmatter?: Record<string, any>;
+  tags?: string[];
 }
 
 export interface UploadResponse {

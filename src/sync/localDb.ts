@@ -3,6 +3,7 @@ import type {
   FrontmatterProperty,
   GraphData,
   NoteData,
+  NoteSummary,
 } from '../../shared/types';
 import { getAttachmentKind } from '../../shared/markdownUtils';
 
@@ -239,19 +240,46 @@ export class LocalDb {
 
   public async putNote(note: NoteData): Promise<void> {
     const db = await this.openDb();
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('notes', 'readwrite');
       const store = tx.objectStore('notes');
       const req = store.put(note);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
+
+    try {
+      if (note.path.endsWith('.md')) {
+        const allNotes = (await this.getMeta<NoteSummary[]>('allNotes')) || [];
+        const name = note.name || note.path.split('/').pop() || '';
+        const folder = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
+        const summary: NoteSummary = {
+          path: note.path,
+          name,
+          basename: name.replace(/\.md$/i, ''),
+          folder,
+          frontmatter: note.frontmatter || {},
+          tags: note.tags || [],
+          mtime: Math.round(note.updatedAt || Date.now()),
+          extension: 'md',
+          isSendTarget: note.isSendTarget,
+          isTemplate: note.isTemplate,
+        };
+        const idx = allNotes.findIndex((n) => n.path === note.path);
+        if (idx >= 0) {
+          allNotes[idx] = summary;
+        } else {
+          allNotes.push(summary);
+        }
+        await this.setMeta('allNotes', allNotes);
+      }
+    } catch {}
   }
 
   public async putNotesBatch(notes: NoteData[]): Promise<void> {
     if (notes.length === 0) return;
     const db = await this.openDb();
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('notes', 'readwrite');
       const store = tx.objectStore('notes');
       for (const note of notes) {
@@ -260,6 +288,32 @@ export class LocalDb {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+
+    try {
+      const allNotes = (await this.getMeta<NoteSummary[]>('allNotes')) || [];
+      const noteMap = new Map<string, NoteSummary>();
+      for (const n of allNotes) {
+        noteMap.set(n.path, n);
+      }
+      for (const note of notes) {
+        if (!note.path.endsWith('.md')) continue;
+        const name = note.name || note.path.split('/').pop() || '';
+        const folder = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
+        noteMap.set(note.path, {
+          path: note.path,
+          name,
+          basename: name.replace(/\.md$/i, ''),
+          folder,
+          frontmatter: note.frontmatter || {},
+          tags: note.tags || [],
+          mtime: Math.round(note.updatedAt || Date.now()),
+          extension: 'md',
+          isSendTarget: note.isSendTarget,
+          isTemplate: note.isTemplate,
+        });
+      }
+      await this.setMeta('allNotes', Array.from(noteMap.values()));
+    } catch {}
   }
 
   public async deleteNote(path: string): Promise<void> {
@@ -384,12 +438,22 @@ export class LocalDb {
         const extension = fileName.includes('.') ? fileName.split('.').pop() : 'md';
 
         const allNotes =
-          (await this.getMeta<
-            { path: string; name: string; basename: string; isSendTarget?: boolean; isTemplate?: boolean }[]
-          >('allNotes')) || [];
+          (await this.getMeta<NoteSummary[]>('allNotes')) || [];
         const existingNoteIdx = allNotes.findIndex((n) => n.path === relPath);
+        const folder = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
         if (existingNoteIdx < 0) {
-          allNotes.push({ path: relPath, name: fileName, basename, isSendTarget, isTemplate });
+          allNotes.push({
+            path: relPath,
+            name: fileName,
+            basename,
+            folder,
+            frontmatter: {},
+            tags: [],
+            mtime: Date.now(),
+            extension: 'md',
+            isSendTarget,
+            isTemplate,
+          });
           await this.setMeta('allNotes', allNotes);
         } else {
           let noteChanged = false;
@@ -596,16 +660,18 @@ export class LocalDb {
       }
 
       // 4. Update allNotes in meta
-      const allNotes = await this.getMeta<{ path: string; name: string; basename: string }[]>('allNotes');
+      const allNotes = await this.getMeta<NoteSummary[]>('allNotes');
       if (allNotes) {
         const updatedNotes = allNotes.map((n) => {
           if (n.path === oldPath) {
             const name = newPath.split('/').pop() || newPath;
-            return { path: newPath, name, basename: name.replace(/\.[^/.]+$/, '') };
+            const folder = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : '';
+            return { ...n, path: newPath, name, basename: name.replace(/\.[^/.]+$/, ''), folder };
           } else if (n.path.startsWith(oldPrefix)) {
             const subPath = newPrefix + n.path.slice(oldPrefix.length);
             const name = subPath.split('/').pop() || subPath;
-            return { path: subPath, name, basename: name.replace(/\.[^/.]+$/, '') };
+            const folder = subPath.includes('/') ? subPath.slice(0, subPath.lastIndexOf('/')) : '';
+            return { ...n, path: subPath, name, basename: name.replace(/\.[^/.]+$/, ''), folder };
           }
           return n;
         });
@@ -794,13 +860,29 @@ export class LocalDb {
 
     const fileMap = new Map<
       string,
-      { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean; isTemplate?: boolean }
+      {
+        path: string;
+        name: string;
+        basename: string;
+        extension: string;
+        folder: string;
+        frontmatter: Record<string, any>;
+        tags: string[];
+        mtime: number;
+        isSendTarget?: boolean;
+        isTemplate?: boolean;
+      }
     >();
     for (const f of rawFiles) {
       if (f?.path && !isDeleted(f.path)) {
         const localNote = localNoteMap.get(f.path);
+        const folder = (f as any).folder || (f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '');
         fileMap.set(f.path, {
           ...f,
+          folder,
+          frontmatter: localNote?.frontmatter ?? (f as any).frontmatter ?? {},
+          tags: localNote?.tags ?? (f as any).tags ?? [],
+          mtime: localNote ? Math.round(localNote.updatedAt || Date.now()) : ((f as any).mtime || (f as any).mtimeMs || 0),
           isSendTarget: localNote?.isSendTarget ?? (f as any).isSendTarget,
           isTemplate: localNote?.isTemplate ?? (f as any).isTemplate,
         });
@@ -828,14 +910,29 @@ export class LocalDb {
       const fileName = filePath.split('/').pop() || filePath;
       const basename = fileName.replace(/\.[^/.]+$/, '');
       const extension = fileName.includes('.') ? fileName.split('.').pop() || 'md' : 'md';
+      const folder = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
       if (!fileMap.has(filePath)) {
-        fileMap.set(filePath, { path: filePath, name: fileName, basename, extension, isSendTarget, isTemplate });
+        fileMap.set(filePath, {
+          path: filePath,
+          name: fileName,
+          basename,
+          extension,
+          folder,
+          frontmatter: localNote?.frontmatter ?? {},
+          tags: localNote?.tags ?? [],
+          mtime: localNote ? Math.round(localNote.updatedAt || Date.now()) : Date.now(),
+          isSendTarget,
+          isTemplate,
+        });
       } else {
+        const existing = fileMap.get(filePath)!;
+        if (localNote?.frontmatter) existing.frontmatter = localNote.frontmatter;
+        if (localNote?.tags) existing.tags = localNote.tags;
         if (isSendTarget !== undefined) {
-          fileMap.get(filePath)!.isSendTarget = isSendTarget;
+          existing.isSendTarget = isSendTarget;
         }
         if (isTemplate !== undefined) {
-          fileMap.get(filePath)!.isTemplate = isTemplate;
+          existing.isTemplate = isTemplate;
         }
       }
     }
@@ -843,6 +940,22 @@ export class LocalDb {
     const updatedFiles = Array.from(fileMap.values());
     await this.setMeta('tree', currentTree);
     await this.setMeta('files', updatedFiles);
+
+    const allNotesSummary: NoteSummary[] = updatedFiles
+      .filter((f) => f.extension === 'md')
+      .map((f) => ({
+        path: f.path,
+        name: f.name,
+        basename: f.basename,
+        folder: f.folder,
+        frontmatter: f.frontmatter,
+        tags: f.tags,
+        mtime: f.mtime,
+        extension: 'md',
+        isSendTarget: f.isSendTarget,
+        isTemplate: f.isTemplate,
+      }));
+    await this.setMeta('allNotes', allNotesSummary);
 
     return { tree: currentTree, files: updatedFiles };
   }

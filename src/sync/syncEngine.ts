@@ -399,6 +399,9 @@ class SyncEngine {
         const treeData = await rawApi.getTree();
         await this.localDb.setMeta('tree', treeData.tree);
         await this.localDb.setMeta('files', treeData.files);
+        if (treeData.notes) {
+          await this.localDb.setMeta('allNotes', treeData.notes);
+        }
         if (remainingOutbox.length > 0) {
           await this.localDb.reconcileTreeWithLocalState();
         }

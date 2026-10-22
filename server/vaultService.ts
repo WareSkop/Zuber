@@ -10,6 +10,7 @@ import type {
   GraphEdge,
   GraphNode,
   NoteData,
+  NoteSummary,
   SyncManifestEntry,
 } from '../shared/types';
 import {
@@ -626,24 +627,73 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     path: string;
     name: string;
     basename: string;
+    folder: string;
     extension: string;
     mtimeMs: number;
+    mtime: number;
+    frontmatter: Record<string, any>;
+    tags: string[];
     isSendTarget?: boolean;
     isTemplate?: boolean;
   }[] {
-    return Array.from(this.files.values());
+    const list: any[] = [];
+    for (const file of this.files.values()) {
+      const note = this.notes.get(file.path);
+      const folder = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
+      list.push({
+        path: file.path,
+        name: file.name,
+        basename: file.basename,
+        folder,
+        extension: file.extension,
+        mtimeMs: file.mtimeMs,
+        mtime: Math.round(file.mtimeMs),
+        frontmatter: note?.frontmatter || {},
+        tags: note?.tags || [],
+        isSendTarget: file.isSendTarget,
+        isTemplate: file.isTemplate,
+      });
+    }
+    return list;
   }
 
-  public getAllFiles(): {
-    path: string;
-    name: string;
-    basename: string;
-    extension: string;
-    mtimeMs: number;
-    isSendTarget?: boolean;
-    isTemplate?: boolean;
-  }[] {
+  public getAllFiles() {
     return this.listAllFiles();
+  }
+
+  public getAllNotes(): NoteSummary[] {
+    const list: NoteSummary[] = [];
+    for (const [relPath, note] of this.notes.entries()) {
+      if (!relPath.endsWith('.md')) continue;
+      const file = this.files.get(relPath);
+      const name = path.basename(relPath);
+      const folder = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
+      list.push({
+        path: relPath,
+        name,
+        basename: name.replace(/\.md$/i, ''),
+        folder,
+        frontmatter: note.frontmatter || {},
+        tags: note.tags || [],
+        mtime: file ? Math.round(file.mtimeMs) : Math.round(note.updatedAt || Date.now()),
+        extension: 'md',
+        isSendTarget: note.isSendTarget,
+        isTemplate: note.isTemplate,
+      });
+    }
+    return list;
+  }
+
+  public getVaultOverview(): {
+    tree: FileTreeNode[];
+    files: any[];
+    notes: NoteSummary[];
+  } {
+    return {
+      tree: this.getFileTree(),
+      files: this.getAllFiles(),
+      notes: this.getAllNotes(),
+    };
   }
 
   public getNoteOrNull(relPath: string): NoteData | null {
@@ -785,6 +835,7 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
   public getSyncManifest(): SyncManifestEntry[] {
     const manifest: SyncManifestEntry[] = [];
     for (const file of this.files.values()) {
+      const note = this.notes.get(file.path);
       manifest.push({
         path: file.path,
         type:
@@ -793,6 +844,8 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
             : 'attachment',
         mtime: Math.round(file.mtimeMs),
         size: file.size || 0,
+        frontmatter: note?.frontmatter || {},
+        tags: note?.tags || [],
       });
     }
     return manifest;
@@ -886,7 +939,8 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     }
   ): NoteData {
     const isCanvas = relPath.endsWith('.canvas');
-    const normalizedRel = isCanvas
+    const isBase = relPath.endsWith('.base');
+    const normalizedRel = isCanvas || isBase
       ? relPath
       : relPath.endsWith('.md')
         ? relPath
@@ -917,8 +971,8 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     const finalRawContent =
       typeof raw === 'string'
         ? raw
-        : isCanvas
-          ? (payload.body ?? '{}')
+        : isCanvas || isBase
+          ? (payload.body ?? '')
           : serializeMarkdownWithFrontmatter(payload.properties ?? [], payload.body ?? '');
 
     fs.writeFileSync(absPath, finalRawContent, 'utf-8');

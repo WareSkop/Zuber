@@ -107,7 +107,7 @@ type MainWorkspaceView = 'editor' | 'graph' | 'split';
 type RightSidebarTab = 'backlinks' | 'outline' | 'local-graph';
 
 interface DialogState {
-  type: 'create-note' | 'create-folder' | 'rename' | 'delete' | 'create-canvas';
+  type: 'create-note' | 'create-folder' | 'rename' | 'delete' | 'create-canvas' | 'create-base';
   title?: string;
   prompt?: string;
   parentFolder?: string;
@@ -124,7 +124,18 @@ export const App: React.FC = () => {
 
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [allFiles, setAllFiles] = useState<
-    { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean; isTemplate?: boolean }[]
+    {
+      path: string;
+      name: string;
+      basename: string;
+      extension: string;
+      folder?: string;
+      frontmatter?: Record<string, any>;
+      tags?: string[];
+      mtime?: number;
+      isSendTarget?: boolean;
+      isTemplate?: boolean;
+    }[]
   >([]);
   const allFilesRef = useRef(allFiles);
   allFilesRef.current = allFiles;
@@ -437,10 +448,10 @@ export const App: React.FC = () => {
   }, [allFiles, tree]);
 
   const getUniqueDefaultName = useCallback(
-    (baseName: string, type: 'file' | 'folder' | 'canvas', parentFolder?: string): string => {
+    (baseName: string, type: 'file' | 'folder' | 'canvas' | 'base', parentFolder?: string): string => {
       const existing = collectExistingPaths();
       const buildPath = (name: string) => {
-        const leaf = type === 'canvas' ? `${name}.canvas` : type === 'file' ? `${name}.md` : name;
+        const leaf = type === 'canvas' ? `${name}.canvas` : type === 'base' ? `${name}.base` : type === 'file' ? `${name}.md` : name;
         return (parentFolder ? `${parentFolder}/${leaf}` : leaf).toLowerCase();
       };
       if (!existing.has(buildPath(baseName))) {
@@ -473,6 +484,22 @@ export const App: React.FC = () => {
         type: 'create-canvas',
         title: t('canvas.createDialogTitle'),
         prompt: t('canvas.createDialogPrompt'),
+        parentFolder,
+        initialValue: defaultName,
+      });
+      setDialogInput(defaultName);
+    },
+    [language, getUniqueDefaultName, t]
+  );
+
+  const openCreateBaseDialog = useCallback(
+    (parentFolder?: string) => {
+      const baseName = language === 'de' ? 'Neue Base' : 'New Base';
+      const defaultName = getUniqueDefaultName(baseName, 'base', parentFolder);
+      setDialog({
+        type: 'create-base',
+        title: t('dialogs.newBaseTitle') || (language === 'de' ? 'Base erstellen' : 'Create Base'),
+        prompt: t('dialogs.baseNamePrompt') || (language === 'de' ? 'Name der Base:' : 'Base name:'),
         parentFolder,
         initialValue: defaultName,
       });
@@ -599,6 +626,9 @@ export const App: React.FC = () => {
         const [treeRes, graphRes] = await Promise.all([rawApi.getTree(), api.getGraph()]);
         await syncEngine.getLocalDb().setMeta('tree', treeRes.tree);
         await syncEngine.getLocalDb().setMeta('files', treeRes.files);
+        if (treeRes.notes) {
+          await syncEngine.getLocalDb().setMeta('allNotes', treeRes.notes);
+        }
         await syncEngine.getLocalDb().setMeta('graph', graphRes);
 
         const remainingOutbox = await syncEngine.getLocalDb().getOutbox();
@@ -769,8 +799,8 @@ export const App: React.FC = () => {
     const byPath = new Map<string, string>();
     const byName = new Map<string, string>();
     const sorted = [...allFiles].sort((a, b) => {
-      const am = a.extension === 'md' || a.extension === 'canvas' ? 0 : 1;
-      const bm = b.extension === 'md' || b.extension === 'canvas' ? 0 : 1;
+      const am = a.extension === 'md' || a.extension === 'canvas' || a.extension === 'base' ? 0 : 1;
+      const bm = b.extension === 'md' || b.extension === 'canvas' || b.extension === 'base' ? 0 : 1;
       return am - bm || a.path.length - b.path.length;
     });
     for (const f of sorted) {
@@ -778,6 +808,7 @@ export const App: React.FC = () => {
       byPath.set(lp, f.path);
       if (f.extension === 'md') byPath.set(lp.replace(/\.md$/, ''), f.path);
       if (f.extension === 'canvas') byPath.set(lp.replace(/\.canvas$/, ''), f.path);
+      if (f.extension === 'base') byPath.set(lp.replace(/\.base$/, ''), f.path);
       if (!byName.has(f.name.toLowerCase())) byName.set(f.name.toLowerCase(), f.path);
       if (!byName.has(f.basename.toLowerCase())) byName.set(f.basename.toLowerCase(), f.path);
     }
@@ -787,11 +818,16 @@ export const App: React.FC = () => {
   const allNotesForEditor = useMemo(
     () =>
       allFiles
-        .filter((f) => f.extension === 'md' || f.extension === 'canvas')
+        .filter((f) => f.extension === 'md' || f.extension === 'canvas' || f.extension === 'base')
         .map((f) => ({
           path: f.path,
           name: f.name,
           basename: f.basename,
+          extension: f.extension,
+          folder: f.folder !== undefined ? f.folder : (f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : ''),
+          frontmatter: f.frontmatter || {},
+          tags: f.tags || [],
+          mtime: f.mtime || 0,
           isSendTarget: f.isSendTarget,
           isTemplate: f.isTemplate,
         })),
@@ -1134,6 +1170,9 @@ export const App: React.FC = () => {
       onCreateCanvas: (parentFolder?: string) => {
         openCreateCanvasDialog(parentFolder);
       },
+      onCreateBase: (parentFolder?: string) => {
+        openCreateBaseDialog(parentFolder);
+      },
       onCreateFolder: (parentFolder?: string) => {
         openCreateFolderDialog(parentFolder);
       },
@@ -1166,6 +1205,7 @@ export const App: React.FC = () => {
       openNoteByPath,
       openCreateNoteDialog,
       openCreateCanvasDialog,
+      openCreateBaseDialog,
       openCreateFolderDialog,
       loadVaultIndex,
       handleToggleSendTarget,
@@ -1227,6 +1267,20 @@ export const App: React.FC = () => {
       }
 
       const canProceedOffline = Boolean(storedToken || hasLocalNotes || hasVerifier);
+
+      // Fast initial hydration from local IndexedDB cache to prevent UI delay/flicker
+      if (canProceedOffline) {
+        try {
+          const [cachedTree, cachedFiles] = await Promise.all([
+            syncEngine.getLocalDb().getMeta<FileTreeNode[]>('tree'),
+            syncEngine.getLocalDb().getMeta<any[]>('files'),
+          ]);
+          if (!cancelled) {
+            if (cachedTree && cachedTree.length > 0) setTree(cachedTree);
+            if (cachedFiles && cachedFiles.length > 0) setAllFiles(cachedFiles);
+          }
+        } catch {}
+      }
 
       const activateOfflineMode = async () => {
         if (cancelled) return;
@@ -1527,6 +1581,28 @@ export const App: React.FC = () => {
               : prev
           );
           setSaveState('saved');
+          setAllFiles((prev) => {
+            const idx = prev.findIndex((f) => f.path === saved.path);
+            if (idx === -1) return prev;
+            const updated = [...prev];
+            const isSendTarget = Boolean(
+              saved.frontmatter &&
+                (saved.frontmatter.sendtarget === true || saved.frontmatter.sendtarget === 'true')
+            );
+            const isTemplate = Boolean(
+              saved.frontmatter &&
+                (saved.frontmatter.isTemplate === true || saved.frontmatter.isTemplate === 'true')
+            );
+            updated[idx] = {
+              ...updated[idx],
+              frontmatter: saved.frontmatter || {},
+              tags: saved.tags || [],
+              mtime: saved.updatedAt || Date.now(),
+              isSendTarget,
+              isTemplate,
+            };
+            return updated;
+          });
           scheduleIndexRefresh(false, 1500);
         } catch (err) {
           console.error('Speicherfehler:', err);
@@ -1635,7 +1711,7 @@ export const App: React.FC = () => {
       // Fast path: resolve in the browser (no server round trip)
       const local = resolveLocally(trimmed, currentFrom);
       if (local) {
-        if (local.toLowerCase().endsWith('.md') || local.toLowerCase().endsWith('.canvas')) {
+        if (local.toLowerCase().endsWith('.md') || local.toLowerCase().endsWith('.canvas') || local.toLowerCase().endsWith('.base')) {
           if (workspaceViewRef.current === 'graph') {
             setWorkspaceView('editor');
           }
@@ -1659,7 +1735,7 @@ export const App: React.FC = () => {
       // Fallback (e.g. aliases): ask the server
       const res = await api.resolveWikiLink(trimmed, currentFrom || undefined);
       if (res.resolvedPath) {
-        if (res.resolvedPath.toLowerCase().endsWith('.md') || res.resolvedPath.toLowerCase().endsWith('.canvas')) {
+        if (res.resolvedPath.toLowerCase().endsWith('.md') || res.resolvedPath.toLowerCase().endsWith('.canvas') || res.resolvedPath.toLowerCase().endsWith('.base')) {
           await openNoteByPath(res.resolvedPath);
         } else {
           window.open(api.getAttachmentUrl(res.resolvedPath, currentFrom || undefined), '_blank');
@@ -1749,6 +1825,29 @@ export const App: React.FC = () => {
           path: relPath,
           rawContent: initialJson,
           body: initialJson,
+          properties: [],
+        });
+        await loadVaultIndex();
+        setActiveNote(created);
+        setSaveState('saved');
+        recordLastActiveNote(created.path);
+        recordRecentNote(created.path);
+        if (workspaceView === 'graph') setWorkspaceView('editor');
+        if (isMobile) setLeftSidebarOpen(false);
+      } else if (currentDialog.type === 'create-base') {
+        if (!val) return;
+        await flushPendingSave();
+        const rawTitle = val.replace(/\.base$/i, '').trim();
+        if (!rawTitle) return;
+        const cleanTitle = getUniqueDefaultName(rawTitle, 'base', currentDialog.parentFolder);
+        const relPath = currentDialog.parentFolder
+          ? `${currentDialog.parentFolder}/${cleanTitle}.base`
+          : `${cleanTitle}.base`;
+        const initialYaml = 'views:\n  - type: table\n    name: Table\n';
+        const created = await syncEngine.saveNote({
+          path: relPath,
+          rawContent: initialYaml,
+          body: initialYaml,
           properties: [],
         });
         await loadVaultIndex();
@@ -2262,6 +2361,14 @@ export const App: React.FC = () => {
         action: () => openCreateCanvasDialog(),
       },
       {
+        id: 'vault-new-base',
+        title: language === 'de' ? 'Vault: Neue Base erstellen (Datenbank / Tabelle)' : 'Vault: Create new Base (Database / Table)',
+        category: 'Vault',
+        icon: <Database size={16} />,
+        keywords: ['base', 'database', 'datenbank', 'table', 'tabelle'],
+        action: () => openCreateBaseDialog(),
+      },
+      {
         id: 'vault-save-note',
         title: 'Vault: Notiz sofort speichern',
         category: 'Vault',
@@ -2387,11 +2494,13 @@ export const App: React.FC = () => {
     activeNote,
     openCreateNoteDialog,
     openCreateCanvasDialog,
+    openCreateBaseDialog,
     handleUploadImageClick,
     handleManualSave,
     handleDownloadNote,
     handleOpenSendToTarget,
     t,
+    language,
   ]);
 
   if (!authChecked) {
@@ -2883,6 +2992,14 @@ export const App: React.FC = () => {
                           >
                             <WorkflowCanvasIcon size={15} />
                             <span>+ Neues Canvas</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => openCreateBaseDialog()}
+                          >
+                            <Database size={15} />
+                            <span>{language === 'de' ? '+ Neue Base' : '+ New Base'}</span>
                           </button>
                         </div>
                       </div>

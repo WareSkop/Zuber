@@ -82,6 +82,7 @@ interface FileSidebarProps {
   onSelectNote: (path: string) => void;
   onCreateNote: (parentFolder?: string) => void;
   onCreateCanvas?: (parentFolder?: string) => void;
+  onCreateBase?: (parentFolder?: string) => void;
   onCreateFolder: (parentFolder?: string) => void;
   onRenameEntry: (oldPath: string, currentName: string) => void;
   onDeleteEntry: (path: string, name: string) => void;
@@ -105,6 +106,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onSelectNote,
   onCreateNote,
   onCreateCanvas,
+  onCreateBase,
   onCreateFolder,
   onRenameEntry,
   onDeleteEntry,
@@ -1099,6 +1101,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   <WorkflowCanvasIcon size={15} />
                 </button>
               )}
+              {onCreateBase && (
+                <button
+                  type="button"
+                  className="sidebar-icon-btn icon-only"
+                  title={t('sidebar.newBase') || 'Neue Base'}
+                  aria-label={t('sidebar.newBase') || 'Neue Base'}
+                  onClick={() => onCreateBase()}
+                >
+                  <Database size={15} />
+                </button>
+              )}
               <button
                 type="button"
                 className="sidebar-icon-btn icon-only"
@@ -1429,6 +1442,21 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                         <span>{t('canvas.newCanvasInFolder')}</span>
                       </button>
                     )}
+                    {onCreateBase && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => {
+                          const path = contextMenu.node!.path;
+                          setExpandedFolders((prev) => ({ ...prev, [path]: true }));
+                          onCreateBase(path);
+                          setContextMenu(null);
+                        }}
+                      >
+                        <Database size={15} />
+                        <span>{t('sidebar.newBaseInFolder') || t('sidebar.newBase')}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="tree-context-item"
@@ -1494,6 +1522,20 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       >
                         <History size={15} />
                         <span>{t('sidebar.versionHistory')}</span>
+                      </button>
+                    )}
+                    {onCreateBase && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => {
+                          const parent = getParentFolder(contextMenu.node!.path);
+                          onCreateBase(parent || undefined);
+                          setContextMenu(null);
+                        }}
+                      >
+                        <Database size={15} />
+                        <span>{t('sidebar.newBase')}</span>
                       </button>
                     )}
                     <button
@@ -1774,6 +1816,19 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   >
                     <WorkflowCanvasIcon size={15} />
                     <span>{t('canvas.newCanvas')}</span>
+                  </button>
+                )}
+                {onCreateBase && (
+                  <button
+                    type="button"
+                    className="tree-context-item"
+                    onClick={() => {
+                      onCreateBase();
+                      setContextMenu(null);
+                    }}
+                  >
+                    <Database size={15} />
+                    <span>{t('sidebar.newBase')}</span>
                   </button>
                 )}
                 <button

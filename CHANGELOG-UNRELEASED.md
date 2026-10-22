@@ -1,4 +1,14 @@
 ### Added
+- Vollständiges Frontmatter-Caching im Frontend-Speicher und IndexedDB:
+  - `NoteSummary` um `frontmatter: Record<string, any>`, `tags: string[]`, `folder: string` und `mtime: number` erweitert.
+  - Server-Endpunkte `/api/vault/tree` und `/api/vault/overview` liefern vollständige Notizen-Metadaten direkt aus dem In-Memory-Index aus.
+  - Sofortige Hydrierung von `allFiles`, `allNotes` und dem Dateibaum beim App-Start aus dem IndexedDB-Cache (`meta.allNotes`, `meta.files`, `meta.tree`), wodurch Render-Flackern und Platzhalter-Striche (`—`) in Base-Ansichten vollständig eliminiert werden.
+  - Optimistische lokale Aktualisierung des Frontmatter-Caches bei Notiz-Speicherungen und Synchronisationen in Speicher und IndexedDB.
+- „Neue Base“-Workflow (`.base`-Dateien):
+  - Neuer Icon-Button „Neue Base“ (`Database`-Icon) in der Sidebar-Aktionsleiste.
+  - Kontextmenü-Eintrag „Neue Base“ für Ordner, die Vault-Wurzel und Dateien (im übergeordneten Ordner der Datei).
+  - Neuer Erstellungs-Dialog mit automatischer Hochzählung (`Neue Base`, `Neue Base 2.base`), Standard-Tabellen-YAML (`views: [{ type: table, name: Table }]`), Speicherung via `syncEngine.saveNote` und sofortigem Öffnen im visuellen Base-Editor.
+  - Befehlspalette um `vault-new-base` („Vault: Neue Base erstellen (Datenbank / Tabelle)“) erweitert.
 - Icon-Only "New Note" Button (`FileSidebar.tsx`, `styles.css`):
   - Entfernen des Textlabels „New Note“ aus der Sidebar-Aktionsleiste für eine aufgeräumte, konsistente Icon-Kopfzeile.
   - Kompaktes quadratisches Icon-Button-Design (`.sidebar-icon-btn.icon-only`) mit erhaltenem barrierefreiem Tooltip (`title`) und `aria-label`.
@@ -90,6 +100,11 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Base-Query-Optimierungen & Deduplizierung (`src/base/baseEngine.ts`):
+  - `.base`-Dateien und `currentBasePath` werden standardmäßig aus Base-Abfragen ausgeschlossen (sofern nicht explizit `file.ext == "base"` abgefragt wird).
+  - Strikte Pfad-Deduplizierung von Kandidaten-Notizen und Abfrageergebnissen nach `file.path`.
+  - Flexible Auflösung von Property-Schlüsseln: Sowohl `IP` als auch `note.IP` werden in Tabellen und Filter-/Formelausdrücken transparent aufgelöst.
+  - Behebung von `SyntaxError` bei `note.*`-Property-Zugriffen in dynamisch kompilierten JavaScript-Filterfunktionen durch Bereitstellung eines dedizierten `note`-Objekts im Auswertungskontext.
 - Behebung des Selektions-Bugs im Dateibaum (`FileSidebar.tsx`): Klick-Handler für Dateien und Ordner entkoppelt mit `e.stopPropagation()`, Ordnerklick wählt keine Kind-Dateien mehr rekursiv aus, normaler Klick auf eine Einzeldatei setzt die Mehrfachauswahl sauber auf genau diese Datei zurück, und Strg/Cmd+Klick schaltet Zeilen selektiv um, ohne die aktive Notiz im Editor umzuschalten.
 - Strikte Pfad-basierte Zeilenmarkierung im Dateibaum (`node.path` statt `name`), um gleichzeitiges Markieren gleichnamiger Dateien in verschiedenen Ordnern auszuschließen.
 - Saubere Cache-Bereinigung in IndexedDB (`notes`, `attachments`, `meta.tree`, `meta.allNotes`, `meta.files`) beim Verschieben/Umbenennen (`moveOrRenameNodeInTree`), wodurch keine Geister-Einträge im alten Ordner zurückbleiben.

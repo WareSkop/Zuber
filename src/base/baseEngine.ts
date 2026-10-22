@@ -80,9 +80,11 @@ export function parseBaseYaml(rawYaml: string): BaseDefinition {
 export function createRecordFromNote(note: NoteData | NoteSummary | any): BaseRecord {
   const filePath = (note.path || '').replace(/^[/\\]+/, '').replace(/\\/g, '/');
   const name = note.name || filePath.split('/').pop() || '';
-  const folder = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
+  const folder = note.folder !== undefined
+    ? note.folder
+    : filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
   const ext = note.extension || (filePath.includes('.') ? filePath.split('.').pop() || 'md' : 'md');
-  const mtime = note.updatedAt ?? (note as any).mtimeMs ?? 0;
+  const mtime = note.mtime ?? note.updatedAt ?? (note as any).mtimeMs ?? 0;
 
   // Extract tags: note.tags or note.properties.find(tags)
   const tagsSet = new Set<string>();
@@ -111,12 +113,26 @@ export function createRecordFromNote(note: NoteData | NoteSummary | any): BaseRe
     }
   }
 
-  if (Array.isArray(note.properties)) {
-    for (const prop of note.properties) {
-      if (prop && prop.key) {
-        properties[prop.key] = prop.value;
-        if (prop.key.toLowerCase() === 'tags') {
-          const list = Array.isArray(prop.value) ? prop.value : [prop.value];
+  if (note.properties && typeof note.properties === 'object') {
+    if (Array.isArray(note.properties)) {
+      for (const prop of note.properties) {
+        if (prop && prop.key) {
+          properties[prop.key] = prop.value;
+          if (prop.key.toLowerCase() === 'tags') {
+            const list = Array.isArray(prop.value) ? prop.value : [prop.value];
+            for (const item of list) {
+              if (typeof item === 'string' && item.trim()) {
+                tagsSet.add(item.trim().replace(/^#/, '').toLowerCase());
+              }
+            }
+          }
+        }
+      }
+    } else {
+      for (const [k, v] of Object.entries(note.properties)) {
+        properties[k] = v;
+        if (k.toLowerCase() === 'tags') {
+          const list = Array.isArray(v) ? v : [v];
           for (const item of list) {
             if (typeof item === 'string' && item.trim()) {
               tagsSet.add(item.trim().replace(/^#/, '').toLowerCase());
@@ -244,11 +260,15 @@ export function evaluateFormula(formula: string, record: BaseRecord, formulasSoF
     ...formulasSoFar,
   };
 
+  const noteObj: Record<string, any> = {};
   for (const [k, v] of Object.entries(record.properties)) {
-    if (!reservedWords.has(k) && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k)) {
-      context[k] = v;
+    const rawKey = k.replace(/^note\./, '');
+    noteObj[rawKey] = v;
+    if (!reservedWords.has(rawKey) && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawKey)) {
+      context[rawKey] = v;
     }
   }
+  context.note = noteObj;
 
   try {
     const keys = Object.keys(context);
@@ -293,9 +313,28 @@ function evaluateStringExpression(expr: string, record: BaseRecord): boolean {
   // Convert standard word operators
   safeExpr = safeExpr.replace(/\band\b/gi, '&&').replace(/\bor\b/gi, '||').replace(/\bnot\b/gi, '!');
 
+  const noteObj: Record<string, any> = {};
+  const validProps: Record<string, any> = {};
+  const reservedWords = new Set([
+    'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',
+    'default', 'delete', 'do', 'else', 'export', 'extends', 'finally',
+    'for', 'function', 'if', 'import', 'in', 'instanceof', 'new',
+    'return', 'super', 'switch', 'this', 'throw', 'try', 'typeof',
+    'var', 'void', 'while', 'with', 'yield', 'enum', 'await'
+  ]);
+
+  for (const [k, v] of Object.entries(record.properties)) {
+    const rawKey = k.replace(/^note\./, '');
+    noteObj[rawKey] = v;
+    if (!reservedWords.has(rawKey) && /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(rawKey)) {
+      validProps[rawKey] = v;
+    }
+  }
+
   const context: Record<string, any> = {
     file: record.file,
-    ...record.properties,
+    note: noteObj,
+    ...validProps,
     ...record.formulas,
   };
 
@@ -351,9 +390,12 @@ export function evaluateCondition(cond: BaseFilterCondition | undefined | null, 
 
     // Key-value exact match: { status: "done", priority: 1 }
     for (const [key, val] of Object.entries(obj)) {
-      const actual = key.startsWith('file.')
-        ? (record.file as any)[key.replace('file.', '')]
-        : record.properties[key] ?? record[key];
+      let actual: any;
+      if (key.startsWith('file.')) {
+        actual = (record.file as any)[key.replace('file.', '')];
+      } else {
+        actual = getPropertyValue(record, key);
+      }
       if (String(actual).toLowerCase() !== String(val).toLowerCase()) {
         return false;
       }
@@ -370,7 +412,8 @@ export function evaluateCondition(cond: BaseFilterCondition | undefined | null, 
 export function executeBaseQuery(
   definition: BaseDefinition,
   allNotes: (NoteData | NoteSummary | any)[],
-  viewIndex = 0
+  viewIndex = 0,
+  currentBasePath?: string
 ): BaseQueryResult {
   const views = definition.views && definition.views.length > 0
     ? definition.views
@@ -378,8 +421,37 @@ export function executeBaseQuery(
 
   const activeView = views[viewIndex] || views[0];
 
+  // Self-Exclusion and Default Filtering:
+  // Check if query filters explicitly mention file.ext
+  const filtersString = JSON.stringify(definition.filters || '') + JSON.stringify(activeView.filters || '');
+  const explicitlyChecksExt = filtersString.includes('file.ext');
+
+  // Candidate filtering:
+  // 1. Strictly exclude .base files and currentBasePath
+  // 2. By default, restrict to .md files unless query explicitly checks file.ext
+  const candidateNotes = (allNotes || []).filter((n) => {
+    const p = n?.path || '';
+    if (!p) return false;
+    if (p.endsWith('.base')) return false;
+    if (currentBasePath && p === currentBasePath) return false;
+    if (!explicitlyChecksExt) {
+      const ext = n.extension || (p.includes('.') ? p.split('.').pop() : 'md');
+      if (ext !== 'md' && !p.endsWith('.md')) return false;
+    }
+    return true;
+  });
+
+  // Strict Path Deduplication
+  const seenCandidatePaths = new Set<string>();
+  const uniqueCandidateNotes = candidateNotes.filter((n) => {
+    const p = n?.path || '';
+    if (seenCandidatePaths.has(p)) return false;
+    seenCandidatePaths.add(p);
+    return true;
+  });
+
   // 1. Convert notes to BaseRecords
-  const allRecords = allNotes.map((n) => createRecordFromNote(n));
+  const allRecords = uniqueCandidateNotes.map((n) => createRecordFromNote(n));
 
   // 2. Evaluate Formulas for each record
   const formulas = definition.formulas || {};
@@ -396,6 +468,7 @@ export function executeBaseQuery(
   }
 
   // 3. Filter Records
+  const seenResultPaths = new Set<string>();
   const matchingRecords = allRecords.filter((rec) => {
     // Check global filters
     if (definition.filters && !evaluateCondition(definition.filters, rec)) {
@@ -405,6 +478,8 @@ export function executeBaseQuery(
     if (activeView.filters && !evaluateCondition(activeView.filters, rec)) {
       return false;
     }
+    if (seenResultPaths.has(rec.file.path)) return false;
+    seenResultPaths.add(rec.file.path);
     return true;
   });
 
@@ -535,11 +610,16 @@ export function getPropertyValue(record: BaseRecord, propertyKey: string): any {
 
   if (propertyKey.startsWith('note.')) {
     const nKey = propertyKey.replace('note.', '');
-    return record.properties[nKey] ?? record[nKey];
+    return record.properties[nKey] ?? record.properties[propertyKey] ?? record[nKey] ?? record[propertyKey];
   }
 
   if (propertyKey in record.properties) {
     return record.properties[propertyKey];
+  }
+
+  // Flexible property access fallback (e.g. resolve both IP and note.IP)
+  if (`note.${propertyKey}` in record.properties) {
+    return record.properties[`note.${propertyKey}`];
   }
 
   return record[propertyKey];

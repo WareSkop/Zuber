@@ -63,6 +63,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
           <BaseView
             yamlContent={rawContent}
             allNotes={allFiles}
+            filePath={filePath}
             onSelectNote={onSelectNote}
             onCellChange={onCellChange}
             className="base-editor-visual-view"

@@ -1386,6 +1386,56 @@ Weitere Punkte folgen.`,
       const sourceBacklinks = service.getBacklinks(sourcePath);
       expect(sourceBacklinks.linked.some((b) => b.sourcePath === targetPath)).toBe(true);
     });
+
+    it('returns all notes with full frontmatter, tags, folder and mtime in getAllNotes and overview', () => {
+      service.saveNote('Projekte/Architektur.md', {
+        body: '# Architektur\n\nEinige Details mit #system #cloud.',
+        properties: [
+          { key: 'status', value: 'in_progress', type: 'text' },
+          { key: 'priority', value: 1, type: 'number' },
+          { key: 'tags', value: ['core', 'infra'], type: 'list' },
+        ],
+      });
+
+      const allNotes = service.getAllNotes();
+      const archNote = allNotes.find((n) => n.path === 'Projekte/Architektur.md');
+      expect(archNote).toBeDefined();
+      expect(archNote?.folder).toBe('Projekte');
+      expect(archNote?.frontmatter.status).toBe('in_progress');
+      expect(archNote?.frontmatter.priority).toBe(1);
+      expect(archNote?.tags).toContain('core');
+      expect(archNote?.tags).toContain('infra');
+      expect(archNote?.tags).toContain('system');
+      expect(archNote?.mtime).toBeGreaterThan(0);
+
+      const overview = service.getVaultOverview();
+      expect(overview.notes.length).toBeGreaterThanOrEqual(1);
+      const overviewNote = overview.notes.find((n) => n.path === 'Projekte/Architektur.md');
+      expect(overviewNote?.frontmatter.status).toBe('in_progress');
+
+      const allFiles = service.getAllFiles();
+      const archFile = allFiles.find((f) => f.path === 'Projekte/Architektur.md');
+      expect(archFile?.frontmatter?.status).toBe('in_progress');
+      expect(archFile?.folder).toBe('Projekte');
+    });
+
+    it('saves and reads .base files preserving extension and raw YAML content', () => {
+      const initialYaml = 'views:\n  - type: table\n    name: Overview\n';
+      const created = service.saveNote('Projects.base', {
+        body: initialYaml,
+        rawContent: initialYaml,
+        properties: [],
+      });
+
+      expect(created.path).toBe('Projects.base');
+      expect(created.body).toBe(initialYaml);
+
+      const read = service.getNote('Projects.base');
+      expect(read.path).toBe('Projects.base');
+      expect(read.body).toBe(initialYaml);
+      expect(fs.existsSync(path.join(tmpDir, 'Projects.base'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, 'Projects.base.md'))).toBe(false);
+    });
   });
 });
 

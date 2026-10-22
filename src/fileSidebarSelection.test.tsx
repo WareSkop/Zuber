@@ -73,6 +73,7 @@ describe('FileSidebar Multi-Select & Selection Logic', () => {
           activePath={props.activePath ?? null}
           tags={[]}
           selectedTagFilter={null}
+          onSelectTagFilter={vi.fn()}
           onClose={vi.fn()}
           onSelectNote={onSelectNote}
           onCreateNote={vi.fn()}
@@ -83,7 +84,6 @@ describe('FileSidebar Multi-Select & Selection Logic', () => {
           onRefresh={vi.fn()}
           onOpenDailyNote={vi.fn()}
           onOpenTemplateSelect={vi.fn()}
-          allNotes={[]}
         />
       );
     });

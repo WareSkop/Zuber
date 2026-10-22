@@ -816,7 +816,9 @@ class InteractiveCodeBlockWidget extends WidgetType {
     readonly mode: 'preview' | 'code',
     readonly onToggleMode: (pos: number, mode: 'preview' | 'code') => void,
     readonly t?: (key: string) => string,
-    readonly onNavigate?: (target: string) => void
+    readonly onNavigate?: (target: string) => void,
+    readonly allNotes?: any[],
+    readonly currentBasePath?: string
   ) {
     super();
   }
@@ -826,7 +828,9 @@ class InteractiveCodeBlockWidget extends WidgetType {
       other.language === this.language &&
       other.codeText === this.codeText &&
       other.pos === this.pos &&
-      other.mode === this.mode
+      other.mode === this.mode &&
+      other.allNotes === this.allNotes &&
+      other.currentBasePath === this.currentBasePath
     );
   }
 
@@ -986,6 +990,8 @@ class InteractiveCodeBlockWidget extends WidgetType {
         root.render(
           <BaseView
             definitionYaml={this.codeText}
+            allNotes={this.allNotes}
+            currentBasePath={this.currentBasePath}
             onOpenNote={this.onNavigate}
           />
         );
@@ -1220,7 +1226,9 @@ function buildLivePreviewDecorations(
                   'preview',
                   onToggleMode,
                   t,
-                  onNavigate
+                  onNavigate,
+                  allNotes,
+                  notePath || undefined
                 ),
               })
             );
@@ -1256,7 +1264,9 @@ function buildLivePreviewDecorations(
                   'code',
                   onToggleMode,
                   t,
-                  onNavigate
+                  onNavigate,
+                  allNotes,
+                  notePath || undefined
                 ),
               })
             );
@@ -2952,6 +2962,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       root.render(
         <BaseView
           definitionYaml={rawCode}
+          allNotes={allNotes}
+          currentBasePath={notePath || undefined}
           onOpenNote={onNavigateWikiLink}
         />
       );

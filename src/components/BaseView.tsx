@@ -29,6 +29,8 @@ export interface BaseViewProps {
   yamlContent?: string;
   definitionYaml?: string;
   allNotes?: any[];
+  filePath?: string;
+  currentBasePath?: string;
   onSelectNote?: (path: string) => void;
   onOpenNote?: (path: string) => void;
   onCellChange?: (notePath: string, key: string, value: any) => Promise<void>;
@@ -40,6 +42,8 @@ export const BaseView: React.FC<BaseViewProps> = ({
   yamlContent,
   definitionYaml,
   allNotes,
+  filePath,
+  currentBasePath,
   onSelectNote,
   onOpenNote,
   onCellChange,
@@ -49,6 +53,7 @@ export const BaseView: React.FC<BaseViewProps> = ({
   const { t } = useTranslation();
   const effectiveYaml = yamlContent ?? definitionYaml ?? '';
   const effectiveSelectNote = onSelectNote || onOpenNote;
+  const effectiveBasePath = filePath || currentBasePath;
   const [internalNotes, setInternalNotes] = useState<any[]>(allNotes || []);
   const [activeViewIdx, setActiveViewIdx] = useState(0);
   const [sortOverride, setSortOverride] = useState<{ property: string; direction: 'ASC' | 'DESC' } | null>(null);
@@ -57,11 +62,8 @@ export const BaseView: React.FC<BaseViewProps> = ({
 
   useEffect(() => {
     if (allNotes && allNotes.length > 0) {
-      const hasProps = allNotes.some((n) => n.properties || n.frontmatter || n.tags);
-      if (hasProps) {
-        setInternalNotes(allNotes);
-        return;
-      }
+      setInternalNotes(allNotes);
+      return;
     }
     let cancelled = false;
     syncEngine.getLocalDb().getAllNotes().then((notes: any[]) => {
@@ -93,7 +95,7 @@ export const BaseView: React.FC<BaseViewProps> = ({
   // Execute Query
   const queryResult: BaseQueryResult | null = useMemo(() => {
     if (!definition) return null;
-    const res = executeBaseQuery(definition, internalNotes, activeViewIdx);
+    const res = executeBaseQuery(definition, internalNotes, activeViewIdx, effectiveBasePath);
 
     // Apply header-click sort override if present
     if (sortOverride) {

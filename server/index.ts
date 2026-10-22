@@ -233,7 +233,16 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     try {
       const tree = vaultService.getFileTree();
       const files = vaultService.getAllFiles();
-      res.json({ tree, files });
+      const notes = vaultService.getAllNotes();
+      res.json({ tree, files, notes });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get('/api/vault/overview', requireAuth, (_req, res) => {
+    try {
+      res.json(vaultService.getVaultOverview());
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

@@ -305,6 +305,52 @@ views:
       expect(result.records[0].file.name).toBe('App.md');
       expect(result.records[1].file.name).toBe('Design.md');
     });
+
+    it('excludes .base files and currentBasePath by default, and deduplicates candidates', () => {
+      const def: BaseDefinition = {
+        views: [{ type: 'table', name: 'All' }],
+      };
+      const notesWithBases = [
+        ...sampleNotes,
+        // duplicate candidate path
+        { path: 'Projekte/App.md', name: 'App.md', properties: { status: 'in-progress' } },
+        // .base file
+        { path: 'Dashboard.base', name: 'Dashboard.base', properties: {} },
+        // currentBasePath
+        { path: 'Projekte/Projects.base', name: 'Projects.base', properties: {} },
+      ];
+
+      const result = executeBaseQuery(def, notesWithBases, 0, 'Projekte/Projects.base');
+      const paths = result.records.map((r) => r.file.path);
+      // No duplicate App.md
+      expect(paths.filter((p) => p === 'Projekte/App.md')).toHaveLength(1);
+      // No .base files
+      expect(paths.some((p) => p.endsWith('.base'))).toBe(false);
+      expect(paths).toContain('Projekte/App.md');
+      expect(paths).toContain('Projekte/Design.md');
+      expect(paths).toContain('Projekte/Backend.md');
+      expect(paths).toContain('Archiv/Old.md');
+    });
+
+    it('flexibly resolves both IP and note.IP property keys in getPropertyValue and filters', () => {
+      const record = createRecordFromNote({
+        path: 'Servers/Web01.md',
+        name: 'Web01.md',
+        properties: {
+          IP: '192.168.1.100',
+          role: 'web',
+        },
+      });
+
+      expect(getPropertyValue(record, 'IP')).toBe('192.168.1.100');
+      expect(getPropertyValue(record, 'note.IP')).toBe('192.168.1.100');
+      expect(getPropertyValue(record, 'role')).toBe('web');
+      expect(getPropertyValue(record, 'note.role')).toBe('web');
+
+      // In expressions
+      expect(evaluateCondition('IP == "192.168.1.100"', record)).toBe(true);
+      expect(evaluateCondition('note.IP == "192.168.1.100"', record)).toBe(true);
+    });
   });
 
   describe('refactorBaseContent', () => {

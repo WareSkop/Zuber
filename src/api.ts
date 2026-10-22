@@ -11,6 +11,7 @@ import type {
   GitFileVersionResponse,
   GraphData,
   NoteData,
+  NoteSummary,
   SecuritySettingsResponse,
   SyncManifestEntry,
   UpdateSecurityRequest,
@@ -320,10 +321,19 @@ export function registerOfflineSyncDelegate(delegate: OfflineSyncDelegate | null
 export const rawApi = {
   getTree(): Promise<{
     tree: FileTreeNode[];
-    files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
+    files: any[];
+    notes?: NoteSummary[];
     vaultPath: string;
   }> {
     return apiFetch('/api/vault/tree');
+  },
+
+  getVaultOverview(): Promise<{
+    tree: FileTreeNode[];
+    files: any[];
+    notes: NoteSummary[];
+  }> {
+    return apiFetch('/api/vault/overview');
   },
 
   getNote(path: string): Promise<NoteData> {
@@ -460,13 +470,22 @@ export const api = {
 
   getTree(): Promise<{
     tree: FileTreeNode[];
-    files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
+    files: any[];
+    notes?: NoteSummary[];
     vaultPath: string;
   }> {
     if (offlineSyncDelegate?.getTreeData && typeof navigator !== 'undefined' && !navigator.onLine) {
       return offlineSyncDelegate.getTreeData();
     }
     return rawApi.getTree();
+  },
+
+  getVaultOverview(): Promise<{
+    tree: FileTreeNode[];
+    files: any[];
+    notes: NoteSummary[];
+  }> {
+    return rawApi.getVaultOverview();
   },
 
   getNote(path: string): Promise<NoteData> {
