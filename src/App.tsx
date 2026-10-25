@@ -97,7 +97,7 @@ const BaseEditor = React.lazy(() =>
 );
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
-import { syncEngine, type SyncState, type ConflictItem } from './sync/syncEngine';
+import { syncEngine, isFastForwardCompatible, type SyncState, type ConflictItem } from './sync/syncEngine';
 import { cleanShareUrlQuery } from './sync/shareTargetService';
 import { clientLogger } from './utils/logger';
 import { useTranslation } from './i18n';
@@ -415,6 +415,18 @@ export const App: React.FC = () => {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaveTaskRef = useRef<(() => Promise<void>) | null>(null);
+  const isSavingFileRef = useRef<Map<string, boolean>>(new Map());
+  const pendingSavePayloadRef = useRef<
+    Map<
+      string,
+      {
+        body?: string;
+        properties?: FrontmatterProperty[];
+        rawContent?: string;
+      }
+    >
+  >(new Map());
+  const inFlightSavePromiseRef = useRef<Map<string, Promise<void>>>(new Map());
   const lastLocalSaveTimeRef = useRef<number>(0);
   const recentSelfWritesRef = useRef<Map<string, number>>(new Map());
   const isUploadingAttachmentRef = useRef<boolean>(false);
@@ -435,9 +447,12 @@ export const App: React.FC = () => {
       saveTimerRef.current = null;
     }
     const task = pendingSaveTaskRef.current;
-    pendingSaveTaskRef.current = null;
     if (task) {
       await task();
+    }
+    const inFlights = Array.from(inFlightSavePromiseRef.current.values());
+    if (inFlights.length > 0) {
+      await Promise.all(inFlights);
     }
   }, []);
 
@@ -1382,6 +1397,59 @@ export const App: React.FC = () => {
     };
   }, [loadVaultIndex, openNoteByPath]);
 
+  // Reconcile active note state on window focus or tab visibility change
+  const reconcileActiveNoteOnFocus = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (!authenticated) return;
+    const currentPath = activePathRef.current;
+    if (!currentPath) return;
+
+    const isDirty =
+      saveStateRef.current === 'dirty' ||
+      saveStateRef.current === 'saving' ||
+      Boolean(saveTimerRef.current) ||
+      pendingSavePayloadRef.current.has(currentPath) ||
+      Boolean(isSavingFileRef.current.get(currentPath));
+
+    try {
+      if (!isDirty) {
+        // Active note is clean: pull latest note from server / cache
+        const latest = await syncEngine.getNote(currentPath);
+        if (
+          activePathRef.current === currentPath &&
+          latest.updatedAt > (activeNoteRef.current?.updatedAt || 0)
+        ) {
+          clientLogger.info('sync', `Reconciling clean note "${currentPath}" on focus/visibility.`);
+          setActiveNote(latest);
+        }
+      } else {
+        // Active note has uncommitted local edits: reconcile baseMtime with server without clobbering editor
+        if (navigator.onLine) {
+          const manifest = await api.getSyncManifest();
+          const entry = manifest.find((m) => m.path === currentPath);
+          if (entry && activeNoteRef.current && activeNoteRef.current.path === currentPath) {
+            const currentUpdatedAt = activeNoteRef.current.updatedAt;
+            if (entry.mtime > currentUpdatedAt) {
+              try {
+                const serverNote = await rawApi.getNote(currentPath);
+                const ff = isFastForwardCompatible(activeNoteRef.current.body, serverNote.body);
+                if (ff.compatible && ff.winner === 'local') {
+                  clientLogger.info(
+                    'sync',
+                    `Fast-forwarding dirty note "${currentPath}" base mtime to server mtime.`
+                  );
+                  activeNoteRef.current.updatedAt = serverNote.updatedAt;
+                }
+              } catch {}
+            }
+          }
+        }
+      }
+    } catch (err) {
+      clientLogger.warn('sync', `Failed to reconcile active note on focus:`, err);
+    }
+  }, [authenticated]);
+
   // WebSocket live file-watcher connection
   useEffect(() => {
     if (!authenticated) return;
@@ -1437,6 +1505,18 @@ export const App: React.FC = () => {
 
                 if (isWithinSelfWriteWindow || isRecentLocalSave || isActivelyUploading) {
                   clientLogger.debug('sync', `Echo suppressed for active note "${currentPath}" (within self-write window).`);
+                } else if (
+                  saveStateRef.current === 'dirty' ||
+                  saveStateRef.current === 'saving' ||
+                  Boolean(saveTimerRef.current) ||
+                  pendingSavePayloadRef.current.has(currentPath) ||
+                  Boolean(isSavingFileRef.current.get(currentPath))
+                ) {
+                  clientLogger.info(
+                    'sync',
+                    `External change detected on active note "${currentPath}" while editing: reconciling base mtime.`
+                  );
+                  reconcileActiveNoteOnFocus();
                 } else {
                   clientLogger.info('sync', `External change detected on open note "${currentPath}". Reloading.`);
                   openNoteByPath(currentPath);
@@ -1477,27 +1557,28 @@ export const App: React.FC = () => {
         } catch {}
       }
     };
-  }, [authenticated, loadVaultIndex, scheduleIndexRefresh, openNoteByPath]);
+  }, [authenticated, loadVaultIndex, scheduleIndexRefresh, openNoteByPath, reconcileActiveNoteOnFocus]);
 
-  // Ingest handler for incoming Web Share Target items while app is running
+  // Ingest handler for incoming Web Share Target items & focus/visibility reconciliation while app is running
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!authenticated) return;
 
-    const checkIncoming = () => {
+    const handleFocusOrVisibility = () => {
       if (window.location.search.includes('incoming_share')) {
         consumeIncomingShares();
       }
+      reconcileActiveNoteOnFocus();
     };
 
-    checkIncoming();
-    window.addEventListener('focus', checkIncoming);
-    window.addEventListener('visibilitychange', checkIncoming);
+    handleFocusOrVisibility();
+    window.addEventListener('focus', handleFocusOrVisibility);
+    window.addEventListener('visibilitychange', handleFocusOrVisibility);
     return () => {
-      window.removeEventListener('focus', checkIncoming);
-      window.removeEventListener('visibilitychange', checkIncoming);
+      window.removeEventListener('focus', handleFocusOrVisibility);
+      window.removeEventListener('visibilitychange', handleFocusOrVisibility);
     };
-  }, [authenticated, consumeIncomingShares]);
+  }, [authenticated, consumeIncomingShares, reconcileActiveNoteOnFocus]);
 
   const handleLogin = async (password: string) => {
     const loginRes = await api.login(password);
@@ -1527,6 +1608,110 @@ export const App: React.FC = () => {
     setActiveNote(null);
   };
 
+  const performSaveForPath = useCallback(
+    async (path: string): Promise<void> => {
+      // If already saving this path, return existing in-flight promise;
+      // when it completes its current request, its while-loop will process pendingSavePayloadRef
+      const existingInFlight = inFlightSavePromiseRef.current.get(path);
+      if (existingInFlight && isSavingFileRef.current.get(path)) {
+        return existingInFlight;
+      }
+
+      const savePromise = (async () => {
+        isSavingFileRef.current.set(path, true);
+        setSaveState('saving');
+        try {
+          while (pendingSavePayloadRef.current.has(path)) {
+            const currentPayload = pendingSavePayloadRef.current.get(path)!;
+            pendingSavePayloadRef.current.delete(path);
+
+            const now = Date.now();
+            lastLocalSaveTimeRef.current = now;
+            recentSelfWritesRef.current.set(path, now);
+            const currentBaseMtime =
+              activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : undefined;
+
+            const saved = await syncEngine.saveNote({
+              path,
+              ...currentPayload,
+              baseMtime: currentBaseMtime,
+              explicitClear: explicitUserClearRef.current,
+            });
+
+            const finishTime = Date.now();
+            lastLocalSaveTimeRef.current = finishTime;
+            recentSelfWritesRef.current.set(saved.path, finishTime);
+
+            // Update activeNoteRef immediately if note path still matches
+            if (activeNoteRef.current && activeNoteRef.current.path === saved.path) {
+              activeNoteRef.current = {
+                ...activeNoteRef.current,
+                links: saved.links,
+                embeds: saved.embeds,
+                tags: saved.tags,
+                headings: saved.headings,
+                updatedAt: saved.updatedAt,
+              };
+            }
+
+            // Only merge derived metadata – never overwrite text the user typed while saving
+            setActiveNote((prev) =>
+              prev && prev.path === saved.path
+                ? {
+                    ...prev,
+                    links: saved.links,
+                    embeds: saved.embeds,
+                    tags: saved.tags,
+                    headings: saved.headings,
+                    updatedAt: saved.updatedAt,
+                  }
+                : prev
+            );
+
+            setAllFiles((prev) => {
+              const idx = prev.findIndex((f) => f.path === saved.path);
+              if (idx === -1) return prev;
+              const updated = [...prev];
+              const isSendTarget = Boolean(
+                saved.frontmatter &&
+                  (saved.frontmatter.sendtarget === true || saved.frontmatter.sendtarget === 'true')
+              );
+              const isTemplate = Boolean(
+                saved.frontmatter &&
+                  (saved.frontmatter.isTemplate === true || saved.frontmatter.isTemplate === 'true')
+              );
+              updated[idx] = {
+                ...updated[idx],
+                frontmatter: saved.frontmatter || {},
+                tags: saved.tags || [],
+                mtime: saved.updatedAt || Date.now(),
+                isSendTarget,
+                isTemplate,
+              };
+              return updated;
+            });
+
+            scheduleIndexRefresh(false, 1500);
+          }
+
+          if (pendingSavePayloadRef.current.size === 0) {
+            setSaveState('saved');
+          }
+        } catch (err) {
+          console.error('Speicherfehler:', err);
+        } finally {
+          isSavingFileRef.current.delete(path);
+          inFlightSavePromiseRef.current.delete(path);
+          pendingSaveTaskRef.current = null;
+        }
+      })();
+
+      inFlightSavePromiseRef.current.set(path, savePromise);
+      return savePromise;
+    },
+    [scheduleIndexRefresh]
+  );
+
   // Debounced auto-save when note body, properties, or rawContent changes
   const scheduleSave = useCallback(
     (
@@ -1542,88 +1727,21 @@ export const App: React.FC = () => {
         clearTimeout(saveTimerRef.current);
       }
 
-      const baseMtime =
-        activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : undefined;
+      const existingPending = pendingSavePayloadRef.current.get(path);
+      pendingSavePayloadRef.current.set(path, {
+        ...existingPending,
+        ...payload,
+      });
 
-      const executeSave = async () => {
-        pendingSaveTaskRef.current = null;
-        setSaveState('saving');
-        const now = Date.now();
-        lastLocalSaveTimeRef.current = now;
-        recentSelfWritesRef.current.set(path, now);
-        const currentBaseMtime = activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : baseMtime;
-        try {
-          const saved = await syncEngine.saveNote({
-            path,
-            ...payload,
-            baseMtime: currentBaseMtime,
-            explicitClear: explicitUserClearRef.current,
-          });
-          const finishTime = Date.now();
-          lastLocalSaveTimeRef.current = finishTime;
-          recentSelfWritesRef.current.set(saved.path, finishTime);
-
-          // Update activeNoteRef immediately
-          if (activeNoteRef.current && activeNoteRef.current.path === saved.path) {
-            activeNoteRef.current = {
-              ...activeNoteRef.current,
-              links: saved.links,
-              embeds: saved.embeds,
-              tags: saved.tags,
-              headings: saved.headings,
-              updatedAt: saved.updatedAt,
-            };
-          }
-
-          // Only merge derived metadata – never overwrite text the user typed while saving
-          setActiveNote((prev) =>
-            prev && prev.path === saved.path
-              ? {
-                  ...prev,
-                  links: saved.links,
-                  embeds: saved.embeds,
-                  tags: saved.tags,
-                  headings: saved.headings,
-                  updatedAt: saved.updatedAt,
-                }
-              : prev
-          );
-          setSaveState('saved');
-          setAllFiles((prev) => {
-            const idx = prev.findIndex((f) => f.path === saved.path);
-            if (idx === -1) return prev;
-            const updated = [...prev];
-            const isSendTarget = Boolean(
-              saved.frontmatter &&
-                (saved.frontmatter.sendtarget === true || saved.frontmatter.sendtarget === 'true')
-            );
-            const isTemplate = Boolean(
-              saved.frontmatter &&
-                (saved.frontmatter.isTemplate === true || saved.frontmatter.isTemplate === 'true')
-            );
-            updated[idx] = {
-              ...updated[idx],
-              frontmatter: saved.frontmatter || {},
-              tags: saved.tags || [],
-              mtime: saved.updatedAt || Date.now(),
-              isSendTarget,
-              isTemplate,
-            };
-            return updated;
-          });
-          scheduleIndexRefresh(false, 1500);
-        } catch (err) {
-          console.error('Speicherfehler:', err);
-        }
-      };
-
+      const executeSave = () => performSaveForPath(path);
       pendingSaveTaskRef.current = executeSave;
+
       saveTimerRef.current = setTimeout(() => {
         saveTimerRef.current = null;
         executeSave();
       }, 500);
     },
-    [scheduleIndexRefresh]
+    [performSaveForPath]
   );
 
   const handlePropertiesChange = (updatedProps: FrontmatterProperty[]) => {

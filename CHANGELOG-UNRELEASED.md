@@ -111,6 +111,11 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Behebung von Schein-Konflikten (`ConflictModal`) und Debounce-Race-Conditions beim aktiven Tippen:
+  - **Clock-Drift-Kompensation:** Der Server sendet den Header `X-Server-Time` bei allen API-Antworten sowie `serverTime` in `/api/auth/status`. Der Client berechnet dynamisch den Uhrenversatz (`serverClockOffset`) und normalisiert lokale Zeitstempel im Konflikt-Modal (`toNormalizedServerTime`), wodurch Diskrepanzen zwischen Server-/Docker- und Browser-Uhrzeit behoben sind.
+  - **Fast-Forward-Erkennung:** Intelligente Fast-Forward-Auflösung (`isFastForwardCompatible` im Frontend, `isFastForward` im Backend). Ist ein Notiztext eine kontinuierliche Fortführung (Präfix/Suffix) des anderen bei identischen Frontmatter-Properties, wird die Änderung nahtlos übernommen, anstatt einen Konflikt-Dialog anzuzeigen.
+  - **Auto-Save-Debounce-Serialisierung:** Strikt sequenzierte Netzwerkspeicherungen pro Dateipfad (`isSavingFileRef` im Frontend, `activeSaveLocks` in `SyncEngine`). Während einer laufenden Speicherung eingegebener Text wird in `pendingSavePayloadRef` gepuffert und unmittelbar nach Abschluss mit dem aktualisierten `baseMtime` gespeichert, ohne den aktuellen Editor-Puffer zu überschreiben.
+  - **Tab-Fokus- & Visibility-Reconciliation:** Bei Tab-Wechsel (`visibilitychange` / `focus`) oder eingehenden WebSocket-Events (`vault:changed`) wird eine saubere Notiz mit der aktuellen Serverversion abgeglichen; bei aktiven lokalen Bearbeitungen wird der `baseMtime` abgeglichen bzw. fast-forwarded, sodass der Benutzer ungestört weiterarbeiten kann.
 - Sicherheits-Härtung & Bugfixes gemäß Prüfbericht (`checkreport.md`):
   - **SEC-01:** `POST /api/auth/logout` durch `requireAuth`-Middleware gegen unauthentifizierte globale Session-Invalidierung geschützt.
   - **SEC-02:** `new Function(...)` in `src/base/baseEngine.ts` (`evaluateFormula`, `evaluateStringExpression`) vollständig durch einen sicheren, deterministischen Expression-Parser ohne Zugriff auf `window`, `globalThis`, `constructor` oder `prototype` ersetzt.

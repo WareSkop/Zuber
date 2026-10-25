@@ -966,6 +966,36 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
     return true;
   }
 
+  public isFastForward(
+    existing: NoteData,
+    incoming: {
+      content?: string;
+      rawContent?: string;
+      body?: string;
+      properties?: FrontmatterProperty[];
+    }
+  ): boolean {
+    const isCanvas = existing.path.endsWith('.canvas');
+    const isBase = existing.path.endsWith('.base');
+    if (isCanvas || isBase) {
+      return false;
+    }
+
+    const incomingBody = (incoming.body ?? '').replace(/\r\n/g, '\n').trim();
+    const existingBody = (existing.body ?? '').replace(/\r\n/g, '\n').trim();
+
+    // Fast-forward check: incoming version is a clean continuation (prefix/suffix match)
+    if (incomingBody.startsWith(existingBody) || incomingBody.endsWith(existingBody)) {
+      const incomingProps = incoming.properties ?? [];
+      const existingProps = existing.properties ?? [];
+      const serializedIncoming = serializeMarkdownWithFrontmatter(incomingProps, '').replace(/\r\n/g, '\n').trim();
+      const serializedExisting = serializeMarkdownWithFrontmatter(existingProps, '').replace(/\r\n/g, '\n').trim();
+      return serializedIncoming === serializedExisting || JSON.stringify(incomingProps) === JSON.stringify(existingProps);
+    }
+
+    return false;
+  }
+
   public saveNote(
     relPath: string,
     payload: {
@@ -993,13 +1023,18 @@ Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startse
           // Content is identical: suppress conflict and return current server note
           return existing;
         }
-        const conflictErr = new Error('Conflict') as Error & {
-          statusCode: number;
-          serverNote: NoteData;
-        };
-        conflictErr.statusCode = 409;
-        conflictErr.serverNote = existing;
-        throw conflictErr;
+        if (this.isFastForward(existing, payload)) {
+          // Fast-forward resolution: incoming note is a clean extension of existing (e.g. forward typing)
+          // Allow save to proceed
+        } else {
+          const conflictErr = new Error('Conflict') as Error & {
+            statusCode: number;
+            serverNote: NoteData;
+          };
+          conflictErr.statusCode = 409;
+          conflictErr.serverNote = existing;
+          throw conflictErr;
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   Copy,
@@ -6,7 +6,13 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { syncEngine, type ConflictItem, type ConflictResolution } from '../sync/syncEngine';
+import {
+  syncEngine,
+  isFastForwardCompatible,
+  type ConflictItem,
+  type ConflictResolution,
+} from '../sync/syncEngine';
+import { toNormalizedServerTime } from '../api';
 import { useTranslation } from '../i18n';
 
 interface ConflictModalProps {
@@ -23,6 +29,17 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
 
   const currentConflict = conflicts[0];
   const remainingCount = conflicts.length - 1;
+
+  // Auto-resolve any fast-forward compatible conflicts seamlessly without interrupting the user
+  useEffect(() => {
+    if (conflicts.length > 0) {
+      const current = conflicts[0];
+      const ff = isFastForwardCompatible(current.localBody, current.serverNote.body);
+      if (ff.compatible) {
+        handleResolve(ff.winner === 'local' ? 'keep_local' : 'keep_server');
+      }
+    }
+  }, [conflicts]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString(language === 'de' ? 'de-DE' : 'en-US', {
@@ -74,7 +91,7 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
             <div className="pane-header">
               <Upload size={15} />
               <span>{t('conflict.localVersion')}</span>
-              <span className="pane-time">{formatDate(currentConflict.localTimestamp)}</span>
+              <span className="pane-time">{formatDate(toNormalizedServerTime(currentConflict.localTimestamp))}</span>
             </div>
             <pre className="pane-content scroller">{currentConflict.localBody}</pre>
           </div>

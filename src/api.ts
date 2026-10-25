@@ -236,6 +236,20 @@ if (typeof window !== 'undefined') {
   migrateLegacyStorageKeys();
 }
 
+let serverClockOffset = 0;
+
+export function getServerClockOffset(): number {
+  return serverClockOffset;
+}
+
+export function setServerClockOffset(offset: number): void {
+  serverClockOffset = offset;
+}
+
+export function toNormalizedServerTime(clientTimestamp: number): number {
+  return clientTimestamp + serverClockOffset;
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getStoredToken();
   const headers = new Headers(options.headers || {});
@@ -288,6 +302,14 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
         throw new ApiConflictError(errMsg || 'Konflikt beim Speichern', serverNote);
       }
       throw new ApiHttpError(errMsg, res.status);
+    }
+
+    const serverTimeHeader = res.headers.get('x-server-time');
+    if (serverTimeHeader) {
+      const st = Number(serverTimeHeader);
+      if (!isNaN(st) && st > 0) {
+        serverClockOffset = st - Date.now();
+      }
     }
 
     return (await res.json()) as T;
@@ -398,13 +420,20 @@ export const rawApi = {
 };
 
 export const api = {
-  checkAuthStatus(timeoutMs = 3000): Promise<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }> {
+  checkAuthStatus(timeoutMs = 3000): Promise<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string; serverTime?: number }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    return apiFetch<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string }>(
+    return apiFetch<{ authenticated: boolean; authRequired?: boolean; https: boolean; vaultPath: string; serverTime?: number }>(
       '/api/auth/status',
       { signal: controller.signal }
-    ).finally(() => clearTimeout(timeoutId));
+    )
+      .then((data) => {
+        if (typeof data.serverTime === 'number') {
+          serverClockOffset = data.serverTime - Date.now();
+        }
+        return data;
+      })
+      .finally(() => clearTimeout(timeoutId));
   },
 
   async login(password: string): Promise<{ authenticated: boolean; token: string; offline?: boolean }> {

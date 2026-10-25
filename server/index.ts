@@ -90,6 +90,12 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
   // --- General API Rate Limiting (600 requests/minute/IP) ---
   app.use('/api', rateLimiter.apiRateLimitMiddleware);
 
+  // --- Server Time Header on all API Responses (Clock Drift Normalization) ---
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('X-Server-Time', String(Date.now()));
+    next();
+  });
+
   // --- Public Static Files (PWA Manifest, Service Worker & Icons before Auth) ---
   const publicDir = path.join(ROOT_DIR, 'public');
   if (fs.existsSync(publicDir)) {
@@ -119,6 +125,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
       authRequired,
       https: isRequestSecure(req),
       vaultPath: vaultService.getVaultDir(),
+      serverTime: Date.now(),
     });
   });
 

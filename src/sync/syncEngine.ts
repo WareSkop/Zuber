@@ -51,6 +51,30 @@ export interface ConflictItem {
 
 export type ConflictResolution = 'keep_local' | 'keep_server' | 'keep_both';
 
+export function isFastForwardCompatible(
+  localBody: string,
+  serverBody: string
+): { compatible: boolean; winner: 'local' | 'server' } {
+  const normLocal = (localBody || '').replace(/\r\n/g, '\n').trim();
+  const normServer = (serverBody || '').replace(/\r\n/g, '\n').trim();
+
+  if (normLocal === normServer) {
+    return { compatible: true, winner: 'local' };
+  }
+
+  // Local is ahead: local contains everything server has as a prefix or suffix
+  if (normLocal.startsWith(normServer) || normLocal.endsWith(normServer)) {
+    return { compatible: true, winner: 'local' };
+  }
+
+  // Server is ahead: server contains everything local has as a prefix or suffix
+  if (normServer.startsWith(normLocal) || normServer.endsWith(normLocal)) {
+    return { compatible: true, winner: 'server' };
+  }
+
+  return { compatible: false, winner: 'local' };
+}
+
 class SyncEngine {
   private localDb: LocalDb;
   private currentProfile: VaultProfile;
@@ -62,6 +86,7 @@ class SyncEngine {
   private syncedAttachmentFolders: string[] = ['attachments'];
   private blobUrls = new Map<string, string>();
   private reconnectTimer: ReturnType<typeof setInterval> | null = null;
+  private activeSaveLocks = new Map<string, Promise<NoteData>>();
 
   constructor() {
     this.currentProfile = getActiveProfile();
@@ -211,6 +236,27 @@ class SyncEngine {
   }
 
   private addOrUpdateConflict(item: ConflictItem): void {
+    const ff = isFastForwardCompatible(item.localBody, item.serverNote.body);
+    if (ff.compatible) {
+      clientLogger.info('sync', `[addOrUpdateConflict] Fast-forward compatible on "${item.path}", auto-resolving (${ff.winner}).`);
+      if (ff.winner === 'local') {
+        rawApi
+          .saveNote({
+            path: item.path,
+            body: item.localBody,
+            properties: item.localProperties,
+            forceOverwrite: true,
+          })
+          .then((saved) => this.localDb.putNote(saved))
+          .catch(() => {});
+        this.localDb.removeOutboxMutation(item.id).catch(() => {});
+      } else {
+        this.localDb.putNote(item.serverNote).catch(() => {});
+        this.localDb.removeOutboxMutation(item.id).catch(() => {});
+      }
+      return;
+    }
+
     const existingIndex = this.activeConflicts.findIndex((c) => c.path === item.path);
     if (existingIndex >= 0) {
       this.activeConflicts[existingIndex] = item;
@@ -330,7 +376,31 @@ class SyncEngine {
             continue;
           }
 
-          // 3. Genuine conflict: deduplicated add/update
+          // 3. Fast-forward auto-resolution
+          const ff = isFastForwardCompatible(localBody, err.serverNote.body);
+          if (ff.compatible) {
+            if (ff.winner === 'local') {
+              clientLogger.info('sync', `[Outbox Replay] Fast-forward compatible on "${m.path}" (local is ahead). Overwriting server.`);
+              const saved = await rawApi.saveNote({
+                path: m.path,
+                body: localBody,
+                properties: localProps,
+                rawContent: latestLocalNote?.rawContent,
+                baseMtime: err.serverNote.updatedAt,
+                forceOverwrite: true,
+              });
+              await this.localDb.putNote(saved);
+              await this.localDb.removeOutboxMutation(m.id);
+              continue;
+            } else {
+              clientLogger.info('sync', `[Outbox Replay] Fast-forward compatible on "${m.path}" (server is ahead). Adopting server version.`);
+              await this.localDb.putNote(err.serverNote);
+              await this.localDb.removeOutboxMutation(m.id);
+              continue;
+            }
+          }
+
+          // 4. Genuine conflict: deduplicated add/update
           clientLogger.warn('sync', `[Outbox Replay] Conflict on "${m.path}": queuing in ConflictModal.`);
           this.addOrUpdateConflict({
             id: m.id,
@@ -561,6 +631,34 @@ class SyncEngine {
     forceOverwrite?: boolean;
     explicitClear?: boolean;
   }): Promise<NoteData> {
+    const prevLock = this.activeSaveLocks.get(payload.path) || Promise.resolve(null as any);
+    const execute = async (): Promise<NoteData> => {
+      try {
+        await prevLock;
+      } catch {}
+      return this.executeSaveNote(payload);
+    };
+
+    const currentLock = execute();
+    this.activeSaveLocks.set(payload.path, currentLock);
+    try {
+      return await currentLock;
+    } finally {
+      if (this.activeSaveLocks.get(payload.path) === currentLock) {
+        this.activeSaveLocks.delete(payload.path);
+      }
+    }
+  }
+
+  private async executeSaveNote(payload: {
+    path: string;
+    rawContent?: string;
+    body?: string;
+    properties?: FrontmatterProperty[];
+    baseMtime?: number;
+    forceOverwrite?: boolean;
+    explicitClear?: boolean;
+  }): Promise<NoteData> {
     const isCanvas = payload.path.endsWith('.canvas');
     const isBase = payload.path.endsWith('.base');
     const raw =
@@ -659,7 +757,26 @@ class SyncEngine {
             return err.serverNote;
           }
 
-          // 3. Genuine conflict: deduplicated add/update
+          // 3. Fast-forward auto-resolution check
+          const ff = isFastForwardCompatible(localBody, err.serverNote.body);
+          if (ff.compatible) {
+            if (ff.winner === 'local') {
+              clientLogger.info('sync', `[Direct Save] Fast-forward compatible on "${payload.path}" (local is ahead). Retrying save with forceOverwrite.`);
+              const retried = await rawApi.saveNote({
+                ...payload,
+                baseMtime: err.serverNote.updatedAt,
+                forceOverwrite: true,
+              });
+              await this.localDb.putNote(retried);
+              return retried;
+            } else {
+              clientLogger.info('sync', `[Direct Save] Fast-forward compatible on "${payload.path}" (server is ahead). Adopting server version.`);
+              await this.localDb.putNote(err.serverNote);
+              return err.serverNote;
+            }
+          }
+
+          // 4. Genuine conflict: deduplicated add/update
           clientLogger.warn('sync', `[Direct Save] Conflict on "${payload.path}": queuing in ConflictModal.`);
           const conflictId = `save-${payload.path}-${Date.now()}`;
           this.addOrUpdateConflict({
