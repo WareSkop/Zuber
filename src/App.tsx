@@ -103,6 +103,7 @@ import { clientLogger } from './utils/logger';
 import { useTranslation } from './i18n';
 import {
   recordLastActiveNote,
+  clearLastActiveNote,
   resolveStartupNotePath,
   getDailyNoteConfig,
 } from './startupConfig';
@@ -1178,6 +1179,22 @@ export const App: React.FC = () => {
 
   handleOpenDailyNoteRef.current = handleOpenDailyNote;
 
+  const handleActiveNoteDeleted = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    pendingSaveTaskRef.current = null;
+    setSaveState('saved');
+    explicitUserClearRef.current = true;
+    activePathRef.current = null;
+    setActiveNote(null);
+    clearLastActiveNote();
+    if (workspaceViewRef.current === 'graph') {
+      setWorkspaceView('editor');
+    }
+  }, []);
+
   const sidebarHandlers = useMemo(
     () => ({
       onSelectNote: (path: string) => {
@@ -1214,6 +1231,7 @@ export const App: React.FC = () => {
             : t('dialogs.deleteNotePrompt', { name }),
         });
       },
+      onActiveNoteDeleted: handleActiveNoteDeleted,
       onRefresh: () => {
         loadVaultIndex();
       },
@@ -1235,6 +1253,7 @@ export const App: React.FC = () => {
       handleToggleTemplate,
       handleOpenTemplateModal,
       handleOpenDailyNote,
+      handleActiveNoteDeleted,
       tree,
       t,
       isMobile,
@@ -2019,13 +2038,14 @@ export const App: React.FC = () => {
 
         await syncEngine.deleteEntry(deletedPath);
         notifyVaultEntryDeleted(deletedPath);
-        const { treeRes } = await loadVaultIndex();
+        await loadVaultIndex();
         if (isActiveOrChild) {
-          const nextFile = treeRes.files.find((f) => f.extension === 'md' || f.extension === 'canvas');
-          if (nextFile) {
-            await openNoteByPath(nextFile.path);
-          } else {
-            setActiveNote(null);
+          explicitUserClearRef.current = true;
+          activePathRef.current = null;
+          setActiveNote(null);
+          clearLastActiveNote();
+          if (workspaceViewRef.current === 'graph') {
+            setWorkspaceView('editor');
           }
         }
       }
@@ -3115,9 +3135,11 @@ export const App: React.FC = () => {
                     ) : (
                       <div className="empty-workspace-state">
                         <FileText size={42} />
-                        <h2>Keine Notiz geöffnet</h2>
+                        <h2>{language === 'de' ? 'Keine Notiz geöffnet' : 'No note open'}</h2>
                         <p>
-                          Wähle links im Dateibaum eine Notiz aus oder erstelle eine neue Notiz.
+                          {language === 'de'
+                            ? 'Wähle links im Dateibaum eine Notiz aus oder erstelle ein neues Dokument.'
+                            : 'Select a note from the file tree on the left or create a new document.'}
                         </p>
                         <div className="empty-state-btn-row">
                           <button
@@ -3125,7 +3147,24 @@ export const App: React.FC = () => {
                             className="btn-primary"
                             onClick={() => openCreateNoteDialog()}
                           >
-                            + Neue Notiz erstellen
+                            <FileText size={15} />
+                            <span>{language === 'de' ? 'Neue Notiz' : 'New Note'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => handleOpenTemplateModal()}
+                          >
+                            <LayoutTemplate size={15} />
+                            <span>{language === 'de' ? 'Aus Vorlage' : 'From Template'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => handleOpenDailyNote()}
+                          >
+                            <Calendar size={15} />
+                            <span>{language === 'de' ? 'Tagesnotiz' : 'Daily Note'}</span>
                           </button>
                           <button
                             type="button"
@@ -3133,7 +3172,7 @@ export const App: React.FC = () => {
                             onClick={() => openCreateCanvasDialog()}
                           >
                             <WorkflowCanvasIcon size={15} />
-                            <span>+ Neues Canvas</span>
+                            <span>{language === 'de' ? 'Neues Canvas' : 'New Canvas'}</span>
                           </button>
                           <button
                             type="button"
@@ -3141,7 +3180,7 @@ export const App: React.FC = () => {
                             onClick={() => openCreateBaseDialog()}
                           >
                             <Database size={15} />
-                            <span>{language === 'de' ? '+ Neue Base' : '+ New Base'}</span>
+                            <span>{language === 'de' ? 'Neue Base' : 'New Base'}</span>
                           </button>
                         </div>
                       </div>

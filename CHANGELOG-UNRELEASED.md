@@ -113,6 +113,9 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Rücksetzen des Editors auf den leeren Startbildschirm beim Löschen der aktiven Notiz:
+  - Verhindert das automatische, verwirrende Springen zur ersten Notiz im Vault beim Löschen einer Notiz oder eines übergeordneten Ordners (`src/App.tsx`, `src/components/FileSidebar.tsx`).
+  - Setzt bei Löschung der aktiven Notiz `activeNote` sauber auf `null`, entfernt den Pfad aus den zuletzt geöffneten Notizen (`clearLastActiveNote`, `notifyVaultEntryDeleted`) und zeigt den Startbildschirm mit Schnellaktionen („Neue Notiz erstellen“, „Aus Vorlage erstellen“, „Tagesnotiz öffnen“, „Neues Canvas“, „Neue Base“) an.
 - Behebung des Canvas-Layering-Bugs (Verbindungslinien/Kanten rendern über Shapes, Notizen und Textkarten):
   - In `<ReactFlow>` (`CanvasEditor.tsx`) `elevateEdgesOnSelect={false}` gesetzt und `elevateNodesOnSelect={true}` sichergestellt, damit das Auswählen einer Verbindungslinie diese niemals über Notizkarten hebt.
   - Exakte CSS-Stapelreihenfolge in `src/styles.css` und `canvasMapper.ts` etabliert: Gruppen-Container (`.react-flow__node-canvasGroup`, `z-index: 0 !important`) < Kanten & Kanten-SVGs (`.react-flow__edges`, `z-index: 10 !important`) < Inhaltsknoten (`z-index: 20 !important`) < Selektierte Inhaltsknoten (`z-index: 25 !important`) < Interaktive Handles & Resizer (`z-index: 30 !important`).

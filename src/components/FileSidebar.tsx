@@ -45,6 +45,7 @@ import {
   saveFavorites,
   loadRecentNotes,
   notifyVaultEntryRenamed,
+  notifyVaultEntryDeleted,
   FavoriteItem,
 } from '../utils/vaultNavigation';
 
@@ -86,6 +87,7 @@ interface FileSidebarProps {
   onCreateFolder: (parentFolder?: string) => void;
   onRenameEntry: (oldPath: string, currentName: string) => void;
   onDeleteEntry: (path: string, name: string) => void;
+  onActiveNoteDeleted?: () => void;
   onRefresh: () => void;
   onSelectTagFilter: (tag: string | null) => void;
   onClose?: () => void;
@@ -110,6 +112,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onCreateFolder,
   onRenameEntry,
   onDeleteEntry,
+  onActiveNoteDeleted,
   onRefresh,
   onSelectTagFilter,
   onClose,
@@ -617,15 +620,23 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     );
     if (!confirmed) return;
 
+    let activeDeleted = false;
     for (const p of paths) {
       try {
         await api.deleteEntry(p);
+        notifyVaultEntryDeleted(p);
+        if (activePath && (activePath === p || activePath.startsWith(p + '/'))) {
+          activeDeleted = true;
+        }
       } catch (err) {
         console.error(`[Zuber] Delete error for ${p}:`, err);
       }
     }
     setSelectedPaths(new Set());
     onRefresh();
+    if (activeDeleted && onActiveNoteDeleted) {
+      onActiveNoteDeleted();
+    }
   };
 
   const handleMoveTo = async (targetFolder: string) => {

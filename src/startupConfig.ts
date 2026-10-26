@@ -91,6 +91,14 @@ export function recordLastActiveNote(notePath: string): void {
   } catch {}
 }
 
+export function clearLastActiveNote(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(LAST_ACTIVE_NOTE_KEY);
+    localStorage.removeItem('knowmesh_last_active_note');
+  } catch {}
+}
+
 export async function resolveStartupNotePath(
   files: { path: string; extension: string; basename?: string }[]
 ): Promise<string | null> {
