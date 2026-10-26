@@ -113,6 +113,10 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Viewport-Kollisionserkennung und Clamping für das Dateibaum-Kontextmenü (`src/components/FileSidebar.tsx`, `src/styles.css`):
+  - Dynamische Positionsberechnung via `useLayoutEffect` und `getBoundingClientRect()`: Liegt das Kontextmenü zu nah am unteren oder rechten Bildschirmrand, wird es automatisch nach oben bzw. links verschoben (Sicherheitsabstand 12px), sodass alle Optionen (insbesondere „Löschen“) vollständig im sichtbaren Bereich bleiben.
+  - Funktioniert nahtlos für alle Trigger (Rechtsklick sowie Klick auf das Drei-Punkte-Aktionsmenü `⋮`).
+  - CSS-Absicherung (`max-height: calc(100vh - 24px) !important`, `overflow-y: auto !important`, `overscroll-behavior: contain`), damit das Menü selbst auf sehr kleinen Bildschirmen niemals abgeschnitten wird, sondern sauber scrollbar bleibt.
 - Rücksetzen des Editors auf den leeren Startbildschirm beim Löschen der aktiven Notiz:
   - Verhindert das automatische, verwirrende Springen zur ersten Notiz im Vault beim Löschen einer Notiz oder eines übergeordneten Ordners (`src/App.tsx`, `src/components/FileSidebar.tsx`).
   - Setzt bei Löschung der aktiven Notiz `activeNote` sauber auf `null`, entfernt den Pfad aus den zuletzt geöffneten Notizen (`clearLastActiveNote`, `notifyVaultEntryDeleted`) und zeigt den Startbildschirm mit Schnellaktionen („Neue Notiz erstellen“, „Aus Vorlage erstellen“, „Tagesnotiz öffnen“, „Neues Canvas“, „Neue Base“) an.

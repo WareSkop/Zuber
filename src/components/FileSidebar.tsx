@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowUpDown,
@@ -369,6 +369,30 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     };
   }, [contextMenu]);
 
+  // Dynamic viewport collision detection & smart positioning for context menu
+  useLayoutEffect(() => {
+    if (!contextMenuRef.current || !contextMenu) return;
+    const rect = contextMenuRef.current.getBoundingClientRect();
+    const margin = 12;
+
+    let newTop = contextMenu.y;
+    let newLeft = contextMenu.x;
+
+    // If the menu protrudes below the bottom viewport edge, shift it upwards:
+    if (newTop + rect.height > window.innerHeight - margin) {
+      newTop = Math.max(margin, window.innerHeight - rect.height - margin);
+    }
+
+    // Also prevent overflow off the right edge:
+    if (newLeft + rect.width > window.innerWidth - margin) {
+      newLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+    }
+
+    // Apply corrected position
+    contextMenuRef.current.style.top = `${newTop}px`;
+    contextMenuRef.current.style.left = `${newLeft}px`;
+  }, [contextMenu]);
+
   // Switch to search tab automatically when a tag filter is selected externally
   useEffect(() => {
     if (selectedTagFilter) {
@@ -455,11 +479,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       setSelectedPaths(new Set());
     }
 
-    const menuWidth = 230;
-    const menuHeight = 360;
-    const x = Math.max(10, Math.min(clientX, window.innerWidth - menuWidth - 10));
-    const y = Math.max(10, Math.min(clientY, window.innerHeight - menuHeight - 10));
-    setContextMenu({ x, y, node });
+    const x = typeof clientX === 'number' && !isNaN(clientX) ? clientX : 20;
+    const y = typeof clientY === 'number' && !isNaN(clientY) ? clientY : 20;
+
+    const estimatedWidth = 240;
+    const estimatedHeight = 420;
+    const initialX = Math.max(12, Math.min(x, window.innerWidth - estimatedWidth - 12));
+    const initialY = Math.max(12, Math.min(y, window.innerHeight - estimatedHeight - 12));
+    setContextMenu({ x: initialX, y: initialY, node });
   };
 
   const handleTouchStart = (e: React.TouchEvent, node: FileTreeNode) => {
