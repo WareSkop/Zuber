@@ -6469,7 +6469,9 @@ input:checked + .slider:before {
    Canvas Edge & Node Stacking Hierarchy (Deterministic Z-Index Strata)
    ========================================================================== */
 /* 1. Group nodes sit at the very bottom (background containers) */
+.react-flow__node-canvasGroup,
 .react-flow__node-group,
+.react-flow__node[data-type="canvasGroup"],
 .react-flow__node[data-type="group"] {
   z-index: 0 !important;
 }
@@ -6482,12 +6484,12 @@ input:checked + .slider:before {
 }
 
 /* 3. All content nodes (shapes, markdown cards, links, files) MUST ALWAYS be above edges */
-.react-flow__node:not(.react-flow__node-group):not([data-type="group"]) {
+.react-flow__node:not(.react-flow__node-canvasGroup):not(.react-flow__node-group):not([data-type="canvasGroup"]):not([data-type="group"]) {
   z-index: 20 !important;
 }
 
 /* 4. Selected content nodes stay slightly higher for border handles */
-.react-flow__node:not(.react-flow__node-group):not([data-type="group"]).selected {
+.react-flow__node:not(.react-flow__node-canvasGroup):not(.react-flow__node-group):not([data-type="canvasGroup"]):not([data-type="group"]).selected {
   z-index: 25 !important;
 }
 
@@ -6674,6 +6676,11 @@ input:checked + .slider:before {
   text-align: center;
   border-radius: 6px;
   box-sizing: border-box;
+}
+
+.canvas-shape-node.shape-rectangle,
+.canvas-shape-node:not([class*="shape-"]) {
+  background-color: var(--bg-secondary, #1e293b);
 }
 
 .canvas-shape-svg,

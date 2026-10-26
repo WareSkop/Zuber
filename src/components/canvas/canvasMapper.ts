@@ -61,7 +61,7 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
       style: {
         width: `${width}px`,
         height: `${height}px`,
-        zIndex: n.zIndex ?? (n.type === 'group' ? -1 : 1),
+        zIndex: n.zIndex ?? (n.type === 'group' ? 0 : 20),
       },
       data: {
         rawType: n.type,

@@ -74,19 +74,29 @@ describe('Editor Shortcut CTRL+. & Canvas Edge Layering', () => {
       const content = fs.readFileSync(cssFile, 'utf-8');
 
       // Group nodes at bottom (z-index: 0)
-      expect(content).toMatch(/\.react-flow__node-group[\s\S]*?z-index:\s*0\s*!important/);
+      expect(content).toMatch(/\.react-flow__node-canvasGroup[\s\S]*?z-index:\s*0\s*!important/);
 
       // Edges above groups but behind content nodes (z-index: 10)
       expect(content).toMatch(/\.react-flow__edges[\s\S]*?z-index:\s*10\s*!important/);
 
       // Content nodes above edges (z-index: 20)
-      expect(content).toMatch(/\.react-flow__node:not\(\.react-flow__node-group\)[\s\S]*?z-index:\s*20\s*!important/);
+      expect(content).toMatch(/\.react-flow__node:not\(\.react-flow__node-canvasGroup\)[\s\S]*?z-index:\s*20\s*!important/);
 
       // Selected content nodes higher (z-index: 25)
-      expect(content).toMatch(/\.react-flow__node:not\(\.react-flow__node-group\)[\s\S]*?\.selected[\s\S]*?z-index:\s*25\s*!important/);
+      expect(content).toMatch(/\.react-flow__node:not\(\.react-flow__node-canvasGroup\)[\s\S]*?\.selected[\s\S]*?z-index:\s*25\s*!important/);
 
       // Handles and resize controls topmost (z-index: 30)
       expect(content).toMatch(/\.react-flow__handle[\s\S]*?z-index:\s*30\s*!important/);
+    });
+
+    it('verifies CanvasShapeNode renders an opaque base background to prevent edge lines shining through', () => {
+      const shapeNodeFile = path.resolve(__dirname, 'components/canvas/nodes/CanvasShapeNode.tsx');
+      const content = fs.readFileSync(shapeNodeFile, 'utf-8');
+
+      // Opaque base fill definition
+      expect(content).toContain("const baseFill = 'var(--bg-secondary, #1e293b)'");
+      // All shapes render baseFill under tint
+      expect(content).toContain('fill={baseFill}');
     });
   });
 });

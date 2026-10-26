@@ -185,67 +185,130 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
   // Shape SVG Geometry & Theme adaptation
   const strokeColor = customColor || (selected ? 'var(--accent-color, #d4af37)' : 'var(--border-strong, #64748b)');
   const strokeWidth = selected ? '2.5' : '2';
+  const baseFill = 'var(--bg-secondary, #1e293b)';
   const fillColor = customColor
     ? `${customColor}26` // ~15% opacity tint
-    : 'var(--bg-secondary, #1e293b)';
+    : baseFill;
 
   const renderShapeSvg = () => {
     switch (shape) {
       case 'rounded':
         return (
-          <rect
-            x="2"
-            y="2"
-            width="96"
-            height="96"
-            rx="24"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <rect
+              x="2"
+              y="2"
+              width="96"
+              height="96"
+              rx="24"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <rect
+              x="2"
+              y="2"
+              width="96"
+              height="96"
+              rx="24"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
       case 'circle':
         return (
-          <ellipse
-            cx="50"
-            cy="50"
-            rx="48"
-            ry="48"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <ellipse
+              cx="50"
+              cy="50"
+              rx="48"
+              ry="48"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <ellipse
+              cx="50"
+              cy="50"
+              rx="48"
+              ry="48"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
       case 'diamond':
         return (
-          <polygon
-            points="50,2 98,50 50,98 2,50"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <polygon
+              points="50,2 98,50 50,98 2,50"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <polygon
+              points="50,2 98,50 50,98 2,50"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
       case 'parallelogram':
         return (
-          <polygon
-            points="18,2 98,2 82,98 2,98"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <polygon
+              points="18,2 98,2 82,98 2,98"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <polygon
+              points="18,2 98,2 82,98 2,98"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
       case 'hexagon':
         return (
-          <polygon
-            points="18,2 82,2 98,50 82,98 18,98 2,50"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <polygon
+              points="18,2 82,2 98,50 82,98 18,98 2,50"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <polygon
+              points="18,2 82,2 98,50 82,98 18,98 2,50"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
       case 'cylinder':
         return (
           <g>
+            <path
+              d="M 4,16 L 4,84 A 46,14 0 0,0 96,84 L 96,16"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <ellipse
+              cx="50"
+              cy="16"
+              rx="46"
+              ry="13"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
             <path
               d="M 4,16 L 4,84 A 46,14 0 0,0 96,84 L 96,16"
               fill={fillColor}
@@ -273,16 +336,34 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
         );
       case 'cloud':
         return (
-          <path
-            d="M 22,65 C 10,65 5,52 14,42 C 12,28 26,18 38,24 C 45,12 65,12 72,24 C 84,18 96,28 94,42 C 102,52 96,65 86,65 C 90,78 78,88 66,86 C 58,94 42,94 34,86 C 22,88 12,78 22,65 Z"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <path
+              d="M 22,65 C 10,65 5,52 14,42 C 12,28 26,18 38,24 C 45,12 65,12 72,24 C 84,18 96,28 94,42 C 102,52 96,65 86,65 C 90,78 78,88 66,86 C 58,94 42,94 34,86 C 22,88 12,78 22,65 Z"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <path
+              d="M 22,65 C 10,65 5,52 14,42 C 12,28 26,18 38,24 C 45,12 65,12 72,24 C 84,18 96,28 94,42 C 102,52 96,65 86,65 C 90,78 78,88 66,86 C 58,94 42,94 34,86 C 22,88 12,78 22,65 Z"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
       case 'server':
         return (
           <g>
+            <rect
+              x="3"
+              y="3"
+              width="94"
+              height="94"
+              rx="8"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
             <rect
               x="3"
               y="3"
@@ -312,6 +393,16 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
               width="90"
               height="68"
               rx="12"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <rect
+              x="5"
+              y="16"
+              width="90"
+              height="68"
+              rx="12"
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
@@ -335,6 +426,16 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
               width="90"
               height="64"
               rx="6"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <rect
+              x="5"
+              y="6"
+              width="90"
+              height="64"
+              rx="6"
               fill={fillColor}
               stroke={strokeColor}
               strokeWidth={strokeWidth}
@@ -346,16 +447,28 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       case 'rectangle':
       default:
         return (
-          <rect
-            x="2"
-            y="2"
-            width="96"
-            height="96"
-            rx="6"
-            fill={fillColor}
-            stroke={strokeColor}
-            strokeWidth={strokeWidth}
-          />
+          <g>
+            <rect
+              x="2"
+              y="2"
+              width="96"
+              height="96"
+              rx="6"
+              fill={baseFill}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+            <rect
+              x="2"
+              y="2"
+              width="96"
+              height="96"
+              rx="6"
+              fill={fillColor}
+              stroke={strokeColor}
+              strokeWidth={strokeWidth}
+            />
+          </g>
         );
     }
   };
@@ -372,6 +485,8 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: shape === 'rectangle' ? 'var(--bg-secondary, #1e293b)' : undefined,
+        borderRadius: shape === 'rectangle' ? '6px' : undefined,
       }}
       onDoubleClick={() => !readOnly && setIsEditing(true)}
     >
