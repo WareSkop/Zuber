@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react';
 import {
+  ArrowLeft,
   BookOpen,
   Check,
   Code2,
@@ -160,6 +161,13 @@ export const App: React.FC = () => {
   });
 
   const [activeNote, setActiveNote] = useState<NoteData | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const isHistoryNavigatingRef = useRef<boolean>(false);
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  historyRef.current = history;
+  historyIndexRef.current = historyIndex;
   const [editorMode, setEditorMode] = useState<EditorMode>('live');
   const [workspaceView, setWorkspaceView] = useState<MainWorkspaceView>('editor');
 
@@ -554,10 +562,22 @@ export const App: React.FC = () => {
 
   const manualSaveRef = useRef<(() => void) | null>(null);
   const handleOpenDailyNoteRef = useRef<(() => Promise<void>) | null>(null);
+  const handleGoBackRef = useRef<(() => void) | null>(null);
 
-  // Global Keyboard shortcuts (Command Palette, Save, Settings, New Note, Sidebars)
+  // Global Keyboard shortcuts (Command Palette, Save, Settings, New Note, Sidebars, Go Back)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Navigate Back (Alt+ArrowLeft)
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowLeft' || e.code === 'ArrowLeft')) {
+        const target = e.target as HTMLElement;
+        if (target && target.tagName === 'INPUT') {
+          return;
+        }
+        e.preventDefault();
+        handleGoBackRef.current?.();
+        return;
+      }
+
       // Zen Mode (Alt+Z)
       if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'z' || e.key === 'Z' || e.code === 'KeyZ')) {
         e.preventDefault();
@@ -800,6 +820,59 @@ export const App: React.FC = () => {
     },
     [flushPendingSave, refreshBacklinks]
   );
+
+  const openNote = openNoteByPath;
+
+  const handleGoBack = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      const targetPath = history[prevIndex];
+      if (targetPath) {
+        isHistoryNavigatingRef.current = true;
+        setHistoryIndex(prevIndex);
+        historyIndexRef.current = prevIndex;
+        if (workspaceViewRef.current === 'graph') {
+          setWorkspaceView('editor');
+        }
+        openNote(targetPath).finally(() => {
+          isHistoryNavigatingRef.current = false;
+        });
+      }
+    }
+  }, [historyIndex, history, openNote]);
+
+  handleGoBackRef.current = handleGoBack;
+
+  // Track navigation history for active notes & canvases (max 50 entries)
+  useEffect(() => {
+    const currentPath = activeNote?.path;
+    if (!currentPath) return;
+
+    if (isHistoryNavigatingRef.current) {
+      return;
+    }
+
+    const curIndex = historyIndexRef.current;
+    const curHist = historyRef.current;
+
+    // If the new path is identical to history[historyIndex], do nothing
+    if (curIndex >= 0 && curHist[curIndex] === currentPath) {
+      return;
+    }
+
+    // Otherwise, slice off any forward history, push new path, limit to 50
+    const sliced = curHist.slice(0, curIndex + 1);
+    let newHistory = [...sliced, currentPath];
+    if (newHistory.length > 50) {
+      newHistory = newHistory.slice(newHistory.length - 50);
+    }
+    const newIndex = newHistory.length - 1;
+
+    historyRef.current = newHistory;
+    historyIndexRef.current = newIndex;
+    setHistory(newHistory);
+    setHistoryIndex(newIndex);
+  }, [activeNote?.path]);
 
   useEffect(() => {
     const unsubSync = syncEngine.subscribe((state) => {
@@ -2038,6 +2111,15 @@ export const App: React.FC = () => {
 
         await syncEngine.deleteEntry(deletedPath);
         notifyVaultEntryDeleted(deletedPath);
+        // Prune deleted path from history stack
+        setHistory((prev) => {
+          const filtered = prev.filter((p) => p !== deletedPath && !p.startsWith(deletedPath + '/'));
+          const newIndex = Math.min(historyIndexRef.current, filtered.length - 1);
+          historyRef.current = filtered;
+          historyIndexRef.current = newIndex;
+          setHistoryIndex(newIndex);
+          return filtered;
+        });
         await loadVaultIndex();
         if (isActiveOrChild) {
           explicitUserClearRef.current = true;
@@ -2471,6 +2553,15 @@ export const App: React.FC = () => {
 
       // Navigation & Sidebars
       {
+        id: 'nav-go-back',
+        title: t('nav.goBack', 'Zurück (Alt+←)') || 'Navigation: Zurück (Vorherige Notiz / Canvas)',
+        category: 'Navigation',
+        shortcut: 'Alt+←',
+        icon: <ArrowLeft size={16} />,
+        keywords: ['back', 'zurück', 'verlauf', 'history', 'navigation'],
+        action: () => handleGoBack(),
+      },
+      {
         id: 'nav-left-sidebar',
         title: 'Navigation: Linke Seitenleiste ein-/ausblenden',
         category: 'Navigation',
@@ -2867,6 +2958,16 @@ export const App: React.FC = () => {
               aria-label={t('header.toggleLeftSidebar')}
             >
               <PanelLeft size={16} />
+            </button>
+            <button
+              type="button"
+              className="topbar-nav-back-btn"
+              onClick={handleGoBack}
+              disabled={historyIndex <= 0}
+              title={t('nav.goBack', 'Zurück (Alt+←)')}
+              aria-label={t('nav.goBack', 'Zurück')}
+            >
+              <ArrowLeft size={18} />
             </button>
           </div>
           <div className="topbar-breadcrumbs">

@@ -4387,6 +4387,30 @@ input:checked + .slider:before {
   border-color: var(--accent-color);
 }
 
+.topbar-nav-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+  margin-left: 4px;
+}
+
+.topbar-nav-back-btn:hover:not(:disabled) {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.topbar-nav-back-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .close-sidebar-btn {
   flex: 0 0 32px !important;
   display: flex;

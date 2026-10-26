@@ -7,7 +7,7 @@ export type SupportedLanguage = 'en' | 'de';
 export interface I18nContextType {
   language: SupportedLanguage;
   setLanguage: (lang: SupportedLanguage) => void;
-  t: (key: string, params?: Record<string, string | number>) => string;
+  t: (key: string, paramsOrFallback?: Record<string, string | number> | string, fallback?: string) => string;
 }
 
 const STORAGE_KEY = 'zuber_language';
@@ -74,7 +74,10 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [language]);
 
   const t = useCallback(
-    (key: string, params?: Record<string, string | number>): string => {
+    (key: string, paramsOrFallback?: Record<string, string | number> | string, fallback?: string): string => {
+      const defaultText = typeof paramsOrFallback === 'string' ? paramsOrFallback : fallback;
+      const params = typeof paramsOrFallback === 'object' && paramsOrFallback !== null ? paramsOrFallback : undefined;
+
       // 1. Check current language dictionary
       const currentDict = dictionaries[language];
       let val = getNestedValue(currentDict, key);
@@ -84,9 +87,9 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         val = getNestedValue(dictionaries.en, key);
       }
 
-      // 3. Fallback to raw key if not found anywhere
+      // 3. Fallback to defaultText or raw key if not found anywhere
       if (val === undefined) {
-        return key;
+        return defaultText !== undefined ? defaultText : key;
       }
 
       return interpolate(val, params);

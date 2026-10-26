@@ -20,6 +20,7 @@
     "version": "Version"
   },
   "nav": {
+    "goBack": "Go Back (Alt+←)",
     "newNote": "Create new note",
     "editor": "Editor view",
     "graph": "Open global graph view",

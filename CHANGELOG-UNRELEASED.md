@@ -1,4 +1,10 @@
 ### Added
+- „Zurück“-Navigationsbutton (Back-Button) in der oberen Kopfleiste (`src/App.tsx`, `src/styles.css`):
+  - Platzierung direkt rechts neben dem Umschalt-Button für die linke Seitenleiste (`.topbar-nav-back-btn`).
+  - Umfassender Navigationsverlauf (History-Stack) für geöffnete Notizen und Canvas-Dateien (bis zu 50 Einträge).
+  - Deaktivierter Zustand (`disabled`) mit reduzierter Deckkraft, wenn man sich auf der ersten Notiz befindet.
+  - Globale Tastenkombination `Alt+ArrowLeft` (`Alt+←`) zum schnellen Zurückspringen.
+  - Integration in die Befehlspalette (`nav-go-back`) und Lokalisierung in Englisch und Deutsch.
 - Editor-Tastenkombination `Strg+.` (`Cmd+.` auf macOS) zum sofortigen Einfügen von aktuellem Datum und Uhrzeit im Format `YYYY-MM-DD HH:mm:ss` (z. B. `2026-10-26 20:45:00`) an der Cursor- bzw. Selektionsposition (`LivePreviewEditor.tsx`).
 - Neuer Befehl in der Befehlspalette (`CommandPalette.tsx`): „Datum & Zeitstempel einfügen (YYYY-MM-DD HH:mm:ss)“ mit Shortcut `Strg+.`.
 - Detaillierter Leitfaden zum YAML-Aufbau von Bases (`BASE_YAML_AUFBAU.md` & `doc/BASE_YAML_AUFBAU.md`) mit den 4 Hauptblöcken (`filters`, `formulas`, `properties`, `views`) und Copy-Paste-Vorlagen.
