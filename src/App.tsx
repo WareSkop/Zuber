@@ -2330,6 +2330,18 @@ export const App: React.FC = () => {
         },
       },
       {
+        id: 'insert-timestamp',
+        title: 'Datum & Zeitstempel einfügen (YYYY-MM-DD HH:mm:ss)',
+        category: 'Editor',
+        shortcut: 'Strg+.',
+        icon: <Calendar size={16} />,
+        keywords: ['zeit', 'datum', 'timestamp', 'uhrzeit', 'time', 'date', 'heute', 'now'],
+        action: () => {
+          if (editorMode === 'reading') setEditorMode('live');
+          setTimeout(() => editorRef.current?.insertDateTime(), 50);
+        },
+      },
+      {
         id: 'insert-h1',
         title: 'Überschrift 1 (H1) einfügen',
         category: 'Formatierung',

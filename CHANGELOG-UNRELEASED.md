@@ -1,4 +1,6 @@
 ### Added
+- Editor-Tastenkombination `Strg+.` (`Cmd+.` auf macOS) zum sofortigen Einfügen von aktuellem Datum und Uhrzeit im Format `YYYY-MM-DD HH:mm:ss` (z. B. `2026-10-26 20:45:00`) an der Cursor- bzw. Selektionsposition (`LivePreviewEditor.tsx`).
+- Neuer Befehl in der Befehlspalette (`CommandPalette.tsx`): „Datum & Zeitstempel einfügen (YYYY-MM-DD HH:mm:ss)“ mit Shortcut `Strg+.`.
 - Detaillierter Leitfaden zum YAML-Aufbau von Bases (`BASE_YAML_AUFBAU.md` & `doc/BASE_YAML_AUFBAU.md`) mit den 4 Hauptblöcken (`filters`, `formulas`, `properties`, `views`) und Copy-Paste-Vorlagen.
 - Umfassendes Handbuch & Referenzdokumentation für Obsidian Bases (`doc/BASE_ANLEITUNG.md` & `BASE_ANLEITUNG.md`):
   - Detaillierte Erklärung der YAML-Struktur (`filters`, `formulas`, `properties`, `views`).
@@ -111,6 +113,9 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Behebung des Canvas-Layering-Bugs (Verbindungslinien/Kanten rendern über Notizen und Karten):
+  - In `<ReactFlow>` (`CanvasEditor.tsx`) `elevateEdgesOnSelect={false}` gesetzt und `elevateNodesOnSelect={true}` sichergestellt, damit das Auswählen einer Verbindungslinie diese niemals über Notizkarten hebt.
+  - Strikte CSS-Stapelreihenfolge in `src/styles.css` etabliert: Gruppen-Container (`z-index: 0 !important`) < Kanten & Kanten-SVGs (`z-index: 10 !important`) < Inhaltsknoten (`z-index: 20 !important`) < Selektierte Inhaltsknoten (`z-index: 25 !important`) < Interaktive Handles & Resizer (`z-index: 30 !important`). Verbindungslinien verschwinden dadurch zuverlässig hinter Notizkarten und bleiben über Gruppencontainern sichtbar.
 - Behebung von Schein-Konflikten (`ConflictModal`) und Debounce-Race-Conditions beim aktiven Tippen:
   - **Clock-Drift-Kompensation:** Der Server sendet den Header `X-Server-Time` bei allen API-Antworten sowie `serverTime` in `/api/auth/status`. Der Client berechnet dynamisch den Uhrenversatz (`serverClockOffset`) und normalisiert lokale Zeitstempel im Konflikt-Modal (`toNormalizedServerTime`), wodurch Diskrepanzen zwischen Server-/Docker- und Browser-Uhrzeit behoben sind.
   - **Fast-Forward-Erkennung:** Intelligente Fast-Forward-Auflösung (`isFastForwardCompatible` im Frontend, `isFastForward` im Backend). Ist ein Notiztext eine kontinuierliche Fortführung (Präfix/Suffix) des anderen bei identischen Frontmatter-Properties, wird die Änderung nahtlos übernommen, anstatt einen Konflikt-Dialog anzuzeigen.

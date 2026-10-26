@@ -6465,6 +6465,38 @@ input:checked + .slider:before {
   border-color: var(--accent-color);
 }
 
+/* ==========================================================================
+   Canvas Edge & Node Stacking Hierarchy (Deterministic Z-Index Strata)
+   ========================================================================== */
+/* 1. Group nodes sit at the very bottom (background containers) */
+.react-flow__node-group,
+.react-flow__node[data-type="group"] {
+  z-index: 0 !important;
+}
+
+/* 2. Connection lines and edge SVGs sit above groups but strictly behind content nodes */
+.react-flow__edges,
+.react-flow__edges svg,
+.react-flow__edge {
+  z-index: 10 !important;
+}
+
+/* 3. All content nodes (shapes, markdown cards, links, files) MUST ALWAYS be above edges */
+.react-flow__node:not(.react-flow__node-group):not([data-type="group"]) {
+  z-index: 20 !important;
+}
+
+/* 4. Selected content nodes stay slightly higher for border handles */
+.react-flow__node:not(.react-flow__node-group):not([data-type="group"]).selected {
+  z-index: 25 !important;
+}
+
+/* 5. Interactive handles and resize controls remain topmost */
+.react-flow__handle,
+.react-flow__resize-control {
+  z-index: 30 !important;
+}
+
 /* Edge Selection & Reconnection Styling */
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--accent-color, #d4af37) !important;

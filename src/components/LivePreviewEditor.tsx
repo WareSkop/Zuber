@@ -5,6 +5,7 @@ import {
   Compartment,
   StateEffect,
   StateField,
+  Prec,
 } from '@codemirror/state';
 import {
   EditorView,
@@ -221,6 +222,7 @@ export interface LivePreviewEditorRef {
   insertTableColumn: () => void;
   insertImageEmbed: (embedTag: string) => void;
   insertExternalLink: (linkText?: string, linkUrl?: string) => void;
+  insertDateTime: () => void;
   getSelectedText: () => string;
   hasSelection: () => boolean;
   replaceSelection: (newText: string) => void;
@@ -2291,6 +2293,16 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
+  const insertDateTime = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    view.dispatch(view.state.replaceSelection(timestamp));
+    view.focus();
+  };
+
   useImperativeHandle(ref, () => ({
     applyFormat,
     insertTable,
@@ -2310,6 +2322,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     insertTableColumn,
     insertImageEmbed,
     insertExternalLink,
+    insertDateTime,
     getSelectedText,
     hasSelection,
     replaceSelection,
@@ -2662,6 +2675,20 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       extensions: [
         blockModesField,
         history(),
+        Prec.highest(
+          keymap.of([
+            {
+              key: 'Mod-.',
+              run: (view) => {
+                const now = new Date();
+                const pad = (n: number) => String(n).padStart(2, '0');
+                const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+                view.dispatch(view.state.replaceSelection(timestamp));
+                return true;
+              },
+            },
+          ])
+        ),
         keymap.of([
           { key: 'Mod-b', run: () => { applyFormat('bold'); return true; } },
           { key: 'Mod-i', run: () => { applyFormat('italic'); return true; } },
