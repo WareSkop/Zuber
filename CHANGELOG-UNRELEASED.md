@@ -138,6 +138,10 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Minified React Error #310 („Rendered more hooks than during the previous render“) nach dem Login behoben (`src/App.tsx`):
+  - Ursache war ein im JSX von `<NewBaseModal />` nach den vorzeitigen Authentifizierungs-Returns (`if (!authChecked)`, `if (!authenticated)`) inline deklarierter Hook `useMemo(() => extractVaultFolders(allFiles), [allFiles])`.
+  - Der Hook wurde auf die oberste Komponentenebene vor alle bedingten Rückgabe-Anweisungen verschoben, sodass Reacts Rules of Hooks strikt eingehalten werden und die Anzahl der Hook-Invocations über alle Renders und Auth-Zustände hinweg absolut konstant bleibt.
+  - Automatisierter AST-Test (`src/authHooksOrder.test.ts`) zur dauerhaften Absicherung gegen Hook-Aufrufe nach bedingten Returns oder innerhalb von Bedingungen/Schleifen hinzugefügt.
 - Viewport-Kollisionserkennung und Clamping für das Dateibaum-Kontextmenü (`src/components/FileSidebar.tsx`, `src/styles.css`):
   - Dynamische Positionsberechnung via `useLayoutEffect` und `getBoundingClientRect()`: Liegt das Kontextmenü zu nah am unteren oder rechten Bildschirmrand, wird es automatisch nach oben bzw. links verschoben (Sicherheitsabstand 12px), sodass alle Optionen (insbesondere „Löschen“) vollständig im sichtbaren Bereich bleiben.
   - Funktioniert nahtlos für alle Trigger (Rechtsklick sowie Klick auf das Drei-Punkte-Aktionsmenü `⋮`).

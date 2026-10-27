@@ -1117,6 +1117,7 @@ export const App: React.FC = () => {
       }));
   }, [allFiles]);
   const allTagNames = useMemo(() => graphData.tags.map((t) => t.tag), [graphData.tags]);
+  const vaultFolders = useMemo(() => extractVaultFolders(allFiles), [allFiles]);
 
   const handleOpenSendToTarget = useCallback(() => {
     const selectedText = editorRef.current?.getSelectedText();
@@ -4021,7 +4022,7 @@ export const App: React.FC = () => {
         onClose={() => setIsNewBaseModalOpen(false)}
         onCreate={handleCreateNewBase}
         initialFolder={newBaseInitialFolder}
-        vaultFolders={useMemo(() => extractVaultFolders(allFiles), [allFiles])}
+        vaultFolders={vaultFolders}
         vaultTags={allTagNames}
       />
 
