@@ -21,6 +21,7 @@
   },
   "nav": {
     "goBack": "Go Back (Alt+←)",
+    "goBackResearch": "Back in Research View (Alt+←) / Alt+Click for Main Editor",
     "newNote": "Create new note",
     "editor": "Editor view",
     "graph": "Open global graph view",
@@ -217,6 +218,8 @@
   },
   "rightSidebar": {
     "backlinks": "Backlinks",
+    "targetResearch": "Research",
+    "targetNote": "Note",
     "outline": "Outline",
     "localGraph": "Local Graph",
     "close": "Close right sidebar",

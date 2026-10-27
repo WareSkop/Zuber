@@ -7,6 +7,9 @@
   - Kontextmenü-Einträge im Dateibaum: „In Rechercheansicht öffnen“ und „Im Haupteditor öffnen (Alt+Klick)“.
   - Responsiver Split: Horizontaler Split auf Desktop-Bildschirmen, automatischer vertikaler Split (Recherche oben, Editor unten) auf Smartphones (< 768px).
   - Nahtlose Zen-Modus-Integration (`Alt+Z`): Der Split bleibt aktiv, Bedienelemente werden ausgeblendet und der Trennbalken bleibt als feine 1-px-Linie interaktiv ziehbar.
+  - Exakte Toolbar-Höhenangleichung (`--pane-toolbar-height: 44px`) mit bündiger `border-bottom`-Linie über den Trenner hinweg.
+  - Zurück-Button-Routing (`handleGoBack` & `Alt+ArrowLeft`): Navigiert bei geöffneter Rechercheansicht im Recherche-Verlauf (`researchHistory`), mit `Alt+Klick`-Override für den Haupteditor und angepasstem Deaktiviert-Status.
+  - Synchronisation der rechten Seitenleiste: Zeigt verknüpfte und nicht verknüpfte Erwähnungen (Backlinks) sowie den lokalen Graphen für die in der Rechercheansicht aktive Datei mit visuellem Ziel-Indikator.
 - „Zurück“-Navigationsbutton (Back-Button) in der oberen Kopfleiste (`src/App.tsx`, `src/styles.css`):
   - Platzierung direkt rechts neben dem Umschalt-Button für die linke Seitenleiste (`.topbar-nav-back-btn`).
   - Umfassender Navigationsverlauf (History-Stack) für geöffnete Notizen und Canvas-Dateien (bis zu 50 Einträge).

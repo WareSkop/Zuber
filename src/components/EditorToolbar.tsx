@@ -201,7 +201,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   const inTable = editorRef.current?.isCursorInTable() ?? false;
 
   return (
-    <div className="mobile-editor-toolbar" role="toolbar" aria-label="Markdown-Formatierungsleiste">
+    <div className="mobile-editor-toolbar editor-toolbar" role="toolbar" aria-label="Markdown-Formatierungsleiste">
       {/* Hidden file inputs for Gallery & Camera */}
       <input
         ref={fileInputRef}

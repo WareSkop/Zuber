@@ -1043,6 +1043,21 @@ Zuber bietet neben der Einzelansicht eine asymmetrische, resizable **Recherche- 
 - Die Rechercheansicht bleibt beim Aktivieren des Zen-Modus im bestehenden Split-Verhältnis vollständig erhalten.
 - Das gesamte umgebende Chrome (Header, Ribbons, Sidebars) wird ausgeblendet, während die 1-px-Trennlinie aktiv und per Maus/Touch ziehbar bleibt.
 
+### 30.6 Toolbar-Höhenangleichung, Zurück-Navigation & Backlinks-Synchronisation
+- **Einheitliche Toolbar-Höhen (`--pane-toolbar-height: 44px`):**
+  - Sowohl die Markdown-Formatierungsleiste des Haupteditors (`.mobile-editor-toolbar` / `.editor-toolbar`) als auch die Kopfzeile der Rechercheansicht (`.research-pane-header`) nutzen die gemeinsame CSS-Variable `--pane-toolbar-height: 44px;` mit `box-sizing: border-box;`, `padding-top: 0; padding-bottom: 0;` und identischem `border-bottom: 1px solid var(--border-color);`.
+  - Dadurch verläuft die horizontale Trennlinie im Split-Screen nahtlos und exakt bündig über den vertikalen Splitter hinweg.
+- **Zurück-Button Routing (`handleGoBack` & `Alt+ArrowLeft`):**
+  - Eigener Navigationsverlauf für die Rechercheansicht (`researchHistory: ResearchTarget[]` und `researchHistoryIndex`).
+  - Wenn `isResearchOpen === true`: Der „Zurück“-Button in der oberen Kopfleiste (sowie der Tastatur-Shortcut `Alt+ArrowLeft`) steuert primär den Verlauf der Rechercheansicht (Rechts) und springt zur vorherigen Referenznotiz / zum Graph zurück.
+  - Der Deaktiviert-Zustand (`disabled`) spiegelt bei geöffneter Rechercheansicht `researchHistoryIndex <= 0` wider.
+  - Per `Alt + Klick` auf den Zurück-Button kann der Nutzer weiterhin gezielt im linken Haupteditor zurückspringen.
+- **Synchronisation der Rechten Seitenleiste (Backlinks & Lokaler Graph):**
+  - Bei geöffneter Rechercheansicht ermittelt die App dynamisch `rightSidebarTargetPath = researchTarget.path` und ruft `api.getBacklinks(...)` für die aktuell im Recherchefenster geladene Referenzdatei ab.
+  - Ein optischer Indikator (`.backlinks-target-indicator`) im Backlinks-Panel signalisiert dem Nutzer unmissverständlich, für welche Notiz (`Recherche: [Name]` bzw. `Notiz: [Name]`) die eingehenden Verweise angezeigt werden.
+  - Auch der Lokale Graph in der rechten Leiste zentriert sich automatisch auf die aktive Referenznotiz.
+  - Sobald die Rechercheansicht geschlossen wird oder auf den globalen Graph umgeschaltet wird, fällt die Anzeige automatisch auf die aktive Hauptnotiz (`activeNote.path`) zurück.
+
 
 
 

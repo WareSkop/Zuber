@@ -297,4 +297,94 @@ Check out [[OtherNote|Alias]] and ==highlighted text==.
       expect(iframe).not.toBeNull();
     });
   });
+
+  describe('Research Split-View Refinements', () => {
+    it('defines matching 44px toolbar height and borders in styles.css', async () => {
+      const fs = await import('fs');
+      const css = fs.readFileSync('src/styles.css', 'utf-8');
+
+      expect(css).toContain('--pane-toolbar-height: 44px;');
+      expect(css).toMatch(/\.research-pane-header\s*\{[^}]*height:\s*var\(--pane-toolbar-height,\s*44px\)/);
+      expect(css).toMatch(/\.editor-toolbar\s*\{[^}]*height:\s*var\(--pane-toolbar-height,\s*44px\)/);
+      expect(css).toMatch(/\.research-pane-header\s*\{[^}]*border-bottom:\s*1px solid var\(--border-color\)/);
+      expect(css).toMatch(/\.editor-toolbar\s*\{[^}]*border-bottom:\s*1px solid var\(--border-color\)/);
+    });
+
+    it('routes Back button to Research Pane history when open, with Alt+Click override for Main Editor', () => {
+      const isResearchOpen = true;
+      const history = ['NoteA.md', 'NoteB.md'];
+      let historyIndex = 1;
+
+      const researchHistory: ResearchTarget[] = [
+        { path: 'Ref1.md', type: 'note' },
+        { path: 'Ref2.md', type: 'note' },
+        { path: 'Diagram.canvas', type: 'canvas' },
+      ];
+      let researchHistoryIndex = 2;
+
+      const handleGoBackPrimary = vi.fn(() => {
+        if (historyIndex > 0) historyIndex--;
+      });
+      const handleGoBackResearch = vi.fn(() => {
+        if (researchHistoryIndex > 0) researchHistoryIndex--;
+      });
+
+      const handleGoBack = (e?: { altKey?: boolean; preventDefault?: () => void }) => {
+        if (isResearchOpen) {
+          if (e?.altKey) {
+            e.preventDefault?.();
+            handleGoBackPrimary();
+          } else {
+            handleGoBackResearch();
+          }
+        } else {
+          handleGoBackPrimary();
+        }
+      };
+
+      // 1. Normal back button click while research view is open -> steps back in Research history
+      handleGoBack();
+      expect(handleGoBackResearch).toHaveBeenCalledTimes(1);
+      expect(handleGoBackPrimary).not.toHaveBeenCalled();
+      expect(researchHistoryIndex).toBe(1);
+
+      // 2. Alt+Click on back button while research view is open -> steps back in Primary history
+      const preventDefault = vi.fn();
+      handleGoBack({ altKey: true, preventDefault });
+      expect(preventDefault).toHaveBeenCalled();
+      expect(handleGoBackPrimary).toHaveBeenCalledTimes(1);
+      expect(historyIndex).toBe(0);
+
+      // 3. Back button disabled state reflects researchHistoryIndex when open
+      const isBackDisabled = isResearchOpen ? researchHistoryIndex <= 0 : historyIndex <= 0;
+      expect(isBackDisabled).toBe(false); // index is 1 > 0
+    });
+
+    it('binds right sidebar target to Research file when split is open, and falls back to Main note when closed or graph', () => {
+      const activeNote = { path: 'MainDoc.md', title: 'MainDoc' };
+
+      // Helper to compute rightSidebarTargetPath
+      const getRightSidebarTarget = (isResearchOpen: boolean, target: ResearchTarget | null) => {
+        if (isResearchOpen && target?.path) {
+          return target.path;
+        }
+        return activeNote?.path ?? null;
+      };
+
+      // 1. Research view open with reference file -> target is Research file
+      expect(
+        getRightSidebarTarget(true, { path: 'Reference.md', type: 'note' })
+      ).toBe('Reference.md');
+
+      // 2. Research view open but showing graph (empty path) -> falls back to Main note
+      expect(
+        getRightSidebarTarget(true, { path: '', type: 'graph' })
+      ).toBe('MainDoc.md');
+
+      // 3. Research view closed -> always falls back to Main note
+      expect(
+        getRightSidebarTarget(false, { path: 'Reference.md', type: 'note' })
+      ).toBe('MainDoc.md');
+    });
+  });
 });

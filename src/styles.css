@@ -33,6 +33,7 @@
 
   --km-font-size-ui: 14px;
   --km-font-size-editor: 16px;
+  --pane-toolbar-height: 44px;
 
   --icon-check: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'></polyline></svg>");
   --icon-dash: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'><line x1='5' y1='12' x2='19' y2='12'></line></svg>");
@@ -1199,8 +1200,11 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
-  height: 38px;
+  padding: 0 12px;
+  height: var(--pane-toolbar-height, 44px);
+  min-height: var(--pane-toolbar-height, 44px);
+  max-height: var(--pane-toolbar-height, 44px);
+  box-sizing: border-box;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -2958,6 +2962,32 @@ a.external-link:hover {
   letter-spacing: 0.05em;
   color: var(--text-muted);
   margin: 0 0 8px;
+}
+
+.backlinks-target-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 12px;
+  overflow: hidden;
+}
+
+.backlinks-target-label {
+  font-weight: 600;
+  color: var(--accent-color, #d4af37);
+  flex-shrink: 0;
+}
+
+.backlinks-target-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
 }
 
 .backlinks-section {
@@ -5083,13 +5113,19 @@ input:checked + .slider:before {
    Mobile / Touch Editor Toolbar & Drawer Optimization
    ========================================================================== */
 
-.mobile-editor-toolbar {
+.mobile-editor-toolbar,
+.editor-toolbar {
   display: flex;
   align-items: center;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  padding: 4px 8px;
+  padding: 0 8px;
+  height: var(--pane-toolbar-height, 44px);
+  min-height: var(--pane-toolbar-height, 44px);
+  max-height: var(--pane-toolbar-height, 44px);
+  box-sizing: border-box;
   overflow-x: auto;
+  overflow-y: hidden;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;

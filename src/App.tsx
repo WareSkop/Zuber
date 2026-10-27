@@ -189,6 +189,14 @@ export const App: React.FC = () => {
     return typeof window !== 'undefined' && window.innerWidth < 768 ? 'vertical' : 'horizontal';
   });
   const [researchTarget, setResearchTarget] = useState<ResearchTarget | null>(null);
+  const [researchHistory, setResearchHistory] = useState<ResearchTarget[]>([]);
+  const [researchHistoryIndex, setResearchHistoryIndex] = useState<number>(-1);
+  const isResearchNavigatingRef = useRef<boolean>(false);
+  const researchHistoryRef = useRef<ResearchTarget[]>([]);
+  const researchHistoryIndexRef = useRef<number>(-1);
+  researchHistoryRef.current = researchHistory;
+  researchHistoryIndexRef.current = researchHistoryIndex;
+
   const [isResizingSplit, setIsResizingSplit] = useState(false);
   const workspacePanesRef = useRef<HTMLDivElement>(null);
 
@@ -199,6 +207,17 @@ export const App: React.FC = () => {
     typeof window !== 'undefined' ? window.innerWidth > 1200 : false
   );
   const [rightTab, setRightTab] = useState<RightSidebarTab>('backlinks');
+
+  const isResearchOpen = workspaceView === 'split';
+  const rightSidebarTargetPath = useMemo(() => {
+    if (isResearchOpen && researchTarget?.path) {
+      return researchTarget.path;
+    }
+    return activeNote?.path ?? null;
+  }, [isResearchOpen, researchTarget?.path, activeNote?.path]);
+
+  const rightSidebarTargetPathRef = useRef<string | null>(null);
+  rightSidebarTargetPathRef.current = rightSidebarTargetPath;
   const [zenMode, setZenMode] = useState(false);
   const [versionHistoryPath, setVersionHistoryPath] = useState<string | null>(null);
   const [isSendToTargetModalOpen, setIsSendToTargetModalOpen] = useState(false);
@@ -764,7 +783,7 @@ export const App: React.FC = () => {
     try {
       if (isOffline) throw new Error('offline');
       const res = await api.getBacklinks(relPath);
-      if (activePathRef.current === relPath) setBacklinks(res);
+      if (rightSidebarTargetPathRef.current === relPath) setBacklinks(res);
     } catch {
       // Offline fallback: compute local backlinks from cached notes
       try {
@@ -786,12 +805,17 @@ export const App: React.FC = () => {
             });
           }
         }
-        if (activePathRef.current === relPath) setBacklinks({ linked, unlinked: [] });
+        if (rightSidebarTargetPathRef.current === relPath) setBacklinks({ linked, unlinked: [] });
       } catch {
         // ignore
       }
     }
   }, []);
+
+  // Sync right-sidebar backlinks whenever the active target note (Research pane or Main editor) changes
+  useEffect(() => {
+    refreshBacklinks(rightSidebarTargetPath);
+  }, [rightSidebarTargetPath, refreshBacklinks]);
 
   // Debounced background refresh of graph (+ tree if structure changed) and backlinks.
   // Never blocks opening/editing notes.
@@ -805,7 +829,7 @@ export const App: React.FC = () => {
         pendingStructuralRef.current = false;
         try {
           await loadVaultIndex();
-          await refreshBacklinks(activePathRef.current);
+          await refreshBacklinks(rightSidebarTargetPathRef.current);
         } catch {
           // ignore
         }
@@ -844,10 +868,10 @@ export const App: React.FC = () => {
 
   const openNote = openNoteByPath;
 
-  const handleGoBack = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevIndex = historyIndex - 1;
-      const targetPath = history[prevIndex];
+  const handleGoBackPrimary = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      const prevIndex = historyIndexRef.current - 1;
+      const targetPath = historyRef.current[prevIndex];
       if (targetPath) {
         isHistoryNavigatingRef.current = true;
         setHistoryIndex(prevIndex);
@@ -860,7 +884,40 @@ export const App: React.FC = () => {
         });
       }
     }
-  }, [historyIndex, history, openNote]);
+  }, [openNote]);
+
+  const handleGoBackResearch = useCallback(() => {
+    if (researchHistoryIndexRef.current > 0) {
+      const prevIndex = researchHistoryIndexRef.current - 1;
+      const target = researchHistoryRef.current[prevIndex];
+      if (target) {
+        isResearchNavigatingRef.current = true;
+        setResearchHistoryIndex(prevIndex);
+        researchHistoryIndexRef.current = prevIndex;
+        setResearchTarget(target);
+        setTimeout(() => {
+          isResearchNavigatingRef.current = false;
+        }, 50);
+      }
+    }
+  }, []);
+
+  const handleGoBack = useCallback(
+    (e?: React.MouseEvent | { altKey?: boolean; preventDefault?: () => void }) => {
+      const isSplit = workspaceViewRef.current === 'split';
+      if (isSplit) {
+        if (e?.altKey) {
+          e.preventDefault?.();
+          handleGoBackPrimary();
+        } else {
+          handleGoBackResearch();
+        }
+      } else {
+        handleGoBackPrimary();
+      }
+    },
+    [handleGoBackPrimary, handleGoBackResearch]
+  );
 
   handleGoBackRef.current = handleGoBack;
 
@@ -967,6 +1024,37 @@ export const App: React.FC = () => {
     setHistory(newHistory);
     setHistoryIndex(newIndex);
   }, [activeNote?.path]);
+
+  // Track navigation history for Research Pane (max 50 entries)
+  useEffect(() => {
+    if (!researchTarget) return;
+    if (isResearchNavigatingRef.current) return;
+
+    const curIndex = researchHistoryIndexRef.current;
+    const curHist = researchHistoryRef.current;
+
+    // If identical to current, do nothing
+    if (
+      curIndex >= 0 &&
+      curHist[curIndex] &&
+      curHist[curIndex].path === researchTarget.path &&
+      curHist[curIndex].type === researchTarget.type
+    ) {
+      return;
+    }
+
+    const sliced = curHist.slice(0, curIndex + 1);
+    let newHistory = [...sliced, researchTarget];
+    if (newHistory.length > 50) {
+      newHistory = newHistory.slice(newHistory.length - 50);
+    }
+    const newIndex = newHistory.length - 1;
+
+    researchHistoryRef.current = newHistory;
+    researchHistoryIndexRef.current = newIndex;
+    setResearchHistory(newHistory);
+    setResearchHistoryIndex(newIndex);
+  }, [researchTarget]);
 
   useEffect(() => {
     const unsubSync = syncEngine.subscribe((state) => {
@@ -2268,6 +2356,18 @@ export const App: React.FC = () => {
           setHistoryIndex(newIndex);
           return filtered;
         });
+        // Prune deleted path from research history stack
+        setResearchHistory((prev) => {
+          const filtered = prev.filter((t) => t.path !== deletedPath && !t.path.startsWith(deletedPath + '/'));
+          const newIndex = Math.min(researchHistoryIndexRef.current, filtered.length - 1);
+          researchHistoryRef.current = filtered;
+          researchHistoryIndexRef.current = newIndex;
+          setResearchHistoryIndex(newIndex);
+          return filtered;
+        });
+        if (researchTarget?.path === deletedPath || researchTarget?.path.startsWith(deletedPath + '/')) {
+          setResearchTarget({ path: '', type: 'graph' });
+        }
         await loadVaultIndex();
         if (isActiveOrChild) {
           explicitUserClearRef.current = true;
@@ -2710,11 +2810,14 @@ export const App: React.FC = () => {
       // Navigation & Sidebars
       {
         id: 'nav-go-back',
-        title: t('nav.goBack', 'Zurück (Alt+←)') || 'Navigation: Zurück (Vorherige Notiz / Canvas)',
+        title:
+          (workspaceView === 'split'
+            ? t('nav.goBackResearch', 'Zurück in Rechercheansicht (Alt+←) / Alt+Klick für Haupteditor')
+            : t('nav.goBack', 'Zurück (Alt+←)')) || 'Navigation: Zurück',
         category: 'Navigation',
         shortcut: 'Alt+←',
         icon: <ArrowLeft size={16} />,
-        keywords: ['back', 'zurück', 'verlauf', 'history', 'navigation'],
+        keywords: ['back', 'zurück', 'verlauf', 'history', 'navigation', 'recherche', 'research'],
         action: () => handleGoBack(),
       },
       {
@@ -3320,9 +3423,17 @@ export const App: React.FC = () => {
               type="button"
               className="topbar-nav-back-btn"
               onClick={handleGoBack}
-              disabled={historyIndex <= 0}
-              title={t('nav.goBack', 'Zurück (Alt+←)')}
-              aria-label={t('nav.goBack', 'Zurück')}
+              disabled={isResearchOpen ? researchHistoryIndex <= 0 : historyIndex <= 0}
+              title={
+                isResearchOpen
+                  ? t('nav.goBackResearch', 'Zurück in Rechercheansicht (Alt+←) / Alt+Klick für Haupteditor')
+                  : t('nav.goBack', 'Zurück (Alt+←)')
+              }
+              aria-label={
+                isResearchOpen
+                  ? t('nav.goBackResearch', 'Zurück in Rechercheansicht (Alt+←) / Alt+Klick für Haupteditor')
+                  : t('nav.goBack', 'Zurück')
+              }
             >
               <ArrowLeft size={18} />
             </button>
@@ -3588,6 +3699,18 @@ export const App: React.FC = () => {
 
           {rightTab === 'backlinks' && (
             <div className="right-sidebar-content scroller">
+              {rightSidebarTargetPath && (
+                <div className="backlinks-target-indicator" title={rightSidebarTargetPath}>
+                  <span className="backlinks-target-label">
+                    {isResearchOpen && researchTarget?.path
+                      ? `${t('rightSidebar.targetResearch', 'Recherche')}:`
+                      : `${t('rightSidebar.targetNote', 'Notiz')}:`}
+                  </span>
+                  <span className="backlinks-target-filename">
+                    {rightSidebarTargetPath.split('/').pop()}
+                  </span>
+                </div>
+              )}
               <div className="backlinks-section">
                 <h3 className="right-section-title">
                   {t('rightSidebar.linkedMentions')} ({linkedMentions.length})
@@ -3685,7 +3808,7 @@ export const App: React.FC = () => {
               <Suspense fallback={<div className="empty-state">Lade Graph…</div>}>
                 <GraphView
                   graphData={graphData}
-                  activeNotePath={activeNote?.path ?? null}
+                  activeNotePath={rightSidebarTargetPath}
                   isLocalGraph={true}
                   onSelectNote={(pathOrTitle, isUnresolved, event) => {
                     if (event?.altKey) event.preventDefault?.();
