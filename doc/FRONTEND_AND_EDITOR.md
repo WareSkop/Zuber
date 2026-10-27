@@ -1002,9 +1002,10 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
   - **Spalten-Manager-Button:** Öffnet den Spalten-Manager (`BaseColumnsModal.tsx`).
   - **Modus-Umschalter:** Nahtloser Wechsel zwischen **Visueller Ansicht** und **YAML-Quelltext**.
 - **Visueller Filter-Builder (`BaseFilterPopover.tsx`):**
-  - Popover zur intuitiven Konfiguration von Filterregeln (`file.folder`, `file.hasTag`, `file.ext` und benutzerdefinierte Frontmatter-Properties).
+  - Popover zur intuitiven Konfiguration von Filterregeln (`file.inFolder`, `file.hasTag`, `file.hasLink`, `file.ext` und benutzerdefinierte Frontmatter-Properties).
   - Dynamische Operatoren: `==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `startsWith`, `!isEmpty`, `isEmpty`.
-  - Dropdowns für Ordner und Tags direkt aus dem Vault-Index extrahiert.
+  - Dropdowns für Ordner, Tags und Autocomplete-Suche für Zielnotizen (`file.hasLink`) direkt aus dem Vault-Index extrahiert.
+  - Filter-Chip-Anzeige: `[ 🔗 Verlinkt auf: [[Notizname]] × ]` mit `LinkIcon` und Schnell-Löschaktion.
 - **Interaktive Tabellenansicht (`BaseTableView.tsx`):**
   - **Spaltenbreiten anpassen:** Drag-Handles (`.col-resize-handle`) am rechten Rand jeder Spaltenüberschrift mit Live-Feedback und Speicherung in `columnSize`.
   - **Spalten-Reihenfolge:** Spaltenüberschriften können per Drag & Drop verschoben werden.
@@ -1014,8 +1015,10 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
 - **Spalten-Manager-Modal (`BaseColumnsModal.tsx`):**
   - Übersichtliche Checkliste aller im Vault gefundenen Eigenschaften zum Ein- und Ausblenden sowie Drag & Drop zur Sortierung.
 - **New Base Erstellungs-Wizard (`NewBaseModal.tsx`):**
-  - Dialog beim Anlegen einer `.base`-Datei: Name, Zielordner, Quellenbereich (Notizen im Ordner, Notizen mit Tag oder alle Notizen) und Start-Ansicht (Tabelle oder Kacheln).
-  - Generiert sauberes Start-YAML mit automatischer `file.ext == "md"`-Filterung.
+  - Vollständiges UI-Redesign mit dunklem Backdrop (`rgba(0, 0, 0, 0.65)` mit Blur), solider Karte (`var(--bg-primary)` ohne Durchscheinen), einheitlichem Header, abgerundetem Schließen-Button und dedizierter Footer-Leiste.
+  - Formular-Kacheln für den Quellenbereich mit 4 Optionen: Notizen im Ordner (`file.inFolder`), Notizen mit Tag (`file.hasTag`), verlinkte Notizen (`file.hasLink` mit Autocomplete-Suchfeld) oder alle Notizen.
+  - Segmented Control für die Start-Ansicht (Tabelle oder Kacheln).
+  - Generiert sauberes Start-YAML mit automatischer `file.ext == "md"`-Filterung und `file.hasLink("Zielnotiz")`.
 
 ### 29.3 Inline-Base-Codeblöcke (`LivePreviewEditor.tsx`)
 - Markdown-Codeblöcke mit Sprache ```` ```base ```` werden in Live-Preview und Lese-Modus interaktiv als `BaseView` dargestellt.

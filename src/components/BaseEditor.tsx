@@ -10,6 +10,7 @@ import {
   X,
   Plus,
   LayoutGrid,
+  Link as LinkIcon,
 } from 'lucide-react';
 import {
   parseBaseYaml,
@@ -113,6 +114,14 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   const vaultProperties = useMemo(() => extractVaultProperties(allFiles), [allFiles]);
   const vaultFolders = useMemo(() => extractVaultFolders(allFiles), [allFiles]);
   const vaultTags = useMemo(() => extractVaultTags(allFiles), [allFiles]);
+  const vaultNotes = useMemo(() => {
+    return (allFiles || [])
+      .filter((f) => f.extension === 'md' || f.path?.endsWith('.md'))
+      .map((f) => ({
+        path: f.path,
+        name: f.name ? f.name.replace(/\.md$/i, '') : f.path.replace(/\.md$/i, '').split('/').pop() || '',
+      }));
+  }, [allFiles]);
 
   // Ensure activeViewIndex is within bounds
   const safeViewIndex = Math.min(Math.max(0, activeViewIndex), Math.max(0, config.views.length - 1));
@@ -346,6 +355,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         availableProperties={vaultProperties}
         vaultFolders={vaultFolders}
         vaultTags={vaultTags}
+        vaultNotes={vaultNotes}
       />
 
       {/* 3. Columns Modal */}
@@ -379,6 +389,9 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
               } else if (rule.field === 'file.hasTag') {
                 Icon = Tag;
                 label = rule.operator === '!=' ? `Ohne Tag: #${rule.value}` : `Tag: #${rule.value}`;
+              } else if (rule.field === 'file.hasLink') {
+                Icon = LinkIcon;
+                label = rule.operator === '!=' ? `Verlinkt nicht auf: [[${rule.value}]]` : `Verlinkt auf: [[${rule.value}]]`;
               } else if (rule.operator === 'isEmpty') {
                 label = `${rule.field} ist leer`;
               } else if (rule.operator === '!isEmpty') {

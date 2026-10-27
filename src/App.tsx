@@ -1118,6 +1118,16 @@ export const App: React.FC = () => {
   }, [allFiles]);
   const allTagNames = useMemo(() => graphData.tags.map((t) => t.tag), [graphData.tags]);
   const vaultFolders = useMemo(() => extractVaultFolders(allFiles), [allFiles]);
+  const vaultNotes = useMemo(
+    () =>
+      allFiles
+        .filter((f) => f.extension === 'md' || f.path.endsWith('.md'))
+        .map((f) => ({
+          path: f.path,
+          name: f.name ? f.name.replace(/\.md$/i, '') : f.path.replace(/\.md$/i, '').split('/').pop() || '',
+        })),
+    [allFiles]
+  );
 
   const handleOpenSendToTarget = useCallback(() => {
     const selectedText = editorRef.current?.getSelectedText();
@@ -2382,7 +2392,7 @@ export const App: React.FC = () => {
     async (options: {
       name: string;
       folder: string;
-      scope: 'folder' | 'tag' | 'all';
+      scope: 'folder' | 'tag' | 'link' | 'all';
       scopeValue?: string;
       viewType: 'table' | 'cards';
     }) => {
@@ -2401,6 +2411,9 @@ export const App: React.FC = () => {
       } else if (options.scope === 'tag' && options.scopeValue) {
         const cleanTag = options.scopeValue.replace(/^#/, '').replace(/"/g, '\\"');
         filterRules.push(`file.hasTag("${cleanTag}")`);
+      } else if (options.scope === 'link' && options.scopeValue) {
+        const cleanLink = options.scopeValue.replace(/^\[\[/, '').replace(/\]\]$/, '').replace(/"/g, '\\"');
+        filterRules.push(`file.hasLink("${cleanLink}")`);
       }
 
       const initialConfig = {
@@ -4024,6 +4037,7 @@ export const App: React.FC = () => {
         initialFolder={newBaseInitialFolder}
         vaultFolders={vaultFolders}
         vaultTags={allTagNames}
+        vaultNotes={vaultNotes}
       />
 
       {/* Toast Notification */}

@@ -201,6 +201,65 @@ views:
     });
   });
 
+  describe('file.hasLink filter condition', () => {
+    it('matches notes with [[Zielnotiz]], [[Zielnotiz#Header]], and [[Zielnotiz|Alias]]', () => {
+      const noteDirect = createRecordFromNote({
+        path: 'Notes/One.md',
+        links: ['Zielnotiz'],
+      });
+      const noteAnchor = createRecordFromNote({
+        path: 'Notes/Two.md',
+        links: ['Zielnotiz#Header'],
+      });
+      const noteAlias = createRecordFromNote({
+        path: 'Notes/Three.md',
+        links: ['Zielnotiz|Mein Alias'],
+      });
+      const noteUnrelated = createRecordFromNote({
+        path: 'Notes/Four.md',
+        links: ['AndereNotiz'],
+      });
+
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', noteDirect)).toBe(true);
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', noteAnchor)).toBe(true);
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', noteAlias)).toBe(true);
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', noteUnrelated)).toBe(false);
+    });
+
+    it('matches note paths like [[Ordner/Zielnotiz]] and markdown links [Text](Zielnotiz.md)', () => {
+      const notePath = createRecordFromNote({
+        path: 'Notes/Five.md',
+        links: ['Ordner/Zielnotiz'],
+      });
+      const noteMarkdown = createRecordFromNote({
+        path: 'Notes/Six.md',
+        body: 'Hier ist ein [Link](Zielnotiz.md) im Text.',
+      });
+      const noteMarkdownPath = createRecordFromNote({
+        path: 'Notes/Seven.md',
+        body: 'Hier ist ein [Link](Ordner/Zielnotiz.md#kapitel) im Text.',
+      });
+
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', notePath)).toBe(true);
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', noteMarkdown)).toBe(true);
+      expect(evaluateCondition('file.hasLink("Zielnotiz")', noteMarkdownPath)).toBe(true);
+    });
+
+    it('correctly evaluates negation !file.hasLink("Zielnotiz")', () => {
+      const noteLinking = createRecordFromNote({
+        path: 'Notes/Linking.md',
+        links: ['Zielnotiz'],
+      });
+      const noteNotLinking = createRecordFromNote({
+        path: 'Notes/NotLinking.md',
+        links: ['DifferentNote'],
+      });
+
+      expect(evaluateCondition('!file.hasLink("Zielnotiz")', noteLinking)).toBe(false);
+      expect(evaluateCondition('!file.hasLink("Zielnotiz")', noteNotLinking)).toBe(true);
+    });
+  });
+
   describe('executeBaseQuery', () => {
     const sampleNotes = [
       {

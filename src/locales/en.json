@@ -523,7 +523,11 @@
     "rename": "Rename",
     "duplicate": "Duplicate",
     "delete": "Delete View",
-    "copy": "Copy"
+    "copy": "Copy",
+    "scopeLinkedTo": "Notes linking to a page...",
+    "targetNotePlaceholder": "Select target note...",
+    "createBase": "Create Base",
+    "cancel": "Cancel"
   },
   "research": {
     "title": "Research View",

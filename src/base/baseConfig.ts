@@ -128,6 +128,15 @@ export function ruleToExpression(rule: BaseFilterRule): string {
     return `file.hasTag("${cleanTag}")`;
   }
 
+  // 3. file.hasLink
+  if (field === 'file.hasLink') {
+    const cleanLink = String(val ?? '').replace(/^\[\[/, '').replace(/\]\]$/, '').replace(/"/g, '\\"');
+    if (rule.operator === '!=') {
+      return `!file.hasLink("${cleanLink}")`;
+    }
+    return `file.hasLink("${cleanLink}")`;
+  }
+
   // 3. isEmpty / !isEmpty
   if (rule.operator === 'isEmpty') {
     return `${field} == null || ${field} == ""`;
@@ -189,6 +198,17 @@ export function expressionToRule(expr: string, idPrefix = 'rule'): BaseFilterRul
       field: 'file.hasTag',
       operator: hasTagMatch[1] ? '!=' : '==',
       value: hasTagMatch[2],
+    };
+  }
+
+  // 3. file.hasLink("...")
+  const hasLinkMatch = trimmed.match(/^(!)?\s*file\.hasLink\(\s*["']([^"']+)["']\s*\)$/i);
+  if (hasLinkMatch) {
+    return {
+      id: ruleId,
+      field: 'file.hasLink',
+      operator: hasLinkMatch[1] ? '!=' : '==',
+      value: hasLinkMatch[2],
     };
   }
 

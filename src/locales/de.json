@@ -523,7 +523,11 @@
     "rename": "Umbenennen",
     "duplicate": "Duplizieren",
     "delete": "Ansicht löschen",
-    "copy": "Kopie"
+    "copy": "Kopie",
+    "scopeLinkedTo": "Notizen, die auf eine Seite verlinken...",
+    "targetNotePlaceholder": "Zielnotiz auswählen...",
+    "createBase": "Base erstellen",
+    "cancel": "Abbrechen"
   },
   "research": {
     "title": "Rechercheansicht",

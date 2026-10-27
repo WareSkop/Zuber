@@ -92,6 +92,26 @@ views:
       value: 'server',
     });
 
+    // 2b. file.hasLink
+    const linkRule: BaseFilterRule = {
+      id: '2b',
+      field: 'file.hasLink',
+      operator: '==',
+      value: 'Zielnotiz',
+    };
+    expect(ruleToExpression(linkRule)).toBe('file.hasLink("Zielnotiz")');
+    expect(expressionToRule('file.hasLink("Zielnotiz")')).toMatchObject({
+      field: 'file.hasLink',
+      operator: '==',
+      value: 'Zielnotiz',
+    });
+    expect(ruleToExpression({ ...linkRule, operator: '!=' })).toBe('!file.hasLink("Zielnotiz")');
+    expect(expressionToRule('!file.hasLink("Zielnotiz")')).toMatchObject({
+      field: 'file.hasLink',
+      operator: '!=',
+      value: 'Zielnotiz',
+    });
+
     // 3. isEmpty & !isEmpty
     const emptyRule: BaseFilterRule = {
       id: '3',

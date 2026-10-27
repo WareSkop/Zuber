@@ -1,4 +1,8 @@
 ### Added
+- Filter für verlinkte Seiten (`file.hasLink("Zielnotiz")` und `!file.hasLink("Zielnotiz")`) für Obsidian Bases:
+  - Vollständige Erkennung von internen Links (`[[Zielnotiz]]`, `[[Ordner/Zielnotiz]]`, Ankern `[[Zielnotiz#Header]]` und Aliasen `[[Zielnotiz|Alias]]`) sowie regulären Markdown-Links (`[Text](Zielnotiz.md)`).
+  - Integration in `baseEngine.ts` (`noteMatchesLinkTarget`, `fileObj.hasLink`), `baseConfig.ts` (`ruleToExpression`, `expressionToRule`) und den visuellen Filter-Builder (`BaseFilterPopover.tsx`) mit Notizen-Autocomplete.
+  - Dedizierte Filter-Chip-Darstellung in `BaseEditor.tsx`: `[ 🔗 Verlinkt auf: [[Notizname]] × ]`.
 - Visuelle Benutzeroberfläche (GUI) zur Konfiguration & Bearbeitung von Obsidian Bases in `BaseEditor.tsx`:
   - Visuelle Ansichten-Verwaltung (`BaseToolbar.tsx`) mit Tabs für definierte Views, Hinzufügen neuer Ansichten (`+ Ansicht`) und 3-Punkte-Menü (Umbenennen, Duplizieren, Löschen).
   - Visueller Filter-Builder im Popover (`BaseFilterPopover.tsx`) mit dynamischen Operatoren (`==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `startsWith`, `!isEmpty`, `isEmpty`), automatischer Vault-Ordner- und Tag-Auswahl und Filter-Badge mit aktiver Regelanzahl.
@@ -138,6 +142,14 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Umfassendes UI-Redesign des „Create Base“-Modals (`NewBaseModal.tsx`, `src/styles.css`):
+  - Dunkles, gleichmäßiges Backdrop-Overlay (`background: rgba(0, 0, 0, 0.65)` mit `backdrop-filter: blur(4px)`).
+  - Solide Modal-Karte (`var(--bg-primary)`) mit abgerundetem Rahmen (`12px`), Schatten (`box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5)`) und keinem Durchscheinen des Hintergrunds.
+  - Abgerundeter Icon-Schließen-Button im Header mit Theme-Hover.
+  - Einheitliches Formularfeld-Design (`var(--bg-secondary)`) mit Akzent-Fokusring.
+  - Saubere Auswahl-Kacheln für den Quellenbereich mit 4 Optionen (Ordner, Tag, verlinkte Seite via `file.hasLink`, alle Notizen).
+  - Segmented Control Toggle-Group für die Start-Ansicht (Tabelle / Kacheln) mit Icons.
+  - Dedizierte Footer-Zeile mit dezentem Abbrechen-Button und primärem „Base erstellen“-Button.
 - Minified React Error #310 („Rendered more hooks than during the previous render“) nach dem Login behoben (`src/App.tsx`):
   - Ursache war ein im JSX von `<NewBaseModal />` nach den vorzeitigen Authentifizierungs-Returns (`if (!authChecked)`, `if (!authenticated)`) inline deklarierter Hook `useMemo(() => extractVaultFolders(allFiles), [allFiles])`.
   - Der Hook wurde auf die oberste Komponentenebene vor alle bedingten Rückgabe-Anweisungen verschoben, sodass Reacts Rules of Hooks strikt eingehalten werden und die Anzahl der Hook-Invocations über alle Renders und Auth-Zustände hinweg absolut konstant bleibt.

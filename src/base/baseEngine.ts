@@ -1,4 +1,5 @@
 import YAML from 'yaml';
+import { extractLinksAndEmbeds } from '../../shared/markdownUtils';
 import type {
   BaseDefinition,
   BaseFilterCondition,
@@ -72,6 +73,65 @@ export function parseBaseYaml(rawYaml: string): BaseDefinition {
   } catch (err) {
     throw new Error(`YAML Parsing Error: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Checks whether a list of links (or note content) points to the requested target note.
+ * Supports:
+ * - Direct note names: [[Target]] -> matches "Target" or "Target.md"
+ * - Subpaths: [[Folder/Target]] -> matches "Target" or "Folder/Target"
+ * - Anchors: [[Target#Heading]] -> matches "Target"
+ * - Aliases: [[Target|Alias]] -> matches "Target"
+ * - Standard Markdown links: [Text](Target.md) or [Text](Folder/Target.md)
+ */
+export function noteMatchesLinkTarget(rawLinkTarget: string, allLinks: string[], noteContent?: string): boolean {
+  const query = (rawLinkTarget || '').trim();
+  if (!query) return false;
+
+  // Clean the query target: remove wiki brackets if present, anchors, aliases, .md
+  let cleanTarget = query.replace(/^\[\[/, '').replace(/\]\]$/, '').trim();
+  cleanTarget = cleanTarget.split('#')[0].split('|')[0].trim();
+  const targetNoExt = cleanTarget.replace(/\.md$/i, '').trim().toLowerCase();
+  const targetBasename = (targetNoExt.split(/[/\\]/).pop() || targetNoExt).toLowerCase();
+
+  const isMatch = (linkItem: string): boolean => {
+    if (!linkItem) return false;
+    let cleanItem = String(linkItem).trim().replace(/^\[\[/, '').replace(/\]\]$/, '').trim();
+    cleanItem = cleanItem.split('#')[0].split('|')[0].trim();
+    const itemNoExt = cleanItem.replace(/\.md$/i, '').trim().toLowerCase();
+    const itemBasename = (itemNoExt.split(/[/\\]/).pop() || itemNoExt).toLowerCase();
+
+    // 1. Exact match on clean target (e.g. "zielnotiz" === "zielnotiz" or "ordner/zielnotiz" === "ordner/zielnotiz")
+    if (itemNoExt === targetNoExt) return true;
+    // 2. Basename match (e.g. "ordner/zielnotiz" matches target "zielnotiz" or link "zielnotiz" matches target "ordner/zielnotiz")
+    if (targetBasename && (itemBasename === targetBasename || itemNoExt === targetBasename || targetNoExt === itemBasename)) return true;
+    // 3. Path suffix match (e.g. "sub/ordner/zielnotiz" ends with "/ordner/zielnotiz")
+    if (itemNoExt.endsWith(`/${targetNoExt}`) || targetNoExt.endsWith(`/${itemNoExt}`)) return true;
+
+    return false;
+  };
+
+  if (allLinks.some(isMatch)) {
+    return true;
+  }
+
+  // If not found in allLinks, also check note body or raw content
+  if (noteContent && typeof noteContent === 'string') {
+    const extracted = extractLinksAndEmbeds(noteContent);
+    if (extracted.links.some(isMatch)) {
+      return true;
+    }
+
+    // Direct regex matching for [[Zielnotiz...]] or [text](...Zielnotiz...)
+    const escapedBasename = targetBasename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const wikiRegex = new RegExp(`\\[\\[(?:[^\\]|#\\n]*[\\/\\\\])?${escapedBasename}(?:#[^\\]|\\n]+)?(?:\\|[^\\]\\n]+)?\\]\\]`, 'i');
+    if (wikiRegex.test(noteContent)) return true;
+
+    const mdRegex = new RegExp(`\\]\\((?:[^)\\n]*[\\/\\\\])?${escapedBasename}(?:\\.md)?(?:#[^)\\n]+)?\\)`, 'i');
+    if (mdRegex.test(noteContent)) return true;
+  }
+
+  return false;
 }
 
 /**
@@ -163,8 +223,8 @@ export function createRecordFromNote(note: NoteData | NoteSummary | any): BaseRe
       return allTags.includes(clean);
     },
     hasLink: (link: string) => {
-      const clean = (link || '').trim().toLowerCase();
-      return allLinks.some((l) => l.toLowerCase() === clean || l.toLowerCase().includes(clean));
+      const content = (note as any).body || (note as any).rawContent;
+      return noteMatchesLinkTarget(link, allLinks, typeof content === 'string' ? content : undefined);
     },
   };
 
@@ -601,19 +661,31 @@ function evaluateStringExpression(expr: string, record: BaseRecord): boolean {
   const trimmed = expr.trim();
   if (!trimmed) return true;
 
-  // 1. file.inFolder("...")
+  // 1. file.inFolder("...") & !file.inFolder("...")
+  const notInFolderMatch = trimmed.match(/^!\s*file\.inFolder\(\s*["']([^"']+)["']\s*\)$/i);
+  if (notInFolderMatch) {
+    return !record.file.inFolder(notInFolderMatch[1]);
+  }
   const inFolderMatch = trimmed.match(/^file\.inFolder\(\s*["']([^"']+)["']\s*\)$/i);
   if (inFolderMatch) {
     return record.file.inFolder(inFolderMatch[1]);
   }
 
-  // 2. file.hasTag("...")
+  // 2. file.hasTag("...") & !file.hasTag("...")
+  const notHasTagMatch = trimmed.match(/^!\s*file\.hasTag\(\s*["']([^"']+)["']\s*\)$/i);
+  if (notHasTagMatch) {
+    return !record.file.hasTag(notHasTagMatch[1]);
+  }
   const hasTagMatch = trimmed.match(/^file\.hasTag\(\s*["']([^"']+)["']\s*\)$/i);
   if (hasTagMatch) {
     return record.file.hasTag(hasTagMatch[1]);
   }
 
-  // 3. file.hasLink("...")
+  // 3. file.hasLink("...") & !file.hasLink("...")
+  const notHasLinkMatch = trimmed.match(/^!\s*file\.hasLink\(\s*["']([^"']+)["']\s*\)$/i);
+  if (notHasLinkMatch) {
+    return !record.file.hasLink(notHasLinkMatch[1]);
+  }
   const hasLinkMatch = trimmed.match(/^file\.hasLink\(\s*["']([^"']+)["']\s*\)$/i);
   if (hasLinkMatch) {
     return record.file.hasLink(hasLinkMatch[1]);

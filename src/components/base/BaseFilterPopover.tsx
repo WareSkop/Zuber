@@ -11,6 +11,7 @@ export interface BaseFilterPopoverProps {
   availableProperties: { key: string; label: string }[];
   vaultFolders: string[];
   vaultTags: string[];
+  vaultNotes?: { path: string; name: string }[];
 }
 
 export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
@@ -21,6 +22,7 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
   availableProperties,
   vaultFolders,
   vaultTags,
+  vaultNotes = [],
 }) => {
   const { t } = useTranslation();
 
@@ -48,6 +50,9 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
       } else if (updates.field === 'file.hasTag') {
         target.operator = '==';
         target.value = vaultTags[0] || '';
+      } else if (updates.field === 'file.hasLink') {
+        target.operator = '==';
+        target.value = vaultNotes[0]?.name || '';
       } else {
         target.operator = '==';
         target.value = '';
@@ -93,7 +98,7 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
         ) : (
           <div className="base-filter-rule-list">
             {rules.map((rule, idx) => {
-              const isSpecialFunc = rule.field === 'file.inFolder' || rule.field === 'file.hasTag';
+              const isSpecialFunc = rule.field === 'file.inFolder' || rule.field === 'file.hasTag' || rule.field === 'file.hasLink';
               const isValueless = rule.operator === 'isEmpty' || rule.operator === '!isEmpty';
 
               return (
@@ -104,9 +109,10 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
                     value={rule.field}
                     onChange={(e) => handleUpdateRule(idx, { field: e.target.value })}
                   >
-                    <optgroup label="Funktionen & Ordner">
+                    <optgroup label="Funktionen & Verknüpfungen">
                       <option value="file.inFolder">📁 Liegt in Ordner... (file.inFolder)</option>
                       <option value="file.hasTag">🏷️ Hat Tag... (file.hasTag)</option>
+                      <option value="file.hasLink">🔗 Verlinkt auf... (file.hasLink)</option>
                     </optgroup>
                     <optgroup label="Datei-Eigenschaften">
                       <option value="file.name">Dateiname (file.name)</option>
@@ -181,6 +187,24 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
                           </option>
                         ))}
                       </select>
+                    ) : rule.field === 'file.hasLink' ? (
+                      <div className="base-filter-note-input-wrapper">
+                        <input
+                          type="text"
+                          list={`datalist-notes-${rule.id}`}
+                          className="base-filter-input val-input"
+                          placeholder={t('base.targetNotePlaceholder') || 'Zielnotiz auswählen...'}
+                          value={String(rule.value ?? '')}
+                          onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
+                        />
+                        <datalist id={`datalist-notes-${rule.id}`}>
+                          {vaultNotes.map((n) => (
+                            <option key={n.path} value={n.name}>
+                              {n.path}
+                            </option>
+                          ))}
+                        </datalist>
+                      </div>
                     ) : isValueless ? (
                       <span className="base-filter-val-placeholder">—</span>
                     ) : (
