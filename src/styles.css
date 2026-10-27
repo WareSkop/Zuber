@@ -8719,6 +8719,267 @@ input:checked + .slider:before {
   color: var(--accent-primary, #e2b714);
 }
 
+.base-board-column-title.editable {
+  cursor: pointer;
+  border-bottom: 1px dotted transparent;
+  transition: all 0.15s ease;
+}
+
+.base-board-column-title.editable:hover {
+  color: var(--accent-color, #d4af37);
+  border-bottom-color: var(--accent-color, #d4af37);
+}
+
+.base-board-col-edit-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.base-board-col-rename-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-color, #d4af37);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  width: 130px;
+  outline: none;
+}
+
+.base-board-col-confirm-btn,
+.base-board-col-cancel-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.base-board-col-confirm-btn:hover {
+  background: var(--bg-hover);
+  color: #10b981;
+}
+
+.base-board-col-cancel-btn:hover {
+  background: var(--bg-hover);
+  color: #ef4444;
+}
+
+.base-board-col-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.base-board-col-menu-wrapper {
+  position: relative;
+}
+
+.base-board-col-menu-trigger {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.base-board-col-menu-trigger:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.base-dropdown-menu.col-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 100;
+  min-width: 160px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  margin-top: 4px;
+}
+
+/* + Neue Spalte hinzufügen */
+.base-board-add-column-wrapper {
+  flex: 0 0 240px;
+  width: 240px;
+  box-sizing: border-box;
+}
+
+.base-board-add-column-btn {
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.base-board-add-column-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color, #d4af37);
+  color: var(--accent-color, #d4af37);
+}
+
+.base-board-add-column-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.add-column-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.add-col-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Board Configuration Modal */
+.base-board-config-modal {
+  width: 100%;
+  max-width: 500px;
+}
+
+.base-board-config-form {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.base-config-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.base-config-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.base-board-columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.base-board-column-config-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.reorder-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.col-move-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.col-move-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.col-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.column-name-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 13px;
+}
+
+.col-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.col-delete-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.col-delete-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.base-board-add-col-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.base-board-add-col-input-row .base-input {
+  flex: 1;
+}
+
+.limit-input {
+  width: 100px;
+}
+
 /* Base Inline Block in Live-Preview & Reading */
 .cm-lp-base-block,
 .reading-base-container {
@@ -9596,11 +9857,82 @@ input:checked + .slider:before {
 }
 
 /* ==========================================================================
-   Base Columns Management Modal
+   Base Modal & Columns Management Modal
    ========================================================================== */
 
+.base-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.base-modal-container {
+  background: var(--bg-primary, #1e1e24);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  padding: 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary);
+  max-height: 90vh;
+}
+
 .base-columns-modal {
-  width: 440px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.base-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.base-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.base-modal-title .modal-title-icon {
+  color: var(--accent-color, #d4af37);
+}
+
+.base-modal-title h2,
+.base-modal-title h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.base-modal-close-btn {
+  background: transparent !important;
+  color: var(--text-secondary, var(--text-muted)) !important;
+  border: none !important;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.base-modal-close-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08)) !important;
+  color: var(--text-primary) !important;
 }
 
 .base-modal-hint {
@@ -9613,28 +9945,37 @@ input:checked + .slider:before {
 .base-columns-checklist {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   max-height: 380px;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .base-column-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 10px;
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #25252e) !important;
+  border: 1px solid var(--border-color, #3a3a46) !important;
+  color: var(--text-primary) !important;
   transition: all 0.15s ease;
+  user-select: none;
+}
+
+.base-column-item:hover {
+  background: var(--bg-tertiary, #2e2e38) !important;
+  border-color: var(--accent-color, #d4af37) !important;
 }
 
 .base-column-item.visible {
-  border-color: var(--border-color);
+  border-color: var(--border-color, #3a3a46) !important;
 }
 
 .base-column-item.dragging {
   opacity: 0.4;
+  transform: scale(0.98);
 }
 
 .base-column-left {
@@ -9681,6 +10022,16 @@ input:checked + .slider:before {
 .base-col-raw-key {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.base-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
 }
 
 /* ==========================================================================

@@ -23,6 +23,7 @@ import {
   type BaseConfig,
   type BaseFilterRule,
   type BaseSortRule,
+  type BaseGroupBy,
 } from '../base/baseConfig';
 import {
   executeBaseQuery,
@@ -33,6 +34,7 @@ import {
 import { BaseToolbar } from './base/BaseToolbar';
 import { BaseFilterPopover } from './base/BaseFilterPopover';
 import { BaseColumnsModal } from './base/BaseColumnsModal';
+import { BaseBoardConfigModal } from './base/BaseBoardConfigModal';
 import { BaseTableView } from './base/BaseTableView';
 import { BaseCardsView } from './base/BaseCardsView';
 import { BaseBoardView } from './base/BaseBoardView';
@@ -62,6 +64,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   // Popover & Modal visibility
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isColumnsModalOpen, setIsColumnsModalOpen] = useState(false);
+  const [isBoardConfigModalOpen, setIsBoardConfigModalOpen] = useState(false);
 
   // Parsed Config state
   const [config, setConfig] = useState<BaseConfig>(() => {
@@ -230,6 +233,123 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   };
 
   // ----------------------------------------------------
+  // Handlers for Board Columns & Board Configuration
+  // ----------------------------------------------------
+  const handleBoardRenameColumn = async (oldName: string, newName: string) => {
+    if (!oldName || !newName || oldName.trim() === newName.trim()) return;
+    const trimmedNew = newName.trim();
+    const curCols = activeView.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+    const stringCols = curCols.map((c) => (typeof c === 'string' ? c : c.name));
+
+    const updatedCols = stringCols.map((c) =>
+      c.toLowerCase() === oldName.trim().toLowerCase() ? trimmedNew : c
+    );
+
+    const newViews = config.views.map((v, i) =>
+      i === safeViewIndex
+        ? {
+            ...v,
+            groupBy: {
+              ...(v.groupBy || { property: 'status' }),
+              columns: updatedCols,
+            },
+          }
+        : v
+    );
+
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+
+    // Automatically update existing notes' frontmatter
+    const groupByProp = activeView.groupBy?.property || 'status';
+    if (onCellChange && queryResult?.records) {
+      for (const rec of queryResult.records) {
+        const val = getPropertyValue(rec, groupByProp);
+        if (val && String(val).trim().toLowerCase() === oldName.trim().toLowerCase()) {
+          try {
+            await onCellChange(rec.file.path, groupByProp, trimmedNew);
+          } catch (err) {
+            console.error('Failed to update note status on column rename:', err);
+          }
+        }
+      }
+    }
+  };
+
+  const handleBoardDeleteColumn = (colName: string) => {
+    const curCols = activeView.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+    const stringCols = curCols.map((c) => (typeof c === 'string' ? c : c.name));
+    if (stringCols.length <= 1) return;
+
+    const updatedCols = stringCols.filter(
+      (c) => c.toLowerCase() !== colName.trim().toLowerCase()
+    );
+
+    const newViews = config.views.map((v, i) =>
+      i === safeViewIndex
+        ? {
+            ...v,
+            groupBy: {
+              ...(v.groupBy || { property: 'status' }),
+              columns: updatedCols,
+            },
+          }
+        : v
+    );
+
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleBoardAddColumn = (newColName: string) => {
+    const trimmed = newColName.trim();
+    if (!trimmed) return;
+    const curCols = activeView.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+    const stringCols = curCols.map((c) => (typeof c === 'string' ? c : c.name));
+    if (stringCols.some((c) => c.toLowerCase() === trimmed.toLowerCase())) return;
+
+    const updatedCols = [...stringCols, trimmed];
+
+    const newViews = config.views.map((v, i) =>
+      i === safeViewIndex
+        ? {
+            ...v,
+            groupBy: {
+              ...(v.groupBy || { property: 'status' }),
+              columns: updatedCols,
+            },
+          }
+        : v
+    );
+
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleSaveBoardConfig = (newGroupBy: BaseGroupBy, newColumnLimit: number) => {
+    const newViews = config.views.map((v, i) =>
+      i === safeViewIndex
+        ? {
+            ...v,
+            groupBy: newGroupBy,
+            columnLimit: newColumnLimit,
+          }
+        : v
+    );
+
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  // ----------------------------------------------------
   // Handlers for Filters
   // ----------------------------------------------------
   const handleFilterRulesChange = (newRules: BaseFilterRule[]) => {
@@ -371,6 +491,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         isFilterPopoverOpen={isFilterPopoverOpen}
         onToggleFilterPopover={() => setIsFilterPopoverOpen((o) => !o)}
         onOpenColumnsModal={() => setIsColumnsModalOpen(true)}
+        onOpenBoardConfigModal={() => setIsBoardConfigModalOpen(true)}
         availableProperties={vaultProperties}
         onSortChange={handleSortChange}
         onGroupByChange={handleGroupByChange}
@@ -405,6 +526,15 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         onResetColumns={() => {
           handleColumnReorder(['file.name']);
         }}
+      />
+
+      {/* 3b. Board Configuration Modal */}
+      <BaseBoardConfigModal
+        isOpen={isBoardConfigModalOpen}
+        onClose={() => setIsBoardConfigModalOpen(false)}
+        view={activeView}
+        availableProperties={vaultProperties}
+        onSave={handleSaveBoardConfig}
       />
 
       {/* 4. Filter Chips Bar (Active Filters) */}
@@ -499,6 +629,9 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
             view={activeView}
             onSelectNote={onSelectNote}
             onCellChange={onCellChange}
+            onRenameColumn={handleBoardRenameColumn}
+            onDeleteColumn={handleBoardDeleteColumn}
+            onAddColumn={handleBoardAddColumn}
           />
         ) : activeView.type === 'cards' ? (
           /* Cards View */

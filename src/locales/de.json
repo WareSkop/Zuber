@@ -2,6 +2,7 @@
   "common": {
     "save": "Speichern",
     "cancel": "Abbrechen",
+    "done": "Fertig",
     "delete": "Löschen",
     "rename": "Umbenennen",
     "copy": "Kopieren",
@@ -546,7 +547,20 @@
     "showFewerCards": "Weniger anzeigen",
     "noStatusColumn": "Kein Status",
     "columnLimit": "Karten-Limit pro Spalte",
-    "addCard": "Karte hinzufügen"
+    "addCard": "Karte hinzufügen",
+    "done": "Fertig",
+    "resetDefault": "Standard wiederherstellen",
+    "configureBoard": "Board konfigurieren",
+    "boardSettings": "Board-Einstellungen",
+    "groupByProperty": "Gruppieren nach",
+    "boardColumns": "Board-Spalten",
+    "addColumn": "Spalte hinzufügen",
+    "newColumn": "Neue Spalte",
+    "newColumnPlaceholder": "Spaltenname...",
+    "renameColumn": "Spalte umbenennen",
+    "deleteColumn": "Spalte entfernen",
+    "columnAdded": "Spalte hinzugefügt",
+    "columnDeleted": "Spalte entfernt"
   },
   "research": {
     "title": "Rechercheansicht",

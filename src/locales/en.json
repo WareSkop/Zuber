@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "done": "Done",
     "delete": "Delete",
     "rename": "Rename",
     "copy": "Copy",
@@ -546,7 +547,20 @@
     "showFewerCards": "Show less",
     "noStatusColumn": "No Status",
     "columnLimit": "Column card limit",
-    "addCard": "Add card"
+    "addCard": "Add card",
+    "done": "Done",
+    "resetDefault": "Reset to Default",
+    "configureBoard": "Configure Board",
+    "boardSettings": "Board Settings",
+    "groupByProperty": "Group by",
+    "boardColumns": "Board Columns",
+    "addColumn": "Add Column",
+    "newColumn": "New Column",
+    "newColumnPlaceholder": "Column name...",
+    "renameColumn": "Rename column",
+    "deleteColumn": "Remove column",
+    "columnAdded": "Column added",
+    "columnDeleted": "Column removed"
   },
   "research": {
     "title": "Research View",

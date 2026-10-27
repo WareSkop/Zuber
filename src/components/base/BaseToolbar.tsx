@@ -15,6 +15,7 @@ import {
   Edit2,
   Trash2,
   Check,
+  Settings,
 } from 'lucide-react';
 import type { BaseConfig, BaseSortRule } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
@@ -32,6 +33,7 @@ export interface BaseToolbarProps {
   isFilterPopoverOpen: boolean;
   onToggleFilterPopover: () => void;
   onOpenColumnsModal: () => void;
+  onOpenBoardConfigModal?: () => void;
   availableProperties: { key: string; label: string }[];
   onSortChange: (sort: BaseSortRule[] | undefined) => void;
   onGroupByChange: (groupBy: { property: string; direction?: 'asc' | 'desc' } | undefined) => void;
@@ -52,6 +54,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
   isFilterPopoverOpen,
   onToggleFilterPopover,
   onOpenColumnsModal,
+  onOpenBoardConfigModal,
   availableProperties,
   onSortChange,
   onGroupByChange,
@@ -495,16 +498,28 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
           )}
         </div>
 
-        {/* Columns Manager Toggle */}
-        <button
-          type="button"
-          className="base-toolbar-btn columns-btn"
-          onClick={onOpenColumnsModal}
-          title="Spalten einblenden / ausblenden"
-        >
-          <Columns size={14} />
-          <span className="btn-label-desktop">Spalten</span>
-        </button>
+        {/* Columns Manager Toggle (Table & Cards) */}
+        {activeView.type !== 'board' ? (
+          <button
+            type="button"
+            className="base-toolbar-btn columns-btn"
+            onClick={onOpenColumnsModal}
+            title="Spalten einblenden / ausblenden"
+          >
+            <Columns size={14} />
+            <span className="btn-label-desktop">Spalten</span>
+          </button>
+        ) : onOpenBoardConfigModal ? (
+          <button
+            type="button"
+            className="base-toolbar-btn board-config-btn"
+            onClick={onOpenBoardConfigModal}
+            title={t('base.configureBoard', 'Board konfigurieren')}
+          >
+            <Settings size={14} />
+            <span className="btn-label-desktop">{t('base.configureBoard', 'Board')}</span>
+          </button>
+        ) : null}
 
         {/* Editor Mode Toggle [ Ansicht | Quellcode ] */}
         <div className="base-editor-mode-toggle">

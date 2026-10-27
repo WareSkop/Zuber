@@ -1014,13 +1014,19 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
   - **Inline-Bearbeitung:** Klick in Datenzellen erlaubt direktes Editieren von Text, Zahlen und Checkboxen mit sofortiger Aktualisierung der Markdown-Frontmatter.
 - **Kartenansicht (`BaseCardsView.tsx`):**
   - Responsive Kacheln (`type: cards`) mit konfigurierbarer Eigenschaftsauswahl (`order`), Ordner-Pills, Tags und Frontmatter-Feldern.
-- **Interaktive Kanban-Board-Ansicht (`BaseBoardView.tsx`):**
+- **Interaktive Kanban-Board-Ansicht (`BaseBoardView.tsx`, `BaseBoardConfigModal.tsx`):**
   - Vollwertiges Board-Layout (`type: board`) mit horizontal scrollbaren Spalten, dynamisch gruppiert nach einer Frontmatter-Eigenschaft (z. B. `groupBy.property: status`).
   - **Konfigurierbare Spalten (`groupBy.columns`):** Unterstützt explizit geordnete Spalten (z. B. `['Open', 'inWork', 'Waiting', 'Finish']`) sowie eine Fallback-Spalte für Notizen ohne Status (`Kein Status`).
+  - **Visuelle Spaltenkonfiguration & Direktbearbeitung:**
+    - Spaltenname anklicken oder Auswahl im Dreipunkt-Menü (`⋮`) öffnet ein Inline-Eingabefeld zur sofortigen Umbenennung. Bestehende Notizen mit dem alten Statuswert werden dabei automatisch in ihrer Frontmatter aktualisiert.
+    - Spalten können über das Menü entfernt werden.
+    - Rechts neben der letzten Spalte befindet sich der Button `[ + Neue Spalte hinzufügen ]`, mit dem per Tastendruck neue Statusspalten angelegt werden.
+    - Toolbar-Button `⚙ Board` öffnet das Konfigurationsmodal (`BaseBoardConfigModal.tsx`) zur Auswahl der Gruppierungs-Property, Neuanordnung per Pfeiltasten und Festlegung des Kartenlimits pro Spalte.
   - **Kartenlimit & Progressives Nachladen (`columnLimit`):** Begrenzt die sichtbaren Karten pro Spalte (Standard: `10`), sortiert nach Änderungsdatum (`mtime` absteigend). Überschreitet eine Spalte das Limit, schaltet ein Button `⬇ {{count}} weitere anzeigen...` bzw. `⬆ Weniger anzeigen` die Ansicht um.
-  - **Flüssiges Drag & Drop mit Frontmatter-Write-Back:** Verschieben einer Karte zwischen Spalten aktualisiert das Ziel-Attribut (z. B. `status`) optimistisch im UI mit 0 ms Latenz und synchronisiert die Änderung persistent in die Frontmatter der Notiz (`api.saveNote` / `onCellChange`).
+  - **Flüssiges Drag & Drop mit Frontmatter-Write-Back:** Verschieben einer Karte zwischen Spalten aktualisiert das Ziel-Attribut (z. B. `status`) optimistisch im UI mit 0 ms Latenz und synchronisiert die Änderung persistent in die Frontmatter der Notiz (`api.saveNote` / `onCellChange`). Karten behalten ihre normale Deckkraft nach dem Loslassen bei (`BaseBoardCard.tsx`).
 - **Spalten-Manager-Modal (`BaseColumnsModal.tsx`):**
-  - Übersichtliche Checkliste aller im Vault gefundenen Eigenschaften zum Ein- und Ausblenden sowie Drag & Drop zur Sortierung.
+  - Vollständiges Theme-Redesign im dunklen Modus (`var(--bg-primary)`, `.base-column-item` mit `var(--bg-secondary)` und Akzent-Hover) und übersichtlicher Checkliste aller im Vault gefundenen Eigenschaften mit Drag & Drop-Reihenfolge.
+  - Vollständig lokalisierter „Fertig“-Button (`t('common.done')`).
 - **New Base Erstellungs-Wizard (`NewBaseModal.tsx`):**
   - Vollständiges UI-Redesign mit dunklem Backdrop (`rgba(0, 0, 0, 0.65)` mit Blur), solider Karte (`var(--bg-primary)` ohne Durchscheinen), einheitlichem Header, abgerundetem Schließen-Button und dedizierter Footer-Leiste.
   - Formular-Kacheln für den Quellenbereich mit 4 Optionen: Notizen im Ordner (`file.inFolder`), Notizen mit Tag (`file.hasTag`), verlinkte Notizen (`file.hasLink` mit Autocomplete-Suchfeld) oder alle Notizen.

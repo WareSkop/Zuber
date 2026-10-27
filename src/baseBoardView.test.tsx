@@ -8,6 +8,8 @@ import { parseBaseYaml, stringifyBaseYaml, type BaseConfig } from './base/baseCo
 import { executeBaseQuery, type BaseQueryResult, type BaseRecord } from './base/baseEngine';
 import { BaseBoardView } from './components/base/BaseBoardView';
 import { BaseToolbar } from './components/base/BaseToolbar';
+import { BaseBoardConfigModal } from './components/base/BaseBoardConfigModal';
+import { BaseColumnsModal } from './components/base/BaseColumnsModal';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -435,5 +437,218 @@ views:
     });
 
     expect(handleSwitchViewType).toHaveBeenCalledWith(0, 'board');
+  });
+
+  it('resets card opacity and is-dragging class on dragend', async () => {
+    const record = createMockRecord('Tasks/Story.md', 'Story.md', 'Sprint', ['feature'], { status: 'Open' });
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: { property: 'status', columns: ['Open', 'Finish'] },
+      columnLimit: 10,
+    };
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [viewConfig] },
+      view: viewConfig,
+      columns: ['file.name', 'status'],
+      columnDisplayNames: {},
+      records: [record],
+      groups: [],
+      totalCount: 1,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={viewConfig}
+          onSelectNote={vi.fn()}
+        />
+      );
+    });
+
+    const card = container.querySelector('.base-board-card') as HTMLDivElement;
+    expect(card).toBeTruthy();
+
+    // Start drag
+    await act(async () => {
+      card.dispatchEvent(new Event('dragstart', { bubbles: true }));
+    });
+    expect(card.classList.contains('is-dragging')).toBe(true);
+    expect(card.style.opacity).toBe('0.5');
+
+    // End drag (dragend)
+    await act(async () => {
+      card.dispatchEvent(new Event('dragend', { bubbles: true }));
+    });
+    expect(card.classList.contains('is-dragging')).toBe(false);
+    expect(card.style.opacity).toBe('1');
+  });
+
+  it('supports inline column renaming, adding new column, and deleting column', async () => {
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: { property: 'status', columns: ['Open', 'inWork', 'Finish'] },
+      columnLimit: 10,
+    };
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [viewConfig] },
+      view: viewConfig,
+      columns: ['file.name'],
+      columnDisplayNames: {},
+      records: [],
+      groups: [],
+      totalCount: 0,
+    };
+
+    const handleRenameColumn = vi.fn();
+    const handleDeleteColumn = vi.fn();
+    const handleAddColumn = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={viewConfig}
+          onSelectNote={vi.fn()}
+          onRenameColumn={handleRenameColumn}
+          onDeleteColumn={handleDeleteColumn}
+          onAddColumn={handleAddColumn}
+        />
+      );
+    });
+
+    // 1. Rename column "Open" -> "Offen"
+    const openTitle = container.querySelector('.base-board-column-title.editable') as HTMLSpanElement;
+    expect(openTitle).toBeTruthy();
+    expect(openTitle.textContent).toBe('Open');
+
+    await act(async () => {
+      openTitle.click();
+    });
+
+    const renameInput = container.querySelector('.base-board-col-rename-input') as HTMLInputElement;
+    expect(renameInput).toBeTruthy();
+    expect(renameInput.value).toBe('Open');
+
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      nativeSetter?.call(renameInput, 'Offen');
+      renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const confirmBtn = container.querySelector('.base-board-col-confirm-btn') as HTMLButtonElement;
+    await act(async () => {
+      confirmBtn.click();
+    });
+    expect(handleRenameColumn).toHaveBeenCalledWith('Open', 'Offen');
+
+    // 2. Add new column via "+ Neue Spalte hinzufügen"
+    const addColBtn = container.querySelector('.base-board-add-column-btn') as HTMLButtonElement;
+    expect(addColBtn).toBeTruthy();
+    await act(async () => {
+      addColBtn.click();
+    });
+
+    const addColInput = container.querySelector('.add-column-input') as HTMLInputElement;
+    expect(addColInput).toBeTruthy();
+
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      nativeSetter?.call(addColInput, 'Prüfung');
+      addColInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const saveColBtn = container.querySelector('.add-col-actions .primary-btn') as HTMLButtonElement;
+    await act(async () => {
+      saveColBtn.click();
+    });
+    expect(handleAddColumn).toHaveBeenCalledWith('Prüfung');
+
+    // 3. Delete column via header menu
+    const menuTrigger = container.querySelector('.base-board-col-menu-trigger') as HTMLButtonElement;
+    expect(menuTrigger).toBeTruthy();
+    await act(async () => {
+      menuTrigger.click();
+    });
+
+    const deleteBtn = container.querySelector('.col-dropdown .base-dropdown-item.danger') as HTMLButtonElement;
+    expect(deleteBtn).toBeTruthy();
+    await act(async () => {
+      deleteBtn.click();
+    });
+    expect(handleDeleteColumn).toHaveBeenCalledWith('Open');
+  });
+
+  it('renders BaseBoardConfigModal with columns reordering and saves configuration', async () => {
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: { property: 'status', columns: ['Open', 'inWork', 'Finish'] },
+      columnLimit: 10,
+    };
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <BaseBoardConfigModal
+          isOpen={true}
+          onClose={handleClose}
+          view={viewConfig}
+          availableProperties={[{ key: 'status', label: 'Status' }, { key: 'priority', label: 'Priority' }]}
+          onSave={handleSave}
+        />
+      );
+    });
+
+    const rows = container.querySelectorAll('.base-board-column-config-row');
+    expect(rows.length).toBe(3);
+
+    // Save form
+    const submitBtn = container.querySelector('.base-board-config-modal .primary-btn') as HTMLButtonElement;
+    await act(async () => {
+      submitBtn.click();
+    });
+
+    expect(handleSave).toHaveBeenCalledWith(
+      { property: 'status', columns: ['Open', 'inWork', 'Finish'] },
+      10
+    );
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it('renders BaseColumnsModal with dark theme classes and localized Fertig button', async () => {
+    const handleClose = vi.fn();
+    const handleReset = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <BaseColumnsModal
+          isOpen={true}
+          onClose={handleClose}
+          order={['file.name', 'status']}
+          availableProperties={[{ key: 'status', label: 'Status' }]}
+          displayNames={{}}
+          onReorder={vi.fn()}
+          onToggleColumn={vi.fn()}
+          onResetColumns={handleReset}
+        />
+      );
+    });
+
+    expect(container.querySelector('.base-modal-container')).toBeTruthy();
+    expect(container.querySelector('.base-columns-modal')).toBeTruthy();
+    expect(container.querySelector('.base-modal-close-btn')).toBeTruthy();
+
+    const columnItems = container.querySelectorAll('.base-column-item');
+    expect(columnItems.length).toBeGreaterThan(0);
+
+    // Done button should not show literal 'common.done'
+    const doneBtn = container.querySelector('.base-modal-footer .primary-btn') as HTMLButtonElement;
+    expect(doneBtn).toBeTruthy();
+    expect(doneBtn.textContent).not.toBe('common.done');
+    expect(doneBtn.textContent).toMatch(/(Fertig|Done)/i);
   });
 });

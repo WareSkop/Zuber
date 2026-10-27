@@ -1,4 +1,9 @@
 ### Added
+- Visuelle Konfiguration für Board-Spaltenwerte (`BaseBoardView.tsx`, `BaseBoardConfigModal.tsx`, `BaseToolbar.tsx`, `BaseEditor.tsx`):
+  - Direktes Bearbeiten im Spaltenkopf: Klick auf den Spaltennamen oder Auswahl im `⋮`-Menü erlaubt das direkte Umbenennen des Statuswerts inklusive automatischer Aktualisierung bestehender Notizen.
+  - Spalte entfernen: Option im `⋮`-Menü des Spaltenkopfs zum Entfernen von Spalten aus `groupBy.columns`.
+  - Button „+ Neue Spalte hinzufügen“ ganz rechts auf dem Board zum schnellen Erstellen neuer Spalten per Klick.
+  - Dialog „Board konfigurieren“ (`BaseBoardConfigModal.tsx`): Erreichbar über `⚙ Board`-Button in der Toolbar zur Auswahl der Gruppierungseigenschaft, Sortierung/Umbenennung/Löschung aller Spalten und Festlegung des Kartenlimits pro Spalte.
 - Interaktive Kanban-Board-Ansicht (`type: board`) für Obsidian Bases (`BaseBoardView.tsx`, `BaseEditor.tsx`, `BaseEmbedWidget.tsx`, `BaseToolbar.tsx`):
   - Unterstützung für `type: board` mit dynamischer Spaltengruppierung nach Frontmatter-Eigenschaften (z. B. `groupBy.property: status`).
   - Konfigurierbare Spalten (`groupBy.columns`, z. B. `['Open', 'inWork', 'Waiting', 'Finish']`) sowie automatischer Fallback für Notizen ohne Status (`Kein Status`).
@@ -149,6 +154,13 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Behebung ausgegrauter Karten nach Drag & Drop im Kanban-Board (`BaseBoardCard.tsx`, `BaseBoardView.tsx`):
+  - Sauberes Zurücksetzen von `opacity: 1` und Entfernen der CSS-Klasse `.is-dragging` über `onDragEnd` auf Kartenebene.
+  - Sofortiges Zurücksetzen von `draggingPath = null` im `onDrop`-Handler der Zielspalte und über einen globalen `dragend`-Listener.
+- Theme-Anpassung & Lokalisierung für Spalten-Manager (`BaseColumnsModal.tsx`, `src/styles.css`):
+  - Theme-konforme Spalten-Zeilen (`var(--bg-secondary)` mit `var(--border-color)` und Akzent-Hover).
+  - Gestylter Schließen-Button analog zu den anderen Modals.
+  - Internationalisierung für „Fertig“-Button (`t('common.done')`) und „Standard wiederherstellen“ (`t('base.resetDefault')`).
 - Umfassendes UI-Redesign des „Create Base“-Modals (`NewBaseModal.tsx`, `src/styles.css`):
   - Dunkles, gleichmäßiges Backdrop-Overlay (`background: rgba(0, 0, 0, 0.65)` mit `backdrop-filter: blur(4px)`).
   - Solide Modal-Karte (`var(--bg-primary)`) mit abgerundetem Rahmen (`12px`), Schatten (`box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5)`) und keinem Durchscheinen des Hintergrunds.

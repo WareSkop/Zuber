@@ -38,6 +38,12 @@ export interface BaseBoardColumnConfig {
   color?: string; // Optional accent color badge for the column header
 }
 
+export interface BaseGroupBy {
+  property: string;
+  direction?: 'asc' | 'desc';
+  columns?: (string | BaseBoardColumnConfig)[];
+}
+
 export interface BaseViewConfig {
   type: 'table' | 'cards' | 'board' | 'list';
   name: string;
@@ -50,11 +56,7 @@ export interface BaseViewConfig {
   };
   order?: string[];
   sort?: BaseSortRule[];
-  groupBy?: {
-    property: string;
-    direction?: 'asc' | 'desc';
-    columns?: (string | BaseBoardColumnConfig)[];
-  };
+  groupBy?: BaseGroupBy;
   columnSize?: Record<string, number>;
   [key: string]: any;
 }

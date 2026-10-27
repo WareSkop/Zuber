@@ -93,25 +93,30 @@ export const BaseColumnsModal: React.FC<BaseColumnsModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="modal-container base-columns-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-cluster">
-            <Columns size={18} className="modal-icon" />
+    <div className="modal-backdrop base-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal-container base-modal-container base-columns-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header base-modal-header">
+          <div className="modal-title-cluster base-modal-title">
+            <Columns size={18} className="modal-icon modal-title-icon" />
             <h2 className="modal-title">{t('base.manageColumns') || 'Spalten verwalten'}</h2>
           </div>
-          <button type="button" className="base-icon-btn close-btn" onClick={onClose}>
+          <button
+            type="button"
+            className="base-modal-close-btn close-btn"
+            onClick={onClose}
+            aria-label={t('common.close', 'Schließen')}
+          >
             <X size={16} />
           </button>
         </div>
 
-        <div className="modal-body scroller">
+        <div className="modal-body base-modal-body scroller">
           <p className="base-modal-hint">
             {t('base.columnsHint') ||
               'Wähle aus, welche Spalten in der Tabelle sichtbar sein sollen und ziehe sie per Drag & Drop in die gewünschte Reihenfolge:'}
           </p>
 
-          <div className="base-columns-checklist">
+          <div className="base-columns-checklist scroller">
             {allColumnsList.map((col, idx) => {
               const isOrderable = idx < order.length;
 
@@ -154,13 +159,13 @@ export const BaseColumnsModal: React.FC<BaseColumnsModalProps> = ({
           </div>
         </div>
 
-        <div className="modal-footer">
+        <div className="modal-footer base-modal-footer">
           <button type="button" className="base-btn secondary-btn" onClick={onResetColumns}>
             <RotateCcw size={14} />
-            <span>{t('base.resetColumns') || 'Standard wiederherstellen'}</span>
+            <span>{t('base.resetDefault', 'Standard wiederherstellen')}</span>
           </button>
           <button type="button" className="base-btn primary-btn" onClick={onClose}>
-            <span>{t('common.done') || 'Fertig'}</span>
+            <span>{t('common.done', 'Fertig')}</span>
           </button>
         </div>
       </div>
