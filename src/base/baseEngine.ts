@@ -976,18 +976,20 @@ export function getPropertyValue(record: BaseRecord, propertyKey: string): any {
     return record.formulas[fKey] ?? record[propertyKey];
   }
 
+  const props = record.properties || {};
+
   if (propertyKey.startsWith('note.')) {
     const nKey = propertyKey.replace('note.', '');
-    return record.properties[nKey] ?? record.properties[propertyKey] ?? record[nKey] ?? record[propertyKey];
+    return props[nKey] ?? props[propertyKey] ?? record[nKey] ?? record[propertyKey];
   }
 
-  if (propertyKey in record.properties) {
-    return record.properties[propertyKey];
+  if (propertyKey in props) {
+    return props[propertyKey];
   }
 
   // Flexible property access fallback (e.g. resolve both IP and note.IP)
-  if (`note.${propertyKey}` in record.properties) {
-    return record.properties[`note.${propertyKey}`];
+  if (`note.${propertyKey}` in props) {
+    return props[`note.${propertyKey}`];
   }
 
   return record[propertyKey];

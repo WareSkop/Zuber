@@ -34,6 +34,7 @@ import { BaseToolbar } from './base/BaseToolbar';
 import { BaseFilterPopover } from './base/BaseFilterPopover';
 import { BaseColumnsModal } from './base/BaseColumnsModal';
 import { BaseTableView } from './base/BaseTableView';
+import { BaseCardsView } from './base/BaseCardsView';
 import { useTranslation } from '../i18n';
 
 export interface BaseEditorProps {
@@ -198,6 +199,14 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
     setActiveViewIndex(Math.max(0, idx - 1));
   };
 
+  const handleSwitchViewType = (idx: number, newType: 'table' | 'cards') => {
+    const newViews = config.views.map((v, i) => (i === idx ? { ...v, type: newType } : v));
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
   // ----------------------------------------------------
   // Handlers for Filters
   // ----------------------------------------------------
@@ -335,6 +344,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         onRenameView={handleRenameView}
         onDuplicateView={handleDuplicateView}
         onDeleteView={handleDeleteView}
+        onSwitchViewType={handleSwitchViewType}
         activeFilterCount={activeFilterRules.length}
         isFilterPopoverOpen={isFilterPopoverOpen}
         onToggleFilterPopover={() => setIsFilterPopoverOpen((o) => !o)}
@@ -462,73 +472,11 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
           </div>
         ) : activeView.type === 'cards' ? (
           /* Cards View */
-          <div className="base-cards-container scroller">
-            {queryResult.groups.map((group) => (
-              <div key={group.key} className="base-group-section">
-                {queryResult.groups.length > 1 && (
-                  <div className="base-group-header">
-                    <span className="base-group-title">{group.label}</span>
-                    <span className="base-group-count">({group.records.length})</span>
-                  </div>
-                )}
-                <div className="base-cards-grid">
-                  {group.records.map((rec) => (
-                    <div key={rec.file.path} className="base-card">
-                      <div className="base-card-top">
-                        <div
-                          className="base-card-title-link"
-                          onClick={() => onSelectNote(rec.file.path)}
-                          title={rec.file.path}
-                        >
-                          <FileText size={15} className="base-card-icon" />
-                          <span className="base-card-title">{rec.file.name.replace(/\.md$/i, '')}</span>
-                        </div>
-                        {rec.file.folder && (
-                          <span className="base-card-folder" title={rec.file.folder}>
-                            {rec.file.folder}
-                          </span>
-                        )}
-                      </div>
-
-                      {rec.tags.length > 0 && (
-                        <div className="base-card-tags">
-                          {rec.tags.map((tg) => (
-                            <span key={tg} className="base-tag-pill">
-                              #{tg}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="base-card-props">
-                        {queryResult.columns
-                          .filter((c) => c !== 'file.name' && c !== 'tags')
-                          .map((col) => {
-                            const val = getPropertyValue(rec, col);
-                            if (val === undefined || val === null || val === '') return null;
-                            const dName = queryResult.columnDisplayNames[col] || col;
-                            return (
-                              <div key={col} className="base-card-prop-row">
-                                <span className="base-prop-key">{dName}:</span>
-                                <span className="base-prop-val">
-                                  {typeof val === 'boolean'
-                                    ? val
-                                      ? '✓'
-                                      : '✗'
-                                    : Array.isArray(val)
-                                    ? val.join(', ')
-                                    : String(val)}
-                                </span>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <BaseCardsView
+            queryResult={queryResult}
+            view={activeView}
+            onSelectNote={onSelectNote}
+          />
         ) : (
           /* Table View */
           <BaseTableView

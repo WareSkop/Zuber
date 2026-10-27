@@ -26,6 +26,7 @@ export interface BaseToolbarProps {
   onRenameView: (index: number, newName: string) => void;
   onDuplicateView: (index: number) => void;
   onDeleteView: (index: number) => void;
+  onSwitchViewType?: (index: number, newType: 'table' | 'cards') => void;
   activeFilterCount: number;
   isFilterPopoverOpen: boolean;
   onToggleFilterPopover: () => void;
@@ -45,6 +46,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
   onRenameView,
   onDuplicateView,
   onDeleteView,
+  onSwitchViewType,
   activeFilterCount,
   isFilterPopoverOpen,
   onToggleFilterPopover,
@@ -73,7 +75,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
 
   const toolbarRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdowns on outside click
+  // Close dropdowns on outside click or Escape key
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
@@ -83,8 +85,21 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
         setIsGroupDropdownOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsAddViewOpen(false);
+        setTabMenuIndex(null);
+        setIsSortDropdownOpen(false);
+        setIsGroupDropdownOpen(false);
+        setEditingTabNameIndex(null);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const activeView = config.views[activeViewIndex] || config.views[0];
@@ -104,9 +119,19 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
     setEditingTabNameIndex(null);
   };
 
+  const handleOpenAddView = () => {
+    const defaultPrefix = t('base.typeTable') === 'Table' ? 'View' : 'Ansicht';
+    setNewViewName(`${defaultPrefix} ${config.views.length + 1}`);
+    setNewViewType('table');
+    setIsAddViewOpen((o) => !o);
+    setTabMenuIndex(null);
+  };
+
   const handleCreateViewSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalName = newViewName.trim() || (newViewType === 'cards' ? 'Cards' : 'Table');
+    const defaultPrefix = t('base.typeTable') === 'Table' ? 'View' : 'Ansicht';
+    const fallbackName = `${defaultPrefix} ${config.views.length + 1}`;
+    const finalName = newViewName.trim() || fallbackName;
     onAddView(finalName, newViewType);
     setNewViewName('');
     setIsAddViewOpen(false);
@@ -173,15 +198,48 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                 </button>
 
                 {tabMenuIndex === idx && (
-                  <div className="base-dropdown-menu tab-dropdown">
+                  <div
+                    className="base-dropdown-menu tab-dropdown"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Switch View Type */}
+                    {v.type === 'cards' ? (
+                      <button
+                        type="button"
+                        className="base-dropdown-item"
+                        onClick={() => {
+                          setTabMenuIndex(null);
+                          onSwitchViewType?.(idx, 'table');
+                        }}
+                      >
+                        <TableIcon size={13} />
+                        <span>{t('base.switchToTable') || 'Zu Tabellenansicht wechseln'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="base-dropdown-item"
+                        onClick={() => {
+                          setTabMenuIndex(null);
+                          onSwitchViewType?.(idx, 'cards');
+                        }}
+                      >
+                        <LayoutGrid size={13} />
+                        <span>{t('base.switchToCards') || 'Zu Kartenansicht wechseln'}</span>
+                      </button>
+                    )}
+
+                    {/* Rename View */}
                     <button
                       type="button"
                       className="base-dropdown-item"
                       onClick={() => handleStartRename(idx, v.name)}
                     >
                       <Edit2 size={13} />
-                      <span>{t('base.rename') || 'Umbenennen'}</span>
+                      <span>{t('base.renameView') || t('base.rename') || 'Umbenennen'}</span>
                     </button>
+
+                    {/* Duplicate View */}
                     <button
                       type="button"
                       className="base-dropdown-item"
@@ -191,8 +249,10 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                       }}
                     >
                       <Copy size={13} />
-                      <span>{t('base.duplicate') || 'Duplizieren'}</span>
+                      <span>{t('base.duplicateView') || t('base.duplicate') || 'Duplizieren'}</span>
                     </button>
+
+                    {/* Delete View */}
                     {config.views.length > 1 && (
                       <button
                         type="button"
@@ -203,7 +263,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                         }}
                       >
                         <Trash2 size={13} />
-                        <span>{t('base.delete') || 'Ansicht löschen'}</span>
+                        <span>{t('base.deleteView') || t('base.delete') || 'Ansicht löschen'}</span>
                       </button>
                     )}
                   </div>
@@ -216,29 +276,33 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
           <div className="base-add-view-wrapper">
             <button
               type="button"
-              className="base-add-tab-btn"
-              onClick={() => setIsAddViewOpen((o) => !o)}
-              title="Neue Ansicht hinzufügen"
+              className={`base-add-tab-btn ${isAddViewOpen ? 'active' : ''}`}
+              onClick={handleOpenAddView}
+              title={t('base.addView') || 'Neue Ansicht hinzufügen'}
             >
               <Plus size={14} />
-              <span className="btn-label-desktop">Ansicht</span>
+              <span className="btn-label-desktop">{t('base.addView') || 'Ansicht'}</span>
             </button>
 
             {isAddViewOpen && (
-              <form className="base-dropdown-menu add-view-dropdown" onSubmit={handleCreateViewSubmit}>
+              <form
+                className="base-dropdown-menu add-view-dropdown"
+                onSubmit={handleCreateViewSubmit}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="add-view-field">
-                  <label className="add-view-label">Name der Ansicht</label>
+                  <label className="add-view-label">{t('base.viewName') || 'Name der Ansicht'}</label>
                   <input
                     type="text"
                     className="base-input"
-                    placeholder="z. B. Aktiv, Tabelle 2..."
+                    placeholder={t('base.viewName') || 'Name der Ansicht'}
                     value={newViewName}
                     autoFocus
                     onChange={(e) => setNewViewName(e.target.value)}
                   />
                 </div>
                 <div className="add-view-field">
-                  <label className="add-view-label">Layout-Typ</label>
+                  <label className="add-view-label">{t('base.viewType') || 'Layout-Typ'}</label>
                   <div className="add-view-types">
                     <button
                       type="button"
@@ -246,7 +310,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                       onClick={() => setNewViewType('table')}
                     >
                       <TableIcon size={14} />
-                      <span>Tabelle</span>
+                      <span>{t('base.typeTable') || 'Tabelle'}</span>
                     </button>
                     <button
                       type="button"
@@ -254,13 +318,22 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                       onClick={() => setNewViewType('cards')}
                     >
                       <LayoutGrid size={14} />
-                      <span>Karten</span>
+                      <span>{t('base.typeCards') || 'Karten'}</span>
                     </button>
                   </div>
                 </div>
-                <button type="submit" className="base-btn primary-btn add-btn-submit">
-                  <span>Hinzufügen</span>
-                </button>
+                <div className="add-view-actions">
+                  <button
+                    type="button"
+                    className="base-btn secondary-btn"
+                    onClick={() => setIsAddViewOpen(false)}
+                  >
+                    {t('base.cancel') || 'Abbrechen'}
+                  </button>
+                  <button type="submit" className="base-btn primary-btn add-btn-submit">
+                    {t('base.create') || 'Erstellen'}
+                  </button>
+                </div>
               </form>
             )}
           </div>

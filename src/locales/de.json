@@ -527,7 +527,18 @@
     "scopeLinkedTo": "Notizen, die auf eine Seite verlinken...",
     "targetNotePlaceholder": "Zielnotiz auswählen...",
     "createBase": "Base erstellen",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "create": "Erstellen",
+    "addView": "Ansicht hinzufügen",
+    "viewName": "Name der Ansicht",
+    "viewType": "Typ",
+    "typeTable": "Tabelle",
+    "typeCards": "Karten",
+    "switchToCards": "Zu Kartenansicht wechseln",
+    "switchToTable": "Zu Tabellenansicht wechseln",
+    "renameView": "Umbenennen",
+    "duplicateView": "Duplizieren",
+    "deleteView": "Ansicht löschen"
   },
   "research": {
     "title": "Rechercheansicht",

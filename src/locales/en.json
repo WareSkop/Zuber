@@ -527,7 +527,18 @@
     "scopeLinkedTo": "Notes linking to a page...",
     "targetNotePlaceholder": "Select target note...",
     "createBase": "Create Base",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "create": "Create",
+    "addView": "Add view",
+    "viewName": "View name",
+    "viewType": "Type",
+    "typeTable": "Table",
+    "typeCards": "Cards",
+    "switchToCards": "Switch to cards view",
+    "switchToTable": "Switch to table view",
+    "renameView": "Rename",
+    "duplicateView": "Duplicate",
+    "deleteView": "Delete view"
   },
   "research": {
     "title": "Research View",
