@@ -8586,6 +8586,828 @@ input:checked + .slider:before {
 }
 
 /* ==========================================================================
+   Base Editor GUI & Visual Configuration Toolbar
+   ========================================================================== */
+
+.base-toolbar-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: var(--pane-toolbar-height, 44px);
+  min-height: var(--pane-toolbar-height, 44px);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  gap: 8px;
+  user-select: none;
+}
+
+.base-toolbar-views-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.base-toolbar-views-group::-webkit-scrollbar {
+  display: none;
+}
+
+.base-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.base-tab-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.base-tab-wrapper:hover {
+  background: var(--bg-hover);
+}
+
+.base-tab-wrapper.active {
+  background: var(--bg-elevated);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.base-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.base-tab-wrapper.active .base-tab-btn {
+  color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
+.base-tab-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.base-tab-wrapper:hover .base-tab-menu-trigger,
+.base-tab-wrapper.active .base-tab-menu-trigger {
+  opacity: 0.8;
+}
+
+.base-tab-menu-trigger:hover {
+  opacity: 1;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.base-tab-rename-inline {
+  padding: 2px 4px;
+}
+
+.base-tab-rename-input {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--accent-color, #d4af37);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  outline: none;
+  width: 110px;
+}
+
+.base-add-view-wrapper {
+  position: relative;
+}
+
+.base-add-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.base-add-tab-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-color, #d4af37);
+  background: var(--bg-hover);
+}
+
+.base-toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.base-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.base-toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.base-toolbar-btn.active {
+  background: var(--bg-active);
+  color: var(--accent-color, #d4af37);
+  border-color: var(--accent-color, #d4af37);
+}
+
+.base-toolbar-btn.has-filters {
+  border-color: var(--accent-color, #d4af37);
+  color: var(--accent-color, #d4af37);
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.base-badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: var(--accent-color, #d4af37);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.base-dropdown-wrapper {
+  position: relative;
+}
+
+.base-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 120;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.base-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.base-dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.base-dropdown-item.selected {
+  color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
+.base-dropdown-item.danger {
+  color: #ef4444;
+}
+
+.base-dropdown-item.danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.sort-dir-badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+/* Add View Dropdown Form */
+.add-view-dropdown {
+  width: 220px;
+  padding: 10px;
+  gap: 8px;
+  left: 0;
+  right: auto;
+}
+
+.add-view-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.add-view-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.add-view-types {
+  display: flex;
+  gap: 4px;
+}
+
+.add-view-types .type-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.add-view-types .type-btn.active {
+  background: var(--bg-active);
+  color: var(--accent-color, #d4af37);
+  border-color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
+.add-btn-submit {
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px;
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Filter Chips Bar
+   ========================================================================== */
+
+.base-filter-chips-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.chips-bar-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.chips-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.base-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.chip-icon {
+  color: var(--accent-color, #d4af37);
+  flex-shrink: 0;
+}
+
+.chip-text {
+  font-weight: 500;
+}
+
+.chip-remove-btn {
+  background: none;
+  border: none;
+  padding: 1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  border-radius: 50%;
+  transition: all 0.1s ease;
+}
+
+.chip-remove-btn:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+/* ==========================================================================
+   Base Filter Popover
+   ========================================================================== */
+
+.base-filter-popover {
+  position: absolute;
+  top: 50px;
+  right: 140px;
+  z-index: 130;
+  width: 540px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+}
+
+.base-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.base-popover-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.base-popover-body {
+  padding: 12px 14px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.base-popover-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 16px 0;
+}
+
+.base-filter-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.base-filter-rule-row {
+  display: grid;
+  grid-template-columns: 180px 140px 1fr 30px;
+  gap: 6px;
+  align-items: center;
+}
+
+.base-filter-select,
+.base-filter-input {
+  width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.base-filter-select:focus,
+.base-filter-input:focus {
+  border-color: var(--accent-color, #d4af37);
+}
+
+.base-filter-val-placeholder {
+  color: var(--text-muted);
+  text-align: center;
+  display: block;
+}
+
+.base-popover-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-start;
+}
+
+.add-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.add-filter-btn:hover {
+  border-color: var(--accent-color, #d4af37);
+  background: var(--bg-hover);
+}
+
+/* ==========================================================================
+   Base Table Interactive Enhancements (Resize, DnD, Header Menus)
+   ========================================================================== */
+
+.base-table th {
+  position: relative;
+  user-select: none;
+}
+
+.base-table th.is-dragging {
+  opacity: 0.35;
+}
+
+.base-table th.drop-target {
+  border-left: 2px solid var(--accent-color, #d4af37) !important;
+}
+
+.base-th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.base-th-title {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.base-th-title:hover {
+  color: var(--text-primary);
+}
+
+.base-sort-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent-color, #d4af37);
+}
+
+.base-th-menu-wrapper {
+  position: relative;
+  margin-left: auto;
+}
+
+.base-th-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.base-table th:hover .base-th-menu-btn {
+  opacity: 0.8;
+}
+
+.base-th-menu-btn:hover {
+  opacity: 1 !important;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.base-th-rename-input {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--accent-color, #d4af37);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 11px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 15;
+}
+
+.col-resize-handle:hover,
+.col-resize-handle:active {
+  background: var(--accent-color, #d4af37);
+}
+
+/* + Add Column Header Button */
+.base-add-column-th {
+  width: 36px;
+  min-width: 36px;
+  padding: 4px !important;
+  text-align: center;
+}
+
+.base-add-column-wrapper {
+  position: relative;
+}
+
+.base-add-col-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.base-add-col-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-color, #d4af37);
+  background: var(--bg-hover);
+}
+
+.add-column-dropdown {
+  right: 0;
+  left: auto;
+  min-width: 190px;
+}
+
+.dropdown-header-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 8px;
+}
+
+.dropdown-empty-item {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  padding: 8px;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Base Columns Management Modal
+   ========================================================================== */
+
+.base-columns-modal {
+  width: 440px;
+}
+
+.base-modal-hint {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.base-columns-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.base-column-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.15s ease;
+}
+
+.base-column-item.visible {
+  border-color: var(--border-color);
+}
+
+.base-column-item.dragging {
+  opacity: 0.4;
+}
+
+.base-column-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.base-col-drag-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+}
+
+.base-col-drag-handle:active {
+  cursor: grabbing;
+}
+
+.base-col-drag-spacer {
+  width: 14px;
+}
+
+.base-checkbox-toggle {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.base-checkbox-toggle .checked-icon {
+  color: var(--accent-color, #d4af37);
+}
+
+.base-col-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.base-col-raw-key {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   New Base Creation Wizard Modal
+   ========================================================================== */
+
+.new-base-modal {
+  width: 480px;
+}
+
+.radio-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.radio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.radio-card:hover {
+  background: var(--bg-hover);
+}
+
+.radio-card.selected {
+  border-color: var(--accent-color, #d4af37);
+  background: var(--bg-active);
+}
+
+.radio-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.radio-card-header .radio-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.radio-card .sub-select {
+  margin-left: 24px;
+  font-size: 12px;
+}
+
+.base-view-type-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.type-option-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.type-option-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.type-option-btn.active {
+  border-color: var(--accent-color, #d4af37);
+  background: var(--bg-active);
+  color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
+
+/* ==========================================================================
    Template Selection Modal
    ========================================================================== */
 .template-modal-overlay {

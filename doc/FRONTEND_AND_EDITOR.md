@@ -989,13 +989,33 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
   - Formeln: Berechnungen mit Feldern und Datumsangaben (`(date(deadline) - today()) / '1 day'`), `round()`, mathematische Funktionen.
   - Sortierung & Gruppierung: Automatische Einteilung in Sektionen (nach Ordner oder Properties wie Status/Team) und Spaltensortierung.
 
-### 29.2 Standalone Base-Editor (`BaseEditor.tsx`)
+### 29.2 Standalone Base-Editor & Visuelle Konfiguration (`BaseEditor.tsx`, `BaseToolbar.tsx`, `baseConfig.ts`)
 - Wird geöffnet, wenn eine `.base`-Datei im Dateibaum angeklickt wird.
-- Segment-Umschalter zwischen **Visueller Ansicht** (`BaseView.tsx`) und **YAML-Quelltext**.
-- **Tabelle & Karten:** Umschalten zwischen Tabellenansicht und Kartenraster.
-- **Interaktivität:**
-  - Klick auf den Notiztitel öffnet die entsprechende Markdown-Notiz.
-  - Inline-Bearbeitung von Eigenschaften direkt in den Tabellenzellen (Text, Zahlen, Checkboxen) mit automatischer Speicherung in den Frontmatter-Properties der jeweiligen Datei.
+- **Bidirektionale Synchronisation (`src/base/baseConfig.ts`):**
+  - Verluste-freie Serialisierung und Deserialisierung zwischen visueller Benutzeroberfläche und Obsidian-kompatiblem YAML (`parseBaseYaml`, `stringifyBaseYaml`). Unbekannte benutzerdefinierte YAML-Felder bleiben bei Änderungen erhalten (Graceful Preservation).
+  - Automatisches, debounctes Speichern (500 ms) nach visuellen Anpassungen.
+- **Interaktive Toolbar (`BaseToolbar.tsx`):**
+  - **Ansichten-Tabs:** Wechsel zwischen definierten Ansichten (`views`), Hinzufügen neuer Ansichten (`+ Ansicht`), 3-Punkte-Kontextmenü für jede Ansicht (Umbenennen, Duplizieren, Löschen).
+  - **Filter-Button:** Zeigt Badge mit Anzahl aktiver Filterregeln und öffnet das visuelle Filter-Popover.
+  - **Filter-Chips-Leiste:** Zeigt aktive Filterbedingungen übersichtlich als Chips unterhalb der Toolbar mit Schnell-Löschen (`×`).
+  - **Sortierung & Gruppierung:** Schnellauswahl der Sortierspalte mit Auf-/Absteigend-Umschalter sowie Gruppierung nach Frontmatter-Eigenschaften.
+  - **Spalten-Manager-Button:** Öffnet den Spalten-Manager (`BaseColumnsModal.tsx`).
+  - **Modus-Umschalter:** Nahtloser Wechsel zwischen **Visueller Ansicht** und **YAML-Quelltext**.
+- **Visueller Filter-Builder (`BaseFilterPopover.tsx`):**
+  - Popover zur intuitiven Konfiguration von Filterregeln (`file.folder`, `file.hasTag`, `file.ext` und benutzerdefinierte Frontmatter-Properties).
+  - Dynamische Operatoren: `==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `startsWith`, `!isEmpty`, `isEmpty`.
+  - Dropdowns für Ordner und Tags direkt aus dem Vault-Index extrahiert.
+- **Interaktive Tabellenansicht (`BaseTableView.tsx`):**
+  - **Spaltenbreiten anpassen:** Drag-Handles (`.col-resize-handle`) am rechten Rand jeder Spaltenüberschrift mit Live-Feedback und Speicherung in `columnSize`.
+  - **Spalten-Reihenfolge:** Spaltenüberschriften können per Drag & Drop verschoben werden.
+  - **Spalten-Kontextmenü:** Schnellaktionen für Anzeigename umbenennen, Auf-/Absteigend sortieren und Spalte ausblenden.
+  - **`+` Spalten-Hinzufügen-Dropdown:** Schnelles Einblenden weiterer im Vault vorhandener Frontmatter-Properties.
+  - **Inline-Bearbeitung:** Klick in Datenzellen erlaubt direktes Editieren von Text, Zahlen und Checkboxen mit sofortiger Aktualisierung der Markdown-Frontmatter.
+- **Spalten-Manager-Modal (`BaseColumnsModal.tsx`):**
+  - Übersichtliche Checkliste aller im Vault gefundenen Eigenschaften zum Ein- und Ausblenden sowie Drag & Drop zur Sortierung.
+- **New Base Erstellungs-Wizard (`NewBaseModal.tsx`):**
+  - Dialog beim Anlegen einer `.base`-Datei: Name, Zielordner, Quellenbereich (Notizen im Ordner, Notizen mit Tag oder alle Notizen) und Start-Ansicht (Tabelle oder Kacheln).
+  - Generiert sauberes Start-YAML mit automatischer `file.ext == "md"`-Filterung.
 
 ### 29.3 Inline-Base-Codeblöcke (`LivePreviewEditor.tsx`)
 - Markdown-Codeblöcke mit Sprache ```` ```base ```` werden in Live-Preview und Lese-Modus interaktiv als `BaseView` dargestellt.

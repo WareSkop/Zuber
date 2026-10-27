@@ -83,6 +83,8 @@ import { ConflictModal } from './components/ConflictModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { SendToTargetModal } from './components/SendToTargetModal';
 import { TemplateSelectModal } from './components/TemplateSelectModal';
+import { NewBaseModal } from './components/NewBaseModal';
+import { extractVaultFolders, stringifyBaseYaml } from './base/baseConfig';
 import { ResearchPane, type ResearchTarget, type ResearchContentType, detectFileType } from './components/ResearchPane';
 
 const CanvasEditor = React.lazy(() =>
@@ -223,6 +225,8 @@ export const App: React.FC = () => {
   const [isSendToTargetModalOpen, setIsSendToTargetModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [templateParentFolder, setTemplateParentFolder] = useState<string | undefined>(undefined);
+  const [isNewBaseModalOpen, setIsNewBaseModalOpen] = useState(false);
+  const [newBaseInitialFolder, setNewBaseInitialFolder] = useState<string | undefined>(undefined);
   const [toastNotification, setToastNotification] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -565,21 +569,10 @@ export const App: React.FC = () => {
     [language, getUniqueDefaultName, t]
   );
 
-  const openCreateBaseDialog = useCallback(
-    (parentFolder?: string) => {
-      const baseName = language === 'de' ? 'Neue Base' : 'New Base';
-      const defaultName = getUniqueDefaultName(baseName, 'base', parentFolder);
-      setDialog({
-        type: 'create-base',
-        title: t('dialogs.newBaseTitle') || (language === 'de' ? 'Base erstellen' : 'Create Base'),
-        prompt: t('dialogs.baseNamePrompt') || (language === 'de' ? 'Name der Base:' : 'Base name:'),
-        parentFolder,
-        initialValue: defaultName,
-      });
-      setDialogInput(defaultName);
-    },
-    [language, getUniqueDefaultName, t]
-  );
+  const openCreateBaseDialog = useCallback((parentFolder?: string) => {
+    setNewBaseInitialFolder(parentFolder);
+    setIsNewBaseModalOpen(true);
+  }, []);
 
   const openCreateFolderDialog = useCallback(
     (parentFolder?: string) => {
@@ -2384,6 +2377,62 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleCreateNewBase = useCallback(
+    async (options: {
+      name: string;
+      folder: string;
+      scope: 'folder' | 'tag' | 'all';
+      scopeValue?: string;
+      viewType: 'table' | 'cards';
+    }) => {
+      await flushPendingSave();
+      const rawTitle = options.name.replace(/\.base$/i, '').trim();
+      const cleanTitle = getUniqueDefaultName(rawTitle, 'base', options.folder || undefined);
+      const relPath = options.folder
+        ? `${options.folder}/${cleanTitle}.base`
+        : `${cleanTitle}.base`;
+
+      // Build initial filters:
+      // Always exclude non-markdown files and the base file itself
+      const filterRules: string[] = ['file.ext == "md"'];
+      if (options.scope === 'folder' && options.scopeValue) {
+        filterRules.push(`file.inFolder("${options.scopeValue.replace(/"/g, '\\"')}")`);
+      } else if (options.scope === 'tag' && options.scopeValue) {
+        const cleanTag = options.scopeValue.replace(/^#/, '').replace(/"/g, '\\"');
+        filterRules.push(`file.hasTag("${cleanTag}")`);
+      }
+
+      const initialConfig = {
+        filters: {
+          and: filterRules,
+        },
+        views: [
+          {
+            type: options.viewType,
+            name: options.viewType === 'cards' ? 'Cards' : 'Table',
+            order: ['file.name'],
+          },
+        ],
+      };
+
+      const initialYaml = stringifyBaseYaml(initialConfig);
+      const created = await syncEngine.saveNote({
+        path: relPath,
+        rawContent: initialYaml,
+        body: initialYaml,
+        properties: [],
+      });
+      await loadVaultIndex();
+      setActiveNote(created);
+      setSaveState('saved');
+      recordLastActiveNote(created.path);
+      recordRecentNote(created.path);
+      if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
+      if (isMobile) setLeftSidebarOpen(false);
+    },
+    [flushPendingSave, getUniqueDefaultName, loadVaultIndex, isMobile]
+  );
+
   const handleUploadImageFile = async (file: File): Promise<string> => {
     // 1. Cancel pending saveTimerRef before starting upload
     if (saveTimerRef.current) {
@@ -3964,6 +4013,16 @@ export const App: React.FC = () => {
         onClose={() => setIsTemplateModalOpen(false)}
         templates={templateNotes}
         onSelectTemplate={handleSelectTemplate}
+      />
+
+      {/* New Base Creation Wizard Modal */}
+      <NewBaseModal
+        isOpen={isNewBaseModalOpen}
+        onClose={() => setIsNewBaseModalOpen(false)}
+        onCreate={handleCreateNewBase}
+        initialFolder={newBaseInitialFolder}
+        vaultFolders={useMemo(() => extractVaultFolders(allFiles), [allFiles])}
+        vaultTags={allTagNames}
       />
 
       {/* Toast Notification */}

@@ -1,6 +1,38 @@
-import React, { useState } from 'react';
-import { Database, Code, Eye, FileSpreadsheet } from 'lucide-react';
-import { BaseView } from './BaseView';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import {
+  Database,
+  Code,
+  Eye,
+  AlertTriangle,
+  Folder,
+  Tag,
+  FileText,
+  X,
+  Plus,
+  LayoutGrid,
+} from 'lucide-react';
+import {
+  parseBaseYaml,
+  stringifyBaseYaml,
+  extractFilterRules,
+  rulesToFiltersObject,
+  extractVaultProperties,
+  extractVaultFolders,
+  extractVaultTags,
+  type BaseConfig,
+  type BaseFilterRule,
+  type BaseSortRule,
+} from '../base/baseConfig';
+import {
+  executeBaseQuery,
+  getPropertyValue,
+  type BaseQueryResult,
+  type BaseRecord,
+} from '../base/baseEngine';
+import { BaseToolbar } from './base/BaseToolbar';
+import { BaseFilterPopover } from './base/BaseFilterPopover';
+import { BaseColumnsModal } from './base/BaseColumnsModal';
+import { BaseTableView } from './base/BaseTableView';
 import { useTranslation } from '../i18n';
 
 export interface BaseEditorProps {
@@ -22,62 +54,483 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
 }) => {
   const { t } = useTranslation();
   const [editorMode, setEditorMode] = useState<'visual' | 'source'>('visual');
+  const [activeViewIndex, setActiveViewIndex] = useState(0);
 
-  const fileName = filePath.split('/').pop() || filePath;
+  // Popover & Modal visibility
+  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
+  const [isColumnsModalOpen, setIsColumnsModalOpen] = useState(false);
+
+  // Parsed Config state
+  const [config, setConfig] = useState<BaseConfig>(() => {
+    try {
+      return parseBaseYaml(rawContent);
+    } catch {
+      return { views: [{ type: 'table', name: 'Table' }] };
+    }
+  });
+
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  // Sync external changes to rawContent when not editing source
+  const lastRawContentRef = useRef(rawContent);
+  useEffect(() => {
+    if (rawContent !== lastRawContentRef.current) {
+      lastRawContentRef.current = rawContent;
+      try {
+        const parsed = parseBaseYaml(rawContent);
+        setConfig(parsed);
+        setParseError(null);
+      } catch (err: any) {
+        setParseError(err?.message || String(err));
+      }
+    }
+  }, [rawContent]);
+
+  // Debounced auto-save
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitConfigChange = useCallback(
+    (newConfig: BaseConfig) => {
+      setConfig(newConfig);
+      setParseError(null);
+
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+      saveTimerRef.current = setTimeout(() => {
+        try {
+          const yaml = stringifyBaseYaml(newConfig);
+          lastRawContentRef.current = yaml;
+          onChange(yaml);
+        } catch (err) {
+          console.error('Failed to serialize Base config:', err);
+        }
+      }, 500);
+    },
+    [onChange]
+  );
+
+  // Extract Vault metadata for auto-completion
+  const vaultProperties = useMemo(() => extractVaultProperties(allFiles), [allFiles]);
+  const vaultFolders = useMemo(() => extractVaultFolders(allFiles), [allFiles]);
+  const vaultTags = useMemo(() => extractVaultTags(allFiles), [allFiles]);
+
+  // Ensure activeViewIndex is within bounds
+  const safeViewIndex = Math.min(Math.max(0, activeViewIndex), Math.max(0, config.views.length - 1));
+  const activeView = config.views[safeViewIndex] || config.views[0];
+
+  // Execute Query for the active view
+  const queryResult: BaseQueryResult | null = useMemo(() => {
+    try {
+      return executeBaseQuery(config, allFiles, safeViewIndex, filePath);
+    } catch (err: any) {
+      setParseError(err?.message || String(err));
+      return null;
+    }
+  }, [config, allFiles, safeViewIndex, filePath]);
+
+  // Active filter rules (from active view if present, otherwise global)
+  const activeFilterRules: BaseFilterRule[] = useMemo(() => {
+    if (activeView.filters) {
+      return extractFilterRules(activeView.filters);
+    }
+    return extractFilterRules(config.filters);
+  }, [activeView.filters, config.filters]);
+
+  // ----------------------------------------------------
+  // Handlers for Views (Add, Rename, Duplicate, Delete)
+  // ----------------------------------------------------
+  const handleAddView = (name: string, type: 'table' | 'cards') => {
+    const newViews = [
+      ...config.views,
+      {
+        type,
+        name,
+        order: activeView?.order ? [...activeView.order] : ['file.name'],
+      },
+    ];
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+    setActiveViewIndex(newViews.length - 1);
+  };
+
+  const handleRenameView = (idx: number, newName: string) => {
+    const newViews = config.views.map((v, i) => (i === idx ? { ...v, name: newName } : v));
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleDuplicateView = (idx: number) => {
+    const target = config.views[idx];
+    if (!target) return;
+    const clone = {
+      ...JSON.parse(JSON.stringify(target)),
+      name: `${target.name} (${t('base.copy') || 'Kopie'})`,
+    };
+    const newViews = [...config.views];
+    newViews.splice(idx + 1, 0, clone);
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+    setActiveViewIndex(idx + 1);
+  };
+
+  const handleDeleteView = (idx: number) => {
+    if (config.views.length <= 1) return;
+    const newViews = config.views.filter((_, i) => i !== idx);
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+    setActiveViewIndex(Math.max(0, idx - 1));
+  };
+
+  // ----------------------------------------------------
+  // Handlers for Filters
+  // ----------------------------------------------------
+  const handleFilterRulesChange = (newRules: BaseFilterRule[]) => {
+    const filtersObj = rulesToFiltersObject(newRules);
+
+    // If view already had its own filters, update view filters, otherwise global filters
+    if (activeView.filters || !config.filters) {
+      const newViews = config.views.map((v, i) => (i === safeViewIndex ? { ...v, filters: filtersObj } : v));
+      commitConfigChange({
+        ...config,
+        views: newViews,
+      });
+    } else {
+      commitConfigChange({
+        ...config,
+        filters: filtersObj,
+      });
+    }
+  };
+
+  const handleRemoveFilterRule = (ruleId: string) => {
+    const updated = activeFilterRules.filter((r) => r.id !== ruleId);
+    handleFilterRulesChange(updated);
+  };
+
+  // ----------------------------------------------------
+  // Handlers for Columns (Resize, Reorder, Hide, Add, Sort)
+  // ----------------------------------------------------
+  const handleColumnResize = (col: string, newWidth: number) => {
+    const curSizes = activeView.columnSize || {};
+    const newViews = config.views.map((v, i) =>
+      i === safeViewIndex
+        ? {
+            ...v,
+            columnSize: {
+              ...curSizes,
+              [col]: newWidth,
+            },
+          }
+        : v
+    );
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleColumnReorder = (newOrder: string[]) => {
+    const newViews = config.views.map((v, i) => (i === safeViewIndex ? { ...v, order: newOrder } : v));
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleColumnHide = (col: string) => {
+    const curOrder = queryResult?.columns || activeView.order || [];
+    const newOrder = curOrder.filter((c) => c !== col);
+    handleColumnReorder(newOrder);
+  };
+
+  const handleColumnAdd = (col: string) => {
+    const curOrder = queryResult?.columns || activeView.order || [];
+    if (!curOrder.includes(col)) {
+      handleColumnReorder([...curOrder, col]);
+    }
+  };
+
+  const handleColumnDisplayNameChange = (col: string, newDisplayName: string) => {
+    const curProperties = config.properties || {};
+    const curColProp = curProperties[col] || {};
+    commitConfigChange({
+      ...config,
+      properties: {
+        ...curProperties,
+        [col]: {
+          ...curColProp,
+          displayName: newDisplayName,
+        },
+      },
+    });
+  };
+
+  const handleSortChange = (newSort: BaseSortRule[] | undefined) => {
+    const newViews = config.views.map((v, i) => (i === safeViewIndex ? { ...v, sort: newSort } : v));
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleGroupByChange = (newGroupBy: { property: string; direction?: 'asc' | 'desc' } | undefined) => {
+    const newViews = config.views.map((v, i) => (i === safeViewIndex ? { ...v, groupBy: newGroupBy } : v));
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  // Columns not yet added to current view
+  const availablePropertiesToAdd = useMemo(() => {
+    const activeCols = new Set(queryResult?.columns || activeView.order || []);
+    return vaultProperties.filter((p) => !activeCols.has(p.key));
+  }, [vaultProperties, queryResult?.columns, activeView.order]);
+
+  // Mode toggle between Visual and Source
+  const handleToggleMode = (nextMode: 'visual' | 'source') => {
+    if (nextMode === 'source') {
+      try {
+        const yaml = stringifyBaseYaml(config);
+        lastRawContentRef.current = yaml;
+        onChange(yaml);
+      } catch {}
+    } else {
+      try {
+        const parsed = parseBaseYaml(rawContent);
+        setConfig(parsed);
+        setParseError(null);
+      } catch (err: any) {
+        setParseError(err?.message || String(err));
+      }
+    }
+    setEditorMode(nextMode);
+  };
 
   return (
     <div className="base-editor-container">
-      {/* Base Editor Topbar */}
-      <div className="base-editor-topbar">
-        <div className="base-editor-title-cluster">
-          <Database size={16} className="base-icon" />
-          <span className="base-file-title" title={filePath}>
-            {fileName}
-          </span>
-          <span className="file-ext-badge base-badge">BASE</span>
-        </div>
+      {/* 1. Interactive Toolbar */}
+      <BaseToolbar
+        config={config}
+        activeViewIndex={safeViewIndex}
+        onSelectView={setActiveViewIndex}
+        onAddView={handleAddView}
+        onRenameView={handleRenameView}
+        onDuplicateView={handleDuplicateView}
+        onDeleteView={handleDeleteView}
+        activeFilterCount={activeFilterRules.length}
+        isFilterPopoverOpen={isFilterPopoverOpen}
+        onToggleFilterPopover={() => setIsFilterPopoverOpen((o) => !o)}
+        onOpenColumnsModal={() => setIsColumnsModalOpen(true)}
+        availableProperties={vaultProperties}
+        onSortChange={handleSortChange}
+        onGroupByChange={handleGroupByChange}
+        editorMode={editorMode}
+        onToggleEditorMode={handleToggleMode}
+      />
 
-        <div className="base-editor-mode-toggle">
-          <button
-            type="button"
-            className={`mode-toggle-btn ${editorMode === 'visual' ? 'active' : ''}`}
-            onClick={() => setEditorMode('visual')}
-          >
-            <Eye size={13} />
-            <span>{t('base.visualView') || 'Visuelle Ansicht'}</span>
-          </button>
-          <button
-            type="button"
-            className={`mode-toggle-btn ${editorMode === 'source' ? 'active' : ''}`}
-            onClick={() => setEditorMode('source')}
-          >
-            <Code size={13} />
-            <span>{t('base.sourceView') || 'YAML-Quelltext'}</span>
-          </button>
-        </div>
-      </div>
+      {/* 2. Filter Popover */}
+      <BaseFilterPopover
+        isOpen={isFilterPopoverOpen}
+        onClose={() => setIsFilterPopoverOpen(false)}
+        rules={activeFilterRules}
+        onChangeRules={handleFilterRulesChange}
+        availableProperties={vaultProperties}
+        vaultFolders={vaultFolders}
+        vaultTags={vaultTags}
+      />
 
-      {/* Editor Body */}
+      {/* 3. Columns Modal */}
+      <BaseColumnsModal
+        isOpen={isColumnsModalOpen}
+        onClose={() => setIsColumnsModalOpen(false)}
+        order={queryResult?.columns || activeView.order || ['file.name']}
+        availableProperties={vaultProperties}
+        displayNames={queryResult?.columnDisplayNames || {}}
+        onReorder={handleColumnReorder}
+        onToggleColumn={(col, visible) => {
+          if (visible) handleColumnAdd(col);
+          else handleColumnHide(col);
+        }}
+        onResetColumns={() => {
+          handleColumnReorder(['file.name']);
+        }}
+      />
+
+      {/* 4. Filter Chips Bar (Active Filters) */}
+      {editorMode === 'visual' && activeFilterRules.length > 0 && (
+        <div className="base-filter-chips-bar">
+          <span className="chips-bar-label">{t('base.activeFilters') || 'Filter:'}</span>
+          <div className="chips-list">
+            {activeFilterRules.map((rule) => {
+              let label = `${rule.field} ${rule.operator} ${rule.value}`;
+              let Icon = FileText;
+              if (rule.field === 'file.inFolder') {
+                Icon = Folder;
+                label = rule.operator === '!=' ? `Nicht in: ${rule.value || '/'}` : `Ordner: ${rule.value || '/'}`;
+              } else if (rule.field === 'file.hasTag') {
+                Icon = Tag;
+                label = rule.operator === '!=' ? `Ohne Tag: #${rule.value}` : `Tag: #${rule.value}`;
+              } else if (rule.operator === 'isEmpty') {
+                label = `${rule.field} ist leer`;
+              } else if (rule.operator === '!isEmpty') {
+                label = `${rule.field} ist nicht leer`;
+              }
+
+              return (
+                <div key={rule.id} className="base-filter-chip" title={label}>
+                  <Icon size={12} className="chip-icon" />
+                  <span className="chip-text">{label}</span>
+                  <button
+                    type="button"
+                    className="chip-remove-btn"
+                    onClick={() => handleRemoveFilterRule(rule.id)}
+                    title="Filter entfernen"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 5. Editor Body (Visual vs Source) */}
       <div className="base-editor-body">
-        {editorMode === 'visual' ? (
-          <BaseView
-            yamlContent={rawContent}
-            allNotes={allFiles}
-            filePath={filePath}
-            onSelectNote={onSelectNote}
-            onCellChange={onCellChange}
-            className="base-editor-visual-view"
-          />
-        ) : (
+        {editorMode === 'source' ? (
           <div className="base-source-editor">
             <textarea
               className="base-source-textarea"
               value={rawContent}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => {
+                onChange(e.target.value);
+                try {
+                  const p = parseBaseYaml(e.target.value);
+                  setConfig(p);
+                  setParseError(null);
+                } catch (err: any) {
+                  setParseError(err?.message || String(err));
+                }
+              }}
               placeholder={'filters:\n  file.inFolder("Projekte")\nviews:\n  - type: table\n    name: "Übersicht"'}
               spellCheck={false}
             />
           </div>
+        ) : parseError ? (
+          <div className="base-error-box">
+            <div className="base-error-header">
+              <AlertTriangle size={16} className="base-error-icon" />
+              <span>{t('base.syntaxError') || 'Syntaxfehler in Base-Definition'}</span>
+            </div>
+            <pre className="base-error-message">{parseError}</pre>
+          </div>
+        ) : !queryResult ? null : queryResult.records.length === 0 ? (
+          <div className="base-empty-state">
+            <Database size={32} className="empty-icon" />
+            <p>{t('base.noRecordsFound') || 'Keine passenden Notizen gefunden.'}</p>
+            {activeFilterRules.length > 0 && (
+              <button
+                type="button"
+                className="base-btn secondary-btn"
+                onClick={() => handleFilterRulesChange([])}
+              >
+                <span>Alle Filter zurücksetzen</span>
+              </button>
+            )}
+          </div>
+        ) : activeView.type === 'cards' ? (
+          /* Cards View */
+          <div className="base-cards-container scroller">
+            {queryResult.groups.map((group) => (
+              <div key={group.key} className="base-group-section">
+                {queryResult.groups.length > 1 && (
+                  <div className="base-group-header">
+                    <span className="base-group-title">{group.label}</span>
+                    <span className="base-group-count">({group.records.length})</span>
+                  </div>
+                )}
+                <div className="base-cards-grid">
+                  {group.records.map((rec) => (
+                    <div key={rec.file.path} className="base-card">
+                      <div className="base-card-top">
+                        <div
+                          className="base-card-title-link"
+                          onClick={() => onSelectNote(rec.file.path)}
+                          title={rec.file.path}
+                        >
+                          <FileText size={15} className="base-card-icon" />
+                          <span className="base-card-title">{rec.file.name.replace(/\.md$/i, '')}</span>
+                        </div>
+                        {rec.file.folder && (
+                          <span className="base-card-folder" title={rec.file.folder}>
+                            {rec.file.folder}
+                          </span>
+                        )}
+                      </div>
+
+                      {rec.tags.length > 0 && (
+                        <div className="base-card-tags">
+                          {rec.tags.map((tg) => (
+                            <span key={tg} className="base-tag-pill">
+                              #{tg}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="base-card-props">
+                        {queryResult.columns
+                          .filter((c) => c !== 'file.name' && c !== 'tags')
+                          .map((col) => {
+                            const val = getPropertyValue(rec, col);
+                            if (val === undefined || val === null || val === '') return null;
+                            const dName = queryResult.columnDisplayNames[col] || col;
+                            return (
+                              <div key={col} className="base-card-prop-row">
+                                <span className="base-prop-key">{dName}:</span>
+                                <span className="base-prop-val">
+                                  {typeof val === 'boolean'
+                                    ? val
+                                      ? '✓'
+                                      : '✗'
+                                    : Array.isArray(val)
+                                    ? val.join(', ')
+                                    : String(val)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Table View */
+          <BaseTableView
+            queryResult={queryResult}
+            onSelectNote={onSelectNote}
+            onCellChange={onCellChange}
+            columnSizes={activeView.columnSize || {}}
+            onColumnResize={handleColumnResize}
+            onColumnReorder={handleColumnReorder}
+            onColumnHide={handleColumnHide}
+            onColumnDisplayNameChange={handleColumnDisplayNameChange}
+            onColumnSort={(col, dir) => handleSortChange([{ property: col, direction: dir }])}
+            availablePropertiesToAdd={availablePropertiesToAdd}
+            onAddColumn={handleColumnAdd}
+          />
         )}
       </div>
     </div>

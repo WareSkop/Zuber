@@ -508,7 +508,22 @@
     "sourceView": "YAML Source",
     "recordsCount": "{{count}} notes",
     "noRecordsFound": "No matching notes found.",
-    "syntaxError": "Syntax error in Base definition"
+    "syntaxError": "Syntax error in Base definition",
+    "filterTitle": "Configure Filters",
+    "noFilters": "No active filters. All notes are displayed.",
+    "addFilter": "Add Filter Rule",
+    "activeFilters": "Filters:",
+    "manageColumns": "Manage Columns",
+    "columnsHint": "Select which columns are visible in the table and drag them to reorder:",
+    "resetColumns": "Reset to Default",
+    "nameLabel": "Base Name:",
+    "locationLabel": "Vault Location:",
+    "sourceScopeLabel": "Filter Scope / Source:",
+    "startViewLabel": "Starting View:",
+    "rename": "Rename",
+    "duplicate": "Duplicate",
+    "delete": "Delete View",
+    "copy": "Copy"
   },
   "research": {
     "title": "Research View",

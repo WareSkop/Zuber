@@ -1,4 +1,12 @@
 ### Added
+- Visuelle Benutzeroberfläche (GUI) zur Konfiguration & Bearbeitung von Obsidian Bases in `BaseEditor.tsx`:
+  - Visuelle Ansichten-Verwaltung (`BaseToolbar.tsx`) mit Tabs für definierte Views, Hinzufügen neuer Ansichten (`+ Ansicht`) und 3-Punkte-Menü (Umbenennen, Duplizieren, Löschen).
+  - Visueller Filter-Builder im Popover (`BaseFilterPopover.tsx`) mit dynamischen Operatoren (`==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `startsWith`, `!isEmpty`, `isEmpty`), automatischer Vault-Ordner- und Tag-Auswahl und Filter-Badge mit aktiver Regelanzahl.
+  - Filter-Chips-Leiste unterhalb der Toolbar zur direkten Übersicht und schnellen Entfernung aktiver Filterregeln.
+  - Interaktive Tabellenansicht (`BaseTableView.tsx`) mit Maus-Drag-Handles (`.col-resize-handle`) zur stufenlosen Anpassung von Spaltenbreiten, Drag & Drop zum Umsortieren von Spalten, Spaltenmenü (Anzeigename umbenennen, Auf-/Absteigend sortieren, Ausblenden) und `+` Spalten-Hinzufügen-Dropdown.
+  - Spalten-Manager-Modal (`BaseColumnsModal.tsx`) mit visueller Checkliste aller Vault-Properties und Drag & Drop-Reihenfolge.
+  - „Neue Base“-Erstellungs-Wizard (`NewBaseModal.tsx`) mit Konfiguration von Name, Zielordner, Quellenbereich (Notizen im Ordner, mit Tag oder alle Notizen) und Startansicht (Tabelle / Kacheln).
+  - Bidirektionaler, verlustfreier YAML-Synchronizer (`src/base/baseConfig.ts`) mit 500 ms debounctem Autosave und Beibehaltung des `[ Ansicht | Quelltext ]`-Umschalters.
 - Asymmetrische 70/30 Recherche- & Referenzansicht (Research Split-View):
   - 70/30 resizable Split-View (standardmäßig 70 % Haupteditor / 30 % Read-Only Referenzbereich, persistent in `localStorage` unter `zuber_split_ratio`, geklemmt zwischen 20 % und 80 %).
   - Unterstützung für gerenderte Markdown-Notizen (`.md` mit Callouts, Aufgabenlisten, Tabellen, Mermaid, Inline-Bildern und PDF-Previews via DOMPurify), interaktive Canvas-Diagramme (`.canvas` mit Read-Only Pan/Zoom), Bilder (`.png`, `.jpg`, etc. mit Zoom-Steuerung), PDF-Dokumente (`.pdf` via `iframe`) und den Wissensgraphen (`GraphView`).

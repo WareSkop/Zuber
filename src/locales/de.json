@@ -508,7 +508,22 @@
     "sourceView": "YAML-Quelltext",
     "recordsCount": "{{count}} Notizen",
     "noRecordsFound": "Keine passenden Notizen gefunden.",
-    "syntaxError": "Syntaxfehler in Base-Definition"
+    "syntaxError": "Syntaxfehler in Base-Definition",
+    "filterTitle": "Filter konfigurieren",
+    "noFilters": "Keine aktiven Filter. Alle Notizen werden angezeigt.",
+    "addFilter": "Bedingung hinzufügen",
+    "activeFilters": "Filter:",
+    "manageColumns": "Spalten verwalten",
+    "columnsHint": "Wähle aus, welche Spalten in der Tabelle sichtbar sein sollen und ziehe sie per Drag & Drop in die gewünschte Reihenfolge:",
+    "resetColumns": "Standard wiederherstellen",
+    "nameLabel": "Name der Base:",
+    "locationLabel": "Speicherort im Vault:",
+    "sourceScopeLabel": "Bereich / Quelle einschränken:",
+    "startViewLabel": "Start-Ansicht:",
+    "rename": "Umbenennen",
+    "duplicate": "Duplizieren",
+    "delete": "Ansicht löschen",
+    "copy": "Kopie"
   },
   "research": {
     "title": "Rechercheansicht",

@@ -443,7 +443,10 @@ function evaluateSafeExpression(expr: string, context: Record<string, any>): any
             }
           }
           if (peek()?.type === 'punct' && peek()?.value === ')') consume();
-          const fn = obj[propName];
+          let fn = obj[propName];
+          if (!fn && propName === 'contains' && typeof obj?.includes === 'function') {
+            fn = obj.includes;
+          }
           if (typeof fn === 'function') {
             obj = fn.apply(obj, args);
           } else {
