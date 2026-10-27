@@ -44,6 +44,11 @@ Dieses Verzeichnis (`doc/`) enthält die vollständige technische Dokumentation 
 - **Interaktive Graph-Ansicht (`GraphView.tsx`) & Backlinks:**
   - Force-Directed Canvas-Graph (sowohl als **Globaler Graph**, im **Split-Screen** neben dem Editor als auch als **Lokaler Graph** in der rechten Seitenleiste).
   - Rechte Seitenleiste mit **Verlinkten Erwähnungen (Backlinks)**, **Unverlinkten Erwähnungen** und **Gliederung (H1–H6)**.
+- **Asymmetrische 70/30 Recherche- & Referenzansicht (Research Split-View):**
+  - Resizable Split-View (standardmäßig 70 % Haupteditor / 30 % Read-Only Referenzbereich, persistent in `localStorage`).
+  - Unterstützt gerendertes Markdown (`.md`), interaktive Canvas-Diagramme (`.canvas`), Bilder (`.png`, `.jpg`, `.svg`, etc.), PDF-Dokumente (`.pdf`) und den interaktiven Wissensgraphen.
+  - Intelligentes Klick-Routing: Reguläre Klicks auf Links, Notizen und Backlinks öffnen im Referenzbereich, während `Alt + Klick` gezielt im Haupteditor öffnet.
+  - Responsiver Spalten- (Desktop) bzw. Zeilensplit (Smartphones) und nahtlose Beibehaltung im Zen-Modus (`Alt+Z`) inklusive ziehbarem Trennbalken.
 - **Grafischer Canvas-, Workflow- & Netzwerk-Editor (`.canvas`):**
   - Vollwertiger visueller Canvas-Editor basierend auf `@xyflow/react`, 100 % abwärtskompatibel zur offiziellen Obsidian JSON Canvas Spec 1.0.
   - Erweiterte Formen für Workflows und Netzwerkdiagramme (`rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`) mit Graceful Degradation in Obsidian.

@@ -118,7 +118,7 @@ interface GraphViewProps {
   graphData: GraphData;
   activeNotePath: string | null;
   isLocalGraph?: boolean;
-  onSelectNote: (pathOrTitle: string, isUnresolved?: boolean) => void;
+  onSelectNote: (pathOrTitle: string, isUnresolved?: boolean, event?: { altKey?: boolean; preventDefault?: () => void }) => void;
   onSelectTag?: (tag: string) => void;
 }
 
@@ -825,7 +825,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             wakeUpRef.current();
           } else {
             // Desktop mouse click: open note directly
-            navigateToNode(node);
+            navigateToNode(node, e);
           }
         }
       }
@@ -846,11 +846,11 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
     };
   };
 
-  const navigateToNode = (node: SimNode) => {
+  const navigateToNode = (node: SimNode, event?: { altKey?: boolean; preventDefault?: () => void }) => {
     if (node.type === 'note' && node.path) {
-      onSelectNote(node.path, false);
+      onSelectNote(node.path, false, event);
     } else if (node.type === 'unresolved') {
-      onSelectNote(node.label, true);
+      onSelectNote(node.label, true, event);
     } else if (node.type === 'tag' && onSelectTag) {
       onSelectTag(node.label.replace(/^#+/, ''));
     }

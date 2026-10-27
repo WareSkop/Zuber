@@ -83,6 +83,7 @@ import { ConflictModal } from './components/ConflictModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { SendToTargetModal } from './components/SendToTargetModal';
 import { TemplateSelectModal } from './components/TemplateSelectModal';
+import { ResearchPane, type ResearchTarget, type ResearchContentType, detectFileType } from './components/ResearchPane';
 
 const CanvasEditor = React.lazy(() =>
   import('./components/canvas/CanvasEditor').then((m) => ({ default: m.CanvasEditor }))
@@ -170,6 +171,26 @@ export const App: React.FC = () => {
   historyIndexRef.current = historyIndex;
   const [editorMode, setEditorMode] = useState<EditorMode>('live');
   const [workspaceView, setWorkspaceView] = useState<MainWorkspaceView>('editor');
+
+  // Asymmetric Research Split-View (70/30) State & Orientation
+  const [splitRatio, setSplitRatio] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('zuber_split_ratio');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 20 && parsed <= 80) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return 70;
+  });
+  const [splitOrientation, setSplitOrientation] = useState<'horizontal' | 'vertical'>(() => {
+    return typeof window !== 'undefined' && window.innerWidth < 768 ? 'vertical' : 'horizontal';
+  });
+  const [researchTarget, setResearchTarget] = useState<ResearchTarget | null>(null);
+  const [isResizingSplit, setIsResizingSplit] = useState(false);
+  const workspacePanesRef = useRef<HTMLDivElement>(null);
 
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 768 : false
@@ -843,6 +864,79 @@ export const App: React.FC = () => {
 
   handleGoBackRef.current = handleGoBack;
 
+  const openInResearch = useCallback((path: string) => {
+    const type = detectFileType(path);
+    setResearchTarget({ path, type });
+    if (workspaceViewRef.current !== 'split') {
+      setWorkspaceView('split');
+    }
+  }, []);
+
+  const handleToggleSplit = useCallback(() => {
+    setWorkspaceView((prev) => {
+      if (prev === 'split') {
+        return 'editor';
+      } else {
+        setResearchTarget((cur) => cur ?? { path: '', type: 'graph' });
+        return 'split';
+      }
+    });
+    if (isMobile) setLeftSidebarOpen(false);
+  }, [isMobile]);
+
+  const handleSplitRatioChange = useCallback((newRatio: number) => {
+    const clamped = Math.min(80, Math.max(20, Math.round(newRatio)));
+    setSplitRatio(clamped);
+    try {
+      localStorage.setItem('zuber_split_ratio', String(clamped));
+    } catch {}
+  }, []);
+
+  const handleSplitResizeStart = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      e.preventDefault();
+      setIsResizingSplit(true);
+
+      const container = workspacePanesRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const currentOrientation = splitOrientation;
+
+      const prevUserSelect = document.body.style.userSelect;
+      document.body.style.userSelect = 'none';
+
+      const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
+        const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : (moveEvent as MouseEvent).clientX;
+        const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : (moveEvent as MouseEvent).clientY;
+
+        if (currentOrientation === 'horizontal') {
+          const ratio = ((clientX - rect.left) / rect.width) * 100;
+          handleSplitRatioChange(ratio);
+        } else {
+          // Vertical: Top is Research Pane, Bottom is Primary Editor
+          const researchHeightRatio = ((clientY - rect.top) / rect.height) * 100;
+          const primaryRatio = 100 - researchHeightRatio;
+          handleSplitRatioChange(primaryRatio);
+        }
+      };
+
+      const handleEnd = () => {
+        setIsResizingSplit(false);
+        document.body.style.userSelect = prevUserSelect;
+        window.removeEventListener('mousemove', handleMove);
+        window.removeEventListener('mouseup', handleEnd);
+        window.removeEventListener('touchmove', handleMove);
+        window.removeEventListener('touchend', handleEnd);
+      };
+
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleEnd);
+      window.addEventListener('touchmove', handleMove, { passive: false });
+      window.addEventListener('touchend', handleEnd);
+    },
+    [splitOrientation, handleSplitRatioChange]
+  );
+
   // Track navigation history for active notes & canvases (max 50 entries)
   useEffect(() => {
     const currentPath = activeNote?.path;
@@ -1270,13 +1364,31 @@ export const App: React.FC = () => {
 
   const sidebarHandlers = useMemo(
     () => ({
-      onSelectNote: (path: string) => {
-        openNoteByPath(path);
-        if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
+      onSelectNote: (path: string, event?: React.MouseEvent | { altKey?: boolean; preventDefault?: () => void }) => {
+        if (event?.altKey) {
+          event.preventDefault?.();
+        }
+        if (workspaceViewRef.current === 'split' && !event?.altKey) {
+          openInResearch(path);
+        } else {
+          const isDoc =
+            path.endsWith('.md') ||
+            path.endsWith('.canvas') ||
+            path.endsWith('.base') ||
+            !path.includes('.');
+          if (isDoc) {
+            openNoteByPath(path);
+            if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
+          } else {
+            window.open(api.getAttachmentUrl(path), '_blank');
+          }
+        }
         if (isMobile) {
           setLeftSidebarOpen(false);
         }
       },
+      isResearchOpen: workspaceView === 'split',
+      onOpenInResearch: openInResearch,
       onCreateNote: (parentFolder?: string) => {
         openCreateNoteDialog(parentFolder);
       },
@@ -1327,6 +1439,8 @@ export const App: React.FC = () => {
       handleOpenTemplateModal,
       handleOpenDailyNote,
       handleActiveNoteDeleted,
+      openInResearch,
+      workspaceView,
       tree,
       t,
       isMobile,
@@ -1916,8 +2030,17 @@ export const App: React.FC = () => {
   };
 
   // Navigate to a [[Wiki-Link]] or Markdown [Link](target); if the note does not exist yet, create it automatically!
-  const handleNavigateWikiLink = async (target: string) => {
+  const handleNavigateWikiLink = async (
+    target: string,
+    event?: { altKey?: boolean; preventDefault?: () => void }
+  ) => {
     try {
+      if (event?.altKey) {
+        event.preventDefault?.();
+      }
+      const isAlt = Boolean(event?.altKey);
+      const targetInResearch = workspaceViewRef.current === 'split' && !isAlt;
+
       const trimmed = target.trim();
       if (/^(https?:|mailto:|tel:)/i.test(trimmed)) {
         window.open(trimmed, '_blank', 'noopener,noreferrer');
@@ -1929,34 +2052,53 @@ export const App: React.FC = () => {
       // Fast path: resolve in the browser (no server round trip)
       const local = resolveLocally(trimmed, currentFrom);
       if (local) {
-        if (local.toLowerCase().endsWith('.md') || local.toLowerCase().endsWith('.canvas') || local.toLowerCase().endsWith('.base')) {
-          if (workspaceViewRef.current === 'graph') {
-            setWorkspaceView('editor');
-          }
-          await openNoteByPath(local);
+        if (targetInResearch) {
+          openInResearch(local);
         } else {
-          window.open(api.getAttachmentUrl(local, currentFrom || undefined), '_blank');
+          const isDoc =
+            local.toLowerCase().endsWith('.md') ||
+            local.toLowerCase().endsWith('.canvas') ||
+            local.toLowerCase().endsWith('.base');
+          if (isDoc) {
+            if (workspaceViewRef.current === 'graph') {
+              setWorkspaceView('editor');
+            }
+            await openNoteByPath(local);
+          } else {
+            window.open(api.getAttachmentUrl(local, currentFrom || undefined), '_blank');
+          }
         }
         return;
       }
 
       // If it looks like a binary attachment (PDF, Office, Image, Archive), open attachment directly
       if (/\.(pdf|xlsx|xls|docx|doc|pptx|png|jpe?g|gif|webp|svg|zip|mp3|mp4)$/i.test(trimmed)) {
-        window.open(api.getAttachmentUrl(trimmed, currentFrom || undefined), '_blank');
+        if (targetInResearch) {
+          openInResearch(trimmed);
+        } else {
+          window.open(api.getAttachmentUrl(trimmed, currentFrom || undefined), '_blank');
+        }
         return;
-      }
-
-      if (workspaceViewRef.current === 'graph') {
-        setWorkspaceView('editor');
       }
 
       // Fallback (e.g. aliases): ask the server
       const res = await api.resolveWikiLink(trimmed, currentFrom || undefined);
       if (res.resolvedPath) {
-        if (res.resolvedPath.toLowerCase().endsWith('.md') || res.resolvedPath.toLowerCase().endsWith('.canvas') || res.resolvedPath.toLowerCase().endsWith('.base')) {
-          await openNoteByPath(res.resolvedPath);
+        if (targetInResearch) {
+          openInResearch(res.resolvedPath);
         } else {
-          window.open(api.getAttachmentUrl(res.resolvedPath, currentFrom || undefined), '_blank');
+          const isDoc =
+            res.resolvedPath.toLowerCase().endsWith('.md') ||
+            res.resolvedPath.toLowerCase().endsWith('.canvas') ||
+            res.resolvedPath.toLowerCase().endsWith('.base');
+          if (isDoc) {
+            if (workspaceViewRef.current === 'graph') {
+              setWorkspaceView('editor');
+            }
+            await openNoteByPath(res.resolvedPath);
+          } else {
+            window.open(api.getAttachmentUrl(res.resolvedPath, currentFrom || undefined), '_blank');
+          }
         }
         return;
       }
@@ -1983,8 +2125,14 @@ export const App: React.FC = () => {
         ],
         body: `# ${cleanName}\n\n`,
       });
-      setActiveNote(created);
-      refreshBacklinks(created.path);
+      if (targetInResearch) {
+        openInResearch(created.path);
+      } else {
+        if (workspaceViewRef.current === 'graph') {
+          setWorkspaceView('editor');
+        }
+        await openNoteByPath(created.path);
+      }
       scheduleIndexRefresh(true, 100);
     } catch (err) {
       console.error('Fehler beim Öffnen des Wiki-Links:', err);
@@ -2550,6 +2698,14 @@ export const App: React.FC = () => {
         action: () =>
           setWorkspaceView((v) => (v === 'graph' ? 'editor' : 'graph')),
       },
+      {
+        id: 'view-split',
+        title: 'Ansicht: Recherche-Split-View umschalten (70/30)',
+        category: 'Ansicht',
+        icon: <Columns size={16} />,
+        keywords: ['split', 'recherche', 'referenz', 'zweigeteilt', 'nebeneinander'],
+        action: handleToggleSplit,
+      },
 
       // Navigation & Sidebars
       {
@@ -2833,11 +2989,8 @@ export const App: React.FC = () => {
         <button
           type="button"
           className={`ribbon-btn ${workspaceView === 'split' ? 'active' : ''}`}
-          onClick={() => {
-            setWorkspaceView((v) => (v === 'split' ? 'editor' : 'split'));
-            if (isMobile) setLeftSidebarOpen(false);
-          }}
-          title={t('nav.split')}
+          onClick={handleToggleSplit}
+          title={t('research.title', 'Rechercheansicht')}
         >
           <Columns size={19} />
         </button>
@@ -2879,6 +3032,210 @@ export const App: React.FC = () => {
         </button>
       </div>
     </nav>
+  );
+
+  const renderPrimaryEditor = (customStyle?: React.CSSProperties) => (
+    <section className="editor-pane-container" style={customStyle}>
+      {isCanvasNote && activeNote ? (
+        <div className="canvas-workspace-pane">
+          <Suspense fallback={<div className="empty-state">Lade Canvas…</div>}>
+            <CanvasEditor
+              filePath={activeNote.path}
+              rawContent={activeNote.rawContent || activeNote.body || '{}'}
+              onChange={(newJson) => {
+                if (!activeNote) return;
+                setActiveNote({
+                  ...activeNote,
+                  rawContent: newJson,
+                  body: newJson,
+                });
+                scheduleSave(activeNote.path, {
+                  rawContent: newJson,
+                  body: newJson,
+                });
+              }}
+              onOpenNote={(targetPath) => {
+                handleNavigateWikiLink(targetPath);
+                if (isMobile) setLeftSidebarOpen(false);
+              }}
+              onSelectTag={(tag) => {
+                setSelectedTagFilter(tag.replace(/^#+/, ''));
+                setLeftSidebarOpen(true);
+              }}
+              allNotes={allNotesForEditor}
+            />
+          </Suspense>
+        </div>
+      ) : isBaseNote && activeNote ? (
+        <div className="base-workspace-pane">
+          <Suspense fallback={<div className="empty-state">Lade Base…</div>}>
+            <BaseEditor
+              filePath={activeNote.path}
+              rawContent={activeNote.rawContent || activeNote.body || ''}
+              onChange={(newYaml) => {
+                if (!activeNote) return;
+                setActiveNote({
+                  ...activeNote,
+                  rawContent: newYaml,
+                  body: newYaml,
+                });
+                scheduleSave(activeNote.path, {
+                  rawContent: newYaml,
+                  body: newYaml,
+                });
+              }}
+              onSelectNote={(targetPath) => {
+                handleNavigateWikiLink(targetPath);
+                if (isMobile) setLeftSidebarOpen(false);
+              }}
+              allFiles={allFiles}
+            />
+          </Suspense>
+        </div>
+      ) : (
+        <>
+          {/* Sticky Formatting Toolbar at the top */}
+          {activeNote && editorMode !== 'reading' && !zenMode && (
+            <EditorToolbar
+              editorRef={editorRef}
+              onUploadImage={handleUploadImageFile}
+              onSendToTarget={handleOpenSendToTarget}
+            />
+          )}
+
+          <div className="editor-pane scroller">
+            {activeNote ? (
+              <div className="note-document-container">
+                {/* Visual Frontmatter Properties UI (No raw YAML shown!) */}
+                {editorMode !== 'source' && !zenMode && (
+                  <PropertiesEditor
+                    notePath={activeNote.path}
+                    properties={activeNote.properties}
+                    allTags={allTagNames}
+                    onChange={handlePropertiesChange}
+                    onTagClick={(tag) => {
+                      setSelectedTagFilter(tag.replace(/^#+/, ''));
+                      setLeftSidebarOpen(true);
+                    }}
+                  />
+                )}
+
+                {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
+                <LivePreviewEditor
+                  ref={editorRef}
+                  notePath={activeNote.path}
+                  body={activeNote.body}
+                  rawContent={activeNote.rawContent}
+                  mode={editorMode}
+                  allNotes={allNotesForEditor}
+                  allTags={allTagNames}
+                  scrollToLine={scrollToLine}
+                  onChangeBody={handleBodyChange}
+                  onChangeRaw={handleRawChange}
+                  onNavigateWikiLink={handleNavigateWikiLink}
+                  onSelectTag={(tag) => {
+                    setSelectedTagFilter(tag.replace(/^#+/, ''));
+                    setLeftSidebarOpen(true);
+                  }}
+                  onUploadAttachment={handleUploadImageFile}
+                  onSendToTargetNote={handleOpenSendToTarget}
+                />
+              </div>
+            ) : (
+              <div className="empty-workspace-state">
+                <FileText size={42} />
+                <h2>{language === 'de' ? 'Keine Notiz geöffnet' : 'No note open'}</h2>
+                <p>
+                  {language === 'de'
+                    ? 'Wähle links im Dateibaum eine Notiz aus oder erstelle ein neues Dokument.'
+                    : 'Select a note from the file tree on the left or create a new document.'}
+                </p>
+                <div className="empty-state-btn-row">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => openCreateNoteDialog()}
+                  >
+                    <FileText size={15} />
+                    <span>{language === 'de' ? 'Neue Notiz' : 'New Note'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleOpenTemplateModal()}
+                  >
+                    <LayoutTemplate size={15} />
+                    <span>{language === 'de' ? 'Aus Vorlage' : 'From Template'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleOpenDailyNote()}
+                  >
+                    <Calendar size={15} />
+                    <span>{language === 'de' ? 'Tagesnotiz' : 'Daily Note'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openCreateCanvasDialog()}
+                  >
+                    <WorkflowCanvasIcon size={15} />
+                    <span>{language === 'de' ? 'Neues Canvas' : 'New Canvas'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => openCreateBaseDialog()}
+                  >
+                    <Database size={15} />
+                    <span>{language === 'de' ? 'Neue Base' : 'New Base'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+
+  const renderResearchPane = (customStyle?: React.CSSProperties) => (
+    <div className="research-pane-wrapper" style={customStyle}>
+      <ResearchPane
+        target={researchTarget}
+        orientation={splitOrientation}
+        onToggleOrientation={() =>
+          setSplitOrientation((o) => (o === 'horizontal' ? 'vertical' : 'horizontal'))
+        }
+        onOpenInMain={(path) => {
+          openNoteByPath(path);
+        }}
+        onClose={() => setWorkspaceView('editor')}
+        onNavigate={(target, ev) => {
+          handleNavigateWikiLink(target, ev);
+        }}
+        onShowGraph={() => setResearchTarget({ path: '', type: 'graph' })}
+        graphData={graphData}
+        allNotes={allNotesForEditor}
+        activeNotePath={activeNote?.path ?? null}
+        onSelectTag={(tag) => {
+          setSelectedTagFilter(tag.replace(/^#+/, ''));
+          setLeftSidebarOpen(true);
+        }}
+      />
+    </div>
+  );
+
+  const renderSplitResizer = () => (
+    <div
+      className={`split-resizer ${splitOrientation} ${isResizingSplit ? 'resizing' : ''}`}
+      onMouseDown={handleSplitResizeStart}
+      onTouchStart={handleSplitResizeStart}
+      title="Drag to resize split panes"
+      role="separator"
+      aria-orientation={splitOrientation}
+    />
   );
 
   return (
@@ -3125,188 +3482,26 @@ export const App: React.FC = () => {
         </header>
         )}
 
-        <div className={`workspace-panes view-${workspaceView}`}>
-          {(workspaceView === 'editor' || workspaceView === 'split') && (
-            <section className="editor-pane-container">
-              {isCanvasNote && activeNote ? (
-                <div className="canvas-workspace-pane">
-                  <Suspense fallback={<div className="empty-state">Lade Canvas…</div>}>
-                    <CanvasEditor
-                      filePath={activeNote.path}
-                      rawContent={activeNote.rawContent || activeNote.body || '{}'}
-                      onChange={(newJson) => {
-                        if (!activeNote) return;
-                        setActiveNote({
-                          ...activeNote,
-                          rawContent: newJson,
-                          body: newJson,
-                        });
-                        scheduleSave(activeNote.path, {
-                          rawContent: newJson,
-                          body: newJson,
-                        });
-                      }}
-                      onOpenNote={(targetPath) => {
-                        handleNavigateWikiLink(targetPath);
-                        if (isMobile) setLeftSidebarOpen(false);
-                      }}
-                      onSelectTag={(tag) => {
-                        setSelectedTagFilter(tag.replace(/^#+/, ''));
-                        setLeftSidebarOpen(true);
-                      }}
-                      allNotes={allNotesForEditor}
-                    />
-                  </Suspense>
-                </div>
-              ) : isBaseNote && activeNote ? (
-                <div className="base-workspace-pane">
-                  <Suspense fallback={<div className="empty-state">Lade Base…</div>}>
-                    <BaseEditor
-                      filePath={activeNote.path}
-                      rawContent={activeNote.rawContent || activeNote.body || ''}
-                      onChange={(newYaml) => {
-                        if (!activeNote) return;
-                        setActiveNote({
-                          ...activeNote,
-                          rawContent: newYaml,
-                          body: newYaml,
-                        });
-                        scheduleSave(activeNote.path, {
-                          rawContent: newYaml,
-                          body: newYaml,
-                        });
-                      }}
-                      onSelectNote={(targetPath) => {
-                        handleNavigateWikiLink(targetPath);
-                        if (isMobile) setLeftSidebarOpen(false);
-                      }}
-                      allFiles={allFiles}
-                    />
-                  </Suspense>
-                </div>
-              ) : (
-                <>
-                  {/* Sticky Formatting Toolbar at the top */}
-                  {activeNote && editorMode !== 'reading' && !zenMode && (
-                    <EditorToolbar
-                      editorRef={editorRef}
-                      onUploadImage={handleUploadImageFile}
-                      onSendToTarget={handleOpenSendToTarget}
-                    />
-                  )}
+        <div
+          ref={workspacePanesRef}
+          className={`workspace-panes view-${workspaceView} split-${splitOrientation}`}
+        >
+          {workspaceView === 'editor' && renderPrimaryEditor()}
 
-                  <div className="editor-pane scroller">
-                    {activeNote ? (
-                      <div className="note-document-container">
-                        {/* Visual Frontmatter Properties UI (No raw YAML shown!) */}
-                        {editorMode !== 'source' && !zenMode && (
-                          <PropertiesEditor
-                            notePath={activeNote.path}
-                            properties={activeNote.properties}
-                            allTags={allTagNames}
-                            onChange={handlePropertiesChange}
-                            onTagClick={(tag) => {
-                              setSelectedTagFilter(tag.replace(/^#+/, ''));
-                              setLeftSidebarOpen(true);
-                            }}
-                          />
-                        )}
-
-                        {/* Main Markdown Editor (Live-Preview / Reading / Source) */}
-                        <LivePreviewEditor
-                          ref={editorRef}
-                          notePath={activeNote.path}
-                          body={activeNote.body}
-                          rawContent={activeNote.rawContent}
-                          mode={editorMode}
-                          allNotes={allNotesForEditor}
-                          allTags={allTagNames}
-                          scrollToLine={scrollToLine}
-                          onChangeBody={handleBodyChange}
-                          onChangeRaw={handleRawChange}
-                          onNavigateWikiLink={handleNavigateWikiLink}
-                          onSelectTag={(tag) => {
-                            setSelectedTagFilter(tag.replace(/^#+/, ''));
-                            setLeftSidebarOpen(true);
-                          }}
-                          onUploadAttachment={handleUploadImageFile}
-                          onSendToTargetNote={handleOpenSendToTarget}
-                        />
-                      </div>
-                    ) : (
-                      <div className="empty-workspace-state">
-                        <FileText size={42} />
-                        <h2>{language === 'de' ? 'Keine Notiz geöffnet' : 'No note open'}</h2>
-                        <p>
-                          {language === 'de'
-                            ? 'Wähle links im Dateibaum eine Notiz aus oder erstelle ein neues Dokument.'
-                            : 'Select a note from the file tree on the left or create a new document.'}
-                        </p>
-                        <div className="empty-state-btn-row">
-                          <button
-                            type="button"
-                            className="btn-primary"
-                            onClick={() => openCreateNoteDialog()}
-                          >
-                            <FileText size={15} />
-                            <span>{language === 'de' ? 'Neue Notiz' : 'New Note'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => handleOpenTemplateModal()}
-                          >
-                            <LayoutTemplate size={15} />
-                            <span>{language === 'de' ? 'Aus Vorlage' : 'From Template'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => handleOpenDailyNote()}
-                          >
-                            <Calendar size={15} />
-                            <span>{language === 'de' ? 'Tagesnotiz' : 'Daily Note'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => openCreateCanvasDialog()}
-                          >
-                            <WorkflowCanvasIcon size={15} />
-                            <span>{language === 'de' ? 'Neues Canvas' : 'New Canvas'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            onClick={() => openCreateBaseDialog()}
-                          >
-                            <Database size={15} />
-                            <span>{language === 'de' ? 'Neue Base' : 'New Base'}</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </section>
-          )}
-
-          {(workspaceView === 'graph' || workspaceView === 'split') && (
+          {workspaceView === 'graph' && (
             <section className="graph-pane">
               <Suspense fallback={<div className="empty-state">Lade Graph…</div>}>
                 <GraphView
                   graphData={graphData}
                   activeNotePath={activeNote?.path ?? null}
                   isLocalGraph={false}
-                  onSelectNote={(pathOrTitle, isUnresolved) => {
+                  onSelectNote={(pathOrTitle, isUnresolved, event) => {
+                    if (event?.altKey) event.preventDefault?.();
                     if (isUnresolved) {
-                      handleNavigateWikiLink(pathOrTitle);
+                      handleNavigateWikiLink(pathOrTitle, event);
                     } else {
                       openNoteByPath(pathOrTitle);
-                      if (workspaceView === 'graph') {
-                        setWorkspaceView('editor');
-                      }
+                      setWorkspaceView('editor');
                     }
                   }}
                   onSelectTag={(tag) => {
@@ -3316,6 +3511,22 @@ export const App: React.FC = () => {
                 />
               </Suspense>
             </section>
+          )}
+
+          {workspaceView === 'split' && (
+            splitOrientation === 'horizontal' ? (
+              <>
+                {renderPrimaryEditor({ width: `${splitRatio}%`, flex: `0 0 ${splitRatio}%` })}
+                {renderSplitResizer()}
+                {renderResearchPane({ width: `calc(100% - ${splitRatio}%)`, flex: '1 1 0' })}
+              </>
+            ) : (
+              <>
+                {renderResearchPane({ height: `${100 - splitRatio}%`, flex: `0 0 ${100 - splitRatio}%` })}
+                {renderSplitResizer()}
+                {renderPrimaryEditor({ height: `${splitRatio}%`, flex: '1 1 0' })}
+              </>
+            )
           )}
         </div>
       </main>
@@ -3390,7 +3601,14 @@ export const App: React.FC = () => {
                     <div
                       key={`${item.sourcePath}-${idx}`}
                       className="backlink-card"
-                      onClick={() => openNoteByPath(item.sourcePath)}
+                      onClick={(e) => {
+                        if (e.altKey) e.preventDefault();
+                        if (workspaceViewRef.current === 'split' && !e.altKey) {
+                          openInResearch(item.sourcePath);
+                        } else {
+                          openNoteByPath(item.sourcePath);
+                        }
+                      }}
                     >
                       <div className="backlink-source">
                         <FileText size={13} />
@@ -3415,7 +3633,14 @@ export const App: React.FC = () => {
                     <div
                       key={`${item.sourcePath}-unlinked-${idx}`}
                       className="backlink-card unlinked"
-                      onClick={() => openNoteByPath(item.sourcePath)}
+                      onClick={(e) => {
+                        if (e.altKey) e.preventDefault();
+                        if (workspaceViewRef.current === 'split' && !e.altKey) {
+                          openInResearch(item.sourcePath);
+                        } else {
+                          openNoteByPath(item.sourcePath);
+                        }
+                      }}
                     >
                       <div className="backlink-source">
                         <FileText size={13} />
@@ -3462,11 +3687,16 @@ export const App: React.FC = () => {
                   graphData={graphData}
                   activeNotePath={activeNote?.path ?? null}
                   isLocalGraph={true}
-                  onSelectNote={(pathOrTitle, isUnresolved) => {
+                  onSelectNote={(pathOrTitle, isUnresolved, event) => {
+                    if (event?.altKey) event.preventDefault?.();
                     if (isUnresolved) {
-                      handleNavigateWikiLink(pathOrTitle);
+                      handleNavigateWikiLink(pathOrTitle, event);
                     } else {
-                      openNoteByPath(pathOrTitle);
+                      if (workspaceViewRef.current === 'split' && !event?.altKey) {
+                        openInResearch(pathOrTitle);
+                      } else {
+                        openNoteByPath(pathOrTitle);
+                      }
                     }
                   }}
                   onSelectTag={(tag) => {

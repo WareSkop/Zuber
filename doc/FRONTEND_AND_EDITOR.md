@@ -1002,6 +1002,48 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
 - Umschalt-Schaltflächen `[ View | Code ]` ermöglichen den direkten Wechsel zwischen gerenderter Datenbank-Ansicht und dem YAML-Codeblock.
 - Automatisches Refactoring von Links und Pfadfiltern bei Umbenennung oder Verschieben von Notizen (`refactorBaseContent`).
 
+---
+
+## 30. Asymmetrische Recherche- & Referenzansicht (70/30 Split-View, Klick-Routing & Zen-Mode)
+
+### 30.1 Konzept & Layout-Aufteilung (`src/components/ResearchPane.tsx`, `App.tsx`)
+Zuber bietet neben der Einzelansicht eine asymmetrische, resizable **Recherche- & Referenzansicht (Research Split-View)**:
+- **Haupteditor (Primary Pane – links auf Desktop / unten auf Smartphones):**
+  - Standardgröße: **70 %** (persistent in `localStorage` unter `zuber_split_ratio`, geklemmt zwischen 20 % und 80 %).
+  - Voller interaktiver Schreib- und Bearbeitungsfokus (`LivePreviewEditor`, `CanvasEditor`, `BaseEditor`).
+  - Beim Schließen der Rechercheansicht kehrt der Haupteditor sofort auf 100 % Breite zurück.
+- **Recherche- & Referenzbereich (Research Pane – rechts auf Desktop / oben auf Smartphones):**
+  - Standardgröße: **30 %** (`100% - splitRatio`).
+  - Strikter **Read-Only-Modus**. Keine versehentliche Modifikation von Referenzmaterial beim Nachschlagen.
+
+### 30.2 Unterstützte Formate in der Rechercheansicht
+1. **Markdown-Notizen (`.md`):** Vollständig gerendertes HTML (Reading Mode via `src/utils/readingMode.ts`) mit Callouts, Aufgabenlisten, Tabellen, Syntax-Highlighting, Mermaid-Diagrammen, inline Bildern und PDF-Vorschauen, bereinigt durch `DOMPurify`.
+2. **Canvas-Diagramme (`.canvas`):** Interaktiver Pan- und Zoom-Viewer mit `@xyflow/react` (`readOnly={true}`, `nodesDraggable={false}`, `nodesConnectable={false}`, `elementsSelectable={false}`).
+3. **Bilder (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`):** Zentrierter Bildbetrachter mit Zoom-In/Out/Fit-Toolbar.
+4. **PDF-Dokumente (`.pdf`):** Eingebetteter Anhang-Viewer im `<iframe>` über `/api/vault/attachment?path=...`.
+5. **Wissensgraph (`graph`):** Vollwertige interaktive `GraphView` umschaltbar direkt in der Recherche-Kopfzeile.
+
+### 30.3 Klick-Routing & `Alt + Klick` Überschreibung
+- **Wenn Rechercheansicht geschlossen ist (`isResearchOpen === false`):**
+  - Jeder Klick im Dateibaum, auf Backlinks oder auf `[[Wiki-Links]]` öffnet die Notiz wie gewohnt im Haupteditor.
+- **Wenn Rechercheansicht geöffnet ist (`isResearchOpen === true`):**
+  - **Standard-Klick (`!event.altKey`):** Öffnet das Ziel automatisch in der **Rechercheansicht (rechts)**. Der Haupteditor bleibt unverändert auf der aktuellen Notiz gesperrt (Schreibkontext und Cursor bleiben erhalten).
+  - **`Alt + Klick` (`event.altKey === true`):** Überschreibt das Routing und lädt die Notiz gezielt in den **Haupteditor (links)**. Browser-Standardaktionen werden durch `event.preventDefault()` unterdrückt.
+  - **Zusätzliche Aktionen:**
+    - Button *„Im Haupteditor öffnen“* (`ArrowLeft`-Icon) in der Recherche-Kopfzeile lädt das aktuelle Referenzdokument in den Haupteditor.
+    - Kontextmenü im Dateibaum bietet *„In Rechercheansicht öffnen“* sowie *„Im Haupteditor öffnen (Alt+Klick)“*.
+
+### 30.4 Responsiver Split & Interaktiver Resizer
+- **Desktop (`>= 768px`):** Nebeneinander (**horizontal** / Spalten).
+- **Smartphones (`< 768px`):** Untereinander (**vertikal** / Zeilen) mit Referenzansicht oben und Haupteditor unten, damit die Tastatur nicht das Schreibfeld verdeckt.
+- **Manueller Umschalter:** Toolbar-Button in der Kopfzeile wechselt jederzeit zwischen Spalten- und Zeilensplit.
+- **Draggable Splitter:** Trennlinie (`.split-resizer`) unterstützt Maus- und Touch-Gesten mit visuellem Hover- und Drag-Feedback.
+
+### 30.5 Nahtlose Integration in den Zen-Modus (`Alt+Z`)
+- Die Rechercheansicht bleibt beim Aktivieren des Zen-Modus im bestehenden Split-Verhältnis vollständig erhalten.
+- Das gesamte umgebende Chrome (Header, Ribbons, Sidebars) wird ausgeblendet, während die 1-px-Trennlinie aktiv und per Maus/Touch ziehbar bleibt.
+
+
 
 
 

@@ -239,7 +239,7 @@ export interface LivePreviewEditorProps {
   scrollToLine?: number | null;
   onChangeBody: (newBody: string) => void;
   onChangeRaw: (newRaw: string) => void;
-  onNavigateWikiLink: (target: string) => void;
+  onNavigateWikiLink: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void;
   onSelectTag: (tag: string) => void;
   onUploadAttachment?: (file: File) => Promise<string>;
   onSendToTargetNote?: () => void;
@@ -315,7 +315,7 @@ class TableWidget extends WidgetType {
     readonly rawLines: string[],
     readonly linePositions: number[],
     readonly notePath: string,
-    readonly onNavigate: (target: string) => void
+    readonly onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void
   ) {
     super();
   }
@@ -351,9 +351,10 @@ class TableWidget extends WidgetType {
     headTr.addEventListener('mousedown', (e) => {
       const linkEl = (e.target as HTMLElement).closest('[data-wikilink]');
       if (linkEl) {
+        if (e.altKey) e.preventDefault();
         e.preventDefault();
         e.stopPropagation();
-        this.onNavigate(linkEl.getAttribute('data-wikilink') || '');
+        this.onNavigate(linkEl.getAttribute('data-wikilink') || '', e);
         return;
       }
       e.preventDefault();
@@ -380,9 +381,10 @@ class TableWidget extends WidgetType {
       tr.addEventListener('mousedown', (e) => {
         const linkEl = (e.target as HTMLElement).closest('[data-wikilink]');
         if (linkEl) {
+          if (e.altKey) e.preventDefault();
           e.preventDefault();
           e.stopPropagation();
-          this.onNavigate(linkEl.getAttribute('data-wikilink') || '');
+          this.onNavigate(linkEl.getAttribute('data-wikilink') || '', e);
           return;
         }
         e.preventDefault();
@@ -404,7 +406,7 @@ class WikiLinkWidget extends WidgetType {
   constructor(
     readonly target: string,
     readonly display: string,
-    readonly onNavigate: (target: string) => void
+    readonly onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void
   ) {
     super();
   }
@@ -419,9 +421,10 @@ class WikiLinkWidget extends WidgetType {
     span.textContent = this.display;
     span.title = `Öffnen: ${this.target}`;
     span.addEventListener('mousedown', (e) => {
+      if (e.altKey) e.preventDefault();
       e.preventDefault();
       e.stopPropagation();
-      this.onNavigate(this.target);
+      this.onNavigate(this.target, e);
     });
     return span;
   }
@@ -522,7 +525,7 @@ class EmbedWidget extends WidgetType {
     readonly target: string,
     readonly alt: string,
     readonly notePath: string,
-    readonly onNavigate: (target: string) => void,
+    readonly onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void,
     readonly width?: number,
     readonly align?: 'left' | 'center' | 'right',
     readonly range?: { from: number; to: number },
@@ -613,9 +616,10 @@ class EmbedWidget extends WidgetType {
       card.className = 'cm-embedded-note-pill';
       card.textContent = `📄 ${this.alt || cleanTarget}`;
       card.addEventListener('mousedown', (e) => {
+        if (e.altKey) e.preventDefault();
         e.preventDefault();
         e.stopPropagation();
-        this.onNavigate(this.target);
+        this.onNavigate(this.target, e);
       });
       wrapper.appendChild(card);
       return wrapper;
@@ -1111,7 +1115,7 @@ class CodeBlockHeaderWidget extends WidgetType {
 function buildLivePreviewDecorations(
   view: EditorView,
   notePath: string,
-  onNavigate: (target: string) => void,
+  onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void,
   onSelectTag: (tag: string) => void,
   onUpdateTag: (newTag: string, from: number, to: number) => void,
   onToggleMode: (pos: number, mode: 'preview' | 'code') => void,
@@ -2430,7 +2434,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
             this.decorations = buildLivePreviewDecorations(
               view,
               callbacksRef.current.notePath,
-              (t) => callbacksRef.current.onNavigateWikiLink(t),
+              (t, ev) => callbacksRef.current.onNavigateWikiLink(t, ev),
               (tag) => callbacksRef.current.onSelectTag(tag),
               onUpdateTag,
               onToggleMode,
@@ -2448,7 +2452,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               this.decorations = buildLivePreviewDecorations(
                 update.view,
                 callbacksRef.current.notePath,
-                (t) => callbacksRef.current.onNavigateWikiLink(t),
+                (t, ev) => callbacksRef.current.onNavigateWikiLink(t, ev),
                 (tag) => callbacksRef.current.onSelectTag(tag),
                 onUpdateTag,
                 onToggleMode,
@@ -3111,8 +3115,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
     const wiki = targetEl.getAttribute('data-wikilink');
     if (wiki) {
+      if (e.altKey) e.preventDefault();
       e.preventDefault();
-      onNavigateWikiLink(wiki);
+      onNavigateWikiLink(wiki, e);
       return;
     }
 

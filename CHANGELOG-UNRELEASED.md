@@ -1,4 +1,12 @@
 ### Added
+- Asymmetrische 70/30 Recherche- & Referenzansicht (Research Split-View):
+  - 70/30 resizable Split-View (standardmäßig 70 % Haupteditor / 30 % Read-Only Referenzbereich, persistent in `localStorage` unter `zuber_split_ratio`, geklemmt zwischen 20 % und 80 %).
+  - Unterstützung für gerenderte Markdown-Notizen (`.md` mit Callouts, Aufgabenlisten, Tabellen, Mermaid, Inline-Bildern und PDF-Previews via DOMPurify), interaktive Canvas-Diagramme (`.canvas` mit Read-Only Pan/Zoom), Bilder (`.png`, `.jpg`, etc. mit Zoom-Steuerung), PDF-Dokumente (`.pdf` via `iframe`) und den Wissensgraphen (`GraphView`).
+  - Intelligentes Klick-Routing: Bei geöffneter Rechercheansicht öffnen normale Klicks im Dateibaum, auf Backlinks und auf `[[Wiki-Links]]` das Dokument in der Rechercheansicht (Haupteditor bleibt auf aktuellem Dokument gesperrt); `Alt + Klick` öffnet gezielt im Haupteditor.
+  - Recherche-Kopfzeile mit Dateityp-Badges (`MD`, `CANVAS`, `IMG`, `PDF`, `GRAPH`), Graph-Umschalter, Orientierungswechsel (Spalten ⇄ Zeilen), „Im Haupteditor öffnen“-Aktion und Schließen-Button.
+  - Kontextmenü-Einträge im Dateibaum: „In Rechercheansicht öffnen“ und „Im Haupteditor öffnen (Alt+Klick)“.
+  - Responsiver Split: Horizontaler Split auf Desktop-Bildschirmen, automatischer vertikaler Split (Recherche oben, Editor unten) auf Smartphones (< 768px).
+  - Nahtlose Zen-Modus-Integration (`Alt+Z`): Der Split bleibt aktiv, Bedienelemente werden ausgeblendet und der Trennbalken bleibt als feine 1-px-Linie interaktiv ziehbar.
 - „Zurück“-Navigationsbutton (Back-Button) in der oberen Kopfleiste (`src/App.tsx`, `src/styles.css`):
   - Platzierung direkt rechts neben dem Umschalt-Button für die linke Seitenleiste (`.topbar-nav-back-btn`).
   - Umfassender Navigationsverlauf (History-Stack) für geöffnete Notizen und Canvas-Dateien (bis zu 50 Einträge).

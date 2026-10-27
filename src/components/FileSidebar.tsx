@@ -7,6 +7,8 @@ import {
   ChevronRight,
   Clipboard,
   Clock,
+  Columns,
+  ArrowLeft,
   Copy,
   Database,
   FilePlus,
@@ -80,7 +82,9 @@ interface FileSidebarProps {
   activePath: string | null;
   tags: { tag: string; count: number }[];
   selectedTagFilter: string | null;
-  onSelectNote: (path: string) => void;
+  onSelectNote: (path: string, event?: React.MouseEvent | { altKey?: boolean; preventDefault?: () => void }) => void;
+  isResearchOpen?: boolean;
+  onOpenInResearch?: (path: string) => void;
   onCreateNote: (parentFolder?: string) => void;
   onCreateCanvas?: (parentFolder?: string) => void;
   onCreateBase?: (parentFolder?: string) => void;
@@ -106,6 +110,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   tags,
   selectedTagFilter,
   onSelectNote,
+  isResearchOpen = false,
+  onOpenInResearch,
   onCreateNote,
   onCreateCanvas,
   onCreateBase,
@@ -577,18 +583,28 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       }
     }
 
-    // Normal click on file (without modifier)
+    if (e.altKey) {
+      e.preventDefault();
+    }
+
+    // Normal click on file (without modifier or with Alt)
     setSelectedPaths(new Set([node.path]));
     lastClickedPathRef.current = node.path;
 
-    if (
+    const isDoc =
       node.extension === 'md' ||
       node.extension === 'canvas' ||
       node.path.endsWith('.canvas') ||
       node.extension === 'base' ||
-      node.path.endsWith('.base')
-    ) {
-      onSelectNote(node.path);
+      node.path.endsWith('.base');
+    const isMediaOrPdf = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf)$/i.test(node.path);
+
+    if (isDoc || (isResearchOpen && isMediaOrPdf)) {
+      if (e.altKey) {
+        onSelectNote(node.path, { altKey: true });
+      } else {
+        onSelectNote(node.path);
+      }
     } else {
       window.open(api.getAttachmentUrl(node.path), '_blank');
     }
@@ -1193,9 +1209,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <div
                         key={fav.path}
                         className={`tree-item favorite-item ${activePath === fav.path ? 'active' : ''}`}
-                        onClick={() => {
+                        onClick={(e) => {
                           if (fav.type === 'file') {
-                            onSelectNote(fav.path);
+                            if (e.altKey) {
+                              e.preventDefault();
+                              onSelectNote(fav.path, { altKey: true });
+                            } else {
+                              onSelectNote(fav.path);
+                            }
                           } else {
                             const parts = fav.path.split('/');
                             setExpandedFolders((prev) => {
@@ -1284,7 +1305,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <div
                         key={notePath}
                         className={`tree-item recent-item ${activePath === notePath ? 'active' : ''}`}
-                        onClick={() => onSelectNote(notePath)}
+                        onClick={(e) => {
+                          if (e.altKey) {
+                            e.preventDefault();
+                            onSelectNote(notePath, { altKey: true });
+                          } else {
+                            onSelectNote(notePath);
+                          }
+                        }}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -1380,7 +1408,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 <div
                   key={res.path}
                   className={`search-result-card ${activePath === res.path ? 'active' : ''}`}
-                  onClick={() => onSelectNote(res.path)}
+                  onClick={(e) => {
+                    if (e.altKey) {
+                      e.preventDefault();
+                      onSelectNote(res.path, { altKey: true });
+                    } else {
+                      onSelectNote(res.path);
+                    }
+                  }}
                 >
                   <div className="search-result-title">
                     <FileText size={14} />
@@ -1537,6 +1572,30 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   </>
                 ) : (
                   <>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => {
+                        onOpenInResearch?.(contextMenu.node!.path);
+                        setContextMenu(null);
+                      }}
+                    >
+                      <Columns size={15} />
+                      <span>{t('research.openInResearch', 'In Rechercheansicht öffnen')}</span>
+                    </button>
+                    {isResearchOpen && (
+                      <button
+                        type="button"
+                        className="tree-context-item"
+                        onClick={() => {
+                          onSelectNote(contextMenu.node!.path, { altKey: true, preventDefault: () => {} });
+                          setContextMenu(null);
+                        }}
+                      >
+                        <ArrowLeft size={15} />
+                        <span>{t('research.openInMain', 'Im Haupteditor öffnen (Alt+Klick)')}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="tree-context-item"

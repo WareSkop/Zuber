@@ -506,5 +506,13 @@
     "recordsCount": "{{count}} Notizen",
     "noRecordsFound": "Keine passenden Notizen gefunden.",
     "syntaxError": "Syntaxfehler in Base-Definition"
+  },
+  "research": {
+    "title": "Rechercheansicht",
+    "openInResearch": "In Rechercheansicht öffnen",
+    "openInMain": "Im Haupteditor öffnen (Alt+Klick)",
+    "toggleOrientation": "Split-Ausrichtung wechseln (Links/Rechts ⇄ Oben/Unten)",
+    "showGraph": "Graph in Rechercheansicht zeigen",
+    "close": "Rechercheansicht schließen"
   }
 }

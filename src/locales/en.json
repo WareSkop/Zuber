@@ -506,5 +506,13 @@
     "recordsCount": "{{count}} notes",
     "noRecordsFound": "No matching notes found.",
     "syntaxError": "Syntax error in Base definition"
+  },
+  "research": {
+    "title": "Research View",
+    "openInResearch": "Open in Research View",
+    "openInMain": "Open in Main Editor (Alt+Click)",
+    "toggleOrientation": "Switch Split Orientation (Left/Right ⇄ Top/Bottom)",
+    "showGraph": "Show Graph in Research View",
+    "close": "Close Research View"
   }
 }
