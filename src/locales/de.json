@@ -538,7 +538,8 @@
     "switchToTable": "Zu Tabellenansicht wechseln",
     "renameView": "Umbenennen",
     "duplicateView": "Duplizieren",
-    "deleteView": "Ansicht löschen"
+    "deleteView": "Ansicht löschen",
+    "openInEditor": "Im Editor öffnen"
   },
   "research": {
     "title": "Rechercheansicht",

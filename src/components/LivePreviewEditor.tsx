@@ -36,6 +36,7 @@ import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { Target } from 'lucide-react';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
+import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
 
 let mermaidModulePromise: Promise<typeof import('mermaid').default> | null = null;
@@ -579,6 +580,42 @@ class EmbedWidget extends WidgetType {
       root.render(
         <CanvasEmbedWidget
           canvasPath={effectiveCanvasPath}
+          onOpenNote={this.onNavigate}
+          allNotes={this.allNotes}
+        />
+      );
+      return container;
+    }
+
+    let isBase = cleanTarget.toLowerCase().endsWith('.base');
+    let effectiveBasePath = cleanTarget;
+
+    if (!isBase && this.allNotes) {
+      const lower = cleanTarget.toLowerCase();
+      const baseMatch = this.allNotes.find(
+        (n) =>
+          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+          n.path.toLowerCase().endsWith('.base')
+      );
+      const mdMatch = this.allNotes.find(
+        (n) =>
+          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+          n.path.toLowerCase().endsWith('.md')
+      );
+      if (baseMatch && !mdMatch) {
+        isBase = true;
+        effectiveBasePath = baseMatch.path;
+      }
+    }
+
+    if (isBase) {
+      const container = document.createElement('div');
+      container.className = 'cm-embed-widget cm-lp-base-embed embedded-base-container base-embed-widget';
+      const root = createRoot(container);
+      (container as any)._reactRoot = root;
+      root.render(
+        <BaseEmbedWidget
+          basePath={effectiveBasePath}
           onOpenNote={this.onNavigate}
           allNotes={this.allNotes}
         />
@@ -2824,6 +2861,29 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           const safeAlt = escapeHtml(alt);
           return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
         }
+        let isBase = target.toLowerCase().endsWith('.base');
+        let basePath = target;
+        if (!isBase) {
+          const lower = target.toLowerCase();
+          const baseMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.base')
+          );
+          const mdMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.md')
+          );
+          if (baseMatch && !mdMatch) {
+            isBase = true;
+            basePath = baseMatch.path;
+          }
+        }
+        if (isBase) {
+          const safeBasePath = escapeHtml(basePath);
+          return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
+        }
         if (target.toLowerCase().endsWith('.pdf')) {
           const url = escapeHtml(api.getAttachmentUrl(target, notePath));
           const fileName = target.split('/').pop() || target;
@@ -2871,6 +2931,29 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           const safeCanvasPath = escapeHtml(canvasPath);
           const safeAlt = escapeHtml(alt);
           return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        }
+        let isBase = target.toLowerCase().endsWith('.base');
+        let basePath = target;
+        if (!isBase) {
+          const lower = target.toLowerCase();
+          const baseMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.base')
+          );
+          const mdMatch = allNotes.find(
+            (n) =>
+              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+              n.path.toLowerCase().endsWith('.md')
+          );
+          if (baseMatch && !mdMatch) {
+            isBase = true;
+            basePath = baseMatch.path;
+          }
+        }
+        if (isBase) {
+          const safeBasePath = escapeHtml(basePath);
+          return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
         }
         if (target.toLowerCase().endsWith('.pdf')) {
           const rawUrl = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);
@@ -3031,6 +3114,25 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           definitionYaml={rawCode}
           allNotes={allNotes}
           currentBasePath={notePath || undefined}
+          onOpenNote={onNavigateWikiLink}
+        />
+      );
+    });
+
+    // Render Base Embeds (![[Name.base]]) in Reading Mode
+    const baseEmbedBlocks = container.querySelectorAll<HTMLElement>('.reading-base-embed');
+    baseEmbedBlocks.forEach((block) => {
+      const basePath = block.dataset.basePath || block.dataset.wikilink || '';
+      const mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
+      if (!mountContainer || mountContainer.hasAttribute('data-rendered')) return;
+
+      mountContainer.setAttribute('data-rendered', 'true');
+      const root = createRoot(mountContainer);
+      baseRoots.push(root);
+      root.render(
+        <BaseEmbedWidget
+          basePath={basePath}
+          allNotes={allNotes}
           onOpenNote={onNavigateWikiLink}
         />
       );

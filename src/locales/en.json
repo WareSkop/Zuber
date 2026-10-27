@@ -538,7 +538,8 @@
     "switchToTable": "Switch to table view",
     "renameView": "Rename",
     "duplicateView": "Duplicate",
-    "deleteView": "Delete view"
+    "deleteView": "Delete view",
+    "openInEditor": "Open in Editor"
   },
   "research": {
     "title": "Research View",

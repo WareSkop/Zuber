@@ -1,0 +1,318 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Database,
+  Table as TableIcon,
+  LayoutGrid,
+  List,
+  ExternalLink,
+  AlertTriangle,
+} from 'lucide-react';
+import { api } from '../../api';
+import { syncEngine } from '../../sync/syncEngine';
+import { useTranslation } from '../../i18n';
+import { parseBaseYaml, type BaseConfig } from '../../base/baseConfig';
+import {
+  executeBaseQuery,
+  getPropertyValue,
+  type BaseQueryResult,
+  type BaseRecord,
+} from '../../base/baseEngine';
+import { BaseTableView } from './BaseTableView';
+import { BaseCardsView } from './BaseCardsView';
+
+export interface BaseEmbedWidgetProps {
+  basePath: string;
+  onOpenNote: (path: string) => void;
+  allNotes?: any[];
+  rawContent?: string;
+  onCellChange?: (notePath: string, key: string, value: any) => Promise<void>;
+  readOnly?: boolean;
+}
+
+export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
+  basePath,
+  onOpenNote,
+  allNotes,
+  rawContent,
+  onCellChange,
+  readOnly = false,
+}) => {
+  const { t } = useTranslation();
+  const [yaml, setYaml] = useState<string>(rawContent || '');
+  const [loading, setLoading] = useState<boolean>(!rawContent);
+  const [error, setError] = useState<string | null>(null);
+  const [internalNotes, setInternalNotes] = useState<any[]>(allNotes || []);
+  const [activeViewIdx, setActiveViewIdx] = useState<number>(0);
+
+  // Column overrides for interactive embedded table
+  const [localColumnSizes, setLocalColumnSizes] = useState<Record<string, number>>({});
+  const [columnOrderOverride, setColumnOrderOverride] = useState<string[] | null>(null);
+  const [sortOverride, setSortOverride] = useState<{ property: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Sync / fetch allNotes if not provided
+  useEffect(() => {
+    if (allNotes && allNotes.length > 0) {
+      setInternalNotes(allNotes);
+      return;
+    }
+    let cancelled = false;
+    syncEngine
+      .getLocalDb()
+      .getAllNotes()
+      .then((notes: any[]) => {
+        if (!cancelled && notes && notes.length > 0) {
+          setInternalNotes(notes);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allNotes]);
+
+  // Load Base YAML content if not provided via props
+  useEffect(() => {
+    if (rawContent !== undefined) {
+      setYaml(rawContent);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    api
+      .getNote(basePath)
+      .then((note) => {
+        if (!cancelled) {
+          const content = note.rawContent || note.body || '';
+          setYaml(content);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError(`Base-Datei konnte nicht geladen werden (${basePath})`);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [basePath, rawContent]);
+
+  // Parse YAML configuration
+  const { config, parseError } = useMemo(() => {
+    if (!yaml) return { config: null, parseError: null };
+    try {
+      const parsed = parseBaseYaml(yaml);
+      return { config: parsed, parseError: null };
+    } catch (err: any) {
+      return { config: null, parseError: err?.message || String(err) };
+    }
+  }, [yaml]);
+
+  // Views & active view
+  const views = useMemo(() => {
+    return config?.views && config.views.length > 0
+      ? config.views
+      : [{ type: 'table' as const, name: 'Table' }];
+  }, [config?.views]);
+
+  const safeViewIndex = Math.min(Math.max(0, activeViewIdx), views.length - 1);
+  const activeView = views[safeViewIndex];
+
+  // Execute query against vault notes
+  const rawQueryResult = useMemo(() => {
+    if (!config) return null;
+    try {
+      return executeBaseQuery(config, internalNotes, safeViewIndex, basePath);
+    } catch (err: any) {
+      return null;
+    }
+  }, [config, internalNotes, safeViewIndex, basePath]);
+
+  // Apply interactive sorting override if present
+  const queryResult: BaseQueryResult | null = useMemo(() => {
+    if (!rawQueryResult) return null;
+    if (!sortOverride) return rawQueryResult;
+
+    const dir = sortOverride.direction === 'desc' ? -1 : 1;
+    const sorted = [...rawQueryResult.records].sort((a, b) => {
+      const valA = getPropertyValue(a, sortOverride.property);
+      const valB = getPropertyValue(b, sortOverride.property);
+      if (valA === valB) return 0;
+      if (valA === undefined || valA === null) return 1 * dir;
+      if (valB === undefined || valB === null) return -1 * dir;
+      if (typeof valA === 'number' && typeof valB === 'number') return (valA - valB) * dir;
+      return String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }) * dir;
+    });
+
+    return {
+      ...rawQueryResult,
+      records: sorted,
+      groups: rawQueryResult.groups.map((g) => ({
+        ...g,
+        records: sorted.filter((s) => g.records.some((r) => r.file.path === s.file.path)),
+      })),
+    };
+  }, [rawQueryResult, sortOverride]);
+
+  // Cell editing support
+  const handleCellChange = async (notePath: string, key: string, value: any) => {
+    if (readOnly) return;
+    if (onCellChange) {
+      await onCellChange(notePath, key, value);
+      return;
+    }
+    try {
+      const note = await api.getNote(notePath);
+      const existingProps = [...(note.properties || [])];
+      const propIdx = existingProps.findIndex((p) => p.key.toLowerCase() === key.toLowerCase());
+      const propType = typeof value === 'boolean' ? 'checkbox' : typeof value === 'number' ? 'number' : 'text';
+      if (propIdx >= 0) {
+        existingProps[propIdx] = { key: existingProps[propIdx].key, value, type: propType };
+      } else {
+        existingProps.push({ key, value, type: propType });
+      }
+      await api.saveNote({
+        path: note.path,
+        body: note.body,
+        properties: existingProps,
+        forceOverwrite: true,
+      });
+      setInternalNotes((prev) =>
+        prev.map((n) => {
+          if (n.path !== notePath) return n;
+          return {
+            ...n,
+            properties: existingProps,
+            frontmatter: {
+              ...(n.frontmatter || {}),
+              [key]: value,
+            },
+          };
+        })
+      );
+    } catch (err) {
+      console.error('Failed to update note property in BaseEmbedWidget:', err);
+    }
+  };
+
+  const fileName = basePath.split('/').pop() || basePath;
+  const effectiveColumnSizes = useMemo(() => {
+    return { ...(activeView.columnSize || {}), ...localColumnSizes };
+  }, [activeView.columnSize, localColumnSizes]);
+
+  return (
+    <div className="cm-lp-base-embed embedded-base-container base-embed-widget">
+      {/* 1. Subtle Status Bar */}
+      <div className="base-embed-status-bar">
+        <div className="base-embed-status-left">
+          <div
+            className="base-embed-title-cluster"
+            onClick={() => onOpenNote(basePath)}
+            title={basePath}
+          >
+            <Database size={14} className="base-embed-icon" />
+            <span className="base-embed-title">{fileName}</span>
+          </div>
+
+          {/* View pills if multiple views exist */}
+          {views.length > 1 && (
+            <div className="base-embed-view-pills">
+              {views.map((v, idx) => {
+                const isActive = idx === safeViewIndex;
+                const ViewIcon = v.type === 'cards' ? LayoutGrid : v.type === 'list' ? List : TableIcon;
+                return (
+                  <button
+                    key={`${v.name || v.type}-${idx}`}
+                    type="button"
+                    className={`base-embed-pill-btn ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveViewIdx(idx);
+                      setSortOverride(null);
+                    }}
+                    title={v.name}
+                  >
+                    <ViewIcon size={12} />
+                    <span>{v.name || (v.type === 'cards' ? 'Cards' : 'Table')}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="base-embed-status-right">
+          <button
+            type="button"
+            className="base-embed-open-btn"
+            onClick={() => onOpenNote(basePath)}
+            title={t('base.openInEditor') || 'Im Editor öffnen ↗'}
+            aria-label={t('base.openInEditor') || 'Im Editor öffnen'}
+          >
+            <span className="open-label-desktop">{t('base.openInEditor') || 'Im Editor öffnen'}</span>
+            <ExternalLink size={13} className="external-icon" />
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Embedded Content Area */}
+      <div className="base-embed-content">
+        {loading ? (
+          <div className="base-embed-loading">
+            <span className="loading-spinner-small" />
+            <span>Lade Base...</span>
+          </div>
+        ) : error ? (
+          <div className="base-error-box">
+            <div className="base-error-header">
+              <AlertTriangle size={15} className="base-error-icon" />
+              <span>{error}</span>
+            </div>
+          </div>
+        ) : parseError ? (
+          <div className="base-error-box">
+            <div className="base-error-header">
+              <AlertTriangle size={15} className="base-error-icon" />
+              <span>{t('base.syntaxError') || 'Syntaxfehler in Base-Definition'}</span>
+            </div>
+            <pre className="base-error-message">{parseError}</pre>
+          </div>
+        ) : !queryResult || queryResult.records.length === 0 ? (
+          <div className="base-empty-state">
+            <Database size={24} className="empty-icon" />
+            <p>{t('base.noRecordsFound') || 'Keine passenden Notizen gefunden.'}</p>
+          </div>
+        ) : activeView.type === 'cards' ? (
+          <BaseCardsView
+            queryResult={queryResult}
+            view={activeView}
+            onSelectNote={onOpenNote}
+          />
+        ) : (
+          <BaseTableView
+            queryResult={queryResult}
+            onSelectNote={onOpenNote}
+            onCellChange={handleCellChange}
+            readOnly={readOnly}
+            columnSizes={effectiveColumnSizes}
+            onColumnResize={(col, width) =>
+              setLocalColumnSizes((prev) => ({ ...prev, [col]: width }))
+            }
+            onColumnReorder={(newOrder) => setColumnOrderOverride(newOrder)}
+            onColumnHide={() => {}}
+            onColumnDisplayNameChange={() => {}}
+            onColumnSort={(col, direction) => setSortOverride({ property: col, direction })}
+            availablePropertiesToAdd={[]}
+            onAddColumn={() => {}}
+          />
+        )}
+      </div>
+    </div>
+  );
+};

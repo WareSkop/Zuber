@@ -20,6 +20,7 @@ import type { GraphData } from '../../shared/types';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
 import { renderReadingHtml, loadAndInitMermaid, escapeHtml } from '../utils/readingMode';
 import { BaseView } from './BaseView';
+import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 
 const GraphView = lazy(() =>
   import('./GraphView').then((m) => ({ default: m.GraphView }))
@@ -213,6 +214,25 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
           definitionYaml={rawCode}
           allNotes={allNotes}
           currentBasePath={target.path || undefined}
+          onOpenNote={(noteP: string) => onNavigate(noteP)}
+        />
+      );
+    });
+
+    // Base Embeds (![[Name.base]]) rendering
+    const baseEmbedBlocks = container.querySelectorAll<HTMLElement>('.reading-base-embed');
+    baseEmbedBlocks.forEach((block) => {
+      const basePath = block.dataset.basePath || block.dataset.wikilink || '';
+      const mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
+      if (!mountContainer || mountContainer.hasAttribute('data-rendered')) return;
+
+      mountContainer.setAttribute('data-rendered', 'true');
+      const root = createRoot(mountContainer);
+      baseRoots.push(root);
+      root.render(
+        <BaseEmbedWidget
+          basePath={basePath}
+          allNotes={allNotes}
           onOpenNote={(noteP: string) => onNavigate(noteP)}
         />
       );

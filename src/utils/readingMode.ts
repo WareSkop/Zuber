@@ -81,6 +81,29 @@ export function renderReadingHtml(
         const safeAlt = escapeHtml(alt);
         return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
       }
+      let isBase = target.toLowerCase().endsWith('.base');
+      let basePath = target;
+      if (!isBase && allNotes) {
+        const lower = target.toLowerCase();
+        const baseMatch = allNotes.find(
+          (n) =>
+            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+            n.path.toLowerCase().endsWith('.base')
+        );
+        const mdMatch = allNotes.find(
+          (n) =>
+            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+            n.path.toLowerCase().endsWith('.md')
+        );
+        if (baseMatch && !mdMatch) {
+          isBase = true;
+          basePath = baseMatch.path;
+        }
+      }
+      if (isBase) {
+        const safeBasePath = escapeHtml(basePath);
+        return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
+      }
       if (target.toLowerCase().endsWith('.pdf')) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
         const fileName = target.split('/').pop() || target;
@@ -128,6 +151,29 @@ export function renderReadingHtml(
         const safeCanvasPath = escapeHtml(canvasPath);
         const safeAlt = escapeHtml(alt);
         return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+      }
+      let isBase = target.toLowerCase().endsWith('.base');
+      let basePath = target;
+      if (!isBase && allNotes) {
+        const lower = target.toLowerCase();
+        const baseMatch = allNotes.find(
+          (n) =>
+            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+            n.path.toLowerCase().endsWith('.base')
+        );
+        const mdMatch = allNotes.find(
+          (n) =>
+            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
+            n.path.toLowerCase().endsWith('.md')
+        );
+        if (baseMatch && !mdMatch) {
+          isBase = true;
+          basePath = baseMatch.path;
+        }
+      }
+      if (isBase) {
+        const safeBasePath = escapeHtml(basePath);
+        return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
       }
       if (target.toLowerCase().endsWith('.pdf')) {
         const rawUrl = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);

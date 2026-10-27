@@ -224,9 +224,10 @@ describe('Base Cards View & View Management', () => {
     // Option to switch to cards should be visible
     const dropdownItems = container.querySelectorAll('.tab-dropdown .base-dropdown-item');
     expect(dropdownItems.length).toBeGreaterThan(0);
-    const switchToCardsBtn = Array.from(dropdownItems).find((el) =>
-      el.textContent?.includes('Karten') || el.textContent?.includes('Cards')
-    ) as HTMLButtonElement;
+    const switchToCardsBtn = Array.from(dropdownItems).find((el) => {
+      const text = el.textContent?.toLowerCase() || '';
+      return text.includes('karten') || text.includes('cards');
+    }) as HTMLButtonElement;
     expect(switchToCardsBtn).toBeTruthy();
 
     await act(async () => {
@@ -238,9 +239,10 @@ describe('Base Cards View & View Management', () => {
     await act(async () => {
       (menuTriggers[1] as HTMLButtonElement).click();
     });
-    const switchToTableBtn = Array.from(container.querySelectorAll('.tab-dropdown .base-dropdown-item')).find((el) =>
-      el.textContent?.includes('Tabelle') || el.textContent?.includes('Table')
-    ) as HTMLButtonElement;
+    const switchToTableBtn = Array.from(container.querySelectorAll('.tab-dropdown .base-dropdown-item')).find((el) => {
+      const text = el.textContent?.toLowerCase() || '';
+      return text.includes('tabelle') || text.includes('table');
+    }) as HTMLButtonElement;
     expect(switchToTableBtn).toBeTruthy();
 
     await act(async () => {

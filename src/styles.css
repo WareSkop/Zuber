@@ -8586,6 +8586,161 @@ input:checked + .slider:before {
 }
 
 /* ==========================================================================
+   Base Embed Widget (![[Name.base]]) - Borderless Dashboard Layout
+   ========================================================================== */
+
+.cm-lp-base-embed,
+.embedded-base-container,
+.base-embed-widget {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.base-embed-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px 8px 4px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+  user-select: none;
+}
+
+.base-embed-status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.base-embed-title-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.base-embed-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.base-embed-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+
+.base-embed-title-cluster:hover .base-embed-title {
+  color: var(--text-primary);
+}
+
+.base-embed-view-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.base-embed-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.base-embed-pill-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.base-embed-pill-btn.active {
+  background: var(--bg-elevated);
+  color: var(--accent-color, #d4af37);
+  border-color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
+.base-embed-status-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.base-embed-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.base-embed-open-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.base-embed-open-btn .external-icon {
+  flex-shrink: 0;
+}
+
+/* Borderless Inner Views inside BaseEmbedWidget */
+.base-embed-widget .base-table-wrapper,
+.cm-lp-base-embed .base-table-wrapper,
+.embedded-base-container .base-table-wrapper {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.base-embed-widget .base-table,
+.cm-lp-base-embed .base-table,
+.embedded-base-container .base-table {
+  border: none !important;
+  border-collapse: collapse;
+}
+
+.base-embed-widget .base-cards-container,
+.cm-lp-base-embed .base-cards-container,
+.embedded-base-container .base-cards-container {
+  border: none !important;
+  padding: 8px 0;
+  background: transparent !important;
+}
+
+.base-embed-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ==========================================================================
    Base Editor GUI & Visual Configuration Toolbar
    ========================================================================== */
 
