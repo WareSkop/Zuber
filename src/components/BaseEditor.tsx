@@ -35,6 +35,7 @@ import { BaseFilterPopover } from './base/BaseFilterPopover';
 import { BaseColumnsModal } from './base/BaseColumnsModal';
 import { BaseTableView } from './base/BaseTableView';
 import { BaseCardsView } from './base/BaseCardsView';
+import { BaseBoardView } from './base/BaseBoardView';
 import { useTranslation } from '../i18n';
 
 export interface BaseEditorProps {
@@ -149,14 +150,22 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   // ----------------------------------------------------
   // Handlers for Views (Add, Rename, Duplicate, Delete)
   // ----------------------------------------------------
-  const handleAddView = (name: string, type: 'table' | 'cards') => {
+  const handleAddView = (name: string, type: 'table' | 'cards' | 'board') => {
+    const newViewObj: any = {
+      type,
+      name,
+      order: activeView?.order ? [...activeView.order] : ['file.name'],
+    };
+    if (type === 'board') {
+      newViewObj.groupBy = {
+        property: 'status',
+        columns: ['Open', 'inWork', 'Waiting', 'Finish'],
+      };
+      newViewObj.columnLimit = 10;
+    }
     const newViews = [
       ...config.views,
-      {
-        type,
-        name,
-        order: activeView?.order ? [...activeView.order] : ['file.name'],
-      },
+      newViewObj,
     ];
     commitConfigChange({
       ...config,
@@ -199,8 +208,21 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
     setActiveViewIndex(Math.max(0, idx - 1));
   };
 
-  const handleSwitchViewType = (idx: number, newType: 'table' | 'cards') => {
-    const newViews = config.views.map((v, i) => (i === idx ? { ...v, type: newType } : v));
+  const handleSwitchViewType = (idx: number, newType: 'table' | 'cards' | 'board') => {
+    const newViews = config.views.map((v, i) => {
+      if (i !== idx) return v;
+      const updated: any = { ...v, type: newType };
+      if (newType === 'board' && !updated.groupBy?.property) {
+        updated.groupBy = {
+          property: 'status',
+          columns: ['Open', 'inWork', 'Waiting', 'Finish'],
+        };
+        if (!updated.columnLimit) {
+          updated.columnLimit = 10;
+        }
+      }
+      return updated;
+    });
     commitConfigChange({
       ...config,
       views: newViews,
@@ -470,6 +492,14 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
               </button>
             )}
           </div>
+        ) : activeView.type === 'board' ? (
+          /* Kanban Board View */
+          <BaseBoardView
+            queryResult={queryResult}
+            view={activeView}
+            onSelectNote={onSelectNote}
+            onCellChange={onCellChange}
+          />
         ) : activeView.type === 'cards' ? (
           /* Cards View */
           <BaseCardsView

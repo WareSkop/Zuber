@@ -539,7 +539,14 @@
     "renameView": "Umbenennen",
     "duplicateView": "Duplizieren",
     "deleteView": "Ansicht löschen",
-    "openInEditor": "Im Editor öffnen"
+    "openInEditor": "Im Editor öffnen",
+    "typeBoard": "Board (Kanban)",
+    "switchToBoard": "Zu Boardansicht wechseln",
+    "showMoreCards": "{{count}} weitere anzeigen...",
+    "showFewerCards": "Weniger anzeigen",
+    "noStatusColumn": "Kein Status",
+    "columnLimit": "Karten-Limit pro Spalte",
+    "addCard": "Karte hinzufügen"
   },
   "research": {
     "title": "Rechercheansicht",

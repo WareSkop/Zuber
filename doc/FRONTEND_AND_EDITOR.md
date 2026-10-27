@@ -1012,6 +1012,13 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
   - **Spalten-Kontextmenü:** Schnellaktionen für Anzeigename umbenennen, Auf-/Absteigend sortieren und Spalte ausblenden.
   - **`+` Spalten-Hinzufügen-Dropdown:** Schnelles Einblenden weiterer im Vault vorhandener Frontmatter-Properties.
   - **Inline-Bearbeitung:** Klick in Datenzellen erlaubt direktes Editieren von Text, Zahlen und Checkboxen mit sofortiger Aktualisierung der Markdown-Frontmatter.
+- **Kartenansicht (`BaseCardsView.tsx`):**
+  - Responsive Kacheln (`type: cards`) mit konfigurierbarer Eigenschaftsauswahl (`order`), Ordner-Pills, Tags und Frontmatter-Feldern.
+- **Interaktive Kanban-Board-Ansicht (`BaseBoardView.tsx`):**
+  - Vollwertiges Board-Layout (`type: board`) mit horizontal scrollbaren Spalten, dynamisch gruppiert nach einer Frontmatter-Eigenschaft (z. B. `groupBy.property: status`).
+  - **Konfigurierbare Spalten (`groupBy.columns`):** Unterstützt explizit geordnete Spalten (z. B. `['Open', 'inWork', 'Waiting', 'Finish']`) sowie eine Fallback-Spalte für Notizen ohne Status (`Kein Status`).
+  - **Kartenlimit & Progressives Nachladen (`columnLimit`):** Begrenzt die sichtbaren Karten pro Spalte (Standard: `10`), sortiert nach Änderungsdatum (`mtime` absteigend). Überschreitet eine Spalte das Limit, schaltet ein Button `⬇ {{count}} weitere anzeigen...` bzw. `⬆ Weniger anzeigen` die Ansicht um.
+  - **Flüssiges Drag & Drop mit Frontmatter-Write-Back:** Verschieben einer Karte zwischen Spalten aktualisiert das Ziel-Attribut (z. B. `status`) optimistisch im UI mit 0 ms Latenz und synchronisiert die Änderung persistent in die Frontmatter der Notiz (`api.saveNote` / `onCellChange`).
 - **Spalten-Manager-Modal (`BaseColumnsModal.tsx`):**
   - Übersichtliche Checkliste aller im Vault gefundenen Eigenschaften zum Ein- und Ausblenden sowie Drag & Drop zur Sortierung.
 - **New Base Erstellungs-Wizard (`NewBaseModal.tsx`):**

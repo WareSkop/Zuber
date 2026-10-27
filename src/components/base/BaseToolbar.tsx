@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Table as TableIcon,
   LayoutGrid,
+  Kanban,
   Plus,
   MoreVertical,
   Filter,
@@ -22,11 +23,11 @@ export interface BaseToolbarProps {
   config: BaseConfig;
   activeViewIndex: number;
   onSelectView: (index: number) => void;
-  onAddView: (name: string, type: 'table' | 'cards') => void;
+  onAddView: (name: string, type: 'table' | 'cards' | 'board') => void;
   onRenameView: (index: number, newName: string) => void;
   onDuplicateView: (index: number) => void;
   onDeleteView: (index: number) => void;
-  onSwitchViewType?: (index: number, newType: 'table' | 'cards') => void;
+  onSwitchViewType?: (index: number, newType: 'table' | 'cards' | 'board') => void;
   activeFilterCount: number;
   isFilterPopoverOpen: boolean;
   onToggleFilterPopover: () => void;
@@ -62,7 +63,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
   // New View popover state
   const [isAddViewOpen, setIsAddViewOpen] = useState(false);
   const [newViewName, setNewViewName] = useState('');
-  const [newViewType, setNewViewType] = useState<'table' | 'cards'>('table');
+  const [newViewType, setNewViewType] = useState<'table' | 'cards' | 'board'>('table');
 
   // Tab menu dropdown state
   const [tabMenuIndex, setTabMenuIndex] = useState<number | null>(null);
@@ -144,7 +145,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
         <div className="base-view-tabs">
           {config.views.map((v, idx) => {
             const isTabActive = idx === activeViewIndex;
-            const IconComponent = v.type === 'cards' ? LayoutGrid : TableIcon;
+            const IconComponent = v.type === 'board' ? Kanban : v.type === 'cards' ? LayoutGrid : TableIcon;
             const isRenaming = editingTabNameIndex === idx;
 
             return (
@@ -203,7 +204,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                     onClick={(e) => e.stopPropagation()}
                   >
                     {/* Switch View Type */}
-                    {v.type === 'cards' ? (
+                    {v.type !== 'table' && (
                       <button
                         type="button"
                         className="base-dropdown-item"
@@ -215,7 +216,8 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                         <TableIcon size={13} />
                         <span>{t('base.switchToTable') || 'Zu Tabellenansicht wechseln'}</span>
                       </button>
-                    ) : (
+                    )}
+                    {v.type !== 'cards' && (
                       <button
                         type="button"
                         className="base-dropdown-item"
@@ -226,6 +228,19 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                       >
                         <LayoutGrid size={13} />
                         <span>{t('base.switchToCards') || 'Zu Kartenansicht wechseln'}</span>
+                      </button>
+                    )}
+                    {v.type !== 'board' && (
+                      <button
+                        type="button"
+                        className="base-dropdown-item"
+                        onClick={() => {
+                          setTabMenuIndex(null);
+                          onSwitchViewType?.(idx, 'board');
+                        }}
+                      >
+                        <Kanban size={13} />
+                        <span>{t('base.switchToBoard') || 'Zu Boardansicht wechseln'}</span>
                       </button>
                     )}
 
@@ -319,6 +334,14 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                     >
                       <LayoutGrid size={14} />
                       <span>{t('base.typeCards') || 'Karten'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`type-btn ${newViewType === 'board' ? 'active' : ''}`}
+                      onClick={() => setNewViewType('board')}
+                    >
+                      <Kanban size={14} />
+                      <span>{t('base.typeBoard') || 'Board'}</span>
                     </button>
                   </div>
                 </div>

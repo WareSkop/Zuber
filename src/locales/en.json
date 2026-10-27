@@ -539,7 +539,14 @@
     "renameView": "Rename",
     "duplicateView": "Duplicate",
     "deleteView": "Delete view",
-    "openInEditor": "Open in Editor"
+    "openInEditor": "Open in Editor",
+    "typeBoard": "Board (Kanban)",
+    "switchToBoard": "Switch to board view",
+    "showMoreCards": "Show {{count}} more...",
+    "showFewerCards": "Show less",
+    "noStatusColumn": "No Status",
+    "columnLimit": "Column card limit",
+    "addCard": "Add card"
   },
   "research": {
     "title": "Research View",

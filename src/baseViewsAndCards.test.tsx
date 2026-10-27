@@ -158,7 +158,7 @@ describe('Base Cards View & View Management', () => {
 
     // Select Cards type
     const typeButtons = container.querySelectorAll('.add-view-types .type-btn');
-    expect(typeButtons.length).toBe(2);
+    expect(typeButtons.length).toBe(3);
     await act(async () => {
       (typeButtons[1] as HTMLButtonElement).click();
     });

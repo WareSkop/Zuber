@@ -230,9 +230,16 @@ export interface BaseSortRule {
   direction?: 'ASC' | 'DESC' | 'asc' | 'desc';
 }
 
+export interface BaseBoardColumnConfig {
+  name: string;
+  limit?: number;
+  color?: string;
+}
+
 export interface BaseGroupBy {
   property: string;
   direction?: 'ASC' | 'DESC' | 'asc' | 'desc';
+  columns?: (string | BaseBoardColumnConfig)[];
 }
 
 export type BaseFilterCondition =
@@ -243,9 +250,10 @@ export type BaseFilterCondition =
   | Record<string, unknown>;
 
 export interface BaseViewConfig {
-  type: 'table' | 'cards' | 'list' | string;
+  type: 'table' | 'cards' | 'board' | 'list' | string;
   name?: string;
   limit?: number;
+  columnLimit?: number;
   order?: string[];
   columnSize?: Record<string, number>;
   filters?: BaseFilterCondition;

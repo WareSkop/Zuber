@@ -875,6 +875,9 @@ export function executeBaseQuery(
       }
       return 0;
     });
+  } else if (activeView.type === 'board') {
+    // Default board sorting by recent modification time (newest first)
+    matchingRecords.sort((a, b) => (b.file?.mtime || 0) - (a.file?.mtime || 0));
   }
 
   // 5. Limit
@@ -917,29 +920,83 @@ export function executeBaseQuery(
 
   // 8. Grouping
   const groups: BaseGroup[] = [];
-  if (activeView.groupBy && activeView.groupBy.property) {
-    const groupProp = activeView.groupBy.property;
-    const groupDir = (activeView.groupBy.direction || 'ASC').toUpperCase() === 'DESC' ? -1 : 1;
+  const isBoard = activeView.type === 'board';
+  const groupProp = activeView.groupBy?.property || (isBoard ? 'status' : undefined);
 
-    const groupMap = new Map<string, BaseRecord[]>();
-    for (const rec of limitedRecords) {
-      const gVal = String(getPropertyValue(rec, groupProp) ?? 'Ungrouped');
-      if (!groupMap.has(gVal)) {
-        groupMap.set(gVal, []);
+  if (groupProp) {
+    const groupDir = (activeView.groupBy?.direction || 'ASC').toUpperCase() === 'DESC' ? -1 : 1;
+    const explicitCols = activeView.groupBy?.columns || (isBoard && !activeView.groupBy?.property ? ['Open', 'inWork', 'Waiting', 'Finish'] : undefined);
+
+    if (Array.isArray(explicitCols) && explicitCols.length > 0) {
+      // 1. Explicit columns mode (e.g. for Kanban Board)
+      const colConfigs: { name: string; limit?: number; color?: string }[] = explicitCols.map((c: any) =>
+        typeof c === 'string' ? { name: c } : { name: c.name, limit: c.limit, color: c.color }
+      );
+
+      const colMap = new Map<string, BaseRecord[]>();
+      for (const c of colConfigs) {
+        colMap.set(c.name, []);
       }
-      groupMap.get(gVal)!.push(rec);
-    }
+      const noStatusRecords: BaseRecord[] = [];
 
-    const sortedGroupKeys = Array.from(groupMap.keys()).sort((a, b) => {
-      return a.localeCompare(b, undefined, { numeric: true }) * groupDir;
-    });
+      for (const rec of limitedRecords) {
+        const rawVal = getPropertyValue(rec, groupProp);
+        if (rawVal === undefined || rawVal === null || String(rawVal).trim() === '') {
+          noStatusRecords.push(rec);
+          continue;
+        }
+        const strVal = String(rawVal).trim();
+        // Match exact or case-insensitive
+        const matchedCol = colConfigs.find(
+          (c) => c.name.toLowerCase() === strVal.toLowerCase()
+        );
+        if (matchedCol) {
+          colMap.get(matchedCol.name)!.push(rec);
+        } else {
+          noStatusRecords.push(rec);
+        }
+      }
 
-    for (const k of sortedGroupKeys) {
-      groups.push({
-        key: k,
-        label: k,
-        records: groupMap.get(k) || [],
+      for (const col of colConfigs) {
+        groups.push({
+          key: col.name,
+          label: col.name,
+          records: colMap.get(col.name) || [],
+        });
+      }
+
+      if (noStatusRecords.length > 0 || isBoard) {
+        groups.push({
+          key: 'no_status',
+          label: 'Kein Status',
+          records: noStatusRecords,
+        });
+      }
+    } else {
+      const groupMap = new Map<string, BaseRecord[]>();
+      for (const rec of limitedRecords) {
+        const raw = getPropertyValue(rec, groupProp);
+        const gVal = (raw === undefined || raw === null || String(raw).trim() === '')
+          ? (isBoard ? 'Kein Status' : 'Ungrouped')
+          : String(raw);
+
+        if (!groupMap.has(gVal)) {
+          groupMap.set(gVal, []);
+        }
+        groupMap.get(gVal)!.push(rec);
+      }
+
+      const sortedGroupKeys = Array.from(groupMap.keys()).sort((a, b) => {
+        return a.localeCompare(b, undefined, { numeric: true }) * groupDir;
       });
+
+      for (const k of sortedGroupKeys) {
+        groups.push({
+          key: k === 'Kein Status' ? 'no_status' : k,
+          label: k,
+          records: groupMap.get(k) || [],
+        });
+      }
     }
   } else {
     // Single default group

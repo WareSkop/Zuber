@@ -32,10 +32,17 @@ export interface BasePropertyConfig {
   [key: string]: any;
 }
 
+export interface BaseBoardColumnConfig {
+  name: string;
+  limit?: number; // Optional per-column limit (defaults to view default or 10)
+  color?: string; // Optional accent color badge for the column header
+}
+
 export interface BaseViewConfig {
-  type: 'table' | 'cards' | 'list';
+  type: 'table' | 'cards' | 'board' | 'list';
   name: string;
   limit?: number;
+  columnLimit?: number; // Default max visible cards per column (default: 10)
   filters?: {
     and?: (string | Record<string, any>)[];
     or?: (string | Record<string, any>)[];
@@ -46,6 +53,7 @@ export interface BaseViewConfig {
   groupBy?: {
     property: string;
     direction?: 'asc' | 'desc';
+    columns?: (string | BaseBoardColumnConfig)[];
   };
   columnSize?: Record<string, number>;
   [key: string]: any;
@@ -77,8 +85,9 @@ export function parseBaseYaml(rawYaml: string): BaseConfig {
     const views: BaseViewConfig[] = Array.isArray(parsed.views) && parsed.views.length > 0
       ? parsed.views.map((v: any, idx: number) => ({
           ...v,
-          type: (v.type === 'cards' || v.type === 'list') ? v.type : 'table',
-          name: v.name || (v.type === 'cards' ? 'Cards' : `Table ${idx + 1}`),
+          type: (v.type === 'cards' || v.type === 'board' || v.type === 'list') ? v.type : 'table',
+          name: v.name || (v.type === 'board' ? 'Board' : v.type === 'cards' ? 'Cards' : `Table ${idx + 1}`),
+          columnLimit: typeof v.columnLimit === 'number' ? v.columnLimit : undefined,
           sort: Array.isArray(v.sort)
             ? v.sort.map((s: any) => ({
                 property: s.property,
@@ -89,6 +98,17 @@ export function parseBaseYaml(rawYaml: string): BaseConfig {
             ? {
                 property: v.groupBy.property,
                 direction: (v.groupBy.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
+                columns: Array.isArray(v.groupBy.columns)
+                  ? v.groupBy.columns.map((c: any) =>
+                      typeof c === 'string'
+                        ? c
+                        : {
+                            name: String(c.name || ''),
+                            limit: typeof c.limit === 'number' ? c.limit : undefined,
+                            color: c.color ? String(c.color) : undefined,
+                          }
+                    )
+                  : undefined,
               }
             : undefined,
         }))
@@ -428,6 +448,10 @@ export function stringifyBaseYaml(config: BaseConfig): string {
       vObj.order = v.order;
     }
 
+    if (typeof v.columnLimit === 'number' && v.columnLimit > 0) {
+      vObj.columnLimit = v.columnLimit;
+    }
+
     if (v.columnSize && typeof v.columnSize === 'object' && Object.keys(v.columnSize).length > 0) {
       vObj.columnSize = v.columnSize;
     }
@@ -440,10 +464,14 @@ export function stringifyBaseYaml(config: BaseConfig): string {
     }
 
     if (v.groupBy && v.groupBy.property) {
-      vObj.groupBy = {
+      const gb: Record<string, any> = {
         property: v.groupBy.property,
         direction: (v.groupBy.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
       };
+      if (Array.isArray(v.groupBy.columns) && v.groupBy.columns.length > 0) {
+        gb.columns = v.groupBy.columns;
+      }
+      vObj.groupBy = gb;
     }
 
     if (v.filters && typeof v.filters === 'object') {

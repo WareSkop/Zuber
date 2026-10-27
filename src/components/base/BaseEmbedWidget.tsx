@@ -3,6 +3,7 @@ import {
   Database,
   Table as TableIcon,
   LayoutGrid,
+  Kanban,
   List,
   ExternalLink,
   AlertTriangle,
@@ -19,6 +20,7 @@ import {
 } from '../../base/baseEngine';
 import { BaseTableView } from './BaseTableView';
 import { BaseCardsView } from './BaseCardsView';
+import { BaseBoardView } from './BaseBoardView';
 
 export interface BaseEmbedWidgetProps {
   basePath: string;
@@ -226,7 +228,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
             <div className="base-embed-view-pills">
               {views.map((v, idx) => {
                 const isActive = idx === safeViewIndex;
-                const ViewIcon = v.type === 'cards' ? LayoutGrid : v.type === 'list' ? List : TableIcon;
+                const ViewIcon = v.type === 'board' ? Kanban : v.type === 'cards' ? LayoutGrid : v.type === 'list' ? List : TableIcon;
                 return (
                   <button
                     key={`${v.name || v.type}-${idx}`}
@@ -239,7 +241,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
                     title={v.name}
                   >
                     <ViewIcon size={12} />
-                    <span>{v.name || (v.type === 'cards' ? 'Cards' : 'Table')}</span>
+                    <span>{v.name || (v.type === 'board' ? 'Board' : v.type === 'cards' ? 'Cards' : 'Table')}</span>
                   </button>
                 );
               })}
@@ -288,6 +290,14 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
             <Database size={24} className="empty-icon" />
             <p>{t('base.noRecordsFound') || 'Keine passenden Notizen gefunden.'}</p>
           </div>
+        ) : activeView.type === 'board' ? (
+          <BaseBoardView
+            queryResult={queryResult}
+            view={activeView}
+            onSelectNote={onOpenNote}
+            onCellChange={handleCellChange}
+            readOnly={readOnly}
+          />
         ) : activeView.type === 'cards' ? (
           <BaseCardsView
             queryResult={queryResult}

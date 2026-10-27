@@ -1,4 +1,11 @@
 ### Added
+- Interaktive Kanban-Board-Ansicht (`type: board`) für Obsidian Bases (`BaseBoardView.tsx`, `BaseEditor.tsx`, `BaseEmbedWidget.tsx`, `BaseToolbar.tsx`):
+  - Unterstützung für `type: board` mit dynamischer Spaltengruppierung nach Frontmatter-Eigenschaften (z. B. `groupBy.property: status`).
+  - Konfigurierbare Spalten (`groupBy.columns`, z. B. `['Open', 'inWork', 'Waiting', 'Finish']`) sowie automatischer Fallback für Notizen ohne Status (`Kein Status`).
+  - Kartenlimit & Progressives Nachladen (`columnLimit: 10`, anpassbar pro Ansicht oder Spalte) mit standardmäßiger Sortierung nach Änderungsdatum (`mtime` absteigend) und ausklappbarem Umschalt-Button (`⬇ {{count}} weitere anzeigen...` / `⬆ Weniger anzeigen`).
+  - Flüssiges Drag & Drop mit 0 ms Latenz (optimistisches UI-Update) und sofortigem Frontmatter-Write-Back in die Notiz-Eigenschaft (`api.saveNote` / `onCellChange`).
+  - Integration in den Ansichten-Umschalter der Toolbar: Auswahltaste `[ ▥ Board ]` im `+ Ansicht`-Popover, `Kanban`-Icon auf Ansichts-Tabs und Kontextmenü-Aktion `[ ▥ Zu Boardansicht wechseln ]`.
+  - Unterstützung für rahmenlose Einbettungen (`![[Name.base]]`) mit Board-Rendering und View-Pills.
 - Filter für verlinkte Seiten (`file.hasLink("Zielnotiz")` und `!file.hasLink("Zielnotiz")`) für Obsidian Bases:
   - Vollständige Erkennung von internen Links (`[[Zielnotiz]]`, `[[Ordner/Zielnotiz]]`, Ankern `[[Zielnotiz#Header]]` und Aliasen `[[Zielnotiz|Alias]]`) sowie regulären Markdown-Links (`[Text](Zielnotiz.md)`).
   - Integration in `baseEngine.ts` (`noteMatchesLinkTarget`, `fileObj.hasLink`), `baseConfig.ts` (`ruleToExpression`, `expressionToRule`) und den visuellen Filter-Builder (`BaseFilterPopover.tsx`) mit Notizen-Autocomplete.

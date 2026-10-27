@@ -8567,6 +8567,158 @@ input:checked + .slider:before {
   word-break: break-word;
 }
 
+/* ==========================================================================
+   Base Kanban Board View (.base-board-*)
+   ========================================================================== */
+
+.base-board-container {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.base-board-column {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 280px;
+  width: 280px;
+  max-height: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 10px;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.base-board-column.drag-over {
+  background: var(--bg-hover, rgba(226, 183, 20, 0.08));
+  border: 1px dashed var(--accent-primary, #e2b714);
+}
+
+.base-board-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 0 4px 6px 4px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.base-board-column-title-cluster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.base-board-column-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.base-board-column-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.base-board-column-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.base-board-add-card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.base-board-add-card-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-normal);
+}
+
+.base-board-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 2px;
+  min-height: 80px;
+  flex: 1;
+}
+
+.base-board-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: grab;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.base-board-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  border-color: var(--border-hover, var(--text-muted));
+}
+
+.base-board-card.is-dragging {
+  opacity: 0.4;
+  transform: scale(0.97);
+  cursor: grabbing;
+}
+
+.base-board-show-more-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  margin-top: 4px;
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.base-board-show-more-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary, #e2b714);
+  color: var(--accent-primary, #e2b714);
+}
+
 /* Base Inline Block in Live-Preview & Reading */
 .cm-lp-base-block,
 .reading-base-container {
@@ -8725,7 +8877,10 @@ input:checked + .slider:before {
 
 .base-embed-widget .base-cards-container,
 .cm-lp-base-embed .base-cards-container,
-.embedded-base-container .base-cards-container {
+.embedded-base-container .base-cards-container,
+.base-embed-widget .base-board-container,
+.cm-lp-base-embed .base-board-container,
+.embedded-base-container .base-board-container {
   border: none !important;
   padding: 8px 0;
   background: transparent !important;
