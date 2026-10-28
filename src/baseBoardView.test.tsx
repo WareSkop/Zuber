@@ -913,15 +913,73 @@ views:
       warteAddBtn.click();
     });
 
-    // Because 'Sprint 42/Neue Notiz.md' already exists, collision handler should choose 'Sprint 42/Neue Notiz 1.md'
+    // Should open the New Note Dialog
+    const modal = container.querySelector('.modal-box');
+    expect(modal).toBeTruthy();
+    const input = container.querySelector('.modal-input') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    expect(input.value).toBe('Neue Notiz 1');
+
+    // Confirm dialog
+    const form = container.querySelector('form') as HTMLFormElement;
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    // Because 'Sprint 42/Neue Notiz.md' already exists, collision handler chose 'Sprint 42/Neue Notiz 1.md'
     expect(saveNoteSpy).toHaveBeenCalledWith({
       path: 'Sprint 42/Neue Notiz 1.md',
-      body: '# Neue Notiz 1\n',
+      body: '# Neue Notiz 1\n\n',
       properties: [{ key: 'status', value: 'Warte', type: 'text' }],
       forceOverwrite: true,
     });
     expect(onSelectNote).toHaveBeenCalledWith('Sprint 42/Neue Notiz 1.md');
 
     saveNoteSpy.mockRestore();
+  });
+
+  it('triggers onOpenCreateNoteDialog with target folder and column property on + click', async () => {
+    const handleOpenDialog = vi.fn();
+
+    const yaml = `
+filters:
+  file.inFolder("Projekte/Mobile")
+views:
+  - type: board
+    name: "Board"
+    groupBy:
+      property: status
+      columns:
+        - "Offen"
+        - "In Bearbeitung"
+`.trim();
+
+    const sampleFiles = [
+      { path: 'Projekte/Mobile/NoteA.md', name: 'NoteA.md', folder: 'Projekte/Mobile' },
+    ];
+
+    await act(async () => {
+      root.render(
+        <BaseEditor
+          filePath="Dashboard.base"
+          rawContent={yaml}
+          onChange={vi.fn()}
+          onSelectNote={vi.fn()}
+          allFiles={sampleFiles}
+          onOpenCreateNoteDialog={handleOpenDialog}
+        />
+      );
+    });
+
+    const addBtns = container.querySelectorAll('.base-board-add-card-btn');
+    expect(addBtns.length).toBeGreaterThanOrEqual(2);
+
+    await act(async () => {
+      (addBtns[0] as HTMLButtonElement).click();
+    });
+
+    expect(handleOpenDialog).toHaveBeenCalledWith('Projekte/Mobile', [
+      { key: 'status', value: 'Offen', type: 'text' },
+    ]);
   });
 });

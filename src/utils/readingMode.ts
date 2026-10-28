@@ -78,8 +78,9 @@ export function renderReadingHtml(
       }
       if (isCanvas) {
         const safeCanvasPath = escapeHtml(canvasPath);
-        const safeAlt = escapeHtml(alt);
-        return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
+        const safeHeight = heightVal ? escapeHtml(heightVal) : '';
+        return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
       }
       let isBase = target.toLowerCase().endsWith('.base');
       let basePath = target;
@@ -103,7 +104,7 @@ export function renderReadingHtml(
       if (isBase) {
         const safeBasePath = escapeHtml(basePath);
         const viewVal = viewOrHeadingRaw ? String(viewOrHeadingRaw).trim() : '';
-        const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
+        const heightVal = alt && /^\d+(?:px)?$/i.test(alt.trim()) ? alt.trim() : '';
         const safeView = viewVal ? escapeHtml(viewVal) : '';
         const safeHeight = heightVal ? escapeHtml(heightVal) : '';
         return `<div class="embedded-base-container base-embed-widget cm-lp-base-embed reading-base-embed" data-base-path="${safeBasePath}" data-view="${safeView}" data-height="${safeHeight}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
@@ -153,8 +154,9 @@ export function renderReadingHtml(
       }
       if (isCanvas) {
         const safeCanvasPath = escapeHtml(canvasPath);
-        const safeAlt = escapeHtml(alt);
-        return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+        const heightVal = altRaw && /^\d+(?:px)?$/i.test(altRaw.trim()) ? altRaw.trim() : '';
+        const safeHeight = heightVal ? escapeHtml(heightVal) : '';
+        return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
       }
       let isBase = target.toLowerCase().endsWith('.base');
       let basePath = target;

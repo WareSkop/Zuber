@@ -22,6 +22,7 @@ import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
 import { renderReadingHtml, loadAndInitMermaid, escapeHtml } from '../utils/readingMode';
 import { BaseView } from './BaseView';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
+import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 
 const GraphView = lazy(() =>
   import('./GraphView').then((m) => ({ default: m.GraphView }))
@@ -249,8 +250,40 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
       );
     });
 
+    // Canvas Embeds (![[Name.canvas]]) rendering
+    const canvasEmbedBlocks = container.querySelectorAll<HTMLElement>('.embedded-canvas-container');
+    const canvasRoots: Root[] = [];
+    canvasEmbedBlocks.forEach((block) => {
+      const canvasPath = block.dataset.canvasPath || block.dataset.wikilink || '';
+      const height = block.dataset.height || undefined;
+      let mountContainer = block.querySelector<HTMLElement>('.reading-canvas-mount');
+      if (!mountContainer) {
+        mountContainer = document.createElement('div');
+        mountContainer.className = 'reading-canvas-mount';
+        block.appendChild(mountContainer);
+      }
+      if (mountContainer.hasAttribute('data-rendered')) return;
+
+      mountContainer.setAttribute('data-rendered', 'true');
+      const root = createRoot(mountContainer);
+      canvasRoots.push(root);
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath={canvasPath}
+          height={height}
+          allNotes={allNotes}
+          onOpenNote={(noteP: string) => onNavigate(noteP)}
+        />
+      );
+    });
+
     return () => {
       baseRoots.forEach((r) => {
+        try {
+          r.unmount();
+        } catch {}
+      });
+      canvasRoots.forEach((r) => {
         try {
           r.unmount();
         } catch {}
@@ -479,18 +512,13 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             </div>
           </div>
         ) : target?.type === 'canvas' ? (
-          <div className="research-canvas-wrapper">
-            <Suspense fallback={<div className="empty-state">Lade Canvas…</div>}>
-              <CanvasEditor
-                filePath={target.path}
-                rawContent={canvasRawContent}
-                onChange={() => {}}
-                onOpenNote={(path: string) => onNavigate(path)}
-                onSelectTag={onSelectTag}
-                allNotes={allNotes}
-                readOnly={true}
-              />
-            </Suspense>
+          <div className="research-canvas-wrapper" style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+            <CanvasEmbedWidget
+              canvasPath={target.path}
+              onOpenNote={(path: string) => onNavigate(path)}
+              allNotes={allNotes}
+              fullSize={true}
+            />
           </div>
         ) : target?.type === 'image' ? (
           <div className="research-image-wrapper">

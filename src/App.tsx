@@ -127,6 +127,7 @@ interface DialogState {
   parentFolder?: string;
   targetPath?: string;
   initialValue: string;
+  initialProperties?: FrontmatterProperty[];
 }
 
 export const App: React.FC = () => {
@@ -544,10 +545,10 @@ export const App: React.FC = () => {
   );
 
   const openCreateNoteDialog = useCallback(
-    (parentFolder?: string) => {
+    (parentFolder?: string, initialProperties?: FrontmatterProperty[]) => {
       const baseName = language === 'de' ? 'Neue Notiz' : 'New Note';
       const defaultName = getUniqueDefaultName(baseName, 'file', parentFolder);
-      setDialog({ type: 'create-note', parentFolder, initialValue: defaultName });
+      setDialog({ type: 'create-note', parentFolder, initialValue: defaultName, initialProperties });
       setDialogInput(defaultName);
     },
     [language, getUniqueDefaultName]
@@ -2250,16 +2251,29 @@ export const App: React.FC = () => {
         const relPath = currentDialog.parentFolder
           ? `${currentDialog.parentFolder}/${cleanTitle}.md`
           : `${cleanTitle}.md`;
+        const initialProperties = currentDialog.initialProperties || [];
+        const baseProps: FrontmatterProperty[] = [
+          { key: 'tags', type: 'list', value: [] },
+          {
+            key: 'erstellt',
+            type: 'date',
+            value: new Date().toISOString().slice(0, 10),
+          },
+        ];
+        const mergedProps = [...baseProps];
+        for (const p of initialProperties) {
+          const idx = mergedProps.findIndex(
+            (ep) => ep.key.toLowerCase() === p.key.toLowerCase()
+          );
+          if (idx >= 0) {
+            mergedProps[idx] = p;
+          } else {
+            mergedProps.push(p);
+          }
+        }
         const created = await syncEngine.saveNote({
           path: relPath,
-          properties: [
-            { key: 'tags', type: 'list', value: [] },
-            {
-              key: 'erstellt',
-              type: 'date',
-              value: new Date().toISOString().slice(0, 10),
-            },
-          ],
+          properties: mergedProps,
           body: `# ${cleanTitle}\n\n`,
         });
         await loadVaultIndex();
@@ -3255,6 +3269,7 @@ export const App: React.FC = () => {
                 if (isMobile) setLeftSidebarOpen(false);
               }}
               allFiles={allFiles}
+              onOpenCreateNoteDialog={openCreateNoteDialog}
             />
           </Suspense>
         </div>

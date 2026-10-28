@@ -240,4 +240,56 @@ views:
     expect(getNoteSpy).toHaveBeenCalledWith('Diagrams/Architecture.canvas');
     getNoteSpy.mockRestore();
   });
+
+  it('transforms ![[Name.canvas|height]] into embedded-canvas-container with data-height and mount point', () => {
+    const markdown = 'Here is a canvas:\n\n![[Workflow.canvas|550]]\n';
+    const allNotes = [
+      { path: 'Workflow.canvas', name: 'Workflow.canvas', basename: 'Workflow' },
+    ];
+
+    const html = renderReadingHtml(markdown, 'Note.md', allNotes);
+
+    expect(html).toContain('embedded-canvas-container');
+    expect(html).toContain('canvas-embed-widget');
+    expect(html).toContain('data-canvas-path="Workflow.canvas"');
+    expect(html).toContain('data-height="550"');
+    expect(html).toContain('reading-canvas-mount');
+  });
+
+  it('supports fullSize and custom height on CanvasEmbedWidget', async () => {
+    vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Diagram.canvas',
+      name: 'Diagram.canvas',
+      rawContent: JSON.stringify({ nodes: [], edges: [] }),
+    } as any);
+
+    await act(async () => {
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath="Diagram.canvas"
+          onOpenNote={vi.fn()}
+          allNotes={[]}
+          height={480}
+        />
+      );
+    });
+
+    let widget = container.querySelector('.canvas-embed-widget') as HTMLElement;
+    expect(widget).toBeTruthy();
+    expect(widget.style.height).toBe('480px');
+
+    await act(async () => {
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath="Diagram.canvas"
+          onOpenNote={vi.fn()}
+          allNotes={[]}
+          fullSize={true}
+        />
+      );
+    });
+
+    widget = container.querySelector('.canvas-embed-widget') as HTMLElement;
+    expect(widget.style.height).toBe('100%');
+  });
 });

@@ -1,4 +1,13 @@
 ### Added
+- Dialog-gestützte Notizerstellung über den „+ Add Card“-Button im Kanban-Board (`BaseBoardColumn.tsx`, `BaseEditor.tsx`, `App.tsx`):
+  - Klick auf den `+`-Button im Spaltenkopf öffnet den Standard „Neue Notiz“-Dialog (`create-note`), sodass der Benutzer den Dateinamen selbst festlegen kann.
+  - Automatische Vorbelegung des Zielordners anhand aktiver Base-Filter (z. B. `file.inFolder("Ordner")` oder `file.folder == "..."`) bzw. des Base-Verzeichnisses.
+  - Automatische Vorauswahl und Speicherung der Gruppierungseigenschaft (z. B. `status: Offen`) im Frontmatter der neu erstellten Notiz.
+  - Automatische Öffnung der neuen Notiz im Editor und Live-Aktualisierung des Kanban-Boards.
+- Interaktive Canvas-Einbettungen im Lese-Modus und Recherche-Split (`LivePreviewEditor.tsx`, `ResearchPane.tsx`, `CanvasEmbedWidget.tsx`, `src/utils/readingMode.ts`):
+  - `![[Name.canvas]]` und `![[Name.canvas|height]]` werden im Lese-Modus (`mode === 'reading'`) und in `ResearchPane.tsx` als interaktive `<CanvasEmbedWidget />`-Widgets mit Pan & Zoom gerendert.
+  - Direkte Anzeige von Canvas-Dateien in der Rechercheansicht in voller Größe (`fullSize: true`).
+  - Umfassende Pfadauflösung gegen `allNotes` (Unterordner, Basename, Case-Insensitivität).
 - Nahtlose Base- und Canvas-Einbettung im Lese-Modus und in der Rechercheansicht (`LivePreviewEditor.tsx`, `ResearchPane.tsx`, `src/utils/readingMode.ts`, `BaseEmbedWidget.tsx`):
   - Eingebettete Bases (`![[Name.base]]`, `![[Name.base#View]]`, `![[Name.base|Height]]`) werden nun zuverlässig im Lese-Modus (`mode === 'reading'`) und in der Rechercheansicht (`ResearchPane.tsx`) mit `<BaseEmbedWidget />` gerendert.
   - DOMPurify erlaubt und bewahrt `data-base-path`, `data-view` und `data-height` sicher bei der HTML-Sanitization.

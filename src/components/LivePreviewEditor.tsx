@@ -574,12 +574,14 @@ class EmbedWidget extends WidgetType {
 
     if (isCanvas) {
       const container = document.createElement('div');
-      container.className = 'cm-embed-widget cm-canvas-embed-wrapper cm-lp-canvas-embed';
+      container.className = 'cm-embed-widget cm-canvas-embed-wrapper cm-lp-canvas-embed embedded-canvas-container canvas-embed-widget';
       const root = createRoot(container);
       (container as any)._reactRoot = root;
+      const heightVal = this.alt && /^\d+(?:px)?$/i.test(this.alt.trim()) ? this.alt.trim() : undefined;
       root.render(
         <CanvasEmbedWidget
           canvasPath={effectiveCanvasPath}
+          height={heightVal}
           onOpenNote={this.onNavigate}
           allNotes={this.allNotes}
         />
@@ -2862,8 +2864,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         }
         if (isCanvas) {
           const safeCanvasPath = escapeHtml(canvasPath);
-          const safeAlt = escapeHtml(alt);
-          return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+          const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
+          const safeHeight = heightVal ? escapeHtml(heightVal) : '';
+          return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
         }
         let isBase = target.toLowerCase().endsWith('.base');
         let basePath = target;
@@ -2937,8 +2940,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         }
         if (isCanvas) {
           const safeCanvasPath = escapeHtml(canvasPath);
-          const safeAlt = escapeHtml(alt);
-          return `<div class="reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-embed-header"><span class="canvas-icon">📊</span> <strong>${safeAlt}</strong> <span class="canvas-open-hint">Im Editor öffnen ↗</span></div></div>`;
+          const heightVal = altRaw && /^\d+(?:px)?$/i.test(altRaw.trim()) ? altRaw.trim() : '';
+          const safeHeight = heightVal ? escapeHtml(heightVal) : '';
+          return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
         }
         let isBase = target.toLowerCase().endsWith('.base');
         let basePath = target;
@@ -3158,8 +3162,40 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       );
     });
 
+    // Render Canvas Embeds (![[Name.canvas]]) in Reading Mode
+    const canvasEmbedBlocks = container.querySelectorAll<HTMLElement>('.embedded-canvas-container');
+    const canvasRoots: Root[] = [];
+    canvasEmbedBlocks.forEach((block) => {
+      const canvasPath = block.dataset.canvasPath || block.dataset.wikilink || '';
+      const height = block.dataset.height || undefined;
+      let mountContainer = block.querySelector<HTMLElement>('.reading-canvas-mount');
+      if (!mountContainer) {
+        mountContainer = document.createElement('div');
+        mountContainer.className = 'reading-canvas-mount';
+        block.appendChild(mountContainer);
+      }
+      if (mountContainer.hasAttribute('data-rendered')) return;
+
+      mountContainer.setAttribute('data-rendered', 'true');
+      const root = createRoot(mountContainer);
+      canvasRoots.push(root);
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath={canvasPath}
+          height={height}
+          allNotes={allNotes}
+          onOpenNote={onNavigateWikiLink}
+        />
+      );
+    });
+
     return () => {
       baseRoots.forEach((r) => {
+        try {
+          r.unmount();
+        } catch {}
+      });
+      canvasRoots.forEach((r) => {
         try {
           r.unmount();
         } catch {}

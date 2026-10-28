@@ -49,6 +49,7 @@ export interface BaseEditorProps {
   onSelectNote: (path: string) => void;
   allFiles: any[];
   onCellChange?: (notePath: string, key: string, value: any) => Promise<void>;
+  onOpenCreateNoteDialog?: (parentFolder?: string, initialProperties?: FrontmatterProperty[]) => void;
 }
 
 export const BaseEditor: React.FC<BaseEditorProps> = ({
@@ -58,6 +59,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   onSelectNote,
   allFiles,
   onCellChange,
+  onOpenCreateNoteDialog,
 }) => {
   const { t } = useTranslation();
   const [editorMode, setEditorMode] = useState<'visual' | 'source'>('visual');
@@ -67,6 +69,12 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [isColumnsModalOpen, setIsColumnsModalOpen] = useState(false);
   const [isBoardConfigModalOpen, setIsBoardConfigModalOpen] = useState(false);
+  const [createNoteModal, setCreateNoteModal] = useState<{
+    parentFolder: string;
+    properties: FrontmatterProperty[];
+    defaultName: string;
+  } | null>(null);
+  const [createNoteInput, setCreateNoteInput] = useState('');
 
   // Parsed Config state
   const [config, setConfig] = useState<BaseConfig>(() => {
@@ -347,19 +355,42 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         ? [{ key: groupByProp, value: columnValue, type: 'text' }]
         : [];
 
-    const body = `# ${noteTitle}\n`;
+    if (onOpenCreateNoteDialog) {
+      onOpenCreateNoteDialog(targetFolder, properties);
+      return;
+    }
+
+    setCreateNoteModal({
+      parentFolder: targetFolder,
+      properties,
+      defaultName: noteTitle,
+    });
+    setCreateNoteInput(noteTitle);
+  };
+
+  const handleConfirmCreateNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createNoteModal) return;
+    const rawVal = createNoteInput.trim();
+    if (!rawVal) return;
+    const cleanTitle = rawVal.replace(/\.md$/i, '').trim();
+    if (!cleanTitle) return;
+
+    const relPath = createNoteModal.parentFolder
+      ? `${createNoteModal.parentFolder}/${cleanTitle}.md`
+      : `${cleanTitle}.md`;
 
     try {
       await api.saveNote({
-        path: candidatePath,
-        body,
-        properties,
+        path: relPath,
+        body: `# ${cleanTitle}\n\n`,
+        properties: createNoteModal.properties,
         forceOverwrite: true,
       });
-
-      onSelectNote(candidatePath);
+      setCreateNoteModal(null);
+      onSelectNote(relPath);
     } catch (err) {
-      console.error('Failed to create note from board column:', err);
+      console.error('Failed to create note from board modal:', err);
     }
   };
 
@@ -716,6 +747,42 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
           />
         )}
       </div>
+
+      {createNoteModal && (
+        <div className="modal-backdrop" onClick={() => setCreateNoteModal(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3>{t('dialogs.newNoteTitle') || 'Neue Notiz erstellen'}</h3>
+            <form onSubmit={handleConfirmCreateNote}>
+              {createNoteModal.parentFolder && (
+                <p className="modal-subfolder-hint">
+                  {t('dialogs.moveTargetFolder') || 'Zielordner:'} <code>{createNoteModal.parentFolder}/</code>
+                </p>
+              )}
+              <input
+                type="text"
+                className="modal-input"
+                value={createNoteInput}
+                onChange={(e) => setCreateNoteInput(e.target.value)}
+                onFocus={(e) => e.currentTarget.select()}
+                autoFocus
+                required
+              />
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setCreateNoteModal(null)}
+                >
+                  {t('common.cancel') || 'Abbrechen'}
+                </button>
+                <button type="submit" className="btn-primary">
+                  {t('common.confirm') || 'Bestätigen'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

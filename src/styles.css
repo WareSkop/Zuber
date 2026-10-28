@@ -7439,6 +7439,20 @@ input:checked + .slider:before {
   color: #ef4444;
 }
 
+.reading-canvas-mount {
+  width: 100%;
+  height: 100%;
+}
+
+.embedded-canvas-container.reading-canvas-embed {
+  margin-top: 4px !important;
+  margin-bottom: 8px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: default !important;
+}
+
 .reading-canvas-embed {
   margin: 12px 0;
   padding: 10px 14px;

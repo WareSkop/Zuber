@@ -22,6 +22,8 @@ export interface CanvasEmbedWidgetProps {
   canvasPath: string;
   onOpenNote: (path: string) => void;
   allNotes?: any[];
+  height?: string | number;
+  fullSize?: boolean;
 }
 
 const nodeTypes = {
@@ -40,6 +42,8 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
   canvasPath,
   onOpenNote,
   allNotes = [],
+  height,
+  fullSize = false,
 }) => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -69,19 +73,40 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
   }, [allNotes]);
 
   const resolvedFullPath = useMemo(() => {
-    const normalizedTarget = canvasPath.trim();
+    const raw = canvasPath.trim().replace(/^\.?\/+/, '');
     const pool = internalNotes.length > 0 ? internalNotes : allNotes;
-    const foundNote = pool.find((n) =>
-      n.path === normalizedTarget ||
-      n.path === `${normalizedTarget}.canvas` ||
-      n.path.toLowerCase() === normalizedTarget.toLowerCase() ||
-      n.name === normalizedTarget ||
-      n.name === normalizedTarget.replace(/\.canvas$/i, '') ||
-      (n as any).basename === normalizedTarget ||
-      (n as any).basename === normalizedTarget.replace(/\.canvas$/i, '')
-    );
+    const lowerRaw = raw.toLowerCase();
+    const lowerWithCanvas = lowerRaw.endsWith('.canvas') ? lowerRaw : `${lowerRaw}.canvas`;
+    const lowerWithoutCanvas = lowerRaw.replace(/\.canvas$/i, '');
+    const baseNameRaw = lowerWithoutCanvas.split('/').pop() || lowerWithoutCanvas;
+
+    const foundNote = pool.find((n: any) => {
+      const p = (n.path || '').toLowerCase();
+      const name = (n.name || '').toLowerCase();
+      const base = (n.basename || name.replace(/\.canvas$/i, '')).toLowerCase();
+
+      return (
+        p === lowerRaw ||
+        p === lowerWithCanvas ||
+        p.endsWith(`/${lowerWithCanvas}`) ||
+        p.endsWith(`/${lowerRaw}`) ||
+        name === lowerRaw ||
+        name === lowerWithCanvas ||
+        base === baseNameRaw ||
+        base === lowerWithoutCanvas
+      );
+    });
+
     return foundNote ? foundNote.path : canvasPath;
   }, [canvasPath, internalNotes, allNotes]);
+
+  const parsedHeight = useMemo(() => {
+    if (fullSize) return '100%';
+    if (!height) return undefined;
+    if (typeof height === 'number') return `${height}px`;
+    const str = String(height).trim();
+    return /^\d+$/.test(str) ? `${str}px` : str;
+  }, [height, fullSize]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +161,10 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
   const fileName = resolvedFullPath.split('/').pop() || resolvedFullPath;
 
   return (
-    <div className="canvas-embed-container canvas-embed-widget embedded-canvas-container cm-lp-canvas-embed nodrag">
+    <div
+      className="canvas-embed-container canvas-embed-widget embedded-canvas-container cm-lp-canvas-embed nodrag"
+      style={parsedHeight ? { height: parsedHeight } : undefined}
+    >
       <div className="canvas-embed-header">
         <div className="canvas-embed-title-cluster" title={resolvedFullPath}>
           <WorkflowCanvasIcon size={14} className="canvas-embed-icon" />
@@ -174,8 +202,8 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
                 nodeTypes={nodeTypes}
                 fitView
                 fitViewOptions={{ padding: 0.25, includeHiddenNodes: false }}
-                minZoom={0.2}
-                maxZoom={1.5}
+                minZoom={0.1}
+                maxZoom={2.0}
                 nodesDraggable={false}
                 nodesConnectable={false}
                 elementsSelectable={true}
