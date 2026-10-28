@@ -10,6 +10,9 @@ import { BaseBoardView } from './components/base/BaseBoardView';
 import { BaseToolbar } from './components/base/BaseToolbar';
 import { BaseBoardConfigModal } from './components/base/BaseBoardConfigModal';
 import { BaseColumnsModal } from './components/base/BaseColumnsModal';
+import { BaseBoardColumn } from './components/base/BaseBoardColumn';
+import { BaseEditor } from './components/BaseEditor';
+import { api } from './api';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -519,13 +522,29 @@ views:
       );
     });
 
-    // 1. Rename column "Open" -> "Offen"
-    const openTitle = container.querySelector('.base-board-column-title.editable') as HTMLSpanElement;
+    // 1. Column title is static text - clicking does NOT start renaming
+    const openTitle = container.querySelector('.base-board-column-title') as HTMLSpanElement;
     expect(openTitle).toBeTruthy();
     expect(openTitle.textContent).toBe('Open');
+    expect(container.querySelector('.base-board-column-title.editable')).toBeNull();
 
     await act(async () => {
       openTitle.click();
+    });
+    // Still not in rename mode
+    expect(container.querySelector('.base-board-col-rename-input')).toBeNull();
+
+    // 2. Rename column via three-dot menu -> "Rename column"
+    const menuTrigger = container.querySelector('.base-board-col-menu-trigger') as HTMLButtonElement;
+    expect(menuTrigger).toBeTruthy();
+    await act(async () => {
+      menuTrigger.click();
+    });
+
+    const renameItem = container.querySelector('.col-dropdown .base-dropdown-item:not(.danger)') as HTMLButtonElement;
+    expect(renameItem).toBeTruthy();
+    await act(async () => {
+      renameItem.click();
     });
 
     const renameInput = container.querySelector('.base-board-col-rename-input') as HTMLInputElement;
@@ -544,7 +563,7 @@ views:
     });
     expect(handleRenameColumn).toHaveBeenCalledWith('Open', 'Offen');
 
-    // 2. Add new column via "+ Neue Spalte hinzufügen"
+    // 3. Add new column via "+ Neue Spalte hinzufügen"
     const addColBtn = container.querySelector('.base-board-add-column-btn') as HTMLButtonElement;
     expect(addColBtn).toBeTruthy();
     await act(async () => {
@@ -566,11 +585,11 @@ views:
     });
     expect(handleAddColumn).toHaveBeenCalledWith('Prüfung');
 
-    // 3. Delete column via header menu
-    const menuTrigger = container.querySelector('.base-board-col-menu-trigger') as HTMLButtonElement;
-    expect(menuTrigger).toBeTruthy();
+    // 4. Delete column via header menu
+    const menuTrigger2 = container.querySelector('.base-board-col-menu-trigger') as HTMLButtonElement;
+    expect(menuTrigger2).toBeTruthy();
     await act(async () => {
-      menuTrigger.click();
+      menuTrigger2.click();
     });
 
     const deleteBtn = container.querySelector('.col-dropdown .base-dropdown-item.danger') as HTMLButtonElement;
@@ -650,5 +669,259 @@ views:
     expect(doneBtn).toBeTruthy();
     expect(doneBtn.textContent).not.toBe('common.done');
     expect(doneBtn.textContent).toMatch(/(Fertig|Done)/i);
+  });
+
+  it('keeps DOM node identity in BaseBoardConfigModal on keystrokes so focus is never lost', async () => {
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: { property: 'status', columns: ['Open', 'inWork', 'Finish'] },
+      columnLimit: 10,
+    };
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <BaseBoardConfigModal
+          isOpen={true}
+          onClose={handleClose}
+          view={viewConfig}
+          availableProperties={[{ key: 'status', label: 'Status' }]}
+          onSave={handleSave}
+        />
+      );
+    });
+
+    const initialInputs = container.querySelectorAll('.column-name-input');
+    const firstInput = initialInputs[0] as HTMLInputElement;
+    expect(firstInput).toBeTruthy();
+    expect(firstInput.value).toBe('Open');
+
+    // Focus first input
+    firstInput.focus();
+    expect(document.activeElement).toBe(firstInput);
+
+    // Type character by character: 'O', 'p', 'e', 'n', ' ' -> 'Open 2'
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    for (const text of ['Open ', 'Open 2']) {
+      await act(async () => {
+        nativeSetter?.call(firstInput, text);
+        firstInput.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    const currentInputs = container.querySelectorAll('.column-name-input');
+    const inputAfterTyping = currentInputs[0] as HTMLInputElement;
+
+    // Critical assertion: The DOM element must be identical (not unmounted/recreated)
+    expect(inputAfterTyping).toBe(firstInput);
+    expect(inputAfterTyping.value).toBe('Open 2');
+  });
+
+  it('verifies BaseBoardColumn: static title, rename only via menu, escape/blur behavior, and remove column', async () => {
+    const handleRename = vi.fn();
+    const handleDelete = vi.fn();
+    const handleAddCard = vi.fn();
+
+    const columnData = {
+      key: 'inWork',
+      label: 'In Arbeit',
+      records: [],
+      limit: 10,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardColumn
+          col={columnData}
+          columns={['file.name']}
+          displayNames={{}}
+          groupByProp="status"
+          onToggleExpand={vi.fn()}
+          onDrop={vi.fn()}
+          onDragOver={vi.fn()}
+          onDragLeave={vi.fn()}
+          onAddCard={handleAddCard}
+          onRenameColumn={handleRename}
+          onDeleteColumn={handleDelete}
+          onSelectNote={vi.fn()}
+          draggingPath={null}
+          onDragStart={vi.fn()}
+          onDragEnd={vi.fn()}
+        />
+      );
+    });
+
+    // 1. Column title is static text - clicking does NOT start renaming
+    const title = container.querySelector('.base-board-column-title') as HTMLSpanElement;
+    expect(title).toBeTruthy();
+    expect(title.textContent).toBe('In Arbeit');
+    expect(title.classList.contains('editable')).toBe(false);
+
+    await act(async () => {
+      title.click();
+    });
+    expect(container.querySelector('.base-board-col-rename-input')).toBeNull();
+
+    // 2. Open rename via menu
+    const menuBtn = container.querySelector('.base-board-col-menu-trigger') as HTMLButtonElement;
+    expect(menuBtn).toBeTruthy();
+    await act(async () => {
+      menuBtn.click();
+    });
+
+    const renameMenuItem = container.querySelector('.col-dropdown .base-dropdown-item:not(.danger)') as HTMLButtonElement;
+    expect(renameMenuItem).toBeTruthy();
+    await act(async () => {
+      renameMenuItem.click();
+    });
+
+    let renameInput = container.querySelector('.base-board-col-rename-input') as HTMLInputElement;
+    expect(renameInput).toBeTruthy();
+    expect(renameInput.value).toBe('In Arbeit');
+
+    // 3. Escape cancels renaming without saving
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      nativeSetter?.call(renameInput, 'Verworfen');
+      renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      renameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(handleRename).not.toHaveBeenCalled();
+    expect(container.querySelector('.base-board-col-rename-input')).toBeNull();
+
+    // 4. Open rename again, blur or enter saves
+    await act(async () => {
+      menuBtn.click();
+    });
+    const renameMenuItem2 = container.querySelector('.col-dropdown .base-dropdown-item:not(.danger)') as HTMLButtonElement;
+    await act(async () => {
+      renameMenuItem2.click();
+    });
+
+    renameInput = container.querySelector('.base-board-col-rename-input') as HTMLInputElement;
+    expect(renameInput).toBeTruthy();
+    await act(async () => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      nativeSetter?.call(renameInput, 'In Bearbeitung');
+      renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      renameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(handleRename).toHaveBeenCalledWith('inWork', 'In Bearbeitung');
+
+    // 5. Remove column via menu
+    await act(async () => {
+      menuBtn.click();
+    });
+    const removeMenuItem = container.querySelector('.col-dropdown .base-dropdown-item.danger') as HTMLButtonElement;
+    expect(removeMenuItem).toBeTruthy();
+    await act(async () => {
+      removeMenuItem.click();
+    });
+    expect(handleDelete).toHaveBeenCalledWith('inWork');
+
+    // 6. Add card button
+    const addCardBtn = container.querySelector('.base-board-add-card-btn') as HTMLButtonElement;
+    expect(addCardBtn).toBeTruthy();
+    await act(async () => {
+      addCardBtn.click();
+    });
+    expect(handleAddCard).toHaveBeenCalledWith('inWork');
+  });
+
+  it('renders No Status column without three-dot menu and passes empty string on add card', async () => {
+    const handleAddCard = vi.fn();
+    const columnData = {
+      key: 'no_status',
+      label: 'Kein Status',
+      records: [],
+      limit: 10,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardColumn
+          col={columnData}
+          columns={['file.name']}
+          displayNames={{}}
+          groupByProp="status"
+          onToggleExpand={vi.fn()}
+          onDrop={vi.fn()}
+          onDragOver={vi.fn()}
+          onDragLeave={vi.fn()}
+          onAddCard={handleAddCard}
+          onSelectNote={vi.fn()}
+          draggingPath={null}
+          onDragStart={vi.fn()}
+          onDragEnd={vi.fn()}
+        />
+      );
+    });
+
+    // Three-dot menu must NOT exist for No Status
+    expect(container.querySelector('.base-board-col-menu-trigger')).toBeNull();
+
+    // Add card button works and passes empty string
+    const addCardBtn = container.querySelector('.base-board-add-card-btn') as HTMLButtonElement;
+    expect(addCardBtn).toBeTruthy();
+    await act(async () => {
+      addCardBtn.click();
+    });
+    expect(handleAddCard).toHaveBeenCalledWith('');
+  });
+
+  it('creates new card in filtered folder with collision-free name and opens note', async () => {
+    const saveNoteSpy = vi.spyOn(api, 'saveNote').mockResolvedValue({} as any);
+    const onSelectNote = vi.fn();
+
+    const yaml = `
+filters:
+  file.inFolder("Sprint 42")
+views:
+  - type: board
+    name: "Board"
+    groupBy:
+      property: status
+      columns:
+        - Offen
+        - Warte
+`.trim();
+
+    const existingFiles = [
+      { path: 'Sprint 42/Neue Notiz.md', name: 'Neue Notiz.md', folder: 'Sprint 42' },
+    ];
+
+    await act(async () => {
+      root.render(
+        <BaseEditor
+          filePath="Sprint 42/Board.base"
+          rawContent={yaml}
+          onChange={vi.fn()}
+          onSelectNote={onSelectNote}
+          allFiles={existingFiles}
+        />
+      );
+    });
+
+    // Click "+ Add Card" on column "Warte"
+    const addCardButtons = container.querySelectorAll('.base-board-add-card-btn');
+    expect(addCardButtons.length).toBeGreaterThan(0);
+    const warteAddBtn = addCardButtons[1] as HTMLButtonElement; // second column is 'Warte'
+
+    await act(async () => {
+      warteAddBtn.click();
+    });
+
+    // Because 'Sprint 42/Neue Notiz.md' already exists, collision handler should choose 'Sprint 42/Neue Notiz 1.md'
+    expect(saveNoteSpy).toHaveBeenCalledWith({
+      path: 'Sprint 42/Neue Notiz 1.md',
+      body: '# Neue Notiz 1\n',
+      properties: [{ key: 'status', value: 'Warte', type: 'text' }],
+      forceOverwrite: true,
+    });
+    expect(onSelectNote).toHaveBeenCalledWith('Sprint 42/Neue Notiz 1.md');
+
+    saveNoteSpy.mockRestore();
   });
 });

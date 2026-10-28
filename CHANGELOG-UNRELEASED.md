@@ -1,4 +1,13 @@
 ### Added
+- Funktion für den „+ Add Card“-Button im Spaltenkopf (`BaseBoardColumn.tsx`, `BaseEditor.tsx`):
+  - Legt beim Klick auf `+` eine neue Notiz direkt im gefilterten Zielordner (z. B. `file.inFolder(...)`) oder im Verzeichnis der `.base`-Datei bzw. Vault-Root an.
+  - Vergibt automatisch einen kollisionsfreien Namen (`Neue Notiz.md`, `Neue Notiz 1.md` etc.).
+  - Setzt die Gruppierungseigenschaft im Frontmatter (z. B. `status: Warte`), bei Klick in „No Status“ wird die Eigenschaft weggelassen.
+  - Speichert die Notiz via `api.saveNote()` und öffnet sie umgehend im Haupteditor (`onSelectNote`).
+- Drei-Punkte-Menü Aktionen („Rename column“ & „Remove column“) im Kanban-Board (`BaseBoardColumn.tsx`, `BaseEditor.tsx`):
+  - „Rename column“ aktiviert das fokussierte Inline-Eingabefeld des Spaltentitels mit automatischer Textselektion.
+  - „Remove column“ entfernt den Spaltenwert aus dem `groupBy.columns`-Array der Base; Notizen mit diesem Wert wandern automatisch in die Spalte „Kein Status / No Status“.
+  - Die Spalte „No Status“ zeigt das `⋮`-Menü gar nicht erst an.
 - Visuelle Konfiguration für Board-Spaltenwerte (`BaseBoardView.tsx`, `BaseBoardConfigModal.tsx`, `BaseToolbar.tsx`, `BaseEditor.tsx`):
   - Direktes Bearbeiten im Spaltenkopf: Klick auf den Spaltennamen oder Auswahl im `⋮`-Menü erlaubt das direkte Umbenennen des Statuswerts inklusive automatischer Aktualisierung bestehender Notizen.
   - Spalte entfernen: Option im `⋮`-Menü des Spaltenkopfs zum Entfernen von Spalten aus `groupBy.columns`.
@@ -146,6 +155,8 @@
 - Neuer Backend-Batch-Move-Endpunkt `POST /api/vault/move-batch` mit konsolidiertem WebSocket-Event (`vault:changed`).
 
 ### Changed
+- Spaltentitel im Kanban-Board (`BaseBoardColumn.tsx`): Klick-Bearbeitung auf dem Titel-Label deaktiviert; Titel ist rein statischer Text. Das Umbenennen einer Spalte erfolgt nun ausschließlich über den Menüpunkt „Rename column“ im Drei-Punkte-Menü (`⋮`).
+- Inline-Umbenennen im Kanban-Board (`BaseBoardColumn.tsx`): Aktiviert ein fokussiertes Eingabefeld mit automatischer Textselektion, Speichern via `Enter` oder `onBlur` in `groupBy.columns` und Abbrechen ohne Speichern via `Escape`.
 - Performance- & Bundle-Optimierungen (`OPT-02` bis `OPT-04`):
   - Code-Splitting (`React.lazy` & dynamischer Import) für `GraphView` (`cytoscape`), `CanvasEditor`, `BaseEditor`, `SettingsModal` und `mermaid` eingeführt (Reduktion des initialen Haupt-Bundles um über 700 kB).
   - Inkrementeller Backlink-Index (`backlinkIndex`) im `VaultService` für $O(k)$ statt $O(N \cdot L)$ bei `getBacklinks()`-Abfragen.
@@ -154,6 +165,7 @@
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
 
 ### Fixed
+- Fokusverlust in „Board konfigurieren“ (`BaseBoardConfigModal.tsx`): Behebung des Fokusverlusts nach jedem einzelnen Tastenanschlag durch Auslagern von `ColumnConfigRow` außerhalb der Modal-Komponente und Verwendung stabiler interner Keys (`key={col.id}`).
 - Behebung ausgegrauter Karten nach Drag & Drop im Kanban-Board (`BaseBoardCard.tsx`, `BaseBoardView.tsx`):
   - Sauberes Zurücksetzen von `opacity: 1` und Entfernen der CSS-Klasse `.is-dragging` über `onDragEnd` auf Kartenebene.
   - Sofortiges Zurücksetzen von `draggingPath = null` im `onDrop`-Handler der Zielspalte und über einen globalen `dragend`-Listener.

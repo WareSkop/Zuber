@@ -1,20 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import {
-  Plus,
-  ArrowDown,
-  ArrowUp,
-  MoreVertical,
-  Edit2,
-  Trash2,
-  Check,
-  X,
-} from 'lucide-react';
+import { Plus, Check, X } from 'lucide-react';
 import type { BaseQueryResult, BaseRecord } from '../../base/baseEngine';
 import { getPropertyValue } from '../../base/baseEngine';
 import type { BaseViewConfig, BaseBoardColumnConfig } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
 import { api } from '../../api';
-import { BaseBoardCard } from './BaseBoardCard';
+import { BaseBoardColumn, type BaseBoardColumnData } from './BaseBoardColumn';
 
 export interface BaseBoardViewProps {
   queryResult: BaseQueryResult;
@@ -54,30 +45,20 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   const [draggingPath, setDraggingPath] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
 
-  // Inline column editing state
-  const [editingColKey, setEditingColKey] = useState<string | null>(null);
-  const [draftColName, setDraftColName] = useState<string>('');
-  const [openMenuColKey, setOpenMenuColKey] = useState<string | null>(null);
-
-  // New column input state
+  // New column input state (board right edge)
   const [isAddingColumn, setIsAddingColumn] = useState<boolean>(false);
   const [newColumnInput, setNewColumnInput] = useState<string>('');
 
-  // Global dragend and click outside listener to ensure no card stays greyed out
+  // Global dragend listener to ensure no card stays greyed out
   useEffect(() => {
     const handleGlobalDragEnd = () => {
       setDraggingPath(null);
       setDragOverCol(null);
     };
-    const handleClickOutside = () => {
-      setOpenMenuColKey(null);
-    };
 
     window.addEventListener('dragend', handleGlobalDragEnd);
-    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       window.removeEventListener('dragend', handleGlobalDragEnd);
-      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
@@ -95,7 +76,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   }, [notes, queryResult?.records]);
 
   // Map records to columns considering optimistic updates
-  const columnsData = useMemo(() => {
+  const columnsData: BaseBoardColumnData[] = useMemo(() => {
     const colMap = new Map<string, BaseRecord[]>();
     columnConfigs.forEach((c) => colMap.set(c.name, []));
     const noStatusRecords: BaseRecord[] = [];
@@ -123,13 +104,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
       }
     }
 
-    const cols: Array<{
-      key: string;
-      label: string;
-      records: BaseRecord[];
-      limit: number;
-      color?: string;
-    }> = [];
+    const cols: BaseBoardColumnData[] = [];
 
     for (const col of columnConfigs) {
       cols.push({
@@ -221,16 +196,6 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     }));
   };
 
-  const handleCommitColRename = (oldColKey: string) => {
-    if (!draftColName.trim() || draftColName.trim() === oldColKey) {
-      setEditingColKey(null);
-      return;
-    }
-    const newName = draftColName.trim();
-    setEditingColKey(null);
-    onRenameColumn?.(oldColKey, newName);
-  };
-
   const handleCommitAddColumn = () => {
     const trimmed = newColumnInput.trim();
     if (!trimmed) {
@@ -254,203 +219,39 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
         setDragOverCol(null);
       }}
     >
-      {columnsData.map((col) => {
-        const isOver = dragOverCol === col.key;
-        const isExpanded = !!expandedColumns[col.key];
-        const visibleCards = isExpanded ? col.records : col.records.slice(0, col.limit);
-        const remainingCount = col.records.length - visibleCards.length;
-
-        return (
-          <div
-            key={col.key}
-            className={`base-board-column ${isOver ? 'drag-over' : ''}`}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              if (dragOverCol !== col.key) setDragOverCol(col.key);
-            }}
-            onDragLeave={(e) => {
-              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-              setDragOverCol(null);
-            }}
-            onDrop={(e) => handleDropOnColumn(e, col.key)}
-          >
-            {/* Column Header */}
-            <div className="base-board-column-header">
-              <div className="base-board-column-title-cluster">
-                {col.color && (
-                  <span
-                    className="base-board-column-badge"
-                    style={{ backgroundColor: col.color }}
-                  />
-                )}
-
-                {editingColKey === col.key ? (
-                  <div className="base-board-col-edit-inline" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="text"
-                      className="base-board-col-rename-input"
-                      value={draftColName}
-                      autoFocus
-                      onChange={(e) => setDraftColName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleCommitColRename(col.key);
-                        if (e.key === 'Escape') setEditingColKey(null);
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="base-board-col-confirm-btn"
-                      onClick={() => handleCommitColRename(col.key)}
-                      title="Bestätigen"
-                    >
-                      <Check size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      className="base-board-col-cancel-btn"
-                      onClick={() => setEditingColKey(null)}
-                      title="Abbrechen"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ) : (
-                  <span
-                    className={`base-board-column-title ${!readOnly && col.key !== 'no_status' ? 'editable' : ''}`}
-                    onClick={() => {
-                      if (!readOnly && col.key !== 'no_status') {
-                        setEditingColKey(col.key);
-                        setDraftColName(col.label);
-                      }
-                    }}
-                    title={!readOnly && col.key !== 'no_status' ? 'Klicken zum Umbenennen' : col.label}
-                  >
-                    {col.label}
-                  </span>
-                )}
-
-                <span className="base-board-column-count">({col.records.length})</span>
-              </div>
-
-              {!readOnly && (
-                <div className="base-board-col-header-actions">
-                  <button
-                    type="button"
-                    className="base-board-add-card-btn"
-                    onClick={() => onAddCard?.(col.key === 'no_status' ? '' : col.key)}
-                    title={t('base.addCard', 'Karte hinzufügen')}
-                    aria-label={t('base.addCard', 'Karte hinzufügen')}
-                  >
-                    <Plus size={13} />
-                  </button>
-
-                  {col.key !== 'no_status' && (
-                    <div className="base-board-col-menu-wrapper">
-                      <button
-                        type="button"
-                        className="base-board-col-menu-trigger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenMenuColKey(openMenuColKey === col.key ? null : col.key);
-                        }}
-                        title="Spalten-Optionen"
-                      >
-                        <MoreVertical size={13} />
-                      </button>
-
-                      {openMenuColKey === col.key && (
-                        <div
-                          className="base-dropdown-menu col-dropdown"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            type="button"
-                            className="base-dropdown-item"
-                            onClick={() => {
-                              setOpenMenuColKey(null);
-                              setEditingColKey(col.key);
-                              setDraftColName(col.label);
-                            }}
-                          >
-                            <Edit2 size={13} />
-                            <span>{t('base.renameColumn', 'Spalte umbenennen')}</span>
-                          </button>
-                          {columnConfigs.length > 1 && (
-                            <button
-                              type="button"
-                              className="base-dropdown-item danger"
-                              onClick={() => {
-                                setOpenMenuColKey(null);
-                                onDeleteColumn?.(col.key);
-                              }}
-                            >
-                              <Trash2 size={13} />
-                              <span>{t('base.deleteColumn', 'Spalte entfernen')}</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Column Drop Zone / Card List */}
-            <div className="base-board-cards-list">
-              {visibleCards.map((rec) => (
-                <BaseBoardCard
-                  key={rec.file.path}
-                  record={rec}
-                  columns={columns}
-                  displayNames={displayNames}
-                  groupByProp={groupByProp}
-                  readOnly={readOnly}
-                  isDragging={draggingPath === rec.file.path}
-                  onSelectNote={onSelectNote}
-                  onDragStart={(path) => {
-                    setDraggingPath(path);
-                  }}
-                  onDragEnd={() => {
-                    setDraggingPath(null);
-                    setDragOverCol(null);
-                  }}
-                />
-              ))}
-
-              {/* Show More / Show Fewer Pagination Button */}
-              {remainingCount > 0 && (
-                <button
-                  type="button"
-                  className="base-board-show-more-btn"
-                  onClick={() => toggleExpand(col.key)}
-                >
-                  <ArrowDown size={12} />
-                  <span>
-                    {t(
-                      'base.showMoreCards',
-                      { count: remainingCount },
-                      `${remainingCount} weitere anzeigen...`
-                    )}
-                  </span>
-                </button>
-              )}
-
-              {isExpanded && col.records.length > col.limit && (
-                <button
-                  type="button"
-                  className="base-board-show-more-btn"
-                  onClick={() => toggleExpand(col.key)}
-                >
-                  <ArrowUp size={12} />
-                  <span>{t('base.showFewerCards', 'Weniger anzeigen')}</span>
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {columnsData.map((col) => (
+        <BaseBoardColumn
+          key={col.key}
+          col={col}
+          columns={columns}
+          displayNames={displayNames}
+          groupByProp={groupByProp}
+          readOnly={readOnly}
+          isOver={dragOverCol === col.key}
+          isExpanded={!!expandedColumns[col.key]}
+          onToggleExpand={() => toggleExpand(col.key)}
+          onDrop={handleDropOnColumn}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (dragOverCol !== col.key) setDragOverCol(col.key);
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+            setDragOverCol(null);
+          }}
+          onAddCard={onAddCard}
+          onRenameColumn={onRenameColumn}
+          onDeleteColumn={onDeleteColumn}
+          onSelectNote={onSelectNote}
+          draggingPath={draggingPath}
+          onDragStart={(path) => setDraggingPath(path)}
+          onDragEnd={() => {
+            setDraggingPath(null);
+            setDragOverCol(null);
+          }}
+        />
+      ))}
 
       {/* "+ Neue Spalte hinzufügen" Button ganz rechts auf dem Board */}
       {!readOnly && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Kanban, X, ArrowUp, ArrowDown, Plus, Trash2, Sliders, Check } from 'lucide-react';
+import { Kanban, X, ArrowUp, ArrowDown, Plus, Trash2 } from 'lucide-react';
 import type { BaseViewConfig, BaseGroupBy } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
 
@@ -11,6 +11,74 @@ export interface BaseBoardConfigModalProps {
   onSave: (newGroupBy: BaseGroupBy, newColumnLimit: number) => void;
 }
 
+interface ColumnItem {
+  id: string;
+  name: string;
+}
+
+interface ColumnConfigRowProps {
+  col: ColumnItem;
+  idx: number;
+  total: number;
+  onMove: (index: number, direction: 'up' | 'down') => void;
+  onRename: (id: string, value: string) => void;
+  onDelete: (id: string) => void;
+  deleteTitle: string;
+}
+
+const ColumnConfigRow: React.FC<ColumnConfigRowProps> = ({
+  col,
+  idx,
+  total,
+  onMove,
+  onRename,
+  onDelete,
+  deleteTitle,
+}) => {
+  return (
+    <div className="base-board-column-config-row">
+      <div className="reorder-buttons">
+        <button
+          type="button"
+          className="col-move-btn"
+          disabled={idx === 0}
+          onClick={() => onMove(idx, 'up')}
+          title="Nach oben"
+        >
+          <ArrowUp size={12} />
+        </button>
+        <button
+          type="button"
+          className="col-move-btn"
+          disabled={idx === total - 1}
+          onClick={() => onMove(idx, 'down')}
+          title="Nach unten"
+        >
+          <ArrowDown size={12} />
+        </button>
+      </div>
+
+      <input
+        type="text"
+        className="base-input column-name-input"
+        value={col.name}
+        onChange={(e) => onRename(col.id, e.target.value)}
+        placeholder="Spaltenname..."
+      />
+
+      <button
+        type="button"
+        className="col-delete-btn"
+        disabled={total <= 1}
+        onClick={() => onDelete(col.id)}
+        title={deleteTitle}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+};
+
 export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   isOpen,
   onClose,
@@ -21,7 +89,7 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   const { t } = useTranslation();
 
   const [property, setProperty] = useState<string>('status');
-  const [columns, setColumns] = useState<string[]>([]);
+  const [columns, setColumns] = useState<ColumnItem[]>([]);
   const [columnLimit, setColumnLimit] = useState<number>(10);
   const [newColName, setNewColName] = useState<string>('');
 
@@ -31,7 +99,10 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
       setProperty(initialProp);
 
       const rawCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
-      const stringCols = rawCols.map((c) => (typeof c === 'string' ? c : c.name));
+      const stringCols: ColumnItem[] = rawCols.map((c, i) => ({
+        id: `col-${i}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        name: typeof c === 'string' ? c : c.name,
+      }));
       setColumns(stringCols);
 
       setColumnLimit(view.columnLimit || 10);
@@ -50,30 +121,36 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     setColumns(newCols);
   };
 
-  const handleRenameColumn = (index: number, value: string) => {
-    const newCols = [...columns];
-    newCols[index] = value;
-    setColumns(newCols);
+  const handleRenameColumn = (id: string, value: string) => {
+    setColumns((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, name: value } : c))
+    );
   };
 
-  const handleDeleteColumn = (index: number) => {
+  const handleDeleteColumn = (id: string) => {
     if (columns.length <= 1) return;
-    setColumns(columns.filter((_, i) => i !== index));
+    setColumns((prev) => prev.filter((c) => c.id !== id));
   };
 
   const handleAddColumn = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = newColName.trim();
     if (!trimmed) return;
-    if (!columns.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-      setColumns([...columns, trimmed]);
+    if (!columns.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setColumns((prev) => [
+        ...prev,
+        {
+          id: `col-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          name: trimmed,
+        },
+      ]);
     }
     setNewColName('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanCols = columns.map((c) => c.trim()).filter(Boolean);
+    const cleanCols = columns.map((c) => c.name.trim()).filter(Boolean);
     const finalCols = cleanCols.length > 0 ? cleanCols : ['Open', 'inWork', 'Waiting', 'Finish'];
     const finalLimit = Math.max(1, Number(columnLimit) || 10);
 
@@ -140,46 +217,16 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
 
               <div className="base-board-columns-list scroller">
                 {columns.map((col, idx) => (
-                  <div key={`${col}-${idx}`} className="base-board-column-config-row">
-                    <div className="reorder-buttons">
-                      <button
-                        type="button"
-                        className="col-move-btn"
-                        disabled={idx === 0}
-                        onClick={() => handleMoveColumn(idx, 'up')}
-                        title="Nach oben"
-                      >
-                        <ArrowUp size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        className="col-move-btn"
-                        disabled={idx === columns.length - 1}
-                        onClick={() => handleMoveColumn(idx, 'down')}
-                        title="Nach unten"
-                      >
-                        <ArrowDown size={12} />
-                      </button>
-                    </div>
-
-                    <input
-                      type="text"
-                      className="base-input column-name-input"
-                      value={col}
-                      onChange={(e) => handleRenameColumn(idx, e.target.value)}
-                      placeholder="Spaltenname..."
-                    />
-
-                    <button
-                      type="button"
-                      className="col-delete-btn"
-                      disabled={columns.length <= 1}
-                      onClick={() => handleDeleteColumn(idx)}
-                      title={t('base.deleteColumn', 'Spalte entfernen')}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  <ColumnConfigRow
+                    key={col.id}
+                    col={col}
+                    idx={idx}
+                    total={columns.length}
+                    onMove={handleMoveColumn}
+                    onRename={handleRenameColumn}
+                    onDelete={handleDeleteColumn}
+                    deleteTitle={t('base.deleteColumn', 'Spalte entfernen')}
+                  />
                 ))}
               </div>
 

@@ -39,6 +39,8 @@ import { BaseTableView } from './base/BaseTableView';
 import { BaseCardsView } from './base/BaseCardsView';
 import { BaseBoardView } from './base/BaseBoardView';
 import { useTranslation } from '../i18n';
+import { api } from '../api';
+import type { FrontmatterProperty } from '../../shared/types';
 
 export interface BaseEditorProps {
   filePath: string;
@@ -281,7 +283,6 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   const handleBoardDeleteColumn = (colName: string) => {
     const curCols = activeView.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
     const stringCols = curCols.map((c) => (typeof c === 'string' ? c : c.name));
-    if (stringCols.length <= 1) return;
 
     const updatedCols = stringCols.filter(
       (c) => c.toLowerCase() !== colName.trim().toLowerCase()
@@ -303,6 +304,63 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
       ...config,
       views: newViews,
     });
+  };
+
+  const handleBoardAddCard = async (columnValue: string) => {
+    const groupByProp = activeView.groupBy?.property || 'status';
+
+    const folderRule = activeFilterRules.find(
+      (r) =>
+        (r.field === 'file.inFolder' || r.field === 'file.folder' || r.field === 'folder') &&
+        (r.operator === '==' || !r.operator) &&
+        r.value &&
+        typeof r.value === 'string'
+    );
+
+    let targetFolder = '';
+    if (folderRule && typeof folderRule.value === 'string') {
+      targetFolder = folderRule.value.trim().replace(/^\/+|\/+$/g, '');
+    } else {
+      const lastSlash = filePath.lastIndexOf('/');
+      targetFolder = lastSlash >= 0 ? filePath.substring(0, lastSlash) : '';
+    }
+
+    const existingPaths = new Set(
+      (allFiles || []).map((f) => (f.path || '').toLowerCase())
+    );
+
+    const baseTitle = 'Neue Notiz';
+    let noteTitle = baseTitle;
+    let fileName = `${noteTitle}.md`;
+    let candidatePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+
+    let counter = 1;
+    while (existingPaths.has(candidatePath.toLowerCase())) {
+      noteTitle = `${baseTitle} ${counter}`;
+      fileName = `${noteTitle}.md`;
+      candidatePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
+      counter++;
+    }
+
+    const properties: FrontmatterProperty[] =
+      columnValue && columnValue !== 'no_status'
+        ? [{ key: groupByProp, value: columnValue, type: 'text' }]
+        : [];
+
+    const body = `# ${noteTitle}\n`;
+
+    try {
+      await api.saveNote({
+        path: candidatePath,
+        body,
+        properties,
+        forceOverwrite: true,
+      });
+
+      onSelectNote(candidatePath);
+    } catch (err) {
+      console.error('Failed to create note from board column:', err);
+    }
   };
 
   const handleBoardAddColumn = (newColName: string) => {
@@ -629,6 +687,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
             view={activeView}
             onSelectNote={onSelectNote}
             onCellChange={onCellChange}
+            onAddCard={handleBoardAddCard}
             onRenameColumn={handleBoardRenameColumn}
             onDeleteColumn={handleBoardDeleteColumn}
             onAddColumn={handleBoardAddColumn}
