@@ -5,10 +5,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BaseEmbedWidget } from './components/base/BaseEmbedWidget';
+import { CanvasEmbedWidget } from './components/canvas/CanvasEmbedWidget';
+import { detectFileType } from './components/ResearchPane';
 import { renderReadingHtml } from './utils/readingMode';
+import { api } from './api';
 
 // @ts-ignore
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+// Mock ResizeObserver for jsdom / xyflow
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 describe('BaseEmbedWidget & Borderless Dashboard Embedding', () => {
   let container: HTMLDivElement;
@@ -151,5 +161,83 @@ views:
 
     expect(html).toContain('reading-base-embed');
     expect(html).toContain('data-base-path="Tracker.base"');
+  });
+
+  it('transforms ![[Name.base#View|Height]] and preserves data-view and data-height through sanitize', () => {
+    const markdown = 'With view and height:\n\n![[Projekt.base#Karten|450]]\n\nWith only height:\n\n![[Projekt.base|350]]\n';
+    const allNotesList = [
+      { path: 'Projekt.base', name: 'Projekt.base', basename: 'Projekt' },
+    ];
+
+    const html = renderReadingHtml(markdown, 'Note.md', allNotesList);
+
+    expect(html).toContain('data-base-path="Projekt.base"');
+    expect(html).toContain('data-view="Karten"');
+    expect(html).toContain('data-height="450"');
+    expect(html).toContain('data-height="350"');
+  });
+
+  it('applies initialView and height to BaseEmbedWidget', async () => {
+    await act(async () => {
+      root.render(
+        <BaseEmbedWidget
+          basePath="Dashboard.base"
+          initialView="Karten"
+          height={420}
+          onOpenNote={vi.fn()}
+          rawContent={sampleYaml}
+          allNotes={mockNotes}
+        />
+      );
+    });
+
+    const widget = container.querySelector('.base-embed-widget') as HTMLElement;
+    expect(widget).toBeTruthy();
+    expect(widget.style.height).toBe('420px');
+
+    // "Karten" view should be active initially instead of default table
+    expect(container.querySelector('.base-cards-grid')).toBeTruthy();
+    expect(container.querySelector('.base-table')).toBeNull();
+  });
+
+  it('detectFileType recognizes .base files as "base"', () => {
+    expect(detectFileType('Test.base')).toBe('base');
+    expect(detectFileType('Folder/Sub/Data.BASE')).toBe('base');
+  });
+
+  it('resolves Canvas path via allNotes and renders borderless layout', async () => {
+    const getNoteSpy = vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Diagrams/Architecture.canvas',
+      name: 'Architecture.canvas',
+      rawContent: JSON.stringify({ nodes: [], edges: [] }),
+    } as any);
+
+    const allNotes = [
+      {
+        path: 'Diagrams/Architecture.canvas',
+        name: 'Architecture.canvas',
+        basename: 'Architecture',
+      },
+    ];
+
+    await act(async () => {
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath="Architecture.canvas"
+          onOpenNote={vi.fn()}
+          allNotes={allNotes}
+        />
+      );
+    });
+
+    const widget = container.querySelector('.canvas-embed-widget') as HTMLElement;
+    expect(widget).toBeTruthy();
+    expect(widget.classList.contains('embedded-canvas-container')).toBe(true);
+    expect(widget.classList.contains('cm-lp-canvas-embed')).toBe(true);
+    expect(container.textContent).toContain('Architecture.canvas');
+
+    // api.getNote should have been called with the resolved path "Diagrams/Architecture.canvas"
+    expect(getNoteSpy).toHaveBeenCalledWith('Diagrams/Architecture.canvas');
+    getNoteSpy.mockRestore();
   });
 });

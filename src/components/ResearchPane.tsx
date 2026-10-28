@@ -10,6 +10,7 @@ import {
   RotateCcw,
   FileText,
   Image as ImageIcon,
+  Database,
 } from 'lucide-react';
 import { createRoot, type Root } from 'react-dom/client';
 import DOMPurify from 'dompurify';
@@ -29,11 +30,12 @@ const CanvasEditor = lazy(() =>
   import('./canvas/CanvasEditor').then((m) => ({ default: m.CanvasEditor }))
 );
 
-export type ResearchContentType = 'note' | 'canvas' | 'image' | 'pdf' | 'graph';
+export type ResearchContentType = 'note' | 'canvas' | 'image' | 'pdf' | 'graph' | 'base';
 
 export function detectFileType(path: string): ResearchContentType {
   const lower = path.toLowerCase();
   if (lower.endsWith('.canvas')) return 'canvas';
+  if (lower.endsWith('.base')) return 'base';
   if (lower.endsWith('.pdf')) return 'pdf';
   if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(lower)) return 'image';
   return 'note';
@@ -220,11 +222,18 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
     });
 
     // Base Embeds (![[Name.base]]) rendering
-    const baseEmbedBlocks = container.querySelectorAll<HTMLElement>('.reading-base-embed');
+    const baseEmbedBlocks = container.querySelectorAll<HTMLElement>('.embedded-base-container, .reading-base-embed');
     baseEmbedBlocks.forEach((block) => {
       const basePath = block.dataset.basePath || block.dataset.wikilink || '';
-      const mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
-      if (!mountContainer || mountContainer.hasAttribute('data-rendered')) return;
+      const initialView = block.dataset.view || undefined;
+      const height = block.dataset.height || undefined;
+      let mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
+      if (!mountContainer) {
+        mountContainer = document.createElement('div');
+        mountContainer.className = 'reading-base-mount';
+        block.appendChild(mountContainer);
+      }
+      if (mountContainer.hasAttribute('data-rendered')) return;
 
       mountContainer.setAttribute('data-rendered', 'true');
       const root = createRoot(mountContainer);
@@ -232,6 +241,8 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
       root.render(
         <BaseEmbedWidget
           basePath={basePath}
+          initialView={initialView}
+          height={height}
           allNotes={allNotes}
           onOpenNote={(noteP: string) => onNavigate(noteP)}
         />
@@ -330,6 +341,8 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
     ? 'MD'
     : target?.type === 'canvas'
     ? 'CANVAS'
+    : target?.type === 'base'
+    ? 'BASE'
     : target?.type === 'image'
     ? 'IMG'
     : target?.type === 'pdf'
@@ -351,6 +364,11 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             ) : target?.type === 'canvas' ? (
               <>
                 <WorkflowCanvasIcon size={14} className="research-icon" />
+                <span>{fileName}</span>
+              </>
+            ) : target?.type === 'base' ? (
+              <>
+                <Database size={14} className="research-icon" />
                 <span>{fileName}</span>
               </>
             ) : target?.type === 'image' ? (
@@ -522,6 +540,14 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
               src={`${api.getAttachmentUrl(target.path)}#toolbar=1&view=FitH`}
               className="research-pdf-frame"
               title={fileName}
+            />
+          </div>
+        ) : target?.type === 'base' ? (
+          <div className="research-base-wrapper" style={{ padding: 12, height: '100%', overflow: 'auto' }}>
+            <BaseEmbedWidget
+              basePath={target.path}
+              allNotes={allNotes}
+              onOpenNote={(path: string) => onNavigate(path)}
             />
           </div>
         ) : (

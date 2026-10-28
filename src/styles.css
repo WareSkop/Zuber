@@ -7346,34 +7346,36 @@ input:checked + .slider:before {
   text-decoration: underline;
 }
 
-/* Canvas Embed Containers (Markdown Inline & Reading) */
+/* Canvas Embed Containers (Markdown Inline & Reading) - Borderless Design */
 .cm-lp-canvas-embed,
 .embedded-canvas-container,
 .cm-canvas-embed-wrapper,
-.canvas-embed-container {
+.canvas-embed-container,
+.canvas-embed-widget {
   display: block;
   width: 100% !important;
   max-width: 100% !important;
-  margin: 16px auto !important;
-  border-radius: 8px !important;
+  margin-top: 4px !important;
+  margin-bottom: 8px !important;
+  padding-top: 0 !important;
+  border-radius: 0 !important;
   overflow: hidden !important;
   min-height: 380px;
   height: 480px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: transparent !important;
+  border: none !important;
   position: relative;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: none !important;
 }
 
 .canvas-embed-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
-  background: var(--bg-tertiary);
+  padding: 4px 2px 6px 2px;
+  background: transparent !important;
   border-bottom: 1px solid var(--border-color);
-  font-size: 12.5px;
-  font-weight: 600;
+  margin-bottom: 6px;
   user-select: none;
   z-index: 5;
   position: relative;
@@ -7385,6 +7387,12 @@ input:checked + .slider:before {
   gap: 8px;
 }
 
+.canvas-embed-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .canvas-embed-icon {
   color: #c084fc;
 }
@@ -7393,11 +7401,11 @@ input:checked + .slider:before {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 5px;
-  color: var(--text-primary);
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
   font-size: 11.5px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -7405,7 +7413,7 @@ input:checked + .slider:before {
 
 .canvas-embed-open-btn:hover {
   background: var(--bg-hover);
-  border-color: var(--accent-color);
+  border-color: var(--border-color);
   color: var(--accent-color);
 }
 
@@ -9003,13 +9011,32 @@ input:checked + .slider:before {
    ========================================================================== */
 
 .cm-lp-base-embed,
+.cm-lp-canvas-embed,
+.embedded-base-container,
+.embedded-canvas-container,
+.base-embed-widget,
+.canvas-embed-widget {
+  margin-top: 4px !important;
+  margin-bottom: 8px !important;
+  padding-top: 0 !important;
+}
+
+.cm-line:has(.cm-embed-widget),
+.cm-line:has(.cm-lp-base-embed),
+.cm-line:has(.cm-lp-canvas-embed),
+.cm-line:has(.embedded-base-container),
+.cm-line:has(.embedded-canvas-container) {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+.cm-lp-base-embed,
 .embedded-base-container,
 .base-embed-widget {
   border: none !important;
   box-shadow: none !important;
   background: transparent !important;
   padding: 0;
-  margin: 16px 0;
   display: flex;
   flex-direction: column;
   width: 100%;

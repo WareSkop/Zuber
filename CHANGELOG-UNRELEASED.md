@@ -1,4 +1,18 @@
 ### Added
+- Nahtlose Base- und Canvas-Einbettung im Lese-Modus und in der Rechercheansicht (`LivePreviewEditor.tsx`, `ResearchPane.tsx`, `src/utils/readingMode.ts`, `BaseEmbedWidget.tsx`):
+  - Eingebettete Bases (`![[Name.base]]`, `![[Name.base#View]]`, `![[Name.base|Height]]`) werden nun zuverlässig im Lese-Modus (`mode === 'reading'`) und in der Rechercheansicht (`ResearchPane.tsx`) mit `<BaseEmbedWidget />` gerendert.
+  - DOMPurify erlaubt und bewahrt `data-base-path`, `data-view` und `data-height` sicher bei der HTML-Sanitization.
+  - Rechercheansicht (`ResearchPane.tsx`) unterstützt `.base`-Dateien nativ (`detectFileType`, `typeBadge: BASE`, Database-Icon) mit direkter interaktiver Ansicht.
+  - Unterstützung für initiale Ansichtswahl (`initialView`) und Höhenvorgaben (`height`) im `BaseEmbedWidget`.
+- Rahmenloses Design für Canvas-Embeds (`CanvasEmbedWidget.tsx`, `src/styles.css`):
+  - Entfernung von Kastenrahmen, Box-Shadows und grauem Hintergrund um eingebettete Canvas-Boards (`border: none`, `box-shadow: none`, `background: transparent`).
+  - Dezente Titelleiste mit Canvas-Icon, Dateiname, feiner Trennlinie und unaufdringlichem „Im Editor öffnen ↗“-Button.
+- Robuste Pfadauflösung & Parsing für Canvas-Embeds (`CanvasEmbedWidget.tsx`):
+  - Behebt den Fehler „Canvas-Datei konnte nicht geladen werden“ bei relativen Pfaden oder Unterordnern durch Vorab-Auflösung über `allNotes` und den lokalen Vault-Cache.
+  - Sicheres Parsen von Notizinhalten als String, `{ rawContent }` oder `{ body }`.
+- Kompakter oberer Abstand für eingebettete Elemente (`src/styles.css`):
+  - Margen für Base- und Canvas-Embeds auf 4px oben und 8px unten verringert (`margin-top: 4px !important; margin-bottom: 8px !important; padding-top: 0 !important;`).
+  - Reduktion von `.cm-line`-Abständen bei CodeMirror-Embed-Blöcken, sodass Einbettungen direkt bündig an den vorangehenden Text anschließen.
 - Funktion für den „+ Add Card“-Button im Spaltenkopf (`BaseBoardColumn.tsx`, `BaseEditor.tsx`):
   - Legt beim Klick auf `+` eine neue Notiz direkt im gefilterten Zielordner (z. B. `file.inFolder(...)`) oder im Verzeichnis der `.base`-Datei bzw. Vault-Root an.
   - Vergibt automatisch einen kollisionsfreien Namen (`Neue Notiz.md`, `Neue Notiz 1.md` etc.).

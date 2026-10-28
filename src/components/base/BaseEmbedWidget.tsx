@@ -29,6 +29,8 @@ export interface BaseEmbedWidgetProps {
   rawContent?: string;
   onCellChange?: (notePath: string, key: string, value: any) => Promise<void>;
   readOnly?: boolean;
+  initialView?: string;
+  height?: string | number;
 }
 
 export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
@@ -38,6 +40,8 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
   rawContent,
   onCellChange,
   readOnly = false,
+  initialView,
+  height,
 }) => {
   const { t } = useTranslation();
   const [yaml, setYaml] = useState<string>(rawContent || '');
@@ -73,6 +77,21 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
     };
   }, [allNotes]);
 
+  const resolvedFullPath = useMemo(() => {
+    const normalizedTarget = basePath.trim();
+    const pool = internalNotes.length > 0 ? internalNotes : (allNotes || []);
+    const foundNote = pool.find((n: any) =>
+      n.path === normalizedTarget ||
+      n.path === `${normalizedTarget}.base` ||
+      n.path.toLowerCase() === normalizedTarget.toLowerCase() ||
+      n.name === normalizedTarget ||
+      n.name === normalizedTarget.replace(/\.base$/i, '') ||
+      n.basename === normalizedTarget ||
+      n.basename === normalizedTarget.replace(/\.base$/i, '')
+    );
+    return foundNote ? foundNote.path : basePath;
+  }, [basePath, internalNotes, allNotes]);
+
   // Load Base YAML content if not provided via props
   useEffect(() => {
     if (rawContent !== undefined) {
@@ -85,26 +104,33 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
     setLoading(true);
     setError(null);
 
-    api
-      .getNote(basePath)
-      .then((note) => {
+    const loadData = async () => {
+      try {
+        let note: any;
+        try {
+          note = await syncEngine.getNote(resolvedFullPath);
+        } catch {
+          note = await api.getNote(resolvedFullPath);
+        }
         if (!cancelled) {
           const content = note.rawContent || note.body || '';
           setYaml(content);
           setLoading(false);
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setError(`Base-Datei konnte nicht geladen werden (${basePath})`);
           setLoading(false);
         }
-      });
+      }
+    };
+
+    loadData();
 
     return () => {
       cancelled = true;
     };
-  }, [basePath, rawContent]);
+  }, [resolvedFullPath, basePath, rawContent]);
 
   // Parse YAML configuration
   const { config, parseError } = useMemo(() => {
@@ -127,15 +153,34 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
   const safeViewIndex = Math.min(Math.max(0, activeViewIdx), views.length - 1);
   const activeView = views[safeViewIndex];
 
+  // Set initial view if specified
+  useEffect(() => {
+    if (!initialView || !config || !config.views || config.views.length === 0) return;
+    const lower = initialView.toLowerCase().trim();
+    const idx = config.views.findIndex(
+      (v) => (v.name && v.name.toLowerCase().trim() === lower) || v.type.toLowerCase().trim() === lower
+    );
+    if (idx >= 0) {
+      setActiveViewIdx(idx);
+    }
+  }, [config, initialView]);
+
+  const parsedHeight = useMemo(() => {
+    if (!height) return undefined;
+    if (typeof height === 'number') return `${height}px`;
+    const str = String(height).trim();
+    return /^\d+$/.test(str) ? `${str}px` : str;
+  }, [height]);
+
   // Execute query against vault notes
   const rawQueryResult = useMemo(() => {
     if (!config) return null;
     try {
-      return executeBaseQuery(config, internalNotes, safeViewIndex, basePath);
+      return executeBaseQuery(config, internalNotes, safeViewIndex, resolvedFullPath);
     } catch (err: any) {
       return null;
     }
-  }, [config, internalNotes, safeViewIndex, basePath]);
+  }, [config, internalNotes, safeViewIndex, resolvedFullPath]);
 
   // Apply interactive sorting override if present
   const queryResult: BaseQueryResult | null = useMemo(() => {
@@ -204,20 +249,23 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
     }
   };
 
-  const fileName = basePath.split('/').pop() || basePath;
+  const fileName = resolvedFullPath.split('/').pop() || resolvedFullPath;
   const effectiveColumnSizes = useMemo(() => {
     return { ...(activeView.columnSize || {}), ...localColumnSizes };
   }, [activeView.columnSize, localColumnSizes]);
 
   return (
-    <div className="cm-lp-base-embed embedded-base-container base-embed-widget">
+    <div
+      className="cm-lp-base-embed embedded-base-container base-embed-widget"
+      style={parsedHeight ? { height: parsedHeight } : undefined}
+    >
       {/* 1. Subtle Status Bar */}
       <div className="base-embed-status-bar">
         <div className="base-embed-status-left">
           <div
             className="base-embed-title-cluster"
-            onClick={() => onOpenNote(basePath)}
-            title={basePath}
+            onClick={() => onOpenNote(resolvedFullPath)}
+            title={resolvedFullPath}
           >
             <Database size={14} className="base-embed-icon" />
             <span className="base-embed-title">{fileName}</span>
@@ -253,7 +301,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
           <button
             type="button"
             className="base-embed-open-btn"
-            onClick={() => onOpenNote(basePath)}
+            onClick={() => onOpenNote(resolvedFullPath)}
             title={t('base.openInEditor') || 'Im Editor öffnen ↗'}
             aria-label={t('base.openInEditor') || 'Im Editor öffnen'}
           >

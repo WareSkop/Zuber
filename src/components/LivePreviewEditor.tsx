@@ -613,9 +613,13 @@ class EmbedWidget extends WidgetType {
       container.className = 'cm-embed-widget cm-lp-base-embed embedded-base-container base-embed-widget';
       const root = createRoot(container);
       (container as any)._reactRoot = root;
+      const viewVal = this.target.includes('#') ? this.target.split('#')[1].trim() : undefined;
+      const heightVal = this.alt && /^\d+(?:px)?$/i.test(this.alt.trim()) ? this.alt.trim() : undefined;
       root.render(
         <BaseEmbedWidget
           basePath={effectiveBasePath}
+          initialView={viewVal}
+          height={heightVal}
           onOpenNote={this.onNavigate}
           allNotes={this.allNotes}
         />
@@ -2833,10 +2837,10 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
     // 2. Transform Wiki-Embeds ![[Embeds]]
     processed = processed.replace(
-      /!\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
-      (_match, targetRaw, altRaw) => {
+      /!\[\[([^\]|#\n]+)(?:#([^\]|\n]+))?(?:\|([^\]\n]+))?\]\]/g,
+      (_match, targetRaw, viewOrHeadingRaw, altOrHeightRaw) => {
         const target = String(targetRaw).trim();
-        const alt = altRaw ? String(altRaw).trim() : target;
+        const alt = altOrHeightRaw ? String(altOrHeightRaw).trim() : target;
         let isCanvas = target.toLowerCase().endsWith('.canvas');
         let canvasPath = target;
         if (!isCanvas) {
@@ -2882,7 +2886,11 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         }
         if (isBase) {
           const safeBasePath = escapeHtml(basePath);
-          return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
+          const viewVal = viewOrHeadingRaw ? String(viewOrHeadingRaw).trim() : '';
+          const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
+          const safeView = viewVal ? escapeHtml(viewVal) : '';
+          const safeHeight = heightVal ? escapeHtml(heightVal) : '';
+          return `<div class="embedded-base-container base-embed-widget cm-lp-base-embed reading-base-embed" data-base-path="${safeBasePath}" data-view="${safeView}" data-height="${safeHeight}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
         }
         if (target.toLowerCase().endsWith('.pdf')) {
           const url = escapeHtml(api.getAttachmentUrl(target, notePath));
@@ -3027,6 +3035,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         'data-wiki-target',
         'data-wikilink',
         'data-canvas-path',
+        'data-base-path',
+        'data-view',
+        'data-height',
         'data-tag',
         'data-code',
         'data-action',
@@ -3120,11 +3131,18 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     });
 
     // Render Base Embeds (![[Name.base]]) in Reading Mode
-    const baseEmbedBlocks = container.querySelectorAll<HTMLElement>('.reading-base-embed');
+    const baseEmbedBlocks = container.querySelectorAll<HTMLElement>('.embedded-base-container, .reading-base-embed');
     baseEmbedBlocks.forEach((block) => {
       const basePath = block.dataset.basePath || block.dataset.wikilink || '';
-      const mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
-      if (!mountContainer || mountContainer.hasAttribute('data-rendered')) return;
+      const initialView = block.dataset.view || undefined;
+      const height = block.dataset.height || undefined;
+      let mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
+      if (!mountContainer) {
+        mountContainer = document.createElement('div');
+        mountContainer.className = 'reading-base-mount';
+        block.appendChild(mountContainer);
+      }
+      if (mountContainer.hasAttribute('data-rendered')) return;
 
       mountContainer.setAttribute('data-rendered', 'true');
       const root = createRoot(mountContainer);
@@ -3132,6 +3150,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       root.render(
         <BaseEmbedWidget
           basePath={basePath}
+          initialView={initialView}
+          height={height}
           allNotes={allNotes}
           onOpenNote={onNavigateWikiLink}
         />

@@ -53,10 +53,10 @@ export function renderReadingHtml(
 
   // 2. Transform Wiki-Embeds ![[Embeds]]
   processed = processed.replace(
-    /!\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
-    (_match, targetRaw, altRaw) => {
+    /!\[\[([^\]|#\n]+)(?:#([^\]|\n]+))?(?:\|([^\]\n]+))?\]\]/g,
+    (_match, targetRaw, viewOrHeadingRaw, altOrHeightRaw) => {
       const target = String(targetRaw).trim();
-      const alt = altRaw ? String(altRaw).trim() : target;
+      const alt = altOrHeightRaw ? String(altOrHeightRaw).trim() : target;
       let isCanvas = target.toLowerCase().endsWith('.canvas');
       let canvasPath = target;
       if (!isCanvas) {
@@ -102,7 +102,11 @@ export function renderReadingHtml(
       }
       if (isBase) {
         const safeBasePath = escapeHtml(basePath);
-        return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
+        const viewVal = viewOrHeadingRaw ? String(viewOrHeadingRaw).trim() : '';
+        const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
+        const safeView = viewVal ? escapeHtml(viewVal) : '';
+        const safeHeight = heightVal ? escapeHtml(heightVal) : '';
+        return `<div class="embedded-base-container base-embed-widget cm-lp-base-embed reading-base-embed" data-base-path="${safeBasePath}" data-view="${safeView}" data-height="${safeHeight}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
       }
       if (target.toLowerCase().endsWith('.pdf')) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
@@ -251,6 +255,9 @@ export function renderReadingHtml(
       'data-wiki-target',
       'data-wikilink',
       'data-canvas-path',
+      'data-base-path',
+      'data-view',
+      'data-height',
       'data-tag',
       'data-code',
       'data-action',
