@@ -22,6 +22,7 @@ export interface CanvasEmbedWidgetProps {
   canvasPath: string;
   onOpenNote: (path: string) => void;
   allNotes?: any[];
+  currentNotePath?: string;
   height?: string | number;
   fullSize?: boolean;
 }
@@ -42,6 +43,7 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
   canvasPath,
   onOpenNote,
   allNotes = [],
+  currentNotePath,
   height,
   fullSize = false,
 }) => {
@@ -80,6 +82,16 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
     const lowerWithoutCanvas = lowerRaw.replace(/\.canvas$/i, '');
     const baseNameRaw = lowerWithoutCanvas.split('/').pop() || lowerWithoutCanvas;
 
+    // Check same folder as current note if provided
+    if (currentNotePath && currentNotePath.includes('/')) {
+      const folder = currentNotePath.substring(0, currentNotePath.lastIndexOf('/')).toLowerCase();
+      const targetInFolder = `${folder}/${lowerWithCanvas}`;
+      const sameFolderMatch = pool.find((n: any) => (n.path || '').toLowerCase() === targetInFolder);
+      if (sameFolderMatch) {
+        return sameFolderMatch.path;
+      }
+    }
+
     const foundNote = pool.find((n: any) => {
       const p = (n.path || '').toLowerCase();
       const name = (n.name || '').toLowerCase();
@@ -97,16 +109,25 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
       );
     });
 
-    return foundNote ? foundNote.path : canvasPath;
-  }, [canvasPath, internalNotes, allNotes]);
+    return foundNote ? foundNote.path : (canvasPath.toLowerCase().endsWith('.canvas') ? canvasPath : `${canvasPath}.canvas`);
+  }, [canvasPath, currentNotePath, internalNotes, allNotes]);
 
-  const parsedHeight = useMemo(() => {
-    if (fullSize) return '100%';
-    if (!height) return undefined;
-    if (typeof height === 'number') return `${height}px`;
-    const str = String(height).trim();
-    return /^\d+$/.test(str) ? `${str}px` : str;
+  const effectiveHeight = useMemo(() => {
+    if (fullSize) return undefined;
+    if (!height) return 380;
+    const str = String(height).trim().replace(/px$/i, '');
+    const parsed = parseInt(str, 10);
+    return !isNaN(parsed) && parsed > 50 ? parsed : 380;
   }, [height, fullSize]);
+
+  const parsedContainerHeight = useMemo(() => {
+    if (fullSize) return '100%';
+    return `${effectiveHeight}px`;
+  }, [fullSize, effectiveHeight]);
+
+  const parsedViewportHeight = useMemo(() => {
+    return 'calc(100% - 38px)';
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,8 +183,12 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
 
   return (
     <div
-      className="canvas-embed-container canvas-embed-widget embedded-canvas-container cm-lp-canvas-embed nodrag"
-      style={parsedHeight ? { height: parsedHeight } : undefined}
+      className={`canvas-embed-container canvas-embed-widget embedded-canvas-container cm-lp-canvas-embed nodrag ${fullSize ? 'full-size' : ''}`}
+      style={{
+        width: '100%',
+        height: parsedContainerHeight,
+        minHeight: fullSize ? '400px' : `${effectiveHeight}px`,
+      }}
     >
       <div className="canvas-embed-header">
         <div className="canvas-embed-title-cluster" title={resolvedFullPath}>
@@ -182,7 +207,15 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
         </button>
       </div>
 
-      <div className="canvas-embed-body" style={{ width: '100%', height: 'calc(100% - 37px)', position: 'relative' }}>
+      <div
+        className="canvas-embed-body canvas-embed-viewport"
+        style={{
+          width: '100%',
+          height: parsedViewportHeight,
+          minHeight: fullSize ? '360px' : `${Math.max(100, (effectiveHeight ?? 380) - 38)}px`,
+          position: 'relative',
+        }}
+      >
         {loading ? (
           <div className="canvas-embed-loading">Lädt Canvas-Vorschau...</div>
         ) : error ? (

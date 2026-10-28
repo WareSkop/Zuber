@@ -154,6 +154,8 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
     return renderReadingHtml(noteContent, target.path, allNotes);
   }, [target?.type, target?.path, noteContent, allNotes]);
 
+  const readingHtmlObj = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
+
   // Setup Mermaid diagrams, Base blocks, and event listeners in reading view
   useEffect(() => {
     if (target?.type !== 'note' || !readingContainerRef.current) return;
@@ -272,6 +274,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
           canvasPath={canvasPath}
           height={height}
           allNotes={allNotes}
+          currentNotePath={target?.path}
           onOpenNote={(noteP: string) => onNavigate(noteP)}
         />
       );
@@ -287,6 +290,9 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
         try {
           r.unmount();
         } catch {}
+      });
+      container.querySelectorAll('.reading-base-mount, .reading-canvas-mount, .reading-mermaid-svg').forEach((el) => {
+        el.removeAttribute('data-rendered');
       });
     };
   }, [target?.type, target?.path, renderedHtml, allNotes, onNavigate]);
@@ -507,7 +513,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             <div className="reading-view-container research-reading-container">
               <div
                 className="reading-view-content"
-                dangerouslySetInnerHTML={{ __html: renderedHtml }}
+                dangerouslySetInnerHTML={readingHtmlObj}
               />
             </div>
           </div>
@@ -517,6 +523,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
               canvasPath={target.path}
               onOpenNote={(path: string) => onNavigate(path)}
               allNotes={allNotes}
+              currentNotePath={target.path}
               fullSize={true}
             />
           </div>

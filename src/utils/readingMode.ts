@@ -59,18 +59,39 @@ export function renderReadingHtml(
       const alt = altOrHeightRaw ? String(altOrHeightRaw).trim() : target;
       let isCanvas = target.toLowerCase().endsWith('.canvas');
       let canvasPath = target;
-      if (!isCanvas) {
+      if (!isCanvas && allNotes) {
         const lower = target.toLowerCase();
-        const canvasMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.canvas')
-        );
-        const mdMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.md')
-        );
+        const lowerWithExt = lower.endsWith('.canvas') ? lower : `${lower}.canvas`;
+        const lowerWithoutExt = lower.replace(/\.canvas$/i, '');
+        const canvasMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.canvas$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p === lowerWithExt ||
+              p.endsWith(`/${lowerWithExt}`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === lowerWithExt ||
+              base === lowerWithoutExt) &&
+            p.endsWith('.canvas')
+          );
+        });
+        const mdMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p.endsWith(`/${lower}.md`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === `${lower}.md` ||
+              base === lower) &&
+            p.endsWith('.md')
+          );
+        });
         if (canvasMatch && !mdMatch) {
           isCanvas = true;
           canvasPath = canvasMatch.path;
@@ -86,16 +107,37 @@ export function renderReadingHtml(
       let basePath = target;
       if (!isBase && allNotes) {
         const lower = target.toLowerCase();
-        const baseMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.base')
-        );
-        const mdMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.md')
-        );
+        const lowerWithExt = lower.endsWith('.base') ? lower : `${lower}.base`;
+        const lowerWithoutExt = lower.replace(/\.base$/i, '');
+        const baseMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.base$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p === lowerWithExt ||
+              p.endsWith(`/${lowerWithExt}`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === lowerWithExt ||
+              base === lowerWithoutExt) &&
+            p.endsWith('.base')
+          );
+        });
+        const mdMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p.endsWith(`/${lower}.md`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === `${lower}.md` ||
+              base === lower) &&
+            p.endsWith('.md')
+          );
+        });
         if (baseMatch && !mdMatch) {
           isBase = true;
           basePath = baseMatch.path;
@@ -135,18 +177,39 @@ export function renderReadingHtml(
       const alt = String(altRaw || target).trim();
       let isCanvas = target.toLowerCase().endsWith('.canvas');
       let canvasPath = target;
-      if (!isCanvas) {
+      if (!isCanvas && allNotes) {
         const lower = target.toLowerCase();
-        const canvasMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.canvas')
-        );
-        const mdMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.md')
-        );
+        const lowerWithExt = lower.endsWith('.canvas') ? lower : `${lower}.canvas`;
+        const lowerWithoutExt = lower.replace(/\.canvas$/i, '');
+        const canvasMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.canvas$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p === lowerWithExt ||
+              p.endsWith(`/${lowerWithExt}`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === lowerWithExt ||
+              base === lowerWithoutExt) &&
+            p.endsWith('.canvas')
+          );
+        });
+        const mdMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p.endsWith(`/${lower}.md`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === `${lower}.md` ||
+              base === lower) &&
+            p.endsWith('.md')
+          );
+        });
         if (canvasMatch && !mdMatch) {
           isCanvas = true;
           canvasPath = canvasMatch.path;
@@ -162,16 +225,37 @@ export function renderReadingHtml(
       let basePath = target;
       if (!isBase && allNotes) {
         const lower = target.toLowerCase();
-        const baseMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.base')
-        );
-        const mdMatch = allNotes.find(
-          (n) =>
-            (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-            n.path.toLowerCase().endsWith('.md')
-        );
+        const lowerWithExt = lower.endsWith('.base') ? lower : `${lower}.base`;
+        const lowerWithoutExt = lower.replace(/\.base$/i, '');
+        const baseMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.base$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p === lowerWithExt ||
+              p.endsWith(`/${lowerWithExt}`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === lowerWithExt ||
+              base === lowerWithoutExt) &&
+            p.endsWith('.base')
+          );
+        });
+        const mdMatch = allNotes.find((n) => {
+          const p = (n.path || '').toLowerCase();
+          const name = (n.name || '').toLowerCase();
+          const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
+          return (
+            (p === lower ||
+              p.endsWith(`/${lower}.md`) ||
+              p.endsWith(`/${lower}`) ||
+              name === lower ||
+              name === `${lower}.md` ||
+              base === lower) &&
+            p.endsWith('.md')
+          );
+        });
         if (baseMatch && !mdMatch) {
           isBase = true;
           basePath = baseMatch.path;

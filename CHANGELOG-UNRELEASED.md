@@ -1,3 +1,11 @@
+### Fixed
+- Fehlerhafte Canvas-Einbettung im Lese-Modus (`mode === 'reading'`) und in der Rechercheansicht (`LivePreviewEditor.tsx`, `ResearchPane.tsx`, `CanvasEmbedWidget.tsx`, `src/utils/readingMode.ts`, `src/styles.css`):
+  - Behebt den 0px-Höhenkollaps von ReactFlow bei Canvas-Einbettungen durch explizite Mindest- und Pixelhöhen (`effectiveHeight`, standardmäßig 380px) auf Container und Viewport.
+  - Sicheres Parsen von leeren `data-height=""`-Attributen ohne Auswertung zu `0` oder `NaN`.
+  - Bereinigung der DOM-Mounting-Logik in `LivePreviewEditor.tsx` und `ResearchPane.tsx`: `useMemo` für `readingHtmlObj` verhindert das Löschen gemounteter Roots bei UI-Re-Renders; das Zurücksetzen von `data-rendered` beim Unmount ermöglicht sauberes Re-Mounten bei Eigenschafts- oder Notizen-Updates.
+  - Übergabe von `currentNotePath` für priorisierte relative Pfadauflösung von Canvas-Dateien im selben Ordner.
+  - Erweiterte Canvas- und Base-Dateiauflösung in `renderReadingHtml` für relative Pfade und schreibweisentolerante Namensabgleiche.
+
 ### Added
 - Dialog-gestützte Notizerstellung über den „+ Add Card“-Button im Kanban-Board (`BaseBoardColumn.tsx`, `BaseEditor.tsx`, `App.tsx`):
   - Klick auf den `+`-Button im Spaltenkopf öffnet den Standard „Neue Notiz“-Dialog (`create-note`), sodass der Benutzer den Dateinamen selbst festlegen kann.

@@ -7417,11 +7417,13 @@ input:checked + .slider:before {
   color: var(--accent-color);
 }
 
-.canvas-embed-body {
+.canvas-embed-body,
+.canvas-embed-viewport {
   width: 100%;
   height: calc(100% - 38px);
   position: relative;
   overflow: hidden;
+  min-height: 250px;
 }
 
 .canvas-embed-loading,

@@ -38,6 +38,7 @@ import { Target } from 'lucide-react';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
+import { renderReadingHtml } from '../utils/readingMode';
 
 let mermaidModulePromise: Promise<typeof import('mermaid').default> | null = null;
 async function loadAndInitMermaid(isDark: boolean) {
@@ -584,6 +585,7 @@ class EmbedWidget extends WidgetType {
           height={heightVal}
           onOpenNote={this.onNavigate}
           allNotes={this.allNotes}
+          currentNotePath={this.notePath}
         />
       );
       return container;
@@ -2819,253 +2821,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   // Render HTML for Reading Mode ('reading')
   const renderedHtml = useMemo(() => {
     if (mode !== 'reading') return '';
+    return renderReadingHtml(body, notePath, allNotes);
+  }, [body, mode, notePath, allNotes]);
 
-    let processed = body;
+  const readingHtmlObj = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
 
-    // 1. Transform Callouts: > [!type] Title \n > content
-    processed = processed.replace(
-      /(?:^>\s*\[!([a-zA-Z]+)\]\s*(.*)\n)((?:^>.*\n?)*)/gm,
-      (_match, typeStr, titleStr, contentBlock) => {
-        const type = String(typeStr).toLowerCase();
-        const title = titleStr?.trim() || type.toUpperCase();
-        const innerLines = String(contentBlock)
-          .split('\n')
-          .map((l) => l.replace(/^>\s?/, ''))
-          .join('\n');
-        const innerHtml = marked.parse(innerLines, { async: false, gfm: true }) as string;
-        return `<div class="reading-callout callout-${type}"><div class="reading-callout-title">${title}</div><div class="reading-callout-body">${innerHtml}</div></div>\n`;
-      }
-    );
-
-    // 2. Transform Wiki-Embeds ![[Embeds]]
-    processed = processed.replace(
-      /!\[\[([^\]|#\n]+)(?:#([^\]|\n]+))?(?:\|([^\]\n]+))?\]\]/g,
-      (_match, targetRaw, viewOrHeadingRaw, altOrHeightRaw) => {
-        const target = String(targetRaw).trim();
-        const alt = altOrHeightRaw ? String(altOrHeightRaw).trim() : target;
-        let isCanvas = target.toLowerCase().endsWith('.canvas');
-        let canvasPath = target;
-        if (!isCanvas) {
-          const lower = target.toLowerCase();
-          const canvasMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.canvas')
-          );
-          const mdMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.md')
-          );
-          if (canvasMatch && !mdMatch) {
-            isCanvas = true;
-            canvasPath = canvasMatch.path;
-          }
-        }
-        if (isCanvas) {
-          const safeCanvasPath = escapeHtml(canvasPath);
-          const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
-          const safeHeight = heightVal ? escapeHtml(heightVal) : '';
-          return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
-        }
-        let isBase = target.toLowerCase().endsWith('.base');
-        let basePath = target;
-        if (!isBase) {
-          const lower = target.toLowerCase();
-          const baseMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.base')
-          );
-          const mdMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.md')
-          );
-          if (baseMatch && !mdMatch) {
-            isBase = true;
-            basePath = baseMatch.path;
-          }
-        }
-        if (isBase) {
-          const safeBasePath = escapeHtml(basePath);
-          const viewVal = viewOrHeadingRaw ? String(viewOrHeadingRaw).trim() : '';
-          const heightVal = altOrHeightRaw && /^\d+(?:px)?$/i.test(altOrHeightRaw.trim()) ? altOrHeightRaw.trim() : '';
-          const safeView = viewVal ? escapeHtml(viewVal) : '';
-          const safeHeight = heightVal ? escapeHtml(heightVal) : '';
-          return `<div class="embedded-base-container base-embed-widget cm-lp-base-embed reading-base-embed" data-base-path="${safeBasePath}" data-view="${safeView}" data-height="${safeHeight}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
-        }
-        if (target.toLowerCase().endsWith('.pdf')) {
-          const url = escapeHtml(api.getAttachmentUrl(target, notePath));
-          const fileName = target.split('/').pop() || target;
-          let height = '550px';
-          if (/^\d+$/.test(alt)) {
-            height = `${alt}px`;
-          }
-          return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
-        }
-        if (IMAGE_EXT_REGEX.test(target)) {
-          const url = escapeHtml(api.getAttachmentUrl(target, notePath));
-          const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
-          return `<span class="reading-image-embed"><img src="${url}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${styleAttr} /></span>`;
-        }
-        return `<div class="reading-note-embed" data-wikilink="${escapeHtml(target)}">📄 Eingebettete Notiz: <strong>${escapeHtml(alt)}</strong></div>`;
-      }
-    );
-
-    // 3. Transform Standard Markdown Images ![alt](url) to use vault attachment resolver
-    processed = processed.replace(
-      /!\[([^\]\n]*)\]\(([^)\n]+)\)/g,
-      (_match, altRaw, hrefRaw) => {
-        const target = String(hrefRaw).trim();
-        const alt = String(altRaw || target).trim();
-        let isCanvas = target.toLowerCase().endsWith('.canvas');
-        let canvasPath = target;
-        if (!isCanvas) {
-          const lower = target.toLowerCase();
-          const canvasMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.canvas')
-          );
-          const mdMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.md')
-          );
-          if (canvasMatch && !mdMatch) {
-            isCanvas = true;
-            canvasPath = canvasMatch.path;
-          }
-        }
-        if (isCanvas) {
-          const safeCanvasPath = escapeHtml(canvasPath);
-          const heightVal = altRaw && /^\d+(?:px)?$/i.test(altRaw.trim()) ? altRaw.trim() : '';
-          const safeHeight = heightVal ? escapeHtml(heightVal) : '';
-          return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
-        }
-        let isBase = target.toLowerCase().endsWith('.base');
-        let basePath = target;
-        if (!isBase) {
-          const lower = target.toLowerCase();
-          const baseMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.base')
-          );
-          const mdMatch = allNotes.find(
-            (n) =>
-              (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-              n.path.toLowerCase().endsWith('.md')
-          );
-          if (baseMatch && !mdMatch) {
-            isBase = true;
-            basePath = baseMatch.path;
-          }
-        }
-        if (isBase) {
-          const safeBasePath = escapeHtml(basePath);
-          return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
-        }
-        if (target.toLowerCase().endsWith('.pdf')) {
-          const rawUrl = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);
-          const url = escapeHtml(rawUrl);
-          const fileName = target.split('/').pop() || target;
-          let height = '550px';
-          if (/^\d+$/.test(alt)) {
-            height = `${alt}px`;
-          }
-          return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
-        }
-        const rawUrl = /^(https?:|data:)/i.test(target)
-          ? target
-          : api.getAttachmentUrl(target, notePath);
-        return `<span class="reading-image-embed"><img src="${escapeHtml(rawUrl)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" /></span>`;
-      }
-    );
-
-    // 3.5. Transform HTML <img> tags to resolve relative vault paths
-    processed = processed.replace(
-      /<img\b([^>]*?src=["']([^"']+)["'][^>]*?)\/?>/gi,
-      (fullTag, _attrs, src) => {
-        const cleanSrc = String(src).trim();
-        if (/^(https?:|data:)/i.test(cleanSrc)) return fullTag;
-        const resolvedUrl = api.getAttachmentUrl(cleanSrc, notePath);
-        return fullTag.replace(src, resolvedUrl);
-      }
-    );
-
-    // 4. Transform Standard Markdown Links [label](url)
-    processed = processed.replace(
-      /(?<!!)\[([^\]\n]+)\]\(([^)\n]+)\)/g,
-      (_match, labelRaw, hrefRaw) => {
-        const href = String(hrefRaw).trim();
-        const label = String(labelRaw).trim();
-        if (/^(https?:|mailto:)/i.test(href)) {
-          return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="external-link">${escapeHtml(label)}</a>`;
-        }
-        return `<a href="#" class="reading-wikilink" data-wikilink="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
-      }
-    );
-
-    // 5. Transform [[Wiki-Links]]
-    processed = processed.replace(
-      /\[\[([^\]|#\n]+)(?:#([^\]|\n]+))?(?:\|([^\]\n]+))?\]\]/g,
-      (_match, targetRaw, _heading, aliasRaw) => {
-        const target = String(targetRaw).trim();
-        const display = aliasRaw ? String(aliasRaw).trim() : target;
-        return `<a href="#" class="reading-wikilink" data-wikilink="${escapeHtml(target)}">${escapeHtml(display)}</a>`;
-      }
-    );
-
-    // 6. Transform ==highlights==
-    processed = processed.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
-
-    // 7. Transform inline #tags
-    processed = processed.replace(
-      /(^|\s)#([a-zA-ZäöüÄÖÜß0-9/_-]+)(?=$|[\s.,;:!?)])/gm,
-      '$1<span class="reading-tag" data-tag="$2">#$2</span>'
-    );
-
-    let rawHtml = marked.parse(processed, { async: false, gfm: true }) as string;
-    // Add task-list-item class to <li> containing input checkbox for reliable styling
-    rawHtml = rawHtml.replace(/<li(\s*[^>]*)>(?:\s*<p>)?\s*(<input\s+[^>]*type=["']checkbox["'][^>]*>)/gi, '<li$1 class="task-list-item">$2');
-    return DOMPurify.sanitize(rawHtml, {
-      ADD_TAGS: ['rect', 'path', 'svg', 'button', 'iframe'],
-      ADD_ATTR: [
-        'href',
-        'target',
-        'rel',
-        'data-wiki-target',
-        'data-wikilink',
-        'data-canvas-path',
-        'data-base-path',
-        'data-view',
-        'data-height',
-        'data-tag',
-        'data-code',
-        'data-action',
-        'data-rendered',
-        'srcdoc',
-        'sandbox',
-        'style',
-        'loading',
-        'decoding',
-        'align',
-        'viewBox',
-        'fill',
-        'stroke',
-        'stroke-width',
-        'width',
-        'height',
-        'rx',
-        'ry',
-        'd',
-      ],
-    });
-  }, [body, mode, notePath]);
-
-  // Render Mermaid diagrams in Reading Mode
+  // Render Mermaid diagrams, Base blocks, Base embeds, and Canvas embeds in Reading Mode
   useEffect(() => {
     if (mode !== 'reading') return;
     const container = document.querySelector('.reading-view-container');
@@ -3078,8 +2839,6 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         document.documentElement.classList.contains('dark'));
 
     const mermaidBlocks = container.querySelectorAll<HTMLElement>('.reading-mermaid-container');
-    if (mermaidBlocks.length === 0) return;
-
     mermaidBlocks.forEach((block) => {
       const rawCode = decodeURIComponent(block.dataset.code || '');
       const svgContainer = block.querySelector<HTMLElement>('.reading-mermaid-svg');
@@ -3113,13 +2872,19 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           `;
         });
     });
+
     // Render Base blocks in Reading Mode
     const baseBlocks = container.querySelectorAll<HTMLElement>('.reading-base-container');
     const baseRoots: Root[] = [];
     baseBlocks.forEach((block) => {
       const rawCode = decodeURIComponent(block.dataset.code || '');
-      const mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
-      if (!mountContainer || mountContainer.hasAttribute('data-rendered')) return;
+      let mountContainer = block.querySelector<HTMLElement>('.reading-base-mount');
+      if (!mountContainer) {
+        mountContainer = document.createElement('div');
+        mountContainer.className = 'reading-base-mount';
+        block.appendChild(mountContainer);
+      }
+      if (mountContainer.hasAttribute('data-rendered')) return;
 
       mountContainer.setAttribute('data-rendered', 'true');
       const root = createRoot(mountContainer);
@@ -3184,6 +2949,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           canvasPath={canvasPath}
           height={height}
           allNotes={allNotes}
+          currentNotePath={notePath}
           onOpenNote={onNavigateWikiLink}
         />
       );
@@ -3200,8 +2966,11 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           r.unmount();
         } catch {}
       });
+      container.querySelectorAll('.reading-base-mount, .reading-canvas-mount, .reading-mermaid-svg').forEach((el) => {
+        el.removeAttribute('data-rendered');
+      });
     };
-  }, [mode, onNavigateWikiLink, renderedHtml]);
+  }, [mode, onNavigateWikiLink, renderedHtml, allNotes, notePath]);
 
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const extLink = (e.target as HTMLElement).closest('a[target="_blank"]');
@@ -3328,7 +3097,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         className="reading-view-container markdown-rendered"
         onClick={handleReadingClick}
         onContextMenu={handleReadingContextMenu}
-        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        dangerouslySetInnerHTML={readingHtmlObj}
       >
         {contextMenuElement}
       </div>

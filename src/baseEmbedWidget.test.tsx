@@ -292,4 +292,68 @@ views:
     widget = container.querySelector('.canvas-embed-widget') as HTMLElement;
     expect(widget.style.height).toBe('100%');
   });
+
+  it('defaults to 380px height when height is omitted or empty on CanvasEmbedWidget', async () => {
+    vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Diagram.canvas',
+      name: 'Diagram.canvas',
+      rawContent: JSON.stringify({ nodes: [], edges: [] }),
+    } as any);
+
+    await act(async () => {
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath="Diagram.canvas"
+          onOpenNote={vi.fn()}
+          allNotes={[]}
+          height=""
+        />
+      );
+    });
+
+    const widget = container.querySelector('.canvas-embed-widget') as HTMLElement;
+    expect(widget).toBeTruthy();
+    expect(widget.style.height).toBe('380px');
+    const viewport = container.querySelector('.canvas-embed-viewport') as HTMLElement;
+    expect(viewport).toBeTruthy();
+    expect(viewport.style.minHeight).toBe('342px');
+  });
+
+  it('resolves relative canvas path based on currentNotePath folder', async () => {
+    const getNoteSpy = vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Projects/Sub/Arch.canvas',
+      name: 'Arch.canvas',
+      rawContent: JSON.stringify({ nodes: [], edges: [] }),
+    } as any);
+
+    const allNotes = [
+      { path: 'Archive/Arch.canvas', name: 'Arch.canvas', basename: 'Arch' },
+      { path: 'Projects/Sub/Arch.canvas', name: 'Arch.canvas', basename: 'Arch' },
+    ];
+
+    await act(async () => {
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath="Arch.canvas"
+          currentNotePath="Projects/Sub/Meeting.md"
+          onOpenNote={vi.fn()}
+          allNotes={allNotes}
+        />
+      );
+    });
+
+    expect(getNoteSpy).toHaveBeenCalledWith('Projects/Sub/Arch.canvas');
+    getNoteSpy.mockRestore();
+  });
+
+  it('resolves extensionless ![[Workflow]] to Workflow.canvas in renderReadingHtml', () => {
+    const markdown = 'Embed: ![[Workflow]]';
+    const allNotes = [
+      { path: 'Diagrams/Workflow.canvas', name: 'Workflow.canvas', basename: 'Workflow' },
+    ];
+
+    const html = renderReadingHtml(markdown, 'Note.md', allNotes);
+    expect(html).toContain('embedded-canvas-container');
+    expect(html).toContain('data-canvas-path="Diagrams/Workflow.canvas"');
+  });
 });
