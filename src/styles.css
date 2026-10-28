@@ -8895,6 +8895,186 @@ input:checked + .slider:before {
   max-width: 500px;
 }
 
+.base-board-config-modal-2col {
+  width: 95vw;
+  max-width: 840px;
+}
+
+.base-board-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .base-board-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.base-board-config-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.base-board-swimlane-hint {
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   2D Kanban Board with Horizontal Swimlanes (.base-board-2d-*)
+   ========================================================================== */
+
+.base-board-2d-container {
+  display: block;
+  overflow: auto;
+  padding: 16px;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.base-board-2d-grid {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 100%;
+}
+
+.base-board-2d-header-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--bg-primary);
+  padding-bottom: 6px;
+}
+
+.base-board-column.base-board-column-header-only {
+  padding: 10px 12px;
+  max-height: none;
+}
+
+.base-board-column.base-board-column-header-only .base-board-column-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.base-board-2d-swimlanes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.base-board-swimlane-band {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.015);
+  overflow: visible;
+}
+
+.base-board-swimlane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 8px 8px 0 0;
+}
+
+.base-board-swimlane-band.is-collapsed .base-board-swimlane-header {
+  border-bottom: none;
+  border-radius: 8px;
+}
+
+.base-board-swimlane-title-cluster {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.base-board-swimlane-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.base-board-swimlane-collapse-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-normal);
+}
+
+.base-board-swimlane-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.base-board-swimlane-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.base-board-swimlane-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.base-board-swimlane-cells-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 16px;
+  padding: 12px;
+}
+
+.base-board-swimlane-cell {
+  flex: 0 0 280px;
+  width: 280px;
+  min-height: 90px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.base-board-swimlane-cell.drag-over {
+  background: var(--bg-hover, rgba(226, 183, 20, 0.08));
+  border: 1px dashed var(--accent-primary, #e2b714);
+}
+
 .base-board-config-form {
   display: flex;
   flex-direction: column;

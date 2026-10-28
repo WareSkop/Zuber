@@ -40,6 +40,7 @@ export interface BaseBoardColumnProps {
   draggingPath: string | null;
   onDragStart: (path: string) => void;
   onDragEnd: () => void;
+  headerOnly?: boolean;
 }
 
 export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
@@ -61,6 +62,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   draggingPath,
   onDragStart,
   onDragEnd,
+  headerOnly = false,
 }) => {
   const { t } = useTranslation();
 
@@ -125,7 +127,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
 
   return (
     <div
-      className={`base-board-column ${isOver ? 'drag-over' : ''}`}
+      className={`base-board-column ${headerOnly ? 'base-board-column-header-only' : ''} ${isOver ? 'drag-over' : ''}`}
       onDragOver={(e) => onDragOver(e, col.key)}
       onDragLeave={onDragLeave}
       onDrop={(e) => onDrop(e, col.key)}
@@ -251,51 +253,53 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
       </div>
 
       {/* Column Drop Zone / Card List */}
-      <div className="base-board-cards-list">
-        {visibleCards.map((rec) => (
-          <BaseBoardCard
-            key={rec.file.path}
-            record={rec}
-            columns={columns}
-            displayNames={displayNames}
-            groupByProp={groupByProp}
-            readOnly={readOnly}
-            isDragging={draggingPath === rec.file.path}
-            onSelectNote={onSelectNote}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-          />
-        ))}
+      {!headerOnly && (
+        <div className="base-board-cards-list">
+          {visibleCards.map((rec) => (
+            <BaseBoardCard
+              key={rec.file.path}
+              record={rec}
+              columns={columns}
+              displayNames={displayNames}
+              groupByProp={groupByProp}
+              readOnly={readOnly}
+              isDragging={draggingPath === rec.file.path}
+              onSelectNote={onSelectNote}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+            />
+          ))}
 
-        {/* Show More / Show Fewer Pagination Button */}
-        {remainingCount > 0 && (
-          <button
-            type="button"
-            className="base-board-show-more-btn"
-            onClick={onToggleExpand}
-          >
-            <ArrowDown size={12} />
-            <span>
-              {t(
-                'base.showMoreCards',
-                { count: remainingCount },
-                `${remainingCount} weitere anzeigen...`
-              )}
-            </span>
-          </button>
-        )}
+          {/* Show More / Show Fewer Pagination Button */}
+          {remainingCount > 0 && (
+            <button
+              type="button"
+              className="base-board-show-more-btn"
+              onClick={onToggleExpand}
+            >
+              <ArrowDown size={12} />
+              <span>
+                {t(
+                  'base.showMoreCards',
+                  { count: remainingCount },
+                  `${remainingCount} weitere anzeigen...`
+                )}
+              </span>
+            </button>
+          )}
 
-        {isExpanded && col.records.length > col.limit && (
-          <button
-            type="button"
-            className="base-board-show-more-btn"
-            onClick={onToggleExpand}
-          >
-            <ArrowUp size={12} />
-            <span>{t('base.showFewerCards', 'Weniger anzeigen')}</span>
-          </button>
-        )}
-      </div>
+          {isExpanded && col.records.length > col.limit && (
+            <button
+              type="button"
+              className="base-board-show-more-btn"
+              onClick={onToggleExpand}
+            >
+              <ArrowUp size={12} />
+              <span>{t('base.showFewerCards', 'Weniger anzeigen')}</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

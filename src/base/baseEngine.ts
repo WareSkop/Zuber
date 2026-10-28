@@ -1051,3 +1051,207 @@ export function getPropertyValue(record: BaseRecord, propertyKey: string): any {
 
   return record[propertyKey];
 }
+
+export interface BaseBoard2DColumn {
+  key: string;
+  label: string;
+  records: BaseRecord[];
+  totalCount: number;
+  limit: number;
+  color?: string;
+}
+
+export interface BaseBoardSwimlaneRow {
+  key: string;
+  label: string;
+  collapsed: boolean;
+  isUnassigned: boolean;
+  totalCount: number;
+  cells: Record<string, BaseRecord[]>;
+}
+
+export interface BaseBoard2DData {
+  columns: BaseBoard2DColumn[];
+  swimlanes: BaseBoardSwimlaneRow[];
+  rows: BaseBoardSwimlaneRow[];
+}
+
+/**
+ * Computes 2D grouping (Columns × Swimlanes) for a Kanban Board view.
+ */
+export function groupBoard2D(
+  records: BaseRecord[],
+  view: BaseViewConfig,
+  options?: {
+    noStatusLabel?: string;
+    unassignedSwimlaneLabel?: string;
+    propertyOverrides?: Record<string, Record<string, string>>;
+    collapsedOverrides?: Record<string, boolean>;
+    getPropValue?: (rec: BaseRecord, prop: string) => any;
+  }
+): BaseBoard2DData {
+  const groupByProp = view.groupBy?.property || 'status';
+  const swimlaneProp = view.swimlanes?.property?.trim() || '';
+  const defaultLimit = view.columnLimit || 10;
+  const noStatusLabel = options?.noStatusLabel || 'Kein Status';
+  const unassignedSwimlaneLabel = options?.unassignedSwimlaneLabel || 'Keine Zuordnung';
+  const overrides = options?.propertyOverrides || {};
+  const collapsedOverrides = options?.collapsedOverrides || {};
+  const getVal = options?.getPropValue || getPropertyValue;
+
+  // 1. Resolve Columns
+  const explicitCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+  const colConfigs = explicitCols.map((c: any) =>
+    typeof c === 'string' ? { name: c } : { name: c.name, limit: c.limit, color: c.color }
+  );
+
+  const colMap = new Map<string, BaseRecord[]>();
+  colConfigs.forEach((c) => colMap.set(c.name, []));
+  const noStatusRecords: BaseRecord[] = [];
+  const recordColKey = new Map<string, string>();
+
+  for (const rec of records) {
+    const rawColVal =
+      overrides[rec.file.path]?.[groupByProp] !== undefined
+        ? overrides[rec.file.path][groupByProp]
+        : getVal(rec, groupByProp);
+
+    if (rawColVal === undefined || rawColVal === null || String(rawColVal).trim() === '') {
+      noStatusRecords.push(rec);
+      recordColKey.set(rec.file.path, 'no_status');
+      continue;
+    }
+
+    const strVal = String(rawColVal).trim();
+    const matchedCol = colConfigs.find((c) => c.name.toLowerCase() === strVal.toLowerCase());
+    if (matchedCol) {
+      colMap.get(matchedCol.name)!.push(rec);
+      recordColKey.set(rec.file.path, matchedCol.name);
+    } else {
+      noStatusRecords.push(rec);
+      recordColKey.set(rec.file.path, 'no_status');
+    }
+  }
+
+  const columns: BaseBoard2DColumn[] = colConfigs.map((col) => {
+    const colRecs = colMap.get(col.name) || [];
+    return {
+      key: col.name,
+      label: col.name,
+      records: colRecs,
+      totalCount: colRecs.length,
+      limit: col.limit || defaultLimit,
+      color: col.color,
+    };
+  });
+
+  if (noStatusRecords.length > 0 || colConfigs.length === 0) {
+    columns.push({
+      key: 'no_status',
+      label: noStatusLabel,
+      records: noStatusRecords,
+      totalCount: noStatusRecords.length,
+      limit: defaultLimit,
+    });
+  }
+
+  if (!swimlaneProp) {
+    return { columns, swimlanes: [], rows: [] };
+  }
+
+  // 2. Resolve Swimlanes
+  const rawLanes = view.swimlanes?.lanes || [];
+  const laneConfigs: { name: string; collapsed: boolean }[] = rawLanes
+    .map((l: any) =>
+      typeof l === 'string'
+        ? { name: l, collapsed: false }
+        : { name: String(l.name || ''), collapsed: Boolean(l.collapsed) }
+    )
+    .filter((l) => Boolean(l.name));
+
+  const createEmptyCells = (): Record<string, BaseRecord[]> => {
+    const cells: Record<string, BaseRecord[]> = {};
+    for (const c of columns) {
+      cells[c.key] = [];
+    }
+    return cells;
+  };
+
+  const laneCellsMap = new Map<string, Record<string, BaseRecord[]>>();
+  const laneCountsMap = new Map<string, number>();
+  for (const lane of laneConfigs) {
+    laneCellsMap.set(lane.name, createEmptyCells());
+    laneCountsMap.set(lane.name, 0);
+  }
+
+  const unassignedCells = createEmptyCells();
+  let unassignedCount = 0;
+
+  for (const rec of records) {
+    const colKey = recordColKey.get(rec.file.path) || 'no_status';
+    const rawLaneVal =
+      overrides[rec.file.path]?.[swimlaneProp] !== undefined
+        ? overrides[rec.file.path][swimlaneProp]
+        : getVal(rec, swimlaneProp);
+
+    if (rawLaneVal === undefined || rawLaneVal === null || String(rawLaneVal).trim() === '') {
+      if (unassignedCells[colKey]) {
+        unassignedCells[colKey].push(rec);
+      }
+      unassignedCount++;
+      continue;
+    }
+
+    const strLaneVal = String(rawLaneVal).trim();
+    const matchedLane = laneConfigs.find((l) => l.name.toLowerCase() === strLaneVal.toLowerCase());
+    if (matchedLane) {
+      const cells = laneCellsMap.get(matchedLane.name)!;
+      if (cells[colKey]) {
+        cells[colKey].push(rec);
+      }
+      laneCountsMap.set(matchedLane.name, (laneCountsMap.get(matchedLane.name) || 0) + 1);
+    } else {
+      if (unassignedCells[colKey]) {
+        unassignedCells[colKey].push(rec);
+      }
+      unassignedCount++;
+    }
+  }
+
+  const swimlanes: BaseBoardSwimlaneRow[] = laneConfigs.map((lane) => {
+    const isCollapsed =
+      collapsedOverrides[lane.name] !== undefined
+        ? collapsedOverrides[lane.name]
+        : lane.collapsed;
+    return {
+      key: lane.name,
+      label: lane.name,
+      collapsed: isCollapsed,
+      isUnassigned: false,
+      totalCount: laneCountsMap.get(lane.name) || 0,
+      cells: laneCellsMap.get(lane.name) || createEmptyCells(),
+    };
+  });
+
+  if (unassignedCount > 0 || laneConfigs.length === 0) {
+    const isUnassignedCollapsed =
+      collapsedOverrides['unassigned_swimlane'] !== undefined
+        ? collapsedOverrides['unassigned_swimlane']
+        : Boolean(view.swimlanes?.unassignedCollapsed);
+
+    swimlanes.push({
+      key: 'unassigned_swimlane',
+      label: unassignedSwimlaneLabel,
+      collapsed: isUnassignedCollapsed,
+      isUnassigned: true,
+      totalCount: unassignedCount,
+      cells: unassignedCells,
+    });
+  }
+
+  return {
+    columns,
+    swimlanes,
+    rows: swimlanes,
+  };
+}

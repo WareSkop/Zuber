@@ -6,6 +6,7 @@ import {
   evaluateCondition,
   executeBaseQuery,
   getPropertyValue,
+  groupBoard2D,
 } from './base/baseEngine';
 import { refactorBaseContent } from '../shared/markdownUtils';
 import type { BaseDefinition } from '../shared/types';
@@ -435,6 +436,91 @@ views:
       const updated = refactorBaseContent(yaml, 'OldNotes/Spec.md', 'NewNotes/Spec.md');
       expect(updated).toContain('NewNotes/Spec.md');
       expect(updated).not.toContain('OldNotes/Spec.md');
+    });
+  });
+
+  describe('groupBoard2D (2D Kanban Matrix: Columns x Swimlanes)', () => {
+    it('groups records across columns and swimlanes and creates catch-all rows/columns when needed', () => {
+      const records = [
+        createRecordFromNote({
+          path: 'Tasks/T1.md',
+          name: 'T1.md',
+          properties: { status: 'Open', prio: 'Prio 1' },
+        }),
+        createRecordFromNote({
+          path: 'Tasks/T2.md',
+          name: 'T2.md',
+          properties: { status: 'inWork', prio: 'Prio 2' },
+        }),
+        createRecordFromNote({
+          path: 'Tasks/T3.md',
+          name: 'T3.md',
+          properties: { status: 'Open', prio: '' }, // Unassigned swimlane
+        }),
+        createRecordFromNote({
+          path: 'Tasks/T4.md',
+          name: 'T4.md',
+          properties: { status: '', prio: 'Prio 1' }, // Unassigned column
+        }),
+      ];
+
+      const view = {
+        type: 'board' as const,
+        name: '2D Board',
+        groupBy: {
+          property: 'status',
+          columns: ['Open', 'inWork', 'Finish'],
+        },
+        swimlanes: {
+          property: 'prio',
+          lanes: [
+            { name: 'Prio 1', collapsed: false },
+            { name: 'Prio 2', collapsed: true },
+          ],
+        },
+        columnLimit: 10,
+      };
+
+      const matrix = groupBoard2D(records, view, {
+        noStatusLabel: 'Kein Status',
+        unassignedSwimlaneLabel: 'Keine Zuordnung',
+      });
+
+      // Columns: Open (2), inWork (1), Finish (0), Kein Status (1)
+      expect(matrix.columns.map((c) => c.key)).toEqual([
+        'Open',
+        'inWork',
+        'Finish',
+        'no_status',
+      ]);
+      expect(matrix.columns.find((c) => c.key === 'Open')?.totalCount).toBe(2);
+      expect(matrix.columns.find((c) => c.key === 'inWork')?.totalCount).toBe(1);
+      expect(matrix.columns.find((c) => c.key === 'Finish')?.totalCount).toBe(0);
+      expect(matrix.columns.find((c) => c.key === 'no_status')?.totalCount).toBe(1);
+
+      // Swimlane rows: Prio 1 (2), Prio 2 (1, collapsed), Keine Zuordnung (1)
+      expect(matrix.rows.map((r) => r.key)).toEqual([
+        'Prio 1',
+        'Prio 2',
+        'unassigned_swimlane',
+      ]);
+
+      const prio1Row = matrix.rows.find((r) => r.key === 'Prio 1')!;
+      expect(prio1Row.totalCount).toBe(2);
+      expect(prio1Row.collapsed).toBe(false);
+      expect(prio1Row.cells['Open'].map((r) => r.file.name)).toEqual(['T1.md']);
+      expect(prio1Row.cells['no_status'].map((r) => r.file.name)).toEqual(['T4.md']);
+
+      const prio2Row = matrix.rows.find((r) => r.key === 'Prio 2')!;
+      expect(prio2Row.totalCount).toBe(1);
+      expect(prio2Row.collapsed).toBe(true);
+      expect(prio2Row.cells['inWork'].map((r) => r.file.name)).toEqual(['T2.md']);
+
+      const unassignedRow = matrix.rows.find((r) => r.key === 'unassigned_swimlane')!;
+      expect(unassignedRow.isUnassigned).toBe(true);
+      expect(unassignedRow.label).toBe('Keine Zuordnung');
+      expect(unassignedRow.totalCount).toBe(1);
+      expect(unassignedRow.cells['Open'].map((r) => r.file.name)).toEqual(['T3.md']);
     });
   });
 });

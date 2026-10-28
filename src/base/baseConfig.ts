@@ -44,6 +44,17 @@ export interface BaseGroupBy {
   columns?: (string | BaseBoardColumnConfig)[];
 }
 
+export interface BaseBoardSwimlaneItem {
+  name: string;
+  collapsed?: boolean;
+}
+
+export interface BaseBoardSwimlaneConfig {
+  property: string; // e.g. "prio" (empty or undefined = no swimlanes)
+  lanes?: (string | BaseBoardSwimlaneItem)[];
+  unassignedCollapsed?: boolean; // Collapse status for the catch-all "Keine Zuordnung" swimlane
+}
+
 export interface BaseViewConfig {
   type: 'table' | 'cards' | 'board' | 'list';
   name: string;
@@ -57,6 +68,7 @@ export interface BaseViewConfig {
   order?: string[];
   sort?: BaseSortRule[];
   groupBy?: BaseGroupBy;
+  swimlanes?: BaseBoardSwimlaneConfig;
   columnSize?: Record<string, number>;
   [key: string]: any;
 }
@@ -113,6 +125,26 @@ export function parseBaseYaml(rawYaml: string): BaseConfig {
                   : undefined,
               }
             : undefined,
+          swimlanes:
+            v.swimlanes && typeof v.swimlanes === 'object' && v.swimlanes.property && String(v.swimlanes.property).trim()
+              ? {
+                  property: String(v.swimlanes.property).trim(),
+                  lanes: Array.isArray(v.swimlanes.lanes)
+                    ? v.swimlanes.lanes.map((l: any) =>
+                        typeof l === 'string'
+                          ? l
+                          : {
+                              name: String(l.name || ''),
+                              collapsed: typeof l.collapsed === 'boolean' ? l.collapsed : undefined,
+                            }
+                      )
+                    : undefined,
+                  unassignedCollapsed:
+                    typeof v.swimlanes.unassignedCollapsed === 'boolean'
+                      ? v.swimlanes.unassignedCollapsed
+                      : undefined,
+                }
+              : undefined,
         }))
       : [{ type: 'table', name: 'Table' }];
 
@@ -476,6 +508,30 @@ export function stringifyBaseYaml(config: BaseConfig): string {
       vObj.groupBy = gb;
     }
 
+    if (v.swimlanes && typeof v.swimlanes === 'object' && v.swimlanes.property && v.swimlanes.property.trim()) {
+      const sl: Record<string, any> = {
+        property: v.swimlanes.property.trim(),
+      };
+      if (Array.isArray(v.swimlanes.lanes) && v.swimlanes.lanes.length > 0) {
+        sl.lanes = v.swimlanes.lanes.map((l) => {
+          if (typeof l === 'string') {
+            return {
+              name: l,
+              collapsed: false,
+            };
+          }
+          return {
+            name: l.name,
+            collapsed: Boolean(l.collapsed),
+          };
+        });
+      }
+      if (typeof v.swimlanes.unassignedCollapsed === 'boolean') {
+        sl.unassignedCollapsed = v.swimlanes.unassignedCollapsed;
+      }
+      vObj.swimlanes = sl;
+    }
+
     if (v.filters && typeof v.filters === 'object') {
       const fObj: Record<string, any> = {};
       if (Array.isArray(v.filters.and) && v.filters.and.length > 0) {
@@ -492,7 +548,7 @@ export function stringifyBaseYaml(config: BaseConfig): string {
     // Preserve any custom view fields
     for (const [k, val] of Object.entries(v)) {
       if (
-        !['type', 'name', 'limit', 'order', 'columnSize', 'sort', 'groupBy', 'filters'].includes(k) &&
+        !['type', 'name', 'limit', 'columnLimit', 'order', 'columnSize', 'sort', 'groupBy', 'swimlanes', 'filters'].includes(k) &&
         val !== undefined
       ) {
         vObj[k] = val;
@@ -579,4 +635,59 @@ export function extractVaultTags(allNotes: any[]): string[] {
   }
 
   return Array.from(tagSet).sort();
+}
+
+/**
+ * Extract all unique non-empty values for a given property across vault notes or records.
+ */
+export function extractPropertyValues(allNotes: any[], propKey: string): string[] {
+  const cleanKey = (propKey || '').trim().toLowerCase();
+  if (!cleanKey) return [];
+
+  const values: string[] = [];
+  const seenLower = new Set<string>();
+
+  const addVal = (rawVal: any) => {
+    if (rawVal === undefined || rawVal === null) return;
+    const items = Array.isArray(rawVal) ? rawVal : [rawVal];
+    for (const item of items) {
+      const str = String(item).trim();
+      if (!str) continue;
+      const lower = str.toLowerCase();
+      if (!seenLower.has(lower)) {
+        seenLower.add(lower);
+        values.push(str);
+      }
+    }
+  };
+
+  for (const n of allNotes || []) {
+    if (!n) continue;
+    // 1. properties array
+    if (Array.isArray(n.properties)) {
+      for (const p of n.properties) {
+        if (p && typeof p.key === 'string' && p.key.trim().toLowerCase() === cleanKey) {
+          addVal(p.value);
+        }
+      }
+    } else if (n.properties && typeof n.properties === 'object') {
+      // BaseRecord properties dictionary
+      for (const [k, v] of Object.entries(n.properties)) {
+        if (k.trim().toLowerCase() === cleanKey) {
+          addVal(v);
+        }
+      }
+    }
+
+    // 2. frontmatter dictionary
+    if (n.frontmatter && typeof n.frontmatter === 'object') {
+      for (const [k, v] of Object.entries(n.frontmatter)) {
+        if (k.trim().toLowerCase() === cleanKey) {
+          addVal(v);
+        }
+      }
+    }
+  }
+
+  return values;
 }

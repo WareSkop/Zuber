@@ -560,7 +560,16 @@
     "renameColumn": "Rename column",
     "deleteColumn": "Remove column",
     "columnAdded": "Column added",
-    "columnDeleted": "Column removed"
+    "columnDeleted": "Column removed",
+    "swimlaneBy": "Swimlanes by:",
+    "noSwimlanes": "No Swimlanes (Disabled)",
+    "swimlanes": "Swimlanes",
+    "addSwimlane": "+ Add Swimlane",
+    "swimlaneNamePlaceholder": "Swimlane name...",
+    "renameSwimlane": "Rename swimlane",
+    "removeSwimlane": "Remove swimlane",
+    "unassignedSwimlane": "No Swimlane",
+    "swimlaneHint": "Select a property (e.g. priority or project) to divide the board horizontally into swimlanes."
   },
   "research": {
     "title": "Research View",

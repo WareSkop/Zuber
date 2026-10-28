@@ -242,6 +242,17 @@ export interface BaseGroupBy {
   columns?: (string | BaseBoardColumnConfig)[];
 }
 
+export interface BaseBoardSwimlaneItem {
+  name: string;
+  collapsed?: boolean;
+}
+
+export interface BaseBoardSwimlaneConfig {
+  property: string;
+  lanes?: (string | BaseBoardSwimlaneItem)[];
+  unassignedCollapsed?: boolean;
+}
+
 export type BaseFilterCondition =
   | string
   | { and?: BaseFilterCondition[] }
@@ -258,6 +269,7 @@ export interface BaseViewConfig {
   columnSize?: Record<string, number>;
   filters?: BaseFilterCondition;
   groupBy?: BaseGroupBy;
+  swimlanes?: BaseBoardSwimlaneConfig;
   sort?: BaseSortRule[];
   summaries?: Record<string, string>;
 }

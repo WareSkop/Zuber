@@ -284,4 +284,71 @@ views:
     expect(tags).toContain('database');
     expect(tags).toContain('personal');
   });
+
+  it('parses and serializes board swimlanes config including collapsed state and removal when disabled', () => {
+    const boardSwimlanesYaml = `
+views:
+  - type: board
+    name: Aufgaben
+    groupBy:
+      property: status
+      columns:
+        - Open
+        - inWork
+        - Waiting
+        - Finish
+    swimlanes:
+      property: prio
+      lanes:
+        - name: Prio 1
+          collapsed: false
+        - name: Prio 2
+          collapsed: true
+      unassignedCollapsed: true
+`;
+
+    const config = parseBaseYaml(boardSwimlanesYaml);
+    expect(config.views).toHaveLength(1);
+    const view = config.views[0];
+    expect(view.type).toBe('board');
+    expect(view.swimlanes).toBeDefined();
+    expect(view.swimlanes?.property).toBe('prio');
+    expect(view.swimlanes?.unassignedCollapsed).toBe(true);
+    expect(view.swimlanes?.lanes).toEqual([
+      { name: 'Prio 1', collapsed: false },
+      { name: 'Prio 2', collapsed: true },
+    ]);
+
+    const serialized = stringifyBaseYaml(config);
+    expect(serialized).toContain('swimlanes:');
+    expect(serialized).toContain('property: prio');
+    expect(serialized).toContain('name: Prio 1');
+    expect(serialized).toContain('collapsed: false');
+    expect(serialized).toContain('name: Prio 2');
+    expect(serialized).toContain('collapsed: true');
+    expect(serialized).toContain('unassignedCollapsed: true');
+
+    // Also supports plain string lanes when parsing
+    const plainLanesYaml = `
+views:
+  - type: board
+    name: Sprint
+    swimlanes:
+      property: prio
+      lanes:
+        - Prio 1
+        - name: Prio 2
+          collapsed: true
+`;
+    const parsedPlain = parseBaseYaml(plainLanesYaml);
+    expect(parsedPlain.views[0].swimlanes?.lanes).toEqual([
+      'Prio 1',
+      { name: 'Prio 2', collapsed: true },
+    ]);
+
+    // When swimlanes are disabled (undefined or empty property), swimlanes block is cleanly omitted
+    delete parsedPlain.views[0].swimlanes;
+    const serializedWithoutSwimlanes = stringifyBaseYaml(parsedPlain);
+    expect(serializedWithoutSwimlanes).not.toContain('swimlanes:');
+  });
 });

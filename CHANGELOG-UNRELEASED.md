@@ -7,6 +7,13 @@
   - Erweiterte Canvas- und Base-Dateiauflösung in `renderReadingHtml` für relative Pfade und schreibweisentolerante Namensabgleiche.
 
 ### Added
+- 2D-Kanban-Board mit horizontalen Swimlanes, zweispaltigem „Configure Board“-Dialog und persistentem Einklapp-Status (`src/base/baseConfig.ts`, `src/base/baseEngine.ts`, `src/components/base/BaseBoardConfigModal.tsx`, `src/components/base/BaseBoardView.tsx`, `src/components/BaseEditor.tsx`, `src/components/base/BaseEmbedWidget.tsx`, `src/styles.css`):
+  - Erweiterung des Base-Datenmodells und YAML-Serializers um `swimlanes` (`BaseBoardSwimlaneConfig`, `BaseBoardSwimlaneItem` mit `name` und `collapsed?: boolean` sowie `unassignedCollapsed?: boolean`).
+  - Zweispaltiges Layout im „Board konfigurieren“-Dialog (`BaseBoardConfigModal.tsx`, `max-width: 840px`): Linke Spalte für vertikale Spalten (`Group by`, `Board Columns`, `Column card limit`), rechte Spalte für horizontale Swimlanes (`Swimlanes by` mit Option `Keine Swimlanes (Deaktiviert)`, automatischem Vorschlag vorhandener Property-Werte aus dem Vault und sortierbarer Swimlane-Liste ohne Fokusverlust).
+  - 2D-Matrix-Gruppierung (`groupBoard2D` in `baseEngine.ts`) und 2D-Rendering in `BaseBoardView.tsx`: Einmalige, oben fixierte Spaltenkopf-Zeile (`.base-board-2d-header-row`) und darunterliegende horizontale Swimlane-Bänder inklusive automatischer Sammel-Swimlane `Keine Zuordnung` / `No Swimlane`.
+  - Einklappbare Swimlanes (`▼` / `▶`) mit direkter Persistierung des `collapsed`-Zustands in der `.base`-YAML-Datei (auch in eingebetteten Bases via `BaseEmbedWidget.tsx`).
+  - Swimlane-Header-Aktionen: `+`-Button öffnet den „Neue Notiz“-Dialog mit beiden Eigenschaften (1. Spalte + Swimlane) vorausgefüllt; Drei-Punkte-Menü (`⋮`) erlaubt „Swimlane umbenennen“ (inkl. Frontmatter-Aktualisierung bestehender Notizen) und „Swimlane entfernen“.
+  - 2D Drag & Drop: Das Ziehen einer Karte in eine Zelle `(Spalte × Swimlane)` aktualisiert beide Frontmatter-Eigenschaften gleichzeitig optimistisch im UI und atomar in einem Speichervorgang (`api.saveNote`).
 - Dialog-gestützte Notizerstellung über den „+ Add Card“-Button im Kanban-Board (`BaseBoardColumn.tsx`, `BaseEditor.tsx`, `App.tsx`):
   - Klick auf den `+`-Button im Spaltenkopf öffnet den Standard „Neue Notiz“-Dialog (`create-note`), sodass der Benutzer den Dateinamen selbst festlegen kann.
   - Automatische Vorbelegung des Zielordners anhand aktiver Base-Filter (z. B. `file.inFolder("Ordner")` oder `file.folder == "..."`) bzw. des Base-Verzeichnisses.

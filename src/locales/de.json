@@ -560,7 +560,16 @@
     "renameColumn": "Spalte umbenennen",
     "deleteColumn": "Spalte entfernen",
     "columnAdded": "Spalte hinzugefügt",
-    "columnDeleted": "Spalte entfernt"
+    "columnDeleted": "Spalte entfernt",
+    "swimlaneBy": "Swimlanes nach:",
+    "noSwimlanes": "Keine Swimlanes (Deaktiviert)",
+    "swimlanes": "Swimlanes",
+    "addSwimlane": "+ Swimlane hinzufügen",
+    "swimlaneNamePlaceholder": "Swimlane-Name...",
+    "renameSwimlane": "Swimlane umbenennen",
+    "removeSwimlane": "Swimlane entfernen",
+    "unassignedSwimlane": "Keine Zuordnung",
+    "swimlaneHint": "Wähle eine Eigenschaft (z. B. Priorität oder Projekt), um das Board horizontal in Swimlanes zu unterteilen."
   },
   "research": {
     "title": "Rechercheansicht",

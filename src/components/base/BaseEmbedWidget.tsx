@@ -11,7 +11,7 @@ import {
 import { api } from '../../api';
 import { syncEngine } from '../../sync/syncEngine';
 import { useTranslation } from '../../i18n';
-import { parseBaseYaml, type BaseConfig } from '../../base/baseConfig';
+import { parseBaseYaml, stringifyBaseYaml, type BaseConfig, type BaseViewConfig } from '../../base/baseConfig';
 import {
   executeBaseQuery,
   getPropertyValue,
@@ -254,6 +254,27 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
     return { ...(activeView.columnSize || {}), ...localColumnSizes };
   }, [activeView.columnSize, localColumnSizes]);
 
+  const handleUpdateViewConfig = async (updatedView: BaseViewConfig) => {
+    if (readOnly || !config) return;
+    const newViews = config.views.map((v, i) => (i === safeViewIndex ? updatedView : v));
+    const newConfig: BaseConfig = {
+      ...config,
+      views: newViews,
+    };
+    try {
+      const nextYaml = stringifyBaseYaml(newConfig);
+      setYaml(nextYaml);
+      await api.saveNote({
+        path: resolvedFullPath,
+        body: nextYaml,
+        properties: [],
+        forceOverwrite: true,
+      });
+    } catch (err) {
+      console.error('Failed to persist BaseEmbedWidget view config update:', err);
+    }
+  };
+
   return (
     <div
       className="cm-lp-base-embed embedded-base-container base-embed-widget"
@@ -345,6 +366,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
             onSelectNote={onOpenNote}
             onCellChange={handleCellChange}
             readOnly={readOnly}
+            onUpdateConfig={handleUpdateViewConfig}
           />
         ) : activeView.type === 'cards' ? (
           <BaseCardsView

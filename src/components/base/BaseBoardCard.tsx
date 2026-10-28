@@ -8,6 +8,7 @@ export interface BaseBoardCardProps {
   columns: string[];
   displayNames: Record<string, string>;
   groupByProp: string;
+  swimlaneProp?: string;
   readOnly?: boolean;
   isDragging?: boolean;
   onSelectNote: (path: string) => void;
@@ -20,6 +21,7 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
   columns,
   displayNames,
   groupByProp,
+  swimlaneProp,
   readOnly = false,
   isDragging = false,
   onSelectNote,
@@ -96,7 +98,7 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
       {/* Card Custom Properties */}
       <div className="base-card-props">
         {columns
-          .filter((c) => c !== 'file.name' && c !== 'tags' && c !== groupByProp)
+          .filter((c) => c !== 'file.name' && c !== 'tags' && c !== groupByProp && c !== swimlaneProp)
           .map((c) => {
             const val = getPropertyValue(record, c);
             if (val === undefined || val === null || val === '') return null;

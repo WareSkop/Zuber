@@ -633,7 +633,8 @@ views:
 
     expect(handleSave).toHaveBeenCalledWith(
       { property: 'status', columns: ['Open', 'inWork', 'Finish'] },
-      10
+      10,
+      undefined
     );
     expect(handleClose).toHaveBeenCalled();
   });
@@ -981,5 +982,319 @@ views:
     expect(handleOpenDialog).toHaveBeenCalledWith('Projekte/Mobile', [
       { key: 'status', value: 'Offen', type: 'text' },
     ]);
+  });
+
+  it('renders 2D Swimlane Board with single sticky column header row, horizontal swimlane bands, and collapsible rows', async () => {
+    const records: BaseRecord[] = [
+      createMockRecord('Tasks/T1.md', 'T1.md', 'Tasks', [], { status: 'Open', prio: 'Prio 1' }, 1000),
+      createMockRecord('Tasks/T2.md', 'T2.md', 'Tasks', [], { status: 'inWork', prio: 'Prio 2' }, 2000),
+      createMockRecord('Tasks/T3.md', 'T3.md', 'Tasks', [], { status: 'Finish', prio: '' }, 3000),
+    ];
+
+    const viewConfig = {
+      type: 'board' as const,
+      name: '2D Board',
+      groupBy: {
+        property: 'status',
+        columns: ['Open', 'inWork', 'Finish'],
+      },
+      swimlanes: {
+        property: 'prio',
+        lanes: [
+          { name: 'Prio 1', collapsed: false },
+          { name: 'Prio 2', collapsed: false },
+        ],
+      },
+      columnLimit: 10,
+    };
+
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [viewConfig] },
+      view: viewConfig,
+      columns: ['file.name', 'status', 'prio'],
+      columnDisplayNames: {},
+      records,
+      groups: [],
+      totalCount: records.length,
+    };
+
+    const handleToggleCollapse = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={viewConfig}
+          onSelectNote={vi.fn()}
+          onToggleSwimlaneCollapse={handleToggleCollapse}
+        />
+      );
+    });
+
+    // 1. Verify 2D container and single column header row at top
+    expect(container.querySelector('.base-board-2d-container')).toBeTruthy();
+    const headerRow = container.querySelector('.base-board-2d-header-row');
+    expect(headerRow).toBeTruthy();
+    const columnHeaders = headerRow!.querySelectorAll('.base-board-column-header-only');
+    expect(columnHeaders.length).toBe(3); // Open, inWork, Finish
+
+    // 2. Verify swimlane bands: Prio 1, Prio 2, and automatic catch-all "Keine Zuordnung"
+    const bands = container.querySelectorAll('.base-board-swimlane-band');
+    expect(bands.length).toBe(3);
+    expect(bands[0].querySelector('.base-board-swimlane-title')?.textContent).toBe('Prio 1');
+    expect(bands[1].querySelector('.base-board-swimlane-title')?.textContent).toBe('Prio 2');
+    expect(bands[2].querySelector('.base-board-swimlane-title')?.textContent).toMatch(
+      /Keine Zuordnung|No Swimlane/i
+    );
+
+    // 3. Collapsing Prio 1 hides its cells row and calls onToggleSwimlaneCollapse('Prio 1', true, false)
+    expect(bands[0].querySelector('.base-board-swimlane-cells-row')).toBeTruthy();
+    const collapseBtn = bands[0].querySelector('.base-board-swimlane-collapse-btn') as HTMLButtonElement;
+    expect(collapseBtn).toBeTruthy();
+
+    await act(async () => {
+      collapseBtn.click();
+    });
+
+    expect(handleToggleCollapse).toHaveBeenCalledWith('Prio 1', true, false);
+    expect(bands[0].querySelector('.base-board-swimlane-cells-row')).toBeNull();
+  });
+
+  it('updates both column and swimlane frontmatter properties on 2D cell drag-and-drop', async () => {
+    const getNoteSpy = vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Tasks/CardA.md',
+      body: '# Card A',
+      properties: [
+        { key: 'status', value: 'Open', type: 'text' },
+        { key: 'prio', value: 'Prio 1', type: 'text' },
+      ],
+    } as any);
+    const saveNoteSpy = vi.spyOn(api, 'saveNote').mockResolvedValue({} as any);
+    const handleCellChange = vi.fn().mockResolvedValue(undefined);
+
+    const records: BaseRecord[] = [
+      createMockRecord('Tasks/CardA.md', 'CardA.md', 'Tasks', [], { status: 'Open', prio: 'Prio 1' }, 1000),
+    ];
+
+    const viewConfig = {
+      type: 'board' as const,
+      name: '2D Board',
+      groupBy: {
+        property: 'status',
+        columns: ['Open', 'inWork', 'Finish'],
+      },
+      swimlanes: {
+        property: 'prio',
+        lanes: ['Prio 1', 'Prio 2'],
+      },
+      columnLimit: 10,
+    };
+
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [viewConfig] },
+      view: viewConfig,
+      columns: ['file.name', 'status', 'prio'],
+      columnDisplayNames: {},
+      records,
+      groups: [],
+      totalCount: 1,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={viewConfig}
+          onSelectNote={vi.fn()}
+          onCellChange={handleCellChange}
+        />
+      );
+    });
+
+    // Find target cell: column "inWork" inside swimlane "Prio 2"
+    const targetCell = container.querySelector(
+      '.base-board-swimlane-cell[data-column-key="inWork"][data-swimlane-key="Prio 2"]'
+    ) as HTMLDivElement;
+    expect(targetCell).toBeTruthy();
+    expect(targetCell.querySelectorAll('.base-board-card').length).toBe(0);
+
+    // Drop CardA into (inWork, Prio 2)
+    await act(async () => {
+      const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(dropEvent, 'dataTransfer', {
+        value: {
+          getData: (type: string) => (type === 'text/plain' ? 'Tasks/CardA.md' : ''),
+        },
+      });
+      targetCell.dispatchEvent(dropEvent);
+    });
+
+    // Both properties must be updated in a single atomic saveNote call
+    expect(saveNoteSpy).toHaveBeenCalledWith({
+      path: 'Tasks/CardA.md',
+      body: '# Card A',
+      properties: [
+        { key: 'status', value: 'inWork', type: 'text' },
+        { key: 'prio', value: 'Prio 2', type: 'text' },
+      ],
+      forceOverwrite: true,
+    });
+
+    // Optimistic UI immediately shows the card inside (inWork, Prio 2)
+    expect(targetCell.querySelectorAll('.base-board-card').length).toBe(1);
+
+    getNoteSpy.mockRestore();
+    saveNoteSpy.mockRestore();
+  });
+
+  it('pre-fills both column and swimlane properties when clicking + in a swimlane header', async () => {
+    const handleOpenDialog = vi.fn();
+
+    const yaml = `
+filters:
+  file.inFolder("Projekte")
+views:
+  - type: board
+    name: "2D Aufgaben"
+    groupBy:
+      property: status
+      columns:
+        - Open
+        - inWork
+    swimlanes:
+      property: prio
+      lanes:
+        - Prio 1
+        - Prio 2
+`.trim();
+
+    const sampleFiles = [
+      {
+        path: 'Projekte/Task1.md',
+        name: 'Task1.md',
+        folder: 'Projekte',
+        properties: [
+          { key: 'status', value: 'Open' },
+          { key: 'prio', value: 'Prio 1' },
+        ],
+      },
+    ];
+
+    await act(async () => {
+      root.render(
+        <BaseEditor
+          filePath="Projekte/Board.base"
+          rawContent={yaml}
+          onChange={vi.fn()}
+          onSelectNote={vi.fn()}
+          allFiles={sampleFiles}
+          onOpenCreateNoteDialog={handleOpenDialog}
+        />
+      );
+    });
+
+    // Click "+" button in the second swimlane header ("Prio 2")
+    const swimlaneBands = container.querySelectorAll('.base-board-swimlane-band');
+    expect(swimlaneBands.length).toBe(2);
+    const prio2AddBtn = swimlaneBands[1].querySelector('.base-board-add-card-btn') as HTMLButtonElement;
+    expect(prio2AddBtn).toBeTruthy();
+
+    await act(async () => {
+      prio2AddBtn.click();
+    });
+
+    // Should pass both first column (status: Open) and swimlane (prio: Prio 2)
+    expect(handleOpenDialog).toHaveBeenCalledWith('Projekte', [
+      { key: 'status', value: 'Open', type: 'text' },
+      { key: 'prio', value: 'Prio 2', type: 'text' },
+    ]);
+  });
+
+  it('renders two-column layout in BaseBoardConfigModal and configures swimlanes without losing focus', async () => {
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: { property: 'status', columns: ['Open', 'inWork'] },
+      columnLimit: 10,
+    };
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    const sampleNotes = [
+      { path: 'N1.md', properties: [{ key: 'prio', value: 'Hoch' }] },
+      { path: 'N2.md', properties: [{ key: 'prio', value: 'Mittel' }] },
+    ];
+
+    await act(async () => {
+      root.render(
+        <BaseBoardConfigModal
+          isOpen={true}
+          onClose={handleClose}
+          view={viewConfig}
+          availableProperties={[
+            { key: 'status', label: 'Status' },
+            { key: 'prio', label: 'Priorität' },
+          ]}
+          allNotes={sampleNotes}
+          onSave={handleSave}
+        />
+      );
+    });
+
+    // Verify 2-column grid layout
+    const grid = container.querySelector('.base-board-config-grid');
+    expect(grid).toBeTruthy();
+    const cols = grid!.querySelectorAll('.base-board-config-col');
+    expect(cols.length).toBe(2);
+
+    // Initially swimlanes are disabled -> hint box is shown
+    expect(container.querySelector('.base-board-swimlane-hint')).toBeTruthy();
+
+    // Select 'prio' in Swimlanes by dropdown
+    const swimlaneSelect = container.querySelector('#board-swimlane-by-select') as HTMLSelectElement;
+    expect(swimlaneSelect).toBeTruthy();
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+      setter?.call(swimlaneSelect, 'prio');
+      swimlaneSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Hint box should disappear and auto-suggested values ('Hoch', 'Mittel') should be populated
+    expect(container.querySelector('.base-board-swimlane-hint')).toBeNull();
+    const swimlaneInputs = container.querySelectorAll('.swimlane-name-input');
+    expect(swimlaneInputs.length).toBe(2);
+    expect((swimlaneInputs[0] as HTMLInputElement).value).toBe('Hoch');
+    expect((swimlaneInputs[1] as HTMLInputElement).value).toBe('Mittel');
+
+    // Verify typing into swimlane input preserves DOM node identity (no focus loss)
+    const firstLaneInput = swimlaneInputs[0] as HTMLInputElement;
+    firstLaneInput.focus();
+    const nativeInputSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      nativeInputSetter?.call(firstLaneInput, 'Sehr Hoch');
+      firstLaneInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const afterLaneInput = container.querySelectorAll('.swimlane-name-input')[0] as HTMLInputElement;
+    expect(afterLaneInput).toBe(firstLaneInput);
+    expect(afterLaneInput.value).toBe('Sehr Hoch');
+
+    // Submit modal
+    const submitBtn = container.querySelector('.base-board-config-modal .primary-btn') as HTMLButtonElement;
+    await act(async () => {
+      submitBtn.click();
+    });
+
+    expect(handleSave).toHaveBeenCalledWith(
+      { property: 'status', columns: ['Open', 'inWork'] },
+      10,
+      {
+        property: 'prio',
+        lanes: [
+          { name: 'Sehr Hoch', collapsed: false },
+          { name: 'Mittel', collapsed: false },
+        ],
+      }
+    );
   });
 });

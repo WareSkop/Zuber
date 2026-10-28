@@ -21,9 +21,12 @@ import {
   extractVaultFolders,
   extractVaultTags,
   type BaseConfig,
+  type BaseViewConfig,
   type BaseFilterRule,
   type BaseSortRule,
   type BaseGroupBy,
+  type BaseBoardSwimlaneConfig,
+  type BaseBoardSwimlaneItem,
 } from '../base/baseConfig';
 import {
   executeBaseQuery,
@@ -314,8 +317,9 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
     });
   };
 
-  const handleBoardAddCard = async (columnValue: string) => {
+  const handleBoardAddCard = async (columnValue: string, swimlaneValue?: string) => {
     const groupByProp = activeView.groupBy?.property || 'status';
+    const swimlaneProp = activeView.swimlanes?.property?.trim() || '';
 
     const folderRule = activeFilterRules.find(
       (r) =>
@@ -350,10 +354,18 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
       counter++;
     }
 
-    const properties: FrontmatterProperty[] =
-      columnValue && columnValue !== 'no_status'
-        ? [{ key: groupByProp, value: columnValue, type: 'text' }]
-        : [];
+    const properties: FrontmatterProperty[] = [];
+    if (columnValue && columnValue !== 'no_status') {
+      properties.push({ key: groupByProp, value: columnValue, type: 'text' });
+    }
+    if (
+      swimlaneProp &&
+      swimlaneValue &&
+      swimlaneValue !== 'unassigned_swimlane' &&
+      swimlaneProp.toLowerCase() !== groupByProp.toLowerCase()
+    ) {
+      properties.push({ key: swimlaneProp, value: swimlaneValue, type: 'text' });
+    }
 
     if (onOpenCreateNoteDialog) {
       onOpenCreateNoteDialog(targetFolder, properties);
@@ -421,20 +433,128 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
     });
   };
 
-  const handleSaveBoardConfig = (newGroupBy: BaseGroupBy, newColumnLimit: number) => {
-    const newViews = config.views.map((v, i) =>
-      i === safeViewIndex
-        ? {
-            ...v,
-            groupBy: newGroupBy,
-            columnLimit: newColumnLimit,
-          }
-        : v
-    );
+  const handleSaveBoardConfig = (
+    newGroupBy: BaseGroupBy,
+    newColumnLimit: number,
+    newSwimlanes?: BaseBoardSwimlaneConfig
+  ) => {
+    const newViews = config.views.map((v, i) => {
+      if (i !== safeViewIndex) return v;
+      const updated: BaseViewConfig = {
+        ...v,
+        groupBy: newGroupBy,
+        columnLimit: newColumnLimit,
+      };
+      if (newSwimlanes && newSwimlanes.property) {
+        updated.swimlanes = newSwimlanes;
+      } else {
+        delete updated.swimlanes;
+      }
+      return updated;
+    });
 
     commitConfigChange({
       ...config,
       views: newViews,
+    });
+  };
+
+  const handleUpdateActiveViewConfig = (updatedView: BaseViewConfig) => {
+    const newViews = config.views.map((v, i) => (i === safeViewIndex ? updatedView : v));
+    commitConfigChange({
+      ...config,
+      views: newViews,
+    });
+  };
+
+  const handleBoardToggleSwimlaneCollapse = (
+    laneName: string,
+    collapsed: boolean,
+    isUnassigned?: boolean
+  ) => {
+    if (!activeView.swimlanes?.property) return;
+    if (isUnassigned) {
+      handleUpdateActiveViewConfig({
+        ...activeView,
+        swimlanes: {
+          ...activeView.swimlanes,
+          unassignedCollapsed: collapsed,
+        },
+      });
+      return;
+    }
+
+    const curLanes = activeView.swimlanes.lanes || [];
+    const updatedLanes: (string | BaseBoardSwimlaneItem)[] = curLanes.map((item) => {
+      const name = typeof item === 'string' ? item : item.name;
+      if (name.toLowerCase() === laneName.trim().toLowerCase()) {
+        return { name, collapsed };
+      }
+      return item;
+    });
+
+    handleUpdateActiveViewConfig({
+      ...activeView,
+      swimlanes: {
+        ...activeView.swimlanes,
+        lanes: updatedLanes,
+      },
+    });
+  };
+
+  const handleBoardRenameSwimlane = async (oldName: string, newName: string) => {
+    if (!oldName || !newName || oldName.trim() === newName.trim() || !activeView.swimlanes?.property) {
+      return;
+    }
+    const trimmedNew = newName.trim();
+    const curLanes = activeView.swimlanes.lanes || [];
+    const updatedLanes: (string | BaseBoardSwimlaneItem)[] = curLanes.map((item) => {
+      const name = typeof item === 'string' ? item : item.name;
+      const collapsed = typeof item === 'string' ? false : Boolean(item.collapsed);
+      if (name.toLowerCase() === oldName.trim().toLowerCase()) {
+        return collapsed ? { name: trimmedNew, collapsed: true } : trimmedNew;
+      }
+      return item;
+    });
+
+    handleUpdateActiveViewConfig({
+      ...activeView,
+      swimlanes: {
+        ...activeView.swimlanes,
+        lanes: updatedLanes,
+      },
+    });
+
+    // Automatically update existing notes' frontmatter for swimlane property
+    const swimlaneProp = activeView.swimlanes.property;
+    if (onCellChange && queryResult?.records) {
+      for (const rec of queryResult.records) {
+        const val = getPropertyValue(rec, swimlaneProp);
+        if (val && String(val).trim().toLowerCase() === oldName.trim().toLowerCase()) {
+          try {
+            await onCellChange(rec.file.path, swimlaneProp, trimmedNew);
+          } catch (err) {
+            console.error('Failed to update note swimlane on rename:', err);
+          }
+        }
+      }
+    }
+  };
+
+  const handleBoardDeleteSwimlane = (laneName: string) => {
+    if (!activeView.swimlanes?.property) return;
+    const curLanes = activeView.swimlanes.lanes || [];
+    const updatedLanes = curLanes.filter((item) => {
+      const name = typeof item === 'string' ? item : item.name;
+      return name.toLowerCase() !== laneName.trim().toLowerCase();
+    });
+
+    handleUpdateActiveViewConfig({
+      ...activeView,
+      swimlanes: {
+        ...activeView.swimlanes,
+        lanes: updatedLanes,
+      },
     });
   };
 
@@ -623,6 +743,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         onClose={() => setIsBoardConfigModalOpen(false)}
         view={activeView}
         availableProperties={vaultProperties}
+        allNotes={allFiles}
         onSave={handleSaveBoardConfig}
       />
 
@@ -722,6 +843,10 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
             onRenameColumn={handleBoardRenameColumn}
             onDeleteColumn={handleBoardDeleteColumn}
             onAddColumn={handleBoardAddColumn}
+            onToggleSwimlaneCollapse={handleBoardToggleSwimlaneCollapse}
+            onRenameSwimlane={handleBoardRenameSwimlane}
+            onDeleteSwimlane={handleBoardDeleteSwimlane}
+            onUpdateConfig={handleUpdateActiveViewConfig}
           />
         ) : activeView.type === 'cards' ? (
           /* Cards View */
