@@ -1752,13 +1752,13 @@ code {
   border-top: 1px solid var(--border-color, #2d3748) !important;
   border-top-left-radius: 8px !important;
   border-top-right-radius: 8px !important;
-  padding: 1px 8px 0px 14px !important;
-  padding-top: 1px !important;
-  padding-bottom: 0px !important;
+  padding: 5px 8px 0px 14px !important;
+  padding-top: 5px !important;
+  padding-bottom: 0 !important;
   margin: 0 !important;
   min-height: 0 !important;
-  height: auto !important;
-  line-height: 1 !important;
+  height: 30px !important;
+  line-height: normal !important;
   font-size: 11px !important;
   box-sizing: border-box !important;
 }
@@ -1766,13 +1766,16 @@ code {
 .cm-line.cm-lp-codeblock-header-line.cm-lp-codeblock-host-line,
 .cm-lp-codeblock-header-line.cm-lp-codeblock-host-line {
   display: block !important;
+  height: auto !important;
   padding: 0 !important;
 }
 
-.cm-lp-codeblock-header-line > br {
+.cm-lp-codeblock-header-line > br,
+.cm-line.cm-lp-codeblock-header-line br {
   display: none !important;
 }
 
+.cm-line.cm-lp-codeblock-header-line .cm-widgetBuffer,
 .cm-lp-codeblock-header-line > .cm-widgetBuffer {
   display: none !important;
   height: 0 !important;
