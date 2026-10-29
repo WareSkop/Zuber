@@ -12,6 +12,11 @@
   - Erweiterte Canvas- und Base-Dateiauflösung in `renderReadingHtml` für relative Pfade und schreibweisentolerante Namensabgleiche.
 
 ### Added
+- Editor-Kontextmenü für Neues Canvas & Bild einfügen sowie Drag-and-Drop vom Dateibaum in den Editor (`LivePreviewEditor.tsx`, `FileSidebar.tsx`, `src/locales/de.json`, `src/locales/en.json`, `App.tsx`):
+  - **Kontextmenü-Aktion „Neues Canvas“:** Per Rechtsklick im Editor öffnet sich ein Dialog zur Eingabe des Canvas-Namens. Die `.canvas`-Datei wird im Ordner der aktiven Notiz angelegt, als `![[Pfad/Name.canvas]]` exakt an der Klick-/Cursor-Position eingebettet und direkt im Editor geöffnet.
+  - **Kontextmenü-Aktion „Bild einfügen“:** Öffnet den nativen Datei-Picker (`accept="image/*"`), lädt das Bild nach `attachments/` hoch und fügt `![[attachments/datei.png]]` an der Cursorposition ein.
+  - **Drag-and-Drop aus der Seitenleiste:** Ziehen von Notizen, Canvas-Dateien, Bildern oder PDFs aus dem Dateibaum in den Editor fügt an der Mausposition sofort die passenden Wikilinks (`[[Notiz]]`) bzw. Embed-Tags (`![[attachments/datei.pdf]]`, `![[Canvas.canvas]]`) ein, ohne versehentliche Datei-Verschiebungen auszulösen.
+  - **Viewport Clamping:** Das Editor-Kontextmenü wird automatisch innerhalb der sichtbaren Fenstergrenzen gehalten und schneidet nicht mehr am Rand ab.
 - 2D-Kanban-Board mit horizontalen Swimlanes, zweispaltigem „Configure Board“-Dialog und persistentem Einklapp-Status (`src/base/baseConfig.ts`, `src/base/baseEngine.ts`, `src/components/base/BaseBoardConfigModal.tsx`, `src/components/base/BaseBoardView.tsx`, `src/components/BaseEditor.tsx`, `src/components/base/BaseEmbedWidget.tsx`, `src/styles.css`):
   - Erweiterung des Base-Datenmodells und YAML-Serializers um `swimlanes` (`BaseBoardSwimlaneConfig`, `BaseBoardSwimlaneItem` mit `name` und `collapsed?: boolean` sowie `unassignedCollapsed?: boolean`).
   - Zweispaltiges Layout im „Board konfigurieren“-Dialog (`BaseBoardConfigModal.tsx`, `max-width: 840px`): Linke Spalte für vertikale Spalten (`Group by`, `Board Columns`, `Column card limit`), rechte Spalte für horizontale Swimlanes (`Swimlanes by` mit Option `Keine Swimlanes (Deaktiviert)`, automatischem Vorschlag vorhandener Property-Werte aus dem Vault und sortierbarer Swimlane-Liste ohne Fokusverlust).

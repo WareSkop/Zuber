@@ -149,7 +149,11 @@
     "preview": "Preview",
     "openPdfInNewTab": "Open in new tab",
     "sendToTargetNote": "Send to Target Note…",
-    "noTextSelected": "Please select a text block in the editor first."
+    "noTextSelected": "Please select a text block in the editor first.",
+    "newCanvas": "New Canvas",
+    "insertNewCanvas": "New Canvas",
+    "canvasNamePrompt": "Name of the new canvas:",
+    "insertPicture": "Insert Picture"
   },
   "toolbar": {
     "sendToTargetNote": "Send to Target Note…",

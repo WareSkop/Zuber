@@ -723,7 +723,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
 
     e.dataTransfer.setData('application/x-knowmesh-paths', JSON.stringify(pathsToMove));
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('application/x-knowmesh-file-path', node.path);
+    e.dataTransfer.setData('text/plain', node.path);
+    e.dataTransfer.effectAllowed = 'copyMove';
   };
 
   const handleDragOverItem = (e: React.DragEvent, node: FileTreeNode) => {

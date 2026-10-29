@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useImperativeHandle, forwardRef } from 'react';
 import {
   EditorState,
   RangeSetBuilder,
@@ -33,8 +33,10 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { createRoot, type Root } from 'react-dom/client';
 import { api } from '../api';
+import { syncEngine } from '../sync/syncEngine';
 import { useTranslation } from '../i18n';
-import { Target } from 'lucide-react';
+import { Target, Image, Workflow } from 'lucide-react';
+import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
@@ -245,6 +247,7 @@ export interface LivePreviewEditorProps {
   onSelectTag: (tag: string) => void;
   onUploadAttachment?: (file: File) => Promise<string>;
   onSendToTargetNote?: () => void;
+  onOpenNote?: (path: string) => void;
 }
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
@@ -1822,8 +1825,30 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const livePluginCompartment = useRef(new Compartment());
-  const [editorContextMenu, setEditorContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [editorContextMenu, setEditorContextMenu] = useState<{ x: number; y: number; clickPos?: number } | null>(null);
   const editorContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [newCanvasModalOpen, setNewCanvasModalOpen] = useState(false);
+  const [newCanvasName, setNewCanvasName] = useState('');
+  const [newCanvasInsertPos, setNewCanvasInsertPos] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeClickPosRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!editorContextMenu || !editorContextMenuRef.current) return;
+    const el = editorContextMenuRef.current;
+    const rect = el.getBoundingClientRect();
+    const margin = 10;
+    let top = editorContextMenu.y;
+    let left = editorContextMenu.x;
+    if (top + rect.height > window.innerHeight - margin) {
+      top = Math.max(margin, window.innerHeight - rect.height - margin);
+    }
+    if (left + rect.width > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - rect.width - margin);
+    }
+    el.style.top = `${top}px`;
+    el.style.left = `${left}px`;
+  }, [editorContextMenu]);
 
   useEffect(() => {
     if (!editorContextMenu) return;
@@ -1849,6 +1874,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onSelectTag,
     onUploadAttachment: props.onUploadAttachment,
     onSendToTargetNote: props.onSendToTargetNote,
+    onOpenNote: props.onOpenNote,
     setEditorContextMenu,
     mode,
     notePath,
@@ -1863,6 +1889,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onSelectTag,
     onUploadAttachment: props.onUploadAttachment,
     onSendToTargetNote: props.onSendToTargetNote,
+    onOpenNote: props.onOpenNote,
     setEditorContextMenu,
     mode,
     notePath,
@@ -2642,6 +2669,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       },
       dragover(event, _view) {
         if (
+          event.dataTransfer?.types.includes('application/x-knowmesh-file-path') ||
+          event.dataTransfer?.types.includes('application/x-knowmesh-paths') ||
           event.dataTransfer?.types.includes('Files') ||
           event.dataTransfer?.types.includes('text/plain')
         ) {
@@ -2658,6 +2687,54 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         const dropPos =
           view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
           view.state.selection.main.head;
+
+        // 1. Internal Drag & Drop from FileSidebar tree
+        const internalFilePath = dt.getData('application/x-knowmesh-file-path');
+        let internalPaths: string[] = [];
+        if (internalFilePath) {
+          internalPaths = [internalFilePath];
+        } else if (dt.types.includes('application/x-knowmesh-paths')) {
+          try {
+            const raw = dt.getData('application/x-knowmesh-paths');
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              internalPaths = parsed;
+            }
+          } catch {}
+        }
+
+        if (internalPaths.length > 0) {
+          event.preventDefault();
+          event.stopPropagation();
+          const tags = internalPaths.map((p) => {
+            const lower = p.toLowerCase();
+            const isImg = IMAGE_EXT_REGEX.test(p);
+            const isPdf = lower.endsWith('.pdf');
+            const isCanvas = lower.endsWith('.canvas');
+            const isBase = lower.endsWith('.base');
+
+            if (isImg || isPdf) {
+              return `![[${p}]]`;
+            } else if (isCanvas) {
+              return `![[${p}]]`;
+            } else if (isBase) {
+              return `![[${p}]]`;
+            } else if (lower.endsWith('.md')) {
+              const noteTarget = p.replace(/\.md$/i, '');
+              return `[[${noteTarget}]]`;
+            } else {
+              return `[[${p}]]`;
+            }
+          });
+
+          const snippet = tags.join('\n');
+          view.dispatch({
+            changes: { from: dropPos, to: dropPos, insert: snippet },
+            selection: { anchor: dropPos + snippet.length },
+          });
+          view.focus();
+          return true;
+        }
 
         const files = dt.files ? Array.from(dt.files) : [];
 
@@ -2729,15 +2806,19 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         return true;
       },
       contextmenu(event, view) {
+        event.preventDefault();
+        const coordsPos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        const clickPos = coordsPos !== null ? coordsPos : view.state.selection.main.head;
         const selection = view.state.selection.main;
-        if (!selection.empty) {
-          event.preventDefault();
-          const x = Math.min(event.clientX, window.innerWidth - 240);
-          const y = Math.min(event.clientY, window.innerHeight - 100);
-          callbacksRef.current.setEditorContextMenu({ x, y });
-          return true;
+        // If right-clicked outside of existing multi-character selection, update selection anchor
+        if (selection.empty && coordsPos !== null) {
+          view.dispatch({ selection: { anchor: coordsPos } });
         }
-        return false;
+        activeClickPosRef.current = clickPos;
+        const x = Math.min(event.clientX, window.innerWidth - 240);
+        const y = Math.min(event.clientY, window.innerHeight - 180);
+        callbacksRef.current.setEditorContextMenu({ x, y, clickPos });
+        return true;
       },
     });
 
@@ -3078,13 +3159,123 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   };
 
   const handleReadingContextMenu = (e: React.MouseEvent) => {
-    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
-    if (sel && !sel.isCollapsed && sel.toString().trim()) {
-      e.preventDefault();
-      const x = Math.min(e.clientX, window.innerWidth - 240);
-      const y = Math.min(e.clientY, window.innerHeight - 100);
-      setEditorContextMenu({ x, y });
+    e.preventDefault();
+    const x = Math.min(e.clientX, window.innerWidth - 240);
+    const y = Math.min(e.clientY, window.innerHeight - 180);
+    setEditorContextMenu({ x, y });
+  };
+
+  const handleOpenNewCanvasModal = () => {
+    const clickPos = editorContextMenu?.clickPos ?? activeClickPosRef.current;
+    setNewCanvasInsertPos(clickPos);
+    setEditorContextMenu(null);
+    setNewCanvasName('');
+    setNewCanvasModalOpen(true);
+  };
+
+  const handleCreateAndInsertCanvas = async () => {
+    const raw = newCanvasName.trim();
+    if (!raw) return;
+
+    let cleanName = raw.replace(/\.canvas$/i, '').trim();
+    if (!cleanName) return;
+
+    // Determine target directory: same directory as current active note
+    const currentFolder = notePath.includes('/')
+      ? notePath.substring(0, notePath.lastIndexOf('/'))
+      : '';
+    const fullPath = currentFolder ? `${currentFolder}/${cleanName}.canvas` : `${cleanName}.canvas`;
+
+    try {
+      const initialJson = JSON.stringify({ nodes: [], edges: [] }, null, 2);
+      await syncEngine.saveNote({
+        path: fullPath,
+        rawContent: initialJson,
+        body: initialJson,
+        properties: [],
+      });
+
+      // Insert embed link at recorded cursor / click position
+      const view = viewRef.current;
+      const tag = `![[${fullPath}]]`;
+      if (view) {
+        const targetPos = newCanvasInsertPos ?? view.state.selection.main.head;
+        const safePos = Math.max(0, Math.min(targetPos, view.state.doc.length));
+        view.dispatch({
+          changes: { from: safePos, to: safePos, insert: tag },
+          selection: { anchor: safePos + tag.length },
+        });
+        view.focus();
+      } else {
+        const nextBody = `${body.trimEnd()}\n\n${tag}\n`;
+        onChangeBody(nextBody);
+      }
+
+      setNewCanvasModalOpen(false);
+      setNewCanvasName('');
+      setNewCanvasInsertPos(null);
+
+      // Open newly created canvas immediately
+      if (callbacksRef.current.onOpenNote) {
+        callbacksRef.current.onOpenNote(fullPath);
+      } else {
+        callbacksRef.current.onNavigateWikiLink(fullPath);
+      }
+    } catch (err) {
+      console.error('Fehler beim Erstellen des Canvas:', err);
     }
+  };
+
+  const handleTriggerInsertPicture = () => {
+    const clickPos = editorContextMenu?.clickPos ?? activeClickPosRef.current;
+    activeClickPosRef.current = clickPos;
+    setEditorContextMenu(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleImageFilePicked = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    try {
+      let embedTag: string;
+      if (callbacksRef.current.onUploadAttachment) {
+        embedTag = await callbacksRef.current.onUploadAttachment(file);
+      } else {
+        const res = await api.uploadAttachment(file);
+        embedTag = res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`);
+      }
+
+      const view = viewRef.current;
+      if (view) {
+        const targetPos = activeClickPosRef.current ?? view.state.selection.main.head;
+        const safePos = Math.max(0, Math.min(targetPos, view.state.doc.length));
+        view.dispatch({
+          changes: { from: safePos, to: safePos, insert: embedTag },
+          selection: { anchor: safePos + embedTag.length },
+        });
+        view.focus();
+      } else {
+        const nextBody = `${body.trimEnd()}\n\n${embedTag}\n`;
+        onChangeBody(nextBody);
+      }
+    } catch (err) {
+      console.error('Fehler beim Einfügen des Bildes:', err);
+    }
+  };
+
+  const hasSelectedText = (): boolean => {
+    if (viewRef.current) {
+      return !viewRef.current.state.selection.main.empty;
+    }
+    if (typeof window !== 'undefined') {
+      const sel = window.getSelection();
+      return !!sel && !sel.isCollapsed && !!sel.toString().trim();
+    }
+    return false;
   };
 
   const contextMenuElement = editorContextMenu && (
@@ -3102,15 +3293,98 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       <button
         type="button"
         className="editor-context-item"
-        onClick={() => {
-          setEditorContextMenu(null);
-          callbacksRef.current.onSendToTargetNote?.();
-        }}
+        onClick={handleOpenNewCanvasModal}
       >
-        <Target size={15} />
-        <span>{t('editor.sendToTargetNote') || 'An Ziel-Notiz senden…'}</span>
+        <WorkflowCanvasIcon size={15} />
+        <span>{t('editor.insertNewCanvas') || t('editor.newCanvas') || 'Neues Canvas'}</span>
       </button>
+
+      <button
+        type="button"
+        className="editor-context-item"
+        onClick={handleTriggerInsertPicture}
+      >
+        <Image size={15} />
+        <span>{t('editor.insertPicture') || 'Bild einfügen'}</span>
+      </button>
+
+      {hasSelectedText() && callbacksRef.current.onSendToTargetNote && (
+        <button
+          type="button"
+          className="editor-context-item"
+          onClick={() => {
+            setEditorContextMenu(null);
+            callbacksRef.current.onSendToTargetNote?.();
+          }}
+        >
+          <Target size={15} />
+          <span>{t('editor.sendToTargetNote') || 'An Ziel-Notiz senden…'}</span>
+        </button>
+      )}
     </div>
+  );
+
+  const canvasModalElement = newCanvasModalOpen && (
+    <div
+      className="modal-backdrop"
+      style={{ zIndex: 10000 }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          setNewCanvasModalOpen(false);
+        }
+      }}
+    >
+      <div className="modal-box" onMouseDown={(e) => e.stopPropagation()}>
+        <h3>{t('canvas.createDialogTitle') || 'Neues Canvas erstellen'}</h3>
+        <p style={{ margin: '0 0 12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+          {t('editor.canvasNamePrompt') || t('canvas.createDialogPrompt') || 'Name des neuen Canvas:'}
+        </p>
+        <input
+          type="text"
+          className="modal-input"
+          autoFocus
+          value={newCanvasName}
+          placeholder="Workflow.canvas"
+          onChange={(e) => setNewCanvasName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleCreateAndInsertCanvas();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              setNewCanvasModalOpen(false);
+            }
+          }}
+        />
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setNewCanvasModalOpen(false)}
+          >
+            {t('common.cancel') || 'Abbrechen'}
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!newCanvasName.trim()}
+            onClick={handleCreateAndInsertCanvas}
+          >
+            {t('common.confirm') || t('canvas.newCanvas') || 'Erstellen'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const hiddenFileInput = (
+    <input
+      type="file"
+      ref={fileInputRef}
+      style={{ display: 'none' }}
+      accept="image/*"
+      onChange={handleImageFilePicked}
+    />
   );
 
   if (mode === 'reading') {
@@ -3122,6 +3396,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         dangerouslySetInnerHTML={readingHtmlObj}
       >
         {contextMenuElement}
+        {canvasModalElement}
+        {hiddenFileInput}
       </div>
     );
   }
@@ -3129,6 +3405,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   return (
     <div ref={editorContainerRef} className="codemirror-editor-wrapper">
       {contextMenuElement}
+      {canvasModalElement}
+      {hiddenFileInput}
     </div>
   );
 });

@@ -3320,6 +3320,10 @@ export const App: React.FC = () => {
                   }}
                   onUploadAttachment={handleUploadImageFile}
                   onSendToTargetNote={handleOpenSendToTarget}
+                  onOpenNote={(targetPath) => {
+                    handleNavigateWikiLink(targetPath);
+                    if (isMobile) setLeftSidebarOpen(false);
+                  }}
                 />
               </div>
             ) : (
