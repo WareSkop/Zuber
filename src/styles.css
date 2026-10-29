@@ -9340,10 +9340,30 @@ input:checked + .slider:before {
 .cm-line:has(.cm-lp-canvas-embed),
 .cm-line:has(.embedded-base-container),
 .cm-line:has(.embedded-canvas-container) {
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: auto !important;
+  line-height: 0 !important; /* Entfernt die Höhe der unsichtbaren Textzeilen */
+  padding: 0 !important;
   margin-top: 0 !important;
-  line-height: normal !important;
+  margin-bottom: 0 !important;
+}
+
+/* Die störenden Puffer-Bilder (Widgets) komplett ausblenden */
+.cm-line.cm-lp-embed-line > .cm-widgetBuffer,
+.cm-line:has(.cm-embed-widget) > .cm-widgetBuffer,
+.cm-line:has(.cm-lp-base-embed) > .cm-widgetBuffer,
+.cm-line:has(.cm-lp-canvas-embed) > .cm-widgetBuffer,
+.cm-line:has(.embedded-base-container) > .cm-widgetBuffer,
+.cm-line:has(.embedded-canvas-container) > .cm-widgetBuffer {
+  display: none !important;
+}
+
+/* Eventuelle Standard-Abstände des Widgets selbst entfernen */
+.cm-line.cm-lp-embed-line .cm-embed-widget,
+.cm-line:has(.cm-embed-widget) .cm-embed-widget {
+  margin-top: 0px !important;
+  margin-bottom: 0px !important;
 }
 
 p:has(.embedded-base-container),
