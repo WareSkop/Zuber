@@ -7433,11 +7433,11 @@ input:checked + .slider:before {
   max-width: 100% !important;
   margin-top: 2px !important;
   padding-top: 0 !important;
-  margin-bottom: 8px !important;
+  margin-bottom: 2px !important;
   border-radius: 0 !important;
   overflow: hidden !important;
-  min-height: 380px;
-  height: 480px;
+  min-height: 0px !important;
+  height: auto !important;
   background: transparent !important;
   border: none !important;
   position: relative;
@@ -9343,10 +9343,18 @@ input:checked + .slider:before {
   display: flex !important;
   flex-direction: column !important;
   height: auto !important;
+  min-height: 0px !important;
   line-height: 0 !important; /* Entfernt die Höhe der unsichtbaren Textzeilen */
   padding: 0 !important;
   margin-top: 0 !important;
   margin-bottom: 0 !important;
+}
+
+.cm-embed-widget.cm-canvas-embed-wrapper {
+  height: auto !important;
+  min-height: 0px !important;
+  margin-top: 2px !important;
+  margin-bottom: 2px !important;
 }
 
 /* Die störenden Puffer-Bilder (Widgets) komplett ausblenden */
