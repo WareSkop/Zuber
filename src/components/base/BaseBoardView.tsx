@@ -499,7 +499,10 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     };
   }, [is2D, allRecords, view, optimisticOverrides, localCollapsedLanes, t]);
 
-  const columns = queryResult?.columns || view?.order || ['file.name'];
+  const columns =
+    Array.isArray(view?.order) && view.order.length > 0
+      ? view.order
+      : queryResult?.columns || ['file.name'];
   const displayNames = queryResult?.columnDisplayNames || {};
 
   // Helper to persist one or two frontmatter properties atomically

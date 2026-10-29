@@ -84,8 +84,8 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
         )}
       </div>
 
-      {/* Card Tags */}
-      {record.tags && record.tags.length > 0 && (
+      {/* Card Tags & Custom Properties */}
+      {columns.includes('tags') ? null : record.tags && record.tags.length > 0 && (
         <div className="base-card-tags">
           {record.tags.map((tg) => (
             <span key={tg} className="base-tag-pill">
@@ -95,16 +95,36 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
         </div>
       )}
 
-      {/* Card Custom Properties */}
+      {/* Card Custom Properties (in exact view.order sequence) */}
       <div className="base-card-props">
         {columns
-          .filter((c) => c !== 'file.name' && c !== 'tags' && c !== groupByProp && c !== swimlaneProp)
+          .filter((c) => c !== 'file.name')
           .map((c) => {
+            if (c === 'tags') {
+              const tagList =
+                record.tags && record.tags.length > 0
+                  ? record.tags
+                  : Array.isArray(record.properties?.tags)
+                  ? record.properties.tags
+                  : [];
+              if (!tagList || tagList.length === 0) return null;
+              return (
+                <div key="tags" className="base-card-tags">
+                  {tagList.map((tg: string) => (
+                    <span key={tg} className="base-tag-pill">
+                      #{String(tg).replace(/^#/, '')}
+                    </span>
+                  ))}
+                </div>
+              );
+            }
+
+            // Skip groupByProp and swimlaneProp unless explicitly selected in columns (when columns is not just default inferred)
             const val = getPropertyValue(record, c);
             if (val === undefined || val === null || val === '') return null;
             const dName = displayNames[c] || c;
             return (
-              <div key={c} className="base-card-prop-row">
+              <div key={c} className="base-card-prop-row" data-prop-key={c}>
                 <span className="base-prop-key">{dName}:</span>
                 <span className="base-prop-val">
                   {typeof val === 'boolean'

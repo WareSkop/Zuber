@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Kanban, X, ArrowUp, ArrowDown, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Kanban, X, ArrowUp, ArrowDown, Plus, Trash2, CheckSquare, Square, GripVertical } from 'lucide-react';
 import {
   extractPropertyValues,
+  extractVaultProperties,
   type BaseViewConfig,
   type BaseGroupBy,
   type BaseBoardSwimlaneConfig,
@@ -14,10 +15,12 @@ export interface BaseBoardConfigModalProps {
   view: BaseViewConfig;
   availableProperties: { key: string; label: string }[];
   allNotes?: any[];
+  displayNames?: Record<string, string>;
   onSave: (
     newGroupBy: BaseGroupBy,
     newColumnLimit: number,
-    newSwimlanes?: BaseBoardSwimlaneConfig
+    newSwimlanes?: BaseBoardSwimlaneConfig,
+    newOrder?: string[]
   ) => void;
 }
 
@@ -165,6 +168,7 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   view,
   availableProperties,
   allNotes = [],
+  displayNames = {},
   onSave,
 }) => {
   const { t } = useTranslation();
@@ -177,6 +181,53 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   const [swimlaneProperty, setSwimlaneProperty] = useState<string>('');
   const [swimlanes, setSwimlanes] = useState<SwimlaneItem[]>([]);
   const [newSwimlaneName, setNewSwimlaneName] = useState<string>('');
+
+  const [cardOrder, setCardOrder] = useState<string[]>(['file.name']);
+  const [orderDirty, setOrderDirty] = useState<boolean>(false);
+  const [draggedCardPropIndex, setDraggedCardPropIndex] = useState<number | null>(null);
+
+  // Merge availableProperties with frontmatter properties detected from allNotes (matching base records)
+  const detectedCardProperties = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set('tags', displayNames['tags'] || 'Tags (tags)');
+    map.set('file.folder', displayNames['file.folder'] || 'Ordner (file.folder)');
+
+    // Properties from matching notes / records
+    const extracted = extractVaultProperties(allNotes);
+    for (const p of extracted) {
+      if (p.key && p.key !== 'file.name') {
+        map.set(p.key, displayNames[p.key] || p.label || p.key);
+      }
+    }
+
+    // Also include BaseRecord properties dictionary if allNotes contains BaseRecord objects
+    for (const n of allNotes || []) {
+      if (n && n.properties && !Array.isArray(n.properties) && typeof n.properties === 'object') {
+        for (const k of Object.keys(n.properties)) {
+          const clean = k.trim();
+          if (clean && clean !== 'file.name' && !map.has(clean)) {
+            map.set(clean, displayNames[clean] || clean);
+          }
+        }
+      }
+      if (n && Array.isArray(n.tags) && n.tags.length > 0 && !map.has('tags')) {
+        map.set('tags', displayNames['tags'] || 'Tags (tags)');
+      }
+    }
+
+    // Properties from availableProperties prop
+    for (const p of availableProperties || []) {
+      if (p.key && p.key !== 'file.name' && !map.has(p.key)) {
+        map.set(p.key, displayNames[p.key] || p.label || p.key);
+      }
+    }
+
+    const result: { key: string; label: string }[] = [];
+    for (const [key, label] of map.entries()) {
+      result.push({ key, label });
+    }
+    return result;
+  }, [allNotes, availableProperties, displayNames]);
 
   useEffect(() => {
     if (isOpen) {
@@ -204,6 +255,15 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
       }));
       setSwimlanes(laneItems);
       setNewSwimlaneName('');
+
+      const initialOrder =
+        Array.isArray(view.order) && view.order.length > 0
+          ? view.order.includes('file.name')
+            ? [...view.order]
+            : ['file.name', ...view.order]
+          : ['file.name'];
+      setCardOrder(initialOrder);
+      setOrderDirty(false);
     }
   }, [isOpen, view]);
 
@@ -298,6 +358,79 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     setNewSwimlaneName('');
   };
 
+  // Build ordered list of card properties (excluding 'file.name' which is always the card title)
+  const selectedCardProps = cardOrder.filter((k) => k !== 'file.name');
+  const selectedCardPropsSet = new Set(selectedCardProps);
+
+  const allCardPropertyItems = useMemo(() => {
+    const items: { key: string; label: string; isVisible: boolean }[] = [];
+
+    // 1. Visible properties first in their configured order
+    for (const key of selectedCardProps) {
+      const found = detectedCardProperties.find((p) => p.key === key);
+      items.push({
+        key,
+        label: displayNames[key] || found?.label || key,
+        isVisible: true,
+      });
+    }
+
+    // 2. Remaining detected properties
+    for (const p of detectedCardProperties) {
+      if (!selectedCardPropsSet.has(p.key)) {
+        items.push({
+          key: p.key,
+          label: displayNames[p.key] || p.label || p.key,
+          isVisible: false,
+        });
+      }
+    }
+
+    return items;
+  }, [selectedCardProps, detectedCardProperties, displayNames]);
+
+  const handleToggleCardProperty = (key: string) => {
+    setOrderDirty(true);
+    setCardOrder((prev) => {
+      const withoutFileName = prev.filter((k) => k !== 'file.name');
+      if (withoutFileName.includes(key)) {
+        return ['file.name', ...withoutFileName.filter((k) => k !== key)];
+      } else {
+        return ['file.name', ...withoutFileName, key];
+      }
+    });
+  };
+
+  const handleMoveCardProperty = (indexInSelected: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? indexInSelected - 1 : indexInSelected + 1;
+    if (targetIdx < 0 || targetIdx >= selectedCardProps.length) return;
+    setOrderDirty(true);
+    const nextSelected = [...selectedCardProps];
+    const [moved] = nextSelected.splice(indexInSelected, 1);
+    nextSelected.splice(targetIdx, 0, moved);
+    setCardOrder(['file.name', ...nextSelected]);
+  };
+
+  const handleDragStartCardProperty = (indexInSelected: number) => {
+    setDraggedCardPropIndex(indexInSelected);
+  };
+
+  const handleDragOverCardProperty = (e: React.DragEvent, targetIdx: number) => {
+    e.preventDefault();
+    if (draggedCardPropIndex === null || draggedCardPropIndex === targetIdx) return;
+    if (draggedCardPropIndex >= selectedCardProps.length || targetIdx >= selectedCardProps.length) return;
+    setOrderDirty(true);
+    const nextSelected = [...selectedCardProps];
+    const [moved] = nextSelected.splice(draggedCardPropIndex, 1);
+    nextSelected.splice(targetIdx, 0, moved);
+    setDraggedCardPropIndex(targetIdx);
+    setCardOrder(['file.name', ...nextSelected]);
+  };
+
+  const handleDragEndCardProperty = () => {
+    setDraggedCardPropIndex(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCols = columns.map((c) => c.name.trim()).filter(Boolean);
@@ -321,14 +454,27 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
       };
     }
 
-    onSave(
-      {
-        property: property.trim() || 'status',
-        columns: finalCols,
-      },
-      finalLimit,
-      finalSwimlanes
-    );
+    const finalOrder = ['file.name', ...cardOrder.filter((k) => k !== 'file.name')];
+    if (orderDirty || view.order !== undefined) {
+      onSave(
+        {
+          property: property.trim() || 'status',
+          columns: finalCols,
+        },
+        finalLimit,
+        finalSwimlanes,
+        finalOrder
+      );
+    } else {
+      onSave(
+        {
+          property: property.trim() || 'status',
+          columns: finalCols,
+        },
+        finalLimit,
+        finalSwimlanes
+      );
+    }
     onClose();
   };
 
@@ -527,6 +673,104 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Card Content / Properties Configuration Section */}
+              <div className="base-config-field-group base-board-card-properties-section">
+                <label className="base-config-label">
+                  {t('base.cardProperties', 'Karten-Inhalte')}:
+                </label>
+                <p className="base-modal-hint base-card-props-hint">
+                  {t(
+                    'base.cardPropertiesHint',
+                    'Wähle und sortiere die Eigenschaften, die auf den Karten angezeigt werden sollen:'
+                  )}
+                </p>
+
+                <div className="base-columns-checklist base-board-card-props-list scroller">
+                  {allCardPropertyItems.map((prop, idx) => {
+                    const isOrderable = prop.isVisible;
+                    const selectedIdx = isOrderable ? selectedCardProps.indexOf(prop.key) : -1;
+
+                    return (
+                      <div
+                        key={prop.key}
+                        className={`base-column-item base-card-prop-config-item ${
+                          prop.isVisible ? 'visible' : ''
+                        } ${draggedCardPropIndex === selectedIdx && isOrderable ? 'dragging' : ''}`}
+                        data-prop-key={prop.key}
+                        draggable={isOrderable}
+                        onDragStart={() => isOrderable && handleDragStartCardProperty(selectedIdx)}
+                        onDragOver={(e) => isOrderable && handleDragOverCardProperty(e, selectedIdx)}
+                        onDragEnd={handleDragEndCardProperty}
+                      >
+                        <div className="base-column-left">
+                          {isOrderable ? (
+                            <span className="base-col-drag-handle" title="Ziehen zum Neuanordnen">
+                              <GripVertical size={14} />
+                            </span>
+                          ) : (
+                            <span className="base-col-drag-spacer" />
+                          )}
+                          <button
+                            type="button"
+                            className="base-checkbox-toggle card-prop-checkbox"
+                            data-prop-key={prop.key}
+                            aria-checked={prop.isVisible}
+                            role="checkbox"
+                            onClick={() => handleToggleCardProperty(prop.key)}
+                            title={
+                              prop.isVisible
+                                ? 'Eigenschaft auf Karte ausblenden'
+                                : 'Eigenschaft auf Karte anzeigen'
+                            }
+                          >
+                            {prop.isVisible ? (
+                              <CheckSquare size={16} className="checked-icon" />
+                            ) : (
+                              <Square size={16} className="unchecked-icon" />
+                            )}
+                          </button>
+                          <span
+                            className="base-col-name"
+                            onClick={() => handleToggleCardProperty(prop.key)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {prop.label}
+                          </span>
+                        </div>
+
+                        <div className="base-card-prop-config-right">
+                          {prop.key !== prop.label && !prop.label.includes(`(${prop.key})`) && (
+                            <span className="base-col-raw-key">({prop.key})</span>
+                          )}
+                          {isOrderable && (
+                            <div className="reorder-buttons card-prop-reorder-buttons">
+                              <button
+                                type="button"
+                                className="col-move-btn card-prop-move-up"
+                                disabled={selectedIdx <= 0}
+                                onClick={() => handleMoveCardProperty(selectedIdx, 'up')}
+                                title="Nach oben"
+                              >
+                                <ArrowUp size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                className="col-move-btn card-prop-move-down"
+                                disabled={selectedIdx >= selectedCardProps.length - 1}
+                                onClick={() => handleMoveCardProperty(selectedIdx, 'down')}
+                                title="Nach unten"
+                              >
+                                <ArrowDown size={12} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
 

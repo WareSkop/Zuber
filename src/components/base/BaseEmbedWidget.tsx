@@ -286,10 +286,21 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
           <div
             className="base-embed-title-cluster"
             onClick={() => onOpenNote(resolvedFullPath)}
-            title={resolvedFullPath}
+            title={`Öffne ${resolvedFullPath}`}
+            style={{ cursor: 'pointer' }}
           >
             <Database size={14} className="base-embed-icon" />
-            <span className="base-embed-title">{fileName}</span>
+            <span
+              className="base-embed-title clickable"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenNote(resolvedFullPath);
+              }}
+              title={`Öffne ${resolvedFullPath}`}
+              style={{ cursor: 'pointer' }}
+            >
+              {fileName}
+            </span>
           </div>
 
           {/* View pills if multiple views exist */}

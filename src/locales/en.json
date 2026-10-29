@@ -569,7 +569,9 @@
     "renameSwimlane": "Rename swimlane",
     "removeSwimlane": "Remove swimlane",
     "unassignedSwimlane": "No Swimlane",
-    "swimlaneHint": "Select a property (e.g. priority or project) to divide the board horizontally into swimlanes."
+    "swimlaneHint": "Select a property (e.g. priority or project) to divide the board horizontally into swimlanes.",
+    "cardProperties": "Card Properties",
+    "cardPropertiesHint": "Select and reorder the properties displayed on the cards:"
   },
   "research": {
     "title": "Research View",

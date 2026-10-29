@@ -1297,4 +1297,130 @@ views:
       }
     );
   });
+
+  it('allows selecting and reordering card content properties (view.order) in BaseBoardConfigModal and renders them on BaseBoardCard', async () => {
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Aufgaben-Board',
+      groupBy: { property: 'status', columns: ['Offen', 'In Arbeit', 'Erledigt'] },
+      columnLimit: 10,
+      order: ['file.name', 'priority'],
+    };
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    const matchingNotes = [
+      {
+        path: 'Tasks/A.md',
+        name: 'A.md',
+        tags: ['urgent'],
+        properties: [
+          { key: 'status', value: 'Offen' },
+          { key: 'priority', value: 'Hoch' },
+          { key: 'deadline', value: '2026-11-01' },
+        ],
+      },
+    ];
+
+    await act(async () => {
+      root.render(
+        <BaseBoardConfigModal
+          isOpen={true}
+          onClose={handleClose}
+          view={viewConfig}
+          availableProperties={[
+            { key: 'status', label: 'Status' },
+            { key: 'priority', label: 'Priority' },
+          ]}
+          allNotes={matchingNotes}
+          onSave={handleSave}
+        />
+      );
+    });
+
+    // Verify Card Properties section is rendered
+    const cardPropsSection = container.querySelector('.base-board-card-properties-section');
+    expect(cardPropsSection).toBeTruthy();
+
+    // Detected properties from matchingNotes should include 'deadline' and 'tags'
+    const deadlineCheckbox = container.querySelector(
+      '.card-prop-checkbox[data-prop-key="deadline"]'
+    ) as HTMLButtonElement;
+    const tagsCheckbox = container.querySelector(
+      '.card-prop-checkbox[data-prop-key="tags"]'
+    ) as HTMLButtonElement;
+    expect(deadlineCheckbox).toBeTruthy();
+    expect(tagsCheckbox).toBeTruthy();
+
+    // Toggle 'tags' and 'deadline' on
+    await act(async () => {
+      tagsCheckbox.click();
+    });
+    await act(async () => {
+      deadlineCheckbox.click();
+    });
+
+    // Currently selected order is ['priority', 'tags', 'deadline']. Move 'tags' up before 'priority'
+    const tagsRow = container.querySelector('.base-card-prop-config-item[data-prop-key="tags"]') as HTMLElement;
+    expect(tagsRow).toBeTruthy();
+    const moveUpBtn = tagsRow.querySelector('.card-prop-move-up') as HTMLButtonElement;
+    expect(moveUpBtn).toBeTruthy();
+    await act(async () => {
+      moveUpBtn.click();
+    });
+
+    // Save modal
+    const submitBtn = container.querySelector('.base-board-config-modal .primary-btn') as HTMLButtonElement;
+    await act(async () => {
+      submitBtn.click();
+    });
+
+    expect(handleSave).toHaveBeenCalledWith(
+      { property: 'status', columns: ['Offen', 'In Arbeit', 'Erledigt'] },
+      10,
+      undefined,
+      ['file.name', 'tags', 'priority', 'deadline']
+    );
+
+    // Verify BaseBoardView renders the properties listed in view.order on BaseBoardCard
+    const updatedViewConfig = {
+      ...viewConfig,
+      order: ['file.name', 'tags', 'priority', 'deadline'],
+    };
+    const record = createMockRecord(
+      'Tasks/A.md',
+      'A.md',
+      'Tasks',
+      ['urgent'],
+      { status: 'Offen', priority: 'Hoch', deadline: '2026-11-01' },
+      1000
+    );
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [updatedViewConfig] },
+      view: updatedViewConfig,
+      columns: ['file.name', 'tags', 'priority', 'deadline'],
+      columnDisplayNames: { priority: 'Priorität', deadline: 'Frist' },
+      records: [record],
+      groups: [],
+      totalCount: 1,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={updatedViewConfig}
+          onSelectNote={vi.fn()}
+        />
+      );
+    });
+
+    const card = container.querySelector('.base-board-card') as HTMLElement;
+    expect(card).toBeTruthy();
+    expect(card.textContent).toContain('#urgent');
+    expect(card.textContent).toContain('Priorität:');
+    expect(card.textContent).toContain('Hoch');
+    expect(card.textContent).toContain('Frist:');
+    expect(card.textContent).toContain('2026-11-01');
+  });
 });

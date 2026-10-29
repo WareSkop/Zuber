@@ -191,9 +191,24 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
       }}
     >
       <div className="canvas-embed-header">
-        <div className="canvas-embed-title-cluster" title={resolvedFullPath}>
+        <div
+          className="canvas-embed-title-cluster"
+          onClick={() => onOpenNote(resolvedFullPath)}
+          title={`Öffne ${resolvedFullPath}`}
+          style={{ cursor: 'pointer' }}
+        >
           <WorkflowCanvasIcon size={14} className="canvas-embed-icon" />
-          <span className="canvas-embed-title">{fileName}</span>
+          <span
+            className="canvas-embed-title clickable"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenNote(resolvedFullPath);
+            }}
+            title={`Öffne ${resolvedFullPath}`}
+            style={{ cursor: 'pointer' }}
+          >
+            {fileName}
+          </span>
         </div>
         <button
           type="button"

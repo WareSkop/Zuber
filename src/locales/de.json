@@ -569,7 +569,9 @@
     "renameSwimlane": "Swimlane umbenennen",
     "removeSwimlane": "Swimlane entfernen",
     "unassignedSwimlane": "Keine Zuordnung",
-    "swimlaneHint": "Wähle eine Eigenschaft (z. B. Priorität oder Projekt), um das Board horizontal in Swimlanes zu unterteilen."
+    "swimlaneHint": "Wähle eine Eigenschaft (z. B. Priorität oder Projekt), um das Board horizontal in Swimlanes zu unterteilen.",
+    "cardProperties": "Karten-Inhalte",
+    "cardPropertiesHint": "Wähle und sortiere die Eigenschaften, die auf den Karten angezeigt werden sollen:"
   },
   "research": {
     "title": "Rechercheansicht",

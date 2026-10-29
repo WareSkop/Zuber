@@ -436,7 +436,8 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
   const handleSaveBoardConfig = (
     newGroupBy: BaseGroupBy,
     newColumnLimit: number,
-    newSwimlanes?: BaseBoardSwimlaneConfig
+    newSwimlanes?: BaseBoardSwimlaneConfig,
+    newOrder?: string[]
   ) => {
     const newViews = config.views.map((v, i) => {
       if (i !== safeViewIndex) return v;
@@ -449,6 +450,9 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         updated.swimlanes = newSwimlanes;
       } else {
         delete updated.swimlanes;
+      }
+      if (Array.isArray(newOrder) && newOrder.length > 0) {
+        updated.order = newOrder;
       }
       return updated;
     });
@@ -743,7 +747,8 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
         onClose={() => setIsBoardConfigModalOpen(false)}
         view={activeView}
         availableProperties={vaultProperties}
-        allNotes={allFiles}
+        allNotes={queryResult?.records && queryResult.records.length > 0 ? queryResult.records : allFiles}
+        displayNames={queryResult?.columnDisplayNames || {}}
         onSave={handleSaveBoardConfig}
       />
 

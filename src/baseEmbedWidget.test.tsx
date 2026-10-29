@@ -356,4 +356,38 @@ views:
     expect(html).toContain('embedded-canvas-container');
     expect(html).toContain('data-canvas-path="Diagrams/Workflow.canvas"');
   });
+
+  it('opens the canvas file in editor when clicking the clickable canvas header title', async () => {
+    vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Diagrams/Flow.canvas',
+      name: 'Flow.canvas',
+      rawContent: JSON.stringify({ nodes: [], edges: [] }),
+    } as any);
+
+    const handleOpenNote = vi.fn();
+    const allNotes = [
+      { path: 'Diagrams/Flow.canvas', name: 'Flow.canvas', basename: 'Flow' },
+    ];
+
+    await act(async () => {
+      root.render(
+        <CanvasEmbedWidget
+          canvasPath="Flow.canvas"
+          onOpenNote={handleOpenNote}
+          allNotes={allNotes}
+        />
+      );
+    });
+
+    const titleEl = container.querySelector('.canvas-embed-title.clickable') as HTMLElement;
+    expect(titleEl).toBeTruthy();
+    expect(titleEl.textContent).toBe('Flow.canvas');
+    expect(titleEl.getAttribute('title')).toBe('Öffne Diagrams/Flow.canvas');
+
+    await act(async () => {
+      titleEl.click();
+    });
+
+    expect(handleOpenNote).toHaveBeenCalledWith('Diagrams/Flow.canvas');
+  });
 });

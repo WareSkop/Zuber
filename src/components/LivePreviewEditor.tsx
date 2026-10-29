@@ -1547,6 +1547,7 @@ function buildLivePreviewDecorations(
 
     // Collect inline decorations for this line and sort by position
     const inlineDecos: { from: number; to: number; deco: Decoration }[] = [];
+    let hasEmbedWidgetOnLine = false;
 
     // 1. Task list checkbox: - [ ] or - [x]
     const taskMatch = text.match(/^(\s*)([-*+]\s+)(\[[ xX]\])(\s*)/);
@@ -1591,6 +1592,7 @@ function buildLivePreviewDecorations(
             else if (p === 'left' || p === 'center' || p === 'right') imgAlign = p;
           }
         }
+        hasEmbedWidgetOnLine = true;
         inlineDecos.push({
           from: fullStart,
           to: fullEnd,
@@ -1630,6 +1632,7 @@ function buildLivePreviewDecorations(
       const href = match[3].trim();
 
       if (isEmbed) {
+        hasEmbedWidgetOnLine = true;
         inlineDecos.push({
           from: fullStart,
           to: fullEnd,
@@ -1765,6 +1768,15 @@ function buildLivePreviewDecorations(
           }),
         });
       }
+    }
+
+    // Add embed line decoration if line contains an embed widget so CodeMirror adds zero excess line-height/padding gap
+    if (hasEmbedWidgetOnLine) {
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({ class: 'cm-lp-embed-line' })
+      );
     }
 
     // Sort and add non-overlapping inline decorations
