@@ -1322,6 +1322,23 @@ views:
       },
     ];
 
+    // First render with isOpen=false, then transition to isOpen=true (verifies consistent hook order across renders)
+    await act(async () => {
+      root.render(
+        <BaseBoardConfigModal
+          isOpen={false}
+          onClose={handleClose}
+          view={viewConfig}
+          availableProperties={[
+            { key: 'status', label: 'Status' },
+            { key: 'priority', label: 'Priority' },
+          ]}
+          allNotes={matchingNotes}
+          onSave={handleSave}
+        />
+      );
+    });
+
     await act(async () => {
       root.render(
         <BaseBoardConfigModal

@@ -267,6 +267,37 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     }
   }, [isOpen, view]);
 
+  // Build ordered list of card properties (excluding 'file.name' which is always the card title)
+  const selectedCardProps = cardOrder.filter((k) => k !== 'file.name');
+  const selectedCardPropsSet = new Set(selectedCardProps);
+
+  const allCardPropertyItems = useMemo(() => {
+    const items: { key: string; label: string; isVisible: boolean }[] = [];
+
+    // 1. Visible properties first in their configured order
+    for (const key of selectedCardProps) {
+      const found = detectedCardProperties.find((p) => p.key === key);
+      items.push({
+        key,
+        label: displayNames[key] || found?.label || key,
+        isVisible: true,
+      });
+    }
+
+    // 2. Remaining detected properties
+    for (const p of detectedCardProperties) {
+      if (!selectedCardPropsSet.has(p.key)) {
+        items.push({
+          key: p.key,
+          label: displayNames[p.key] || p.label || p.key,
+          isVisible: false,
+        });
+      }
+    }
+
+    return items;
+  }, [selectedCardProps, detectedCardProperties, displayNames]);
+
   if (!isOpen) return null;
 
   const handleMoveColumn = (index: number, direction: 'up' | 'down') => {
@@ -357,37 +388,6 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     }
     setNewSwimlaneName('');
   };
-
-  // Build ordered list of card properties (excluding 'file.name' which is always the card title)
-  const selectedCardProps = cardOrder.filter((k) => k !== 'file.name');
-  const selectedCardPropsSet = new Set(selectedCardProps);
-
-  const allCardPropertyItems = useMemo(() => {
-    const items: { key: string; label: string; isVisible: boolean }[] = [];
-
-    // 1. Visible properties first in their configured order
-    for (const key of selectedCardProps) {
-      const found = detectedCardProperties.find((p) => p.key === key);
-      items.push({
-        key,
-        label: displayNames[key] || found?.label || key,
-        isVisible: true,
-      });
-    }
-
-    // 2. Remaining detected properties
-    for (const p of detectedCardProperties) {
-      if (!selectedCardPropsSet.has(p.key)) {
-        items.push({
-          key: p.key,
-          label: displayNames[p.key] || p.label || p.key,
-          isVisible: false,
-        });
-      }
-    }
-
-    return items;
-  }, [selectedCardProps, detectedCardProperties, displayNames]);
 
   const handleToggleCardProperty = (key: string) => {
     setOrderDirty(true);
