@@ -1357,10 +1357,15 @@ function buildLivePreviewDecorations(
               builder.add(line.from, line.to, Decoration.replace({}));
             }
           } else {
+            const isFirstContentLine = lineNum === block.startLine + 1;
             builder.add(
               line.from,
               line.from,
-              Decoration.line({ class: 'cm-lp-codeblock-content-line' })
+              Decoration.line({
+                class: isFirstContentLine
+                  ? 'cm-lp-codeblock-content-line cm-lp-codeblock-first-line'
+                  : 'cm-lp-codeblock-content-line',
+              })
             );
           }
           continue;
@@ -1397,10 +1402,15 @@ function buildLivePreviewDecorations(
             builder.add(line.from, line.to, Decoration.replace({}));
           }
         } else {
+          const isFirstContentLine = lineNum === block.startLine + 1;
           builder.add(
             line.from,
             line.from,
-            Decoration.line({ class: 'cm-lp-codeblock-content-line' })
+            Decoration.line({
+              class: isFirstContentLine
+                ? 'cm-lp-codeblock-content-line cm-lp-codeblock-first-line'
+                : 'cm-lp-codeblock-content-line',
+            })
           );
         }
       } else {
