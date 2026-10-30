@@ -1854,4 +1854,74 @@ views:
 
     expect(popover.isConnected).toBe(true);
   });
+
+  it('renders BaseBoardConfigModal with viewport-clamped frame, scrollable body, and pinned header and footer', async () => {
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: { property: 'status', columns: ['Backlog', 'Doing', 'Done'] },
+      columnLimit: 15,
+    };
+    const handleSave = vi.fn();
+    const handleClose = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <BaseBoardConfigModal
+          isOpen={true}
+          onClose={handleClose}
+          view={viewConfig}
+          availableProperties={[{ key: 'status', label: 'Status' }]}
+          onSave={handleSave}
+        />
+      );
+    });
+
+    // 1. Overlay & Modal structure
+    const overlay = container.querySelector('.board-config-modal-overlay');
+    expect(overlay).toBeTruthy();
+
+    const modal = container.querySelector('.board-config-modal');
+    expect(modal).toBeTruthy();
+
+    // 2. Fixed Header at top
+    const header = modal!.querySelector('.board-config-header');
+    expect(header).toBeTruthy();
+    expect(header!.querySelector('.board-config-title')).toBeTruthy();
+    const closeBtn = header!.querySelector('.board-config-close-btn') as HTMLButtonElement;
+    expect(closeBtn).toBeTruthy();
+
+    // 3. Scrollable Body in between
+    const body = modal!.querySelector('.board-config-body');
+    expect(body).toBeTruthy();
+
+    // 4. Pinned Footer with Cancel and Save buttons
+    const footer = modal!.querySelector('.board-config-footer');
+    expect(footer).toBeTruthy();
+    const cancelBtn = footer!.querySelector('.board-config-cancel-btn') as HTMLButtonElement;
+    expect(cancelBtn).toBeTruthy();
+    const saveBtn = footer!.querySelector('.board-config-save-btn') as HTMLButtonElement;
+    expect(saveBtn).toBeTruthy();
+
+    // 5. Test close actions
+    await act(async () => {
+      cancelBtn.click();
+    });
+    expect(handleClose).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      closeBtn.click();
+    });
+    expect(handleClose).toHaveBeenCalledTimes(2);
+
+    // 6. Test save action
+    await act(async () => {
+      saveBtn.click();
+    });
+    expect(handleSave).toHaveBeenCalledWith(
+      { property: 'status', columns: ['Backlog', 'Doing', 'Done'] },
+      15,
+      undefined
+    );
+  });
 });

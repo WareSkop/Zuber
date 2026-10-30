@@ -9166,18 +9166,100 @@ input:checked + .slider:before {
   gap: 6px;
 }
 
-/* Board Configuration Modal */
+/* Board Configuration Modal Overlay */
+.board-config-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Modal Dialog Box */
+.board-config-modal,
 .base-board-config-modal {
-  width: 100%;
-  max-width: 500px;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 95vw;
+  max-width: 900px;
+  max-height: calc(100vh - 48px) !important; /* Never overflow 1080p or smaller screens */
+  background: var(--bg-primary, #16181d);
+  border: 1px solid var(--border-color, #2a2d36);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden !important; /* Keep rounded corners clean */
+  box-sizing: border-box;
+  padding: 0 !important;
 }
 
 .base-board-config-modal-2col {
   width: 95vw;
-  max-width: 840px;
+  max-width: 900px;
 }
 
+/* Header bar */
+.board-config-header {
+  flex-shrink: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #2a2d36);
+  background: var(--bg-primary, #16181d);
+  margin-bottom: 0 !important;
+}
+
+.board-config-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.board-config-title h2,
+.board-config-title h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.board-config-icon {
+  color: var(--accent-color, #d4af37);
+  display: flex;
+  align-items: center;
+}
+
+.board-config-close-btn {
+  background: transparent !important;
+  color: var(--text-secondary, var(--text-muted)) !important;
+  border: none !important;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.board-config-close-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08)) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Scrollable Content Body */
+.board-config-body,
 .base-board-config-grid {
+  flex: 1 1 auto !important;
+  min-height: 0 !important; /* Critical flexbox rule to allow inner scrolling */
+  overflow-y: auto !important;
+  padding: 20px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
@@ -9185,8 +9267,9 @@ input:checked + .slider:before {
 }
 
 @media (max-width: 640px) {
+  .board-config-body,
   .base-board-config-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 }
 
@@ -9194,6 +9277,54 @@ input:checked + .slider:before {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+/* Pinned Footer Bar */
+.board-config-footer {
+  flex-shrink: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-color, #2a2d36);
+  background: var(--bg-secondary, #1b1e24);
+  z-index: 10;
+  margin-top: 0 !important;
+}
+
+.board-config-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border-color, #2a2d36);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.board-config-cancel-btn:hover:not(:disabled) {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.board-config-save-btn,
+.board-config-save-btn.btn-primary {
+  background: var(--accent-color, #d4af37);
+  color: #fff;
+  border: 1px solid var(--accent-color, #d4af37);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.board-config-save-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 
 .base-board-swimlane-hint {
@@ -9550,7 +9681,12 @@ input:checked + .slider:before {
 }
 
 .base-board-card-props-list {
-  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .base-card-prop-config-item {

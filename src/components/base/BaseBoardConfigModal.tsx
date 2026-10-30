@@ -267,6 +267,18 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     }
   }, [isOpen, view]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Build ordered list of card properties (excluding 'file.name' which is always the card title)
   const selectedCardProps = cardOrder.filter((k) => k !== 'file.name');
   const selectedCardPropsSet = new Set(selectedCardProps);
@@ -431,8 +443,8 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     setDraggedCardPropIndex(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
     const cleanCols = columns
       .map((c) => {
         const trimmed = c.name.trim();
@@ -491,19 +503,27 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   };
 
   return (
-    <div className="modal-backdrop base-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+    <div
+      className="board-config-modal-overlay modal-backdrop base-modal-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
       <div
-        className="modal-container base-modal-container base-board-config-modal base-board-config-modal-2col"
+        className="board-config-modal modal-container base-modal-container base-board-config-modal base-board-config-modal-2col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header base-modal-header">
-          <div className="modal-title-cluster base-modal-title">
-            <Kanban size={18} className="modal-icon modal-title-icon" />
-            <h2 className="modal-title">{t('base.configureBoard', 'Board konfigurieren')}</h2>
+        {/* 1. Header (Fixed at top) */}
+        <div className="board-config-header modal-header base-modal-header">
+          <div className="board-config-title modal-title-cluster base-modal-title">
+            <span className="board-config-icon modal-title-icon">
+              <Kanban size={18} className="modal-icon" />
+            </span>
+            <h3 className="modal-title">{t('base.configureBoard', 'Board konfigurieren')}</h3>
           </div>
           <button
             type="button"
-            className="base-modal-close-btn close-btn"
+            className="board-config-close-btn base-modal-close-btn close-btn"
             onClick={onClose}
             aria-label={t('common.close', 'Schließen')}
           >
@@ -511,8 +531,8 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="base-board-config-form">
-          <div className="modal-body base-modal-body base-board-config-grid scroller">
+        {/* 2. Body (Scrollable in between) */}
+        <div className="board-config-body modal-body base-modal-body base-board-config-grid scroller">
             {/* LEFT COLUMN: Vertical Columns */}
             <div className="base-board-config-column base-board-config-col base-board-config-left">
               {/* 1. Group By Property */}
@@ -599,6 +619,12 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
                   className="base-input limit-input"
                   value={columnLimit}
                   onChange={(e) => setColumnLimit(Number(e.target.value) || 10)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSubmit();
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -784,17 +810,25 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
                 </div>
               </div>
             </div>
-          </div>
+        </div>
 
-          <div className="modal-footer base-modal-footer">
-            <button type="button" className="base-btn secondary-btn" onClick={onClose}>
-              <span>{t('common.cancel', 'Abbrechen')}</span>
-            </button>
-            <button type="submit" className="base-btn primary-btn">
-              <span>{t('common.save', 'Speichern')}</span>
-            </button>
-          </div>
-        </form>
+        {/* 3. Footer (Always pinned at bottom) */}
+        <div className="board-config-footer modal-footer base-modal-footer">
+          <button
+            type="button"
+            className="board-config-cancel-btn base-btn secondary-btn"
+            onClick={onClose}
+          >
+            <span>{t('common.cancel', 'Abbrechen')}</span>
+          </button>
+          <button
+            type="button"
+            className="board-config-save-btn base-btn primary-btn btn-primary"
+            onClick={() => handleSubmit()}
+          >
+            <span>{t('common.save', 'Speichern')}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
