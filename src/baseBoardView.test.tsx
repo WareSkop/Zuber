@@ -1620,6 +1620,7 @@ views:
     await act(async () => {
       select.value = 'file.name';
       select.dispatchEvent(new Event('change', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 450));
     });
 
     // Verify cards are sorted Alpha, Beta, Gamma
@@ -1827,36 +1828,29 @@ views:
     expect(descBtn.textContent).not.toContain('Descending');
     expect(descBtn.textContent).not.toContain('Absteigend');
 
-    // Rapidly toggle back and forth 10 times to verify no React Error #310 occurs
+    // Rapidly toggle back and forth 10 times to verify no React Error #310 occurs and saves are debounced
     for (let i = 0; i < 10; i++) {
       await act(async () => {
         descBtn.click();
       });
       await act(async () => {
-        root.render(
-          <BaseBoardView
-            queryResult={mockQueryResult}
-            view={curView}
-            onSelectNote={() => {}}
-            onUpdateConfig={handleUpdate}
-          />
-        );
-      });
-
-      await act(async () => {
         ascBtn.click();
       });
-      await act(async () => {
-        root.render(
-          <BaseBoardView
-            queryResult={mockQueryResult}
-            view={curView}
-            onSelectNote={() => {}}
-            onUpdateConfig={handleUpdate}
-          />
-        );
-      });
     }
+
+    // Immediately after rapid clicks, handleUpdate should not have been called 20 times (it is debounced!)
+    expect(handleUpdate).not.toHaveBeenCalled();
+
+    // After 500ms debounce timer expires, only the final state is persisted once
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+    });
+
+    expect(handleUpdate).toHaveBeenCalledTimes(1);
+    expect(curView.groupBy?.columns?.[0]).toEqual({
+      name: 'Open',
+      sort: { property: 'file.name', direction: 'asc' },
+    });
 
     expect(popover.isConnected).toBe(true);
   });

@@ -23,10 +23,11 @@
   - Dedizierte Komponente `BaseBoardSwimlaneRow.tsx` für modulare, selbstständige Swimlane-Reihen mit unabhängigem Einklapp-Status (`collapsed`), Drei-Punkte-Menü für Rename/Remove und 2D-Drag-&-Drop auf Header-Items und Zellen.
 
 ### Fixed
-- React Error #310 beim schnellen Wechseln der Sortierrichtung im Sortier-Popover behoben (`BaseBoardSortPopover.tsx`, `BaseBoardView.tsx`):
-  - Alle React-Hooks (`useState`, `useEffect`, `useMemo`, `useCallback`) werden ausnahmslos auf oberster Ebene vor jedem bedingten Early Return deklariert.
-  - Ersatz von `useLayoutEffect` durch `useEffect` mit Vorinitialisierung von `coords` und Fenster-Scroll-/Resize-Listenern verhindert synchrone State-Kollisionen und Hook-Mismatch-Fehler.
-  - `handlePropertyChange`, `handleDirectionChange`, `handleResetSort` und `handleColumnSortChange` via `useCallback` stabilisiert.
+- React Error #310 beim schnellen Wechseln der Sortierrichtung im Sortier-Popover behoben (`BaseBoardSortPopover.tsx`, `BaseBoardView.tsx`, `BaseBoardColumn.tsx`, `BaseEditor.tsx`, `src/baseBoardView.test.tsx`):
+  - **Entprellte Konfigurationsspeicherung (Debounced Persistence):** Schnelles Hin- und Her-Klicken zwischen den Sortierrichtungs-Schaltflächen (`↑ (A-Z)` / `↓ (Z-A)`) oder Dropdown-Wechseln triggert die asynchrone YAML-Persistierung nun entprellt über einen 450ms-Timer. Schnelle Klickfolgen brechen vorherige Timer ab, sodass erst der finale Zustand gespeichert wird.
+  - **Sofortige optimistische Kartensortierung:** Die lokale visuelle Kartensortierung wird verzögerungsfrei sofort im State aktualisiert (`columnSortOverrides`), während die Netzwerkspeicherung im Hintergrund entprellt läuft.
+  - **Serialisierung aktiver Speichervorgänge (Save Request Queuing):** Aktive `saveNote`-Aufrufe werden über `isSavingBaseRef` und `queuedSaveConfigRef` serialisiert, um parallele HTTP-Anfragen, Dateikonflikte und störende WebSocket-Echo-Reloads (`vault:changed`) während aktiver Popover-Bedienung zu verhindern.
+  - **Strikte Hook-Normalisierung & einheitlicher Render-Baum:** Alle React-Hooks (`useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`) in `BaseBoardSortPopover.tsx` und `BaseBoardColumn.tsx` sind ausnahmslos auf oberster Ebene vor jedem bedingten Return deklariert. In `BaseBoardView.tsx` wurden getrennte 1D/2D JSX-Return-Pfade zu einem einheitlichen Render-Baum zusammengeführt, in dem das `BaseBoardSortPopover` genau einmal am Ende mit `key={activeSortCol.colKey}` gerendert wird.
 - Formatierung von Zeitstempeln (`created`, `file.ctime`, `ctime`, `file.mtime`, `mtime`) auf Base-Karten (`BaseBoardCard.tsx`, `BaseCardsView.tsx`, `src/base/baseEngine.ts`, `src/base/baseConfig.ts`):
   - Rohdaten im Unix-Millisekunden-Format (z. B. `1793227980423`) werden über die neue Hilfsfunktion `formatDateTime` in ein lesbares Format `YYYY-MM-DD HH:mm` umgewandelt.
 - Darstellung von Tags in eingebetteten Bases und Sichtbarkeit von eingebetteten Canvas-Dateien (`src/styles.css`, `src/baseEmbedWidget.test.tsx`):

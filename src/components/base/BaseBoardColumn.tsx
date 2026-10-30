@@ -218,8 +218,8 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
               className={`base-board-col-sort-btn board-sort-btn board-column-action-btn ${sortRule ? 'is-active' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
-                if (onOpenSort && sortBtnRef.current) {
-                  onOpenSort(col.key, sortBtnRef.current);
+                if (onOpenSort) {
+                  onOpenSort(col.key, e.currentTarget);
                 } else {
                   setIsSortOpen((prev) => !prev);
                 }

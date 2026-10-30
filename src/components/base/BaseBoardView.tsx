@@ -110,7 +110,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     );
   }, [explicitCols]);
 
-  // Local column sort overrides
+  // Local column sort overrides (instant optimistic UI)
   const [localColumnSorts, setLocalColumnSorts] = useState<
     Record<string, BoardColumnSortRule | undefined>
   >({});
@@ -119,9 +119,22 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     anchorEl: HTMLElement;
   } | null>(null);
 
-  // Sync local sort overrides when view changes externally
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  const onUpdateConfigRef = useRef(onUpdateConfig);
+  onUpdateConfigRef.current = onUpdateConfig;
+
+  const pendingSortRulesRef = useRef<Record<string, BoardColumnSortRule | undefined>>({});
+  const sortDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSavingBaseRef = useRef<boolean>(false);
+  const queuedSaveConfigRef = useRef<BaseViewConfig | null>(null);
+
+  // Sync local sort overrides when view changes externally, but only when no pending unsaved sorts
   useEffect(() => {
-    setLocalColumnSorts({});
+    if (Object.keys(pendingSortRulesRef.current).length === 0 && !sortDebounceTimerRef.current) {
+      setLocalColumnSorts({});
+    }
   }, [view]);
 
   const getEffectiveColumnSort = useCallback(
@@ -138,56 +151,123 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     [localColumnSorts, view.boardSort, columnConfigs]
   );
 
+  const flushPendingSortConfig = useCallback(async () => {
+    if (!onUpdateConfigRef.current) return;
+    if (sortDebounceTimerRef.current) {
+      clearTimeout(sortDebounceTimerRef.current);
+      sortDebounceTimerRef.current = null;
+    }
+
+    const pendingRules = { ...pendingSortRulesRef.current };
+    const keys = Object.keys(pendingRules);
+    if (keys.length === 0) return;
+
+    // Reset pending sort rules ref now that we are persisting them
+    pendingSortRulesRef.current = {};
+
+    let updatedView = { ...viewRef.current };
+
+    for (const [colKey, sortRule] of Object.entries(pendingRules)) {
+      if (colKey === 'no_status') {
+        updatedView = {
+          ...updatedView,
+          boardSort: sortRule,
+        };
+        continue;
+      }
+
+      const curCols = updatedView.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+      let found = false;
+      const updatedCols: (string | BaseBoardColumnConfig)[] = curCols.map((c) => {
+        const name = typeof c === 'string' ? c : c.name;
+        if (name.toLowerCase() === colKey.toLowerCase()) {
+          found = true;
+          if (!sortRule) {
+            if (typeof c === 'string') return c;
+            const { sort, ...rest } = c;
+            return Object.keys(rest).length === 1 && rest.name ? rest.name : rest;
+          }
+          if (typeof c === 'string') {
+            return { name: c, sort: sortRule };
+          }
+          return { ...c, sort: sortRule };
+        }
+        return c;
+      });
+
+      if (!found && sortRule) {
+        updatedCols.push({ name: colKey, sort: sortRule });
+      }
+
+      updatedView = {
+        ...updatedView,
+        groupBy: {
+          ...(updatedView.groupBy || { property: 'status' }),
+          property: updatedView.groupBy?.property || 'status',
+          columns: updatedCols,
+        },
+      };
+    }
+
+    // Save serialization: if a save is in-flight, queue the latest state
+    if (isSavingBaseRef.current) {
+      queuedSaveConfigRef.current = updatedView;
+      return;
+    }
+
+    isSavingBaseRef.current = true;
+    try {
+      await Promise.resolve(onUpdateConfigRef.current(updatedView));
+    } catch (err) {
+      console.error('Failed to update board sort config:', err);
+    } finally {
+      isSavingBaseRef.current = false;
+      if (queuedSaveConfigRef.current) {
+        const nextView = queuedSaveConfigRef.current;
+        queuedSaveConfigRef.current = null;
+        isSavingBaseRef.current = true;
+        try {
+          await Promise.resolve(onUpdateConfigRef.current(nextView));
+        } catch (e) {
+          console.error('Failed to update queued board sort config:', e);
+        } finally {
+          isSavingBaseRef.current = false;
+        }
+      }
+    }
+  }, []);
+
+  // Flush pending changes on unmount
+  useEffect(() => {
+    return () => {
+      if (sortDebounceTimerRef.current) {
+        clearTimeout(sortDebounceTimerRef.current);
+        sortDebounceTimerRef.current = null;
+        flushPendingSortConfig();
+      }
+    };
+  }, [flushPendingSortConfig]);
+
   const handleColumnSortChange = useCallback(
     (colKey: string, sortRule?: BoardColumnSortRule) => {
+      // 1. Instant optimistic update for UI and card ordering
       setLocalColumnSorts((prev) => ({
         ...prev,
         [colKey]: sortRule,
       }));
 
-      if (onUpdateConfig) {
-        if (colKey === 'no_status') {
-          onUpdateConfig({
-            ...view,
-            boardSort: sortRule,
-          });
-          return;
-        }
+      // 2. Queue sort rule for debounced persistence
+      pendingSortRulesRef.current[colKey] = sortRule;
 
-        const curCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
-        let found = false;
-        const updatedCols: (string | BaseBoardColumnConfig)[] = curCols.map((c) => {
-          const name = typeof c === 'string' ? c : c.name;
-          if (name.toLowerCase() === colKey.toLowerCase()) {
-            found = true;
-            if (!sortRule) {
-              if (typeof c === 'string') return c;
-              const { sort, ...rest } = c;
-              return Object.keys(rest).length === 1 && rest.name ? rest.name : rest;
-            }
-            if (typeof c === 'string') {
-              return { name: c, sort: sortRule };
-            }
-            return { ...c, sort: sortRule };
-          }
-          return c;
-        });
-
-        if (!found && sortRule) {
-          updatedCols.push({ name: colKey, sort: sortRule });
-        }
-
-        onUpdateConfig({
-          ...view,
-          groupBy: {
-            ...(view.groupBy || { property: 'status' }),
-            property: view.groupBy?.property || 'status',
-            columns: updatedCols,
-          },
-        });
+      // 3. Debounce save (450ms) to avoid overlapping writes on rapid clicks
+      if (sortDebounceTimerRef.current) {
+        clearTimeout(sortDebounceTimerRef.current);
       }
+      sortDebounceTimerRef.current = setTimeout(() => {
+        flushPendingSortConfig();
+      }, 450);
     },
-    [onUpdateConfig, view]
+    [flushPendingSortConfig]
   );
 
   // All records (either passed explicitly or from queryResult)
@@ -555,24 +635,24 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   }, [view.swimlanes?.property, config, queryResult]);
 
   // ==========================================
-  // 2D SWIMLANE BOARD RENDER
+  // UNIFIED BOARD RENDER (2D Swimlane or 1D Standard)
   // ==========================================
-  if (is2D && board2DData) {
-    return (
-      <>
-        <div
-          className="base-board-container base-board-2d-container scroller"
-          onDragEnd={() => {
-            setDraggingPath(null);
-            setDragOverCol(null);
-            setDragOverCell(null);
-          }}
-          onDrop={() => {
-            setDraggingPath(null);
-            setDragOverCol(null);
-            setDragOverCell(null);
-          }}
-        >
+  return (
+    <>
+      <div
+        className={`base-board-container ${is2D && board2DData ? 'base-board-2d-container' : ''} scroller`}
+        onDragEnd={() => {
+          setDraggingPath(null);
+          setDragOverCol(null);
+          setDragOverCell(null);
+        }}
+        onDrop={() => {
+          setDraggingPath(null);
+          setDragOverCol(null);
+          setDragOverCell(null);
+        }}
+      >
+        {is2D && board2DData ? (
           <div className="base-board-2d-grid">
             {/* Horizontal Swimlane Rows with unified column blocks */}
             <div className="base-board-2d-swimlanes-list">
@@ -619,90 +699,56 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
               ))}
             </div>
           </div>
-        </div>
-
-        {activeSortCol && (
-          <BaseBoardSortPopover
-            isOpen={Boolean(activeSortCol)}
-            onClose={() => setActiveSortCol(null)}
-            anchorEl={activeSortCol.anchorEl}
-            columnName={
-              activeSortCol.colKey === 'no_status'
-                ? t('base.noStatusColumn', 'Kein Status')
-                : activeSortCol.colKey
-            }
-            currentSort={getEffectiveColumnSort(activeSortCol.colKey)}
-            cardProperties={columns}
-            propertyDisplayNames={displayNames}
-            onApplySort={(rule) => {
-              handleColumnSortChange(activeSortCol.colKey, rule);
-            }}
-          />
+        ) : (
+          columnsData.map((col) => (
+            <BaseBoardColumn
+              key={col.key}
+              col={col}
+              columns={columns}
+              displayNames={displayNames}
+              groupByProp={groupByProp}
+              groupByDisplayName={colPropDisplayName}
+              readOnly={readOnly}
+              isOver={dragOverCol === col.key}
+              isExpanded={!!expandedColumns[col.key]}
+              onToggleExpand={() => toggleExpand(col.key)}
+              onDrop={handleDropOnColumn}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragOverCol !== col.key) setDragOverCol(col.key);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setDragOverCol(null);
+              }}
+              onAddCard={(colVal) => onAddCard?.(colVal)}
+              onRenameColumn={onRenameColumn}
+              onDeleteColumn={onDeleteColumn}
+              onSelectNote={onSelectNote}
+              draggingPath={draggingPath}
+              onDragStart={(path) => setDraggingPath(path)}
+              onDragEnd={() => {
+                setDraggingPath(null);
+                setDragOverCol(null);
+              }}
+              sortRule={getEffectiveColumnSort(col.key)}
+              onOpenSort={(colKey, anchorEl) => setActiveSortCol({ colKey, anchorEl })}
+              onSortChange={(rule) => handleColumnSortChange(col.key, rule)}
+              cardProperties={columns}
+            />
+          ))
         )}
-      </>
-    );
-  }
-
-  // ==========================================
-  // 1D STANDARD BOARD RENDER
-  // ==========================================
-  return (
-    <>
-      <div
-        className="base-board-container scroller"
-        onDragEnd={() => {
-          setDraggingPath(null);
-          setDragOverCol(null);
-        }}
-        onDrop={() => {
-          setDraggingPath(null);
-          setDragOverCol(null);
-        }}
-      >
-        {columnsData.map((col) => (
-          <BaseBoardColumn
-            key={col.key}
-            col={col}
-            columns={columns}
-            displayNames={displayNames}
-            groupByProp={groupByProp}
-            groupByDisplayName={colPropDisplayName}
-            readOnly={readOnly}
-            isOver={dragOverCol === col.key}
-            isExpanded={!!expandedColumns[col.key]}
-            onToggleExpand={() => toggleExpand(col.key)}
-            onDrop={handleDropOnColumn}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = 'move';
-              if (dragOverCol !== col.key) setDragOverCol(col.key);
-            }}
-            onDragLeave={(e) => {
-              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-              setDragOverCol(null);
-            }}
-            onAddCard={(colVal) => onAddCard?.(colVal)}
-            onRenameColumn={onRenameColumn}
-            onDeleteColumn={onDeleteColumn}
-            onSelectNote={onSelectNote}
-            draggingPath={draggingPath}
-            onDragStart={(path) => setDraggingPath(path)}
-            onDragEnd={() => {
-              setDraggingPath(null);
-              setDragOverCol(null);
-            }}
-            sortRule={getEffectiveColumnSort(col.key)}
-            onOpenSort={(colKey, anchorEl) => setActiveSortCol({ colKey, anchorEl })}
-            onSortChange={(rule) => handleColumnSortChange(col.key, rule)}
-            cardProperties={columns}
-          />
-        ))}
       </div>
 
       {activeSortCol && (
         <BaseBoardSortPopover
+          key={activeSortCol.colKey}
           isOpen={Boolean(activeSortCol)}
-          onClose={() => setActiveSortCol(null)}
+          onClose={() => {
+            flushPendingSortConfig();
+            setActiveSortCol(null);
+          }}
           anchorEl={activeSortCol.anchorEl}
           columnName={
             activeSortCol.colKey === 'no_status'

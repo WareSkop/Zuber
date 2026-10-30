@@ -92,7 +92,10 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
 
   // Sync external changes to rawContent when not editing source
   const lastRawContentRef = useRef(rawContent);
+  const isSavingBaseRef = useRef(false);
+
   useEffect(() => {
+    if (isSavingBaseRef.current) return;
     if (rawContent !== lastRawContentRef.current) {
       lastRawContentRef.current = rawContent;
       try {
@@ -115,11 +118,16 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
       }
-      saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = setTimeout(async () => {
         try {
           const yaml = stringifyBaseYaml(newConfig);
           lastRawContentRef.current = yaml;
-          onChange(yaml);
+          isSavingBaseRef.current = true;
+          try {
+            await Promise.resolve(onChange(yaml));
+          } finally {
+            isSavingBaseRef.current = false;
+          }
         } catch (err) {
           console.error('Failed to serialize Base config:', err);
         }
