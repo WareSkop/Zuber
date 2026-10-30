@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, ArrowDown, X, RotateCcw } from 'lucide-react';
 import type { BoardColumnSortRule } from '../../base/baseConfig';
@@ -28,6 +28,7 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
   const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement>(null);
 
+  // 1. Local state hooks
   const [selectedProperty, setSelectedProperty] = useState<string>(
     currentSort?.property || 'file.name'
   );
@@ -35,30 +36,49 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
     currentSort?.direction || 'asc'
   );
 
-  // Sync state when currentSort changes externally
-  useEffect(() => {
-    setSelectedProperty(currentSort?.property || 'file.name');
-    setSelectedDirection(currentSort?.direction || 'asc');
-  }, [currentSort]);
-
   // Position calculation with window boundary clamping
-  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-
-  useLayoutEffect(() => {
-    if (!anchorEl) return;
+  const [coords, setCoords] = useState<{ top: number; left: number }>(() => {
+    if (!anchorEl || typeof window === 'undefined') return { top: 0, left: 0 };
     const rect = anchorEl.getBoundingClientRect();
     const popoverWidth = 270;
     let left = rect.left;
-
-    // Viewport clamping
     if (left + popoverWidth > window.innerWidth - 12) {
       left = Math.max(12, window.innerWidth - popoverWidth - 12);
     }
-    const top = rect.bottom + 6;
-    setCoords({ top, left });
+    return { top: rect.bottom + 6, left };
+  });
+
+  // 2. Synchronize state when currentSort changes externally
+  useEffect(() => {
+    setSelectedProperty(currentSort?.property || 'file.name');
+    setSelectedDirection(currentSort?.direction || 'asc');
+  }, [currentSort?.property, currentSort?.direction]);
+
+  // 3. Update popover position when anchor element changes or window resizes/scrolls
+  useEffect(() => {
+    if (!anchorEl || typeof window === 'undefined') return;
+
+    const updatePosition = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      const popoverWidth = 270;
+      let left = rect.left;
+
+      if (left + popoverWidth > window.innerWidth - 12) {
+        left = Math.max(12, window.innerWidth - popoverWidth - 12);
+      }
+      setCoords({ top: rect.bottom + 6, left });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
   }, [anchorEl]);
 
-  // Handle click outside and Escape key
+  // 4. Handle click outside and Escape key
   useEffect(() => {
     if (!isOpen) return;
 
@@ -87,7 +107,7 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
     };
   }, [isOpen, onClose, anchorEl]);
 
-  // Available sorting property options
+  // 5. Available sorting property options
   const propertyOptions = useMemo(() => {
     const list: { key: string; label: string }[] = [
       { key: 'file.name', label: t('base.sortByName', 'Name') },
@@ -115,27 +135,35 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
     return list;
   }, [cardProperties, propertyDisplayNames, t]);
 
-  const handlePropertyChange = (newProp: string) => {
-    setSelectedProperty(newProp);
-    onApplySort({
-      property: newProp,
-      direction: selectedDirection,
-    });
-  };
+  // 6. Action callbacks
+  const handlePropertyChange = useCallback(
+    (newProp: string) => {
+      setSelectedProperty(newProp);
+      onApplySort({
+        property: newProp,
+        direction: selectedDirection,
+      });
+    },
+    [onApplySort, selectedDirection]
+  );
 
-  const handleDirectionChange = (newDir: 'asc' | 'desc') => {
-    setSelectedDirection(newDir);
-    onApplySort({
-      property: selectedProperty,
-      direction: newDir,
-    });
-  };
+  const handleDirectionChange = useCallback(
+    (newDir: 'asc' | 'desc') => {
+      setSelectedDirection(newDir);
+      onApplySort({
+        property: selectedProperty,
+        direction: newDir,
+      });
+    },
+    [onApplySort, selectedProperty]
+  );
 
-  const handleResetSort = () => {
+  const handleResetSort = useCallback(() => {
     onApplySort(undefined);
     onClose();
-  };
+  }, [onApplySort, onClose]);
 
+  // Early return MUST happen ONLY AFTER all hooks have executed
   if (!isOpen) return null;
 
   return createPortal(
@@ -188,23 +216,27 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
         </select>
       </div>
 
-      {/* Direction Segmented Control */}
+      {/* Compact Direction Segmented Control */}
       <div className="base-board-sort-direction-group">
         <button
           type="button"
           className={`base-board-sort-dir-btn board-sort-dir-asc ${selectedDirection === 'asc' ? 'is-active' : ''}`}
           onClick={() => handleDirectionChange('asc')}
+          title="↑ (A-Z)"
+          aria-label="↑ (A-Z)"
         >
           <ArrowUp size={12} />
-          <span>{t('base.sortAsc', 'Aufsteigend (A-Z)')}</span>
+          <span>(A-Z)</span>
         </button>
         <button
           type="button"
           className={`base-board-sort-dir-btn board-sort-dir-desc ${selectedDirection === 'desc' ? 'is-active' : ''}`}
           onClick={() => handleDirectionChange('desc')}
+          title="↓ (Z-A)"
+          aria-label="↓ (Z-A)"
         >
           <ArrowDown size={12} />
-          <span>{t('base.sortDesc', 'Absteigend (Z-A)')}</span>
+          <span>(Z-A)</span>
         </button>
       </div>
 

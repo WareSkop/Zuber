@@ -1359,3 +1359,19 @@ export function sortColumnNotes<T = any>(
   });
 }
 
+/**
+ * Formats a timestamp, date string, or Date object into YYYY-MM-DD HH:mm.
+ */
+export function formatDateTime(val: number | string | Date): string {
+  if (!val) return '';
+  const date = typeof val === 'number' ? new Date(val) : new Date(String(val));
+  if (isNaN(date.getTime())) return String(val);
+
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
+

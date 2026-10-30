@@ -470,4 +470,19 @@ views:
     const sortedByAssigneeAsc = sortColumnNotes(sampleNotes, { property: 'assignee', direction: 'asc' });
     expect(sortedByAssigneeAsc.map((n) => n.name)).toEqual(['Task A', 'Task B', 'Task C']);
   });
+
+  it('formats dates and epoch timestamps into YYYY-MM-DD HH:mm via formatDateTime', async () => {
+    const { formatDateTime } = await import('./base/baseConfig');
+    // Test with epoch ms timestamp (e.g. 1793227980423)
+    const fixedDate = new Date(2026, 9, 28, 14, 35); // 2026-10-28 14:35
+    expect(formatDateTime(fixedDate.getTime())).toBe('2026-10-28 14:35');
+
+    // Test with Date object
+    expect(formatDateTime(fixedDate)).toBe('2026-10-28 14:35');
+
+    // Test with empty/null/invalid
+    expect(formatDateTime(0)).toBe('');
+    expect(formatDateTime('')).toBe('');
+    expect(formatDateTime('invalid-date')).toBe('invalid-date');
+  });
 });

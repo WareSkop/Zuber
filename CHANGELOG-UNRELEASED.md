@@ -1,4 +1,7 @@
 ### Changed
+- Kompakte Sortierrichtungs-Umschalter im Sortier-Popover (`BaseBoardSortPopover.tsx`, `src/locales/de.json`, `src/locales/en.json`):
+  - Entfernung redundanter Textbeschriftungen („Aufsteigend“ / „Absteigend“ bzw. „Ascending“ / „Descending“).
+  - Anzeige ausschließlich als kompakter Pfeil mit Wertebereich: `↑ (A-Z)` und `↓ (Z-A)` bei beibehaltener segmentierter Umschalter-Optik und aktivem Zustand.
 - Vereinheitlichtes 1D- und 2D-Kanban-Board Spaltenlayout, Attributnamen in Spaltenköpfen und Bereinigung von Standalone-Buttons (`BaseBoardColumn.tsx`, `BaseBoardSwimlaneRow.tsx`, `BaseBoardView.tsx`, `src/styles.css`, `src/baseBoardView.test.tsx`):
   - **Integriertes Spaltenkarten-Design im 2D-Board:** In 2D-Swimlane-Reihen wurde das losgelöste, separate Spaltenkopf-Band entfernt. Jede Zelle (Schnittmenge aus Spalte × Swimlane) ist nun ein kontinuierlicher Spaltenblock (`.base-board-column.base-board-swimlane-cell`) mit integriertem Kopfbereich (`.base-board-column-header`) und Kartenbereich (`.base-board-cards-list.base-board-swimlane-cards-list`), identisch zur Optik und Haptik des 1D-Boards.
   - **Attribut-/Property-Namen in Spaltenköpfen:** In Spaltenköpfen von 1D- und 2D-Boards wird dem Spaltenwert nun das zugehörige Gruppierungsattribut als Badge vorangestellt (z. B. `STATUS: Offen (2)`), passend zu den Swimlane-Headern (`PRIO: ...`).
@@ -20,6 +23,12 @@
   - Dedizierte Komponente `BaseBoardSwimlaneRow.tsx` für modulare, selbstständige Swimlane-Reihen mit unabhängigem Einklapp-Status (`collapsed`), Drei-Punkte-Menü für Rename/Remove und 2D-Drag-&-Drop auf Header-Items und Zellen.
 
 ### Fixed
+- React Error #310 beim schnellen Wechseln der Sortierrichtung im Sortier-Popover behoben (`BaseBoardSortPopover.tsx`, `BaseBoardView.tsx`):
+  - Alle React-Hooks (`useState`, `useEffect`, `useMemo`, `useCallback`) werden ausnahmslos auf oberster Ebene vor jedem bedingten Early Return deklariert.
+  - Ersatz von `useLayoutEffect` durch `useEffect` mit Vorinitialisierung von `coords` und Fenster-Scroll-/Resize-Listenern verhindert synchrone State-Kollisionen und Hook-Mismatch-Fehler.
+  - `handlePropertyChange`, `handleDirectionChange`, `handleResetSort` und `handleColumnSortChange` via `useCallback` stabilisiert.
+- Formatierung von Zeitstempeln (`created`, `file.ctime`, `ctime`, `file.mtime`, `mtime`) auf Base-Karten (`BaseBoardCard.tsx`, `BaseCardsView.tsx`, `src/base/baseEngine.ts`, `src/base/baseConfig.ts`):
+  - Rohdaten im Unix-Millisekunden-Format (z. B. `1793227980423`) werden über die neue Hilfsfunktion `formatDateTime` in ein lesbares Format `YYYY-MM-DD HH:mm` umgewandelt.
 - Darstellung von Tags in eingebetteten Bases und Sichtbarkeit von eingebetteten Canvas-Dateien (`src/styles.css`, `src/baseEmbedWidget.test.tsx`):
   - **Base-Tags & Kartentext-Überlappung behoben:** Durch `line-height: 0 !important;` auf `.cm-line.cm-lp-embed-line` erbten alle Kind-Elemente innerhalb von eingebetteten Widgets eine Zeilenhöhe von `0`, wodurch Tag-Pills (`.base-tag-pill`) und Karteneigenschaften kollabierten, sich überlappten und nicht mehr anklickbar waren. `.cm-line.cm-lp-embed-line > *`, `.cm-embed-widget` und die Embed-Container setzen `line-height: 1.5 !important;` nun explizit zurück.
   - **Sichtbarkeit eingebetteter Canvas-Dateien wiederhergestellt:** `height: auto !important; min-height: 0px !important;` wurde auf den äußeren CodeMirror-Wrapper `.cm-embed-widget.cm-canvas-embed-wrapper` beschränkt, damit die Inline-Höhenvorgabe (`style={{ height: '380px', minHeight: '380px' }}`) des inneren `.canvas-embed-container` nicht mehr überschrieben wird und der ReactFlow-Viewport sichtbar bleibt.

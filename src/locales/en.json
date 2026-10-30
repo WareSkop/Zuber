@@ -580,8 +580,8 @@
     "sortBy": "Sort by",
     "sortByName": "Name",
     "sortByCreated": "Creation date",
-    "sortAsc": "Ascending (A-Z)",
-    "sortDesc": "Descending (Z-A)",
+    "sortAsc": "↑ (A-Z)",
+    "sortDesc": "↓ (Z-A)",
     "clearSort": "Reset sort"
   },
   "research": {

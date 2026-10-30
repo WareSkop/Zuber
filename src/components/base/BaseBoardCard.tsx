@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { FileText, Folder } from 'lucide-react';
 import type { BaseRecord } from '../../base/baseEngine';
-import { getPropertyValue } from '../../base/baseEngine';
+import { getPropertyValue, formatDateTime } from '../../base/baseEngine';
 
 export interface BaseBoardCardProps {
   record: BaseRecord;
@@ -123,18 +123,30 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
             const val = getPropertyValue(record, c);
             if (val === undefined || val === null || val === '') return null;
             const dName = displayNames[c] || c;
+
+            const isDateProp =
+              c === 'created' ||
+              c === 'file.ctime' ||
+              c === 'ctime' ||
+              c === 'file.mtime' ||
+              c === 'mtime' ||
+              (typeof val === 'number' && val > 1000000000000);
+
+            let displayVal: string;
+            if (typeof val === 'boolean') {
+              displayVal = val ? '✓' : '✗';
+            } else if (isDateProp) {
+              displayVal = formatDateTime(val);
+            } else if (Array.isArray(val)) {
+              displayVal = val.join(', ');
+            } else {
+              displayVal = String(val);
+            }
+
             return (
               <div key={c} className="base-card-prop-row" data-prop-key={c}>
                 <span className="base-prop-key">{dName}:</span>
-                <span className="base-prop-val">
-                  {typeof val === 'boolean'
-                    ? val
-                      ? '✓'
-                      : '✗'
-                    : Array.isArray(val)
-                    ? val.join(', ')
-                    : String(val)}
-                </span>
+                <span className="base-prop-val">{displayVal}</span>
               </div>
             );
           })}

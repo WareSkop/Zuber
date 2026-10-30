@@ -730,5 +730,5 @@ export function extractPropertyValues(allNotes: any[], propKey: string): string[
   return values;
 }
 
-export { sortColumnNotes } from './baseEngine';
+export { sortColumnNotes, formatDateTime } from './baseEngine';
 

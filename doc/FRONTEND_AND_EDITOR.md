@@ -1028,7 +1028,8 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
     - Unmittelbar links neben dem `+`-Button im Spaltenkopf (sowohl im 1D-Board als auch in allen Zellen des 2D-Swimlane-Boards) befindet sich der Sortier-Icon-Button (`.base-board-col-sort-btn.board-sort-btn`, Icon `ArrowUpDown`). Bei aktiver benutzerdefinierter Sortierung leuchtet der Button akzentuiert (`.is-active`).
     - Ein Klick öffnet ein portal-gestütztes Popover (`BaseBoardSortPopover`) mit dynamischem Viewport-Clamping:
       - **Eigenschaftsauswahl (`<select>`):** Bietet standardmäßig `file.name` (Name) und `file.ctime` (Erstelldatum) sowie alle in `view.order` der Base konfigurierten Frontmatter-Eigenschaften (z. B. `priority`, `deadline`).
-      - **Richtungsumschalter:** Segmentierte Buttons für Aufsteigend (`↑ A–Z / Älteste zuerst`) und Absteigend (`↓ Z–A / Neueste zuerst`).
+      - **Richtungsumschalter:** Kompakte segmentierte Buttons für `↑ (A-Z)` und `↓ (Z-A)`.
+      - **Zeitstempel-Formatierung:** Eigenschaften wie `created`, `file.ctime` oder große Epoch-Millisekunden-Zeitstempel werden auf den Karten automatisch als lesbare Datumsstrings im Format `YYYY-MM-DD HH:mm` formatiert.
       - **Live-Vorschau & Persistenz:** Die Kartenreihenfolge wird sofort live im UI aktualisiert und im `.base`-YAML gespeichert (`view.boardSort` oder spaltenspezifisch in `groupBy.columns[].sort`).
       - **Zurücksetzen:** Die Schaltfläche „Sortierung zurücksetzen“ setzt die Sortierung wieder auf die Standard-Reihenfolge (Änderungsdatum absteigend) zurück.
   - **„+ Add Card“-Button im Spaltenkopf:**

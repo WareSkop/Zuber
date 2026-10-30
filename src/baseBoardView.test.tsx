@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
-import { parseBaseYaml, stringifyBaseYaml, type BaseConfig } from './base/baseConfig';
+import { parseBaseYaml, stringifyBaseYaml, type BaseConfig, type BaseViewConfig } from './base/baseConfig';
 import { executeBaseQuery, type BaseQueryResult, type BaseRecord } from './base/baseEngine';
 import { BaseBoardView } from './components/base/BaseBoardView';
 import { BaseToolbar } from './components/base/BaseToolbar';
@@ -1668,5 +1668,196 @@ views:
     // Default sorting restored (initial order: Beta, Alpha, Gamma)
     cardTitles = Array.from(container.querySelectorAll('.base-card-title')).map((el) => el.textContent);
     expect(cardTitles).toEqual(['Beta', 'Alpha', 'Gamma']);
+  });
+
+  it('formats created and file.ctime timestamps into YYYY-MM-DD HH:mm on BaseBoardCard', async () => {
+    const fixedTime = new Date(2026, 9, 28, 14, 35).getTime(); // 2026-10-28 14:35
+    const view: BaseViewConfig = {
+      type: 'board',
+      name: 'Kanban',
+      order: ['file.name', 'created', 'file.ctime'],
+      groupBy: {
+        property: 'status',
+        columns: ['Open'],
+      },
+    };
+
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [view] } as any,
+      view: view as any,
+      columns: ['file.name', 'created', 'file.ctime'],
+      columnDisplayNames: {
+        'file.name': 'Name',
+        created: 'Erstelldatum',
+        'file.ctime': 'Erstellzeit',
+      },
+      records: [
+        {
+          file: {
+            path: 'Notes/TestNote.md',
+            name: 'TestNote',
+            folder: 'Notes',
+            ext: 'md',
+            ctime: fixedTime,
+            mtime: fixedTime,
+            inFolder: () => false,
+            hasTag: () => false,
+            hasLink: () => false,
+          },
+          properties: {
+            status: 'Open',
+            created: fixedTime,
+          },
+          formulas: {},
+          tags: [],
+          links: [],
+        },
+      ],
+      groups: [],
+      totalCount: 1,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={view}
+          onSelectNote={() => {}}
+        />
+      );
+    });
+
+    // Verify properties on card are formatted into YYYY-MM-DD HH:mm
+    const propRows = container.querySelectorAll('.base-card-prop-row');
+    expect(propRows.length).toBeGreaterThanOrEqual(1);
+
+    const propVals = Array.from(propRows).map((el) => el.querySelector('.base-prop-val')?.textContent);
+    expect(propVals).toContain('2026-10-28 14:35');
+  });
+
+  it('renders compact sort direction buttons with (A-Z) and (Z-A) and withstands rapid toggling without error #310', async () => {
+    let curView: BaseViewConfig = {
+      type: 'board',
+      name: 'Board',
+      order: ['file.name'],
+      groupBy: { property: 'status', columns: ['Open'] },
+    };
+
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [curView] } as any,
+      view: curView as any,
+      columns: ['file.name', 'status'],
+      columnDisplayNames: { 'file.name': 'Name', status: 'Status' },
+      records: [
+        {
+          file: {
+            path: 'A.md',
+            name: 'Alpha',
+            folder: '',
+            ext: 'md',
+            mtime: 100,
+            ctime: 100,
+            inFolder: () => false,
+            hasTag: () => false,
+            hasLink: () => false,
+          },
+          properties: { status: 'Open' },
+          formulas: {},
+          tags: [],
+          links: [],
+        },
+        {
+          file: {
+            path: 'B.md',
+            name: 'Beta',
+            folder: '',
+            ext: 'md',
+            mtime: 200,
+            ctime: 200,
+            inFolder: () => false,
+            hasTag: () => false,
+            hasLink: () => false,
+          },
+          properties: { status: 'Open' },
+          formulas: {},
+          tags: [],
+          links: [],
+        },
+      ],
+      groups: [],
+      totalCount: 2,
+    };
+
+    const handleUpdate = vi.fn((newView) => {
+      curView = newView;
+    });
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={curView}
+          onSelectNote={() => {}}
+          onUpdateConfig={handleUpdate}
+        />
+      );
+    });
+
+    const sortBtn = container.querySelector('.base-board-col-sort-btn') as HTMLButtonElement;
+    expect(sortBtn).toBeTruthy();
+
+    await act(async () => {
+      sortBtn.click();
+    });
+
+    const popover = document.body.querySelector('.base-board-sort-popover') as HTMLElement;
+    expect(popover).toBeTruthy();
+
+    const ascBtn = popover.querySelector('.board-sort-dir-asc') as HTMLButtonElement;
+    const descBtn = popover.querySelector('.board-sort-dir-desc') as HTMLButtonElement;
+    expect(ascBtn).toBeTruthy();
+    expect(descBtn).toBeTruthy();
+
+    // Verify compact labels: no words "Ascending" or "Descending", contains "(A-Z)" and "(Z-A)"
+    expect(ascBtn.textContent).toContain('(A-Z)');
+    expect(ascBtn.textContent).not.toContain('Ascending');
+    expect(ascBtn.textContent).not.toContain('Aufsteigend');
+
+    expect(descBtn.textContent).toContain('(Z-A)');
+    expect(descBtn.textContent).not.toContain('Descending');
+    expect(descBtn.textContent).not.toContain('Absteigend');
+
+    // Rapidly toggle back and forth 10 times to verify no React Error #310 occurs
+    for (let i = 0; i < 10; i++) {
+      await act(async () => {
+        descBtn.click();
+      });
+      await act(async () => {
+        root.render(
+          <BaseBoardView
+            queryResult={mockQueryResult}
+            view={curView}
+            onSelectNote={() => {}}
+            onUpdateConfig={handleUpdate}
+          />
+        );
+      });
+
+      await act(async () => {
+        ascBtn.click();
+      });
+      await act(async () => {
+        root.render(
+          <BaseBoardView
+            queryResult={mockQueryResult}
+            view={curView}
+            onSelectNote={() => {}}
+            onUpdateConfig={handleUpdate}
+          />
+        );
+      });
+    }
+
+    expect(popover.isConnected).toBe(true);
   });
 });

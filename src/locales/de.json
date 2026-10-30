@@ -579,9 +579,9 @@
     "sortColumn": "Karten sortieren",
     "sortBy": "Sortieren nach",
     "sortByName": "Name",
-    "sortByCreated": "Erstellzeit",
-    "sortAsc": "Aufsteigend (A-Z)",
-    "sortDesc": "Absteigend (Z-A)",
+    "sortByCreated": "Erstelldatum",
+    "sortAsc": "↑ (A-Z)",
+    "sortDesc": "↓ (Z-A)",
     "clearSort": "Sortierung zurücksetzen"
   },
   "research": {

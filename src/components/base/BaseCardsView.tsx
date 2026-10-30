@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileText, Folder } from 'lucide-react';
 import type { BaseQueryResult, BaseRecord } from '../../base/baseEngine';
-import { getPropertyValue } from '../../base/baseEngine';
+import { getPropertyValue, formatDateTime } from '../../base/baseEngine';
 import type { BaseViewConfig } from '../../base/baseConfig';
 
 export interface BaseCardsViewProps {
@@ -85,18 +85,30 @@ export const BaseCardsView: React.FC<BaseCardsViewProps> = ({
                         const val = getPropertyValue(rec, col);
                         if (val === undefined || val === null || val === '') return null;
                         const dName = displayNames[col] || col;
+
+                        const isDateProp =
+                          col === 'created' ||
+                          col === 'file.ctime' ||
+                          col === 'ctime' ||
+                          col === 'file.mtime' ||
+                          col === 'mtime' ||
+                          (typeof val === 'number' && val > 1000000000000);
+
+                        let displayVal: string;
+                        if (typeof val === 'boolean') {
+                          displayVal = val ? '✓' : '✗';
+                        } else if (isDateProp) {
+                          displayVal = formatDateTime(val);
+                        } else if (Array.isArray(val)) {
+                          displayVal = val.join(', ');
+                        } else {
+                          displayVal = String(val);
+                        }
+
                         return (
-                          <div key={col} className="base-card-prop-row">
+                          <div key={col} className="base-card-prop-row" data-prop-key={col}>
                             <span className="base-prop-key">{dName}:</span>
-                            <span className="base-prop-val">
-                              {typeof val === 'boolean'
-                                ? val
-                                  ? '✓'
-                                  : '✗'
-                                : Array.isArray(val)
-                                ? val.join(', ')
-                                : String(val)}
-                            </span>
+                            <span className="base-prop-val">{displayVal}</span>
                           </div>
                         );
                       })}

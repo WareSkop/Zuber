@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Plus,
   Check,
@@ -124,65 +124,71 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     setLocalColumnSorts({});
   }, [view]);
 
-  const getEffectiveColumnSort = (colKey: string): BoardColumnSortRule | undefined => {
-    if (Object.prototype.hasOwnProperty.call(localColumnSorts, colKey)) {
-      return localColumnSorts[colKey];
-    }
-    if (colKey === 'no_status') {
-      return view.boardSort;
-    }
-    const colCfg = columnConfigs.find((c) => c.name.toLowerCase() === colKey.toLowerCase());
-    return colCfg?.sort || view.boardSort;
-  };
-
-  const handleColumnSortChange = (colKey: string, sortRule?: BoardColumnSortRule) => {
-    setLocalColumnSorts((prev) => ({
-      ...prev,
-      [colKey]: sortRule,
-    }));
-
-    if (onUpdateConfig) {
+  const getEffectiveColumnSort = useCallback(
+    (colKey: string): BoardColumnSortRule | undefined => {
+      if (Object.prototype.hasOwnProperty.call(localColumnSorts, colKey)) {
+        return localColumnSorts[colKey];
+      }
       if (colKey === 'no_status') {
+        return view.boardSort;
+      }
+      const colCfg = columnConfigs.find((c) => c.name.toLowerCase() === colKey.toLowerCase());
+      return colCfg?.sort || view.boardSort;
+    },
+    [localColumnSorts, view.boardSort, columnConfigs]
+  );
+
+  const handleColumnSortChange = useCallback(
+    (colKey: string, sortRule?: BoardColumnSortRule) => {
+      setLocalColumnSorts((prev) => ({
+        ...prev,
+        [colKey]: sortRule,
+      }));
+
+      if (onUpdateConfig) {
+        if (colKey === 'no_status') {
+          onUpdateConfig({
+            ...view,
+            boardSort: sortRule,
+          });
+          return;
+        }
+
+        const curCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+        let found = false;
+        const updatedCols: (string | BaseBoardColumnConfig)[] = curCols.map((c) => {
+          const name = typeof c === 'string' ? c : c.name;
+          if (name.toLowerCase() === colKey.toLowerCase()) {
+            found = true;
+            if (!sortRule) {
+              if (typeof c === 'string') return c;
+              const { sort, ...rest } = c;
+              return Object.keys(rest).length === 1 && rest.name ? rest.name : rest;
+            }
+            if (typeof c === 'string') {
+              return { name: c, sort: sortRule };
+            }
+            return { ...c, sort: sortRule };
+          }
+          return c;
+        });
+
+        if (!found && sortRule) {
+          updatedCols.push({ name: colKey, sort: sortRule });
+        }
+
         onUpdateConfig({
           ...view,
-          boardSort: sortRule,
+          groupBy: {
+            ...(view.groupBy || { property: 'status' }),
+            property: view.groupBy?.property || 'status',
+            columns: updatedCols,
+          },
         });
-        return;
       }
-
-      const curCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
-      let found = false;
-      const updatedCols: (string | BaseBoardColumnConfig)[] = curCols.map((c) => {
-        const name = typeof c === 'string' ? c : c.name;
-        if (name.toLowerCase() === colKey.toLowerCase()) {
-          found = true;
-          if (!sortRule) {
-            if (typeof c === 'string') return c;
-            const { sort, ...rest } = c;
-            return Object.keys(rest).length === 1 && rest.name ? rest.name : rest;
-          }
-          if (typeof c === 'string') {
-            return { name: c, sort: sortRule };
-          }
-          return { ...c, sort: sortRule };
-        }
-        return c;
-      });
-
-      if (!found && sortRule) {
-        updatedCols.push({ name: colKey, sort: sortRule });
-      }
-
-      onUpdateConfig({
-        ...view,
-        groupBy: {
-          ...(view.groupBy || { property: 'status' }),
-          property: view.groupBy?.property || 'status',
-          columns: updatedCols,
-        },
-      });
-    }
-  };
+    },
+    [onUpdateConfig, view]
+  );
 
   // All records (either passed explicitly or from queryResult)
   const allRecords: BaseRecord[] = useMemo(() => {
