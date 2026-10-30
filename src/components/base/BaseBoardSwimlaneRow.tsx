@@ -22,6 +22,7 @@ export interface BaseBoardSwimlaneRowProps {
   cardColumns: string[];
   displayNames: Record<string, string>;
   groupByProp: string;
+  groupByDisplayName?: string;
   swimlaneProp: string;
   swimlaneDisplayName?: string;
   readOnly: boolean;
@@ -47,6 +48,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
   cardColumns,
   displayNames,
   groupByProp,
+  groupByDisplayName,
   swimlaneProp,
   swimlaneDisplayName,
   readOnly,
@@ -122,6 +124,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
 
   const propName = swimlaneProp || 'Swimlane';
   const displayName = swimlaneDisplayName || propName;
+  const colPropDisplayName = groupByDisplayName || groupByProp.toUpperCase();
   const headerLabel = lane.isUnassigned
     ? t('base.unassignedSwimlane', 'Keine Zuordnung')
     : `${displayName}: ${laneValue}`;
@@ -251,61 +254,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
         )}
       </div>
 
-      {/* 2. Repeated Column Header Strip (Rendered when !collapsed) */}
-      {!lane.collapsed && (
-        <div className="base-board-swimlane-columns-header">
-          {columns.map((col) => {
-            const cellKey = `${lane.key}::${col.key}`;
-            const cellRecords = lane.cells[col.key] || [];
-            const isOver = dragOverCell === cellKey;
-
-            return (
-              <div
-                key={col.key}
-                className={`base-board-swimlane-col-header-item ${isOver ? 'drag-over' : ''}`}
-                data-column-key={col.key}
-                data-swimlane-key={lane.key}
-                onDragOver={(e) => onDragOverCell(e, cellKey)}
-                onDragLeave={onDragLeaveCell}
-                onDrop={(e) => onDropOnCell(e, col.key, lane.key)}
-              >
-                <div className="base-board-swimlane-col-header-title-cluster">
-                  {col.color && (
-                    <span
-                      className="base-board-column-badge"
-                      style={{ backgroundColor: col.color }}
-                    />
-                  )}
-                  <span className="base-board-swimlane-col-header-title">{col.label}</span>
-                  <span className="base-board-swimlane-col-header-count">
-                    ({cellRecords.length})
-                  </span>
-                </div>
-
-                {!readOnly && (
-                  <button
-                    type="button"
-                    className="base-board-add-card-btn base-board-col-add-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddCard(
-                        col.key === 'no_status' ? '' : col.key,
-                        lane.isUnassigned ? '' : lane.key
-                      );
-                    }}
-                    title={t('base.addCard', 'Karte hinzufügen')}
-                    aria-label={`${t('base.addCard', 'Karte hinzufügen')} (${col.label} - ${laneValue})`}
-                  >
-                    <Plus size={13} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 3. Card Cells Grid (Rendered when !collapsed) */}
+      {/* 2. Unified Column Cells Row (Rendered when !collapsed) */}
       {!lane.collapsed && (
         <div className="base-board-swimlane-cells-row">
           {columns.map((col) => {
@@ -320,29 +269,77 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
             return (
               <div
                 key={col.key}
-                className={`base-board-swimlane-cell ${isOver ? 'drag-over' : ''} ${isEmpty ? 'is-empty' : ''}`}
+                className={`base-board-column base-board-swimlane-cell board-column board-swimlane-cell ${isOver ? 'drag-over' : ''} ${isEmpty ? 'is-empty' : ''}`}
                 data-column-key={col.key}
                 data-swimlane-key={lane.key}
                 onDragOver={(e) => onDragOverCell(e, cellKey)}
                 onDragLeave={onDragLeaveCell}
                 onDrop={(e) => onDropOnCell(e, col.key, lane.key)}
               >
-                {visibleCards.map((rec) => (
-                  <BaseBoardCard
-                    key={rec.file.path}
-                    record={rec}
-                    columns={cardColumns}
-                    displayNames={displayNames}
-                    groupByProp={groupByProp}
-                    swimlaneProp={swimlaneProp}
-                    readOnly={readOnly}
-                    isDragging={draggingPath === rec.file.path}
-                    onSelectNote={onSelectNote}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                  />
-                ))}
+                {/* Integrated Column Header inside the box */}
+                <div className="base-board-column-header board-column-header">
+                  <div className="base-board-column-title-cluster board-column-title-group board-column-title-wrap">
+                    {col.color && (
+                      <span
+                        className="base-board-column-badge"
+                        style={{ backgroundColor: col.color }}
+                      />
+                    )}
+                    <span className="base-board-column-prop-badge board-column-prop-badge board-prop-badge">
+                      {colPropDisplayName}:
+                    </span>
+                    <span className="base-board-column-title board-column-title board-column-name">
+                      {col.label}
+                    </span>
+                    <span className="base-board-column-count board-column-count board-card-counter">
+                      ({cellRecords.length})
+                    </span>
+                  </div>
 
+                  {!readOnly && (
+                    <div className="base-board-col-header-actions board-column-actions">
+                      <button
+                        type="button"
+                        className="base-board-add-card-btn base-board-col-add-btn board-add-card-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddCard(
+                            col.key === 'no_status' ? '' : col.key,
+                            lane.isUnassigned ? '' : lane.key
+                          );
+                        }}
+                        title={t('base.addCard', 'Karte hinzufügen')}
+                        aria-label={`${t('base.addCard', 'Karte hinzufügen')} (${col.label} - ${laneValue})`}
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cards list and drop area inside the same box */}
+                <div className="base-board-cards-list base-board-swimlane-cards-list board-column-cards-container">
+                  {visibleCards.map((rec) => (
+                    <BaseBoardCard
+                      key={rec.file.path}
+                      record={rec}
+                      columns={cardColumns}
+                      displayNames={displayNames}
+                      groupByProp={groupByProp}
+                      swimlaneProp={swimlaneProp}
+                      readOnly={readOnly}
+                      isDragging={draggingPath === rec.file.path}
+                      onSelectNote={onSelectNote}
+                      onDragStart={onDragStart}
+                      onDragEnd={onDragEnd}
+                    />
+                  ))}
+                  {cellRecords.length === 0 && (
+                    <div className="base-board-cell-empty-placeholder board-cell-empty-placeholder" />
+                  )}
+                </div>
+
+                {/* Pagination show more / fewer */}
                 {remainingCount > 0 && (
                   <button
                     type="button"

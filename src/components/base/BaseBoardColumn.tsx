@@ -26,6 +26,7 @@ export interface BaseBoardColumnProps {
   columns: string[];
   displayNames: Record<string, string>;
   groupByProp: string;
+  groupByDisplayName?: string;
   readOnly?: boolean;
   isOver?: boolean;
   isExpanded?: boolean;
@@ -48,6 +49,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   columns,
   displayNames,
   groupByProp,
+  groupByDisplayName,
   readOnly = false,
   isOver = false,
   isExpanded = false,
@@ -65,6 +67,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   headerOnly = false,
 }) => {
   const { t } = useTranslation();
+  const colPropDisplayName = groupByDisplayName || groupByProp.toUpperCase();
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftColName, setDraftColName] = useState(col.label);
@@ -133,14 +136,18 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
       onDrop={(e) => onDrop(e, col.key)}
     >
       {/* Column Header */}
-      <div className="base-board-column-header">
-        <div className="base-board-column-title-cluster">
+      <div className="base-board-column-header board-column-header">
+        <div className="base-board-column-title-cluster board-column-title-group board-column-title-wrap">
           {col.color && (
             <span
               className="base-board-column-badge"
               style={{ backgroundColor: col.color }}
             />
           )}
+
+          <span className="base-board-column-prop-badge board-column-prop-badge board-prop-badge">
+            {colPropDisplayName}:
+          </span>
 
           {isRenaming ? (
             <div className="base-board-col-edit-inline" onClick={(e) => e.stopPropagation()}>
@@ -191,10 +198,10 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
         </div>
 
         {!readOnly && (
-          <div className="base-board-col-header-actions">
+          <div className="base-board-col-header-actions board-column-actions">
             <button
               type="button"
-              className="base-board-add-card-btn"
+              className="base-board-add-card-btn board-add-card-btn"
               onClick={() => onAddCard?.(col.key === 'no_status' ? '' : col.key)}
               title={t('base.addCard', 'Karte hinzufügen')}
               aria-label={t('base.addCard', 'Karte hinzufügen')}

@@ -84,10 +84,6 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
 
-  // New column input state (board right edge)
-  const [isAddingColumn, setIsAddingColumn] = useState<boolean>(false);
-  const [newColumnInput, setNewColumnInput] = useState<string>('');
-
   // Global dragend listener to ensure no card stays greyed out
   useEffect(() => {
     const handleGlobalDragEnd = () => {
@@ -390,71 +386,32 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     }
   };
 
-  const handleCommitAddColumn = () => {
-    const trimmed = newColumnInput.trim();
-    if (!trimmed) {
-      setIsAddingColumn(false);
-      return;
+  const colPropKey = view.groupBy?.property || 'status';
+  const colPropDisplayName = useMemo(() => {
+    const effectiveConfig = config || queryResult?.definition;
+    if (effectiveConfig?.properties?.[colPropKey]?.displayName) {
+      return effectiveConfig.properties[colPropKey].displayName!;
     }
-    onAddColumn?.(trimmed);
-    setNewColumnInput('');
-    setIsAddingColumn(false);
-  };
-
-  const renderAddColumnWidget = () => {
-    if (readOnly) return null;
-    return (
-      <div className="base-board-add-column-wrapper">
-        {isAddingColumn ? (
-          <div className="base-board-add-column-form">
-            <input
-              type="text"
-              className="base-input add-column-input"
-              placeholder={t('base.newColumnPlaceholder', 'Spaltenname...')}
-              value={newColumnInput}
-              autoFocus
-              onChange={(e) => setNewColumnInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCommitAddColumn();
-                if (e.key === 'Escape') setIsAddingColumn(false);
-              }}
-            />
-            <div className="add-col-actions">
-              <button
-                type="button"
-                className="base-btn primary-btn btn-sm"
-                onClick={handleCommitAddColumn}
-                disabled={!newColumnInput.trim()}
-              >
-                <Check size={12} />
-                <span>{t('common.save', 'Speichern')}</span>
-              </button>
-              <button
-                type="button"
-                className="base-btn secondary-btn btn-sm"
-                onClick={() => {
-                  setIsAddingColumn(false);
-                  setNewColumnInput('');
-                }}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="base-board-add-column-btn"
-            onClick={() => setIsAddingColumn(true)}
-            title={t('base.addColumn', 'Neue Spalte hinzufügen')}
-          >
-            <Plus size={15} />
-            <span>{t('base.addColumn', 'Neue Spalte hinzufügen')}</span>
-          </button>
-        )}
-      </div>
-    );
-  };
+    const lower = colPropKey.toLowerCase();
+    if (effectiveConfig?.properties) {
+      for (const [k, v] of Object.entries(effectiveConfig.properties)) {
+        if (k.toLowerCase() === lower && v?.displayName) {
+          return v.displayName;
+        }
+      }
+    }
+    if (queryResult?.columnDisplayNames?.[colPropKey]) {
+      return queryResult.columnDisplayNames[colPropKey];
+    }
+    if (queryResult?.columnDisplayNames) {
+      for (const [k, v] of Object.entries(queryResult.columnDisplayNames)) {
+        if (k.toLowerCase() === lower && v) {
+          return v;
+        }
+      }
+    }
+    return colPropKey.toUpperCase();
+  }, [colPropKey, config, queryResult]);
 
   const swimlaneDisplayName = useMemo(() => {
     const propName = view.swimlanes?.property?.trim() || '';
@@ -503,13 +460,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
         }}
       >
         <div className="base-board-2d-grid">
-          {!readOnly && (
-            <div className="base-board-2d-top-actions">
-              {renderAddColumnWidget()}
-            </div>
-          )}
-
-          {/* Horizontal Swimlane Rows with repeated column headers */}
+          {/* Horizontal Swimlane Rows with unified column blocks */}
           <div className="base-board-2d-swimlanes-list">
             {board2DData.rows.map((lane) => (
               <BaseBoardSwimlaneRow
@@ -519,6 +470,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
                 cardColumns={columns}
                 displayNames={displayNames}
                 groupByProp={groupByProp}
+                groupByDisplayName={colPropDisplayName}
                 swimlaneProp={swimlaneProp}
                 swimlaneDisplayName={swimlaneDisplayName}
                 readOnly={readOnly}
@@ -577,6 +529,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
           columns={columns}
           displayNames={displayNames}
           groupByProp={groupByProp}
+          groupByDisplayName={colPropDisplayName}
           readOnly={readOnly}
           isOver={dragOverCol === col.key}
           isExpanded={!!expandedColumns[col.key]}
@@ -603,8 +556,6 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
           }}
         />
       ))}
-
-      {renderAddColumnWidget()}
     </div>
   );
 };

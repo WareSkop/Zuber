@@ -488,7 +488,7 @@ views:
     expect(card.style.opacity).toBe('1');
   });
 
-  it('supports inline column renaming, adding new column, and deleting column', async () => {
+  it('supports inline column renaming and deleting column, and verifies no standalone add column button', async () => {
     const viewConfig = {
       type: 'board' as const,
       name: 'Kanban',
@@ -563,27 +563,15 @@ views:
     });
     expect(handleRenameColumn).toHaveBeenCalledWith('Open', 'Offen');
 
-    // 3. Add new column via "+ Neue Spalte hinzufügen"
-    const addColBtn = container.querySelector('.base-board-add-column-btn') as HTMLButtonElement;
-    expect(addColBtn).toBeTruthy();
-    await act(async () => {
-      addColBtn.click();
-    });
+    // 3. Verify no standalone "+ Neue Spalte hinzufügen" button or trailing card exists in 1D board
+    expect(container.querySelector('.base-board-add-column-btn')).toBeNull();
+    expect(container.querySelector('.base-board-add-column-card')).toBeNull();
+    expect(container.querySelector('.board-add-column-card')).toBeNull();
 
-    const addColInput = container.querySelector('.add-column-input') as HTMLInputElement;
-    expect(addColInput).toBeTruthy();
-
-    await act(async () => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-      nativeSetter?.call(addColInput, 'Prüfung');
-      addColInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    const saveColBtn = container.querySelector('.add-col-actions .primary-btn') as HTMLButtonElement;
-    await act(async () => {
-      saveColBtn.click();
-    });
-    expect(handleAddColumn).toHaveBeenCalledWith('Prüfung');
+    // Verify column property badge in 1D column header
+    const propBadge = container.querySelector('.base-board-column-prop-badge');
+    expect(propBadge).toBeTruthy();
+    expect(propBadge?.textContent).toBe('STATUS:');
 
     // 4. Delete column via header menu
     const menuTrigger2 = container.querySelector('.base-board-col-menu-trigger') as HTMLButtonElement;
@@ -1038,9 +1026,11 @@ views:
       );
     });
 
-    // 1. Verify 2D container and verify detached single sticky header row is ELIMINATED
+    // 1. Verify 2D container, verify detached single sticky header row is ELIMINATED, and no top + Add Column button exists
     expect(container.querySelector('.base-board-2d-container')).toBeTruthy();
     expect(container.querySelector('.base-board-2d-header-row')).toBeNull();
+    expect(container.querySelector('.base-board-2d-top-actions')).toBeNull();
+    expect(container.querySelector('.base-board-add-column-btn')).toBeNull();
 
     // 2. Verify swimlane rows: Prio 1, Prio 2, and automatic catch-all "Keine Zuordnung"
     const bands = container.querySelectorAll('.base-board-swimlane-band');
@@ -1053,19 +1043,22 @@ views:
       /Keine Zuordnung|No Swimlane/i
     );
 
-    // 3. Verify repeated column header strip inside expanded swimlane row
-    const colHeaderStrip0 = bands[0].querySelector('.base-board-swimlane-columns-header');
-    expect(colHeaderStrip0).toBeTruthy();
-    const colHeaderItems = colHeaderStrip0!.querySelectorAll('.base-board-swimlane-col-header-item');
-    expect(colHeaderItems.length).toBe(3); // Open, inWork, Finish
+    // 3. Verify integrated column blocks inside expanded swimlane row matching 1D container styling
+    const cellColumns = bands[0].querySelectorAll('.base-board-swimlane-cells-row .base-board-column');
+    expect(cellColumns.length).toBe(3); // Open, inWork, Finish
 
-    // Verify each column header has title and individual + button
-    const titles = Array.from(colHeaderItems).map(
-      (item) => item.querySelector('.base-board-swimlane-col-header-title')?.textContent
+    // Verify each integrated column cell contains a header with property badge, title, count, and individual + button
+    const titles = Array.from(cellColumns).map(
+      (item) => item.querySelector('.base-board-column-title')?.textContent
     );
     expect(titles).toEqual(['Open', 'inWork', 'Finish']);
 
-    const addButtons = colHeaderStrip0!.querySelectorAll('.base-board-col-add-btn');
+    const propBadges = Array.from(cellColumns).map(
+      (item) => item.querySelector('.base-board-column-prop-badge')?.textContent
+    );
+    expect(propBadges).toEqual(['STATUS:', 'STATUS:', 'STATUS:']);
+
+    const addButtons = bands[0].querySelectorAll('.base-board-add-card-btn');
     expect(addButtons.length).toBe(3);
 
     // 4. Click "+" button on the second column header ("inWork") in the first swimlane ("Prio 1")
@@ -1074,7 +1067,7 @@ views:
     });
     expect(handleAddCard).toHaveBeenCalledWith('inWork', 'Prio 1');
 
-    // 5. Collapsing Prio 1 hides its column header strip and cells row
+    // 5. Collapsing Prio 1 hides its cells row
     expect(bands[0].querySelector('.base-board-swimlane-cells-row')).toBeTruthy();
     const collapseBtn = bands[0].querySelector('.base-board-swimlane-collapse-btn') as HTMLButtonElement;
     expect(collapseBtn).toBeTruthy();
@@ -1084,7 +1077,6 @@ views:
     });
 
     expect(handleToggleCollapse).toHaveBeenCalledWith('Prio 1', true, false);
-    expect(bands[0].querySelector('.base-board-swimlane-columns-header')).toBeNull();
     expect(bands[0].querySelector('.base-board-swimlane-cells-row')).toBeNull();
   });
 
