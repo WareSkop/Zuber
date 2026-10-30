@@ -7436,12 +7436,15 @@ input:checked + .slider:before {
   margin-bottom: 2px !important;
   border-radius: 0 !important;
   overflow: hidden !important;
-  min-height: 0px !important;
-  height: auto !important;
+  line-height: normal !important;
   background: transparent !important;
   border: none !important;
   position: relative;
   box-shadow: none !important;
+}
+
+.canvas-embed-container {
+  min-height: 380px;
 }
 
 .canvas-embed-header {
@@ -9344,10 +9347,23 @@ input:checked + .slider:before {
   flex-direction: column !important;
   height: auto !important;
   min-height: 0px !important;
-  line-height: 0 !important; /* Entfernt die Höhe der unsichtbaren Textzeilen */
+  line-height: 0 !important; /* Entfernt die Höhe der unsichtbaren Textzeilen auf der CodeMirror-Zeile */
   padding: 0 !important;
   margin-top: 0 !important;
   margin-bottom: 0 !important;
+}
+
+/* WICHTIG: Innerhalb des Embed-Widgets muss line-height wieder normal sein,
+   damit Tags, Text, Tabellen und Kacheln in Bases & Canvases nicht kollabieren oder überlappen! */
+.cm-line.cm-lp-embed-line > *,
+.cm-embed-widget,
+.cm-lp-base-embed,
+.cm-lp-canvas-embed,
+.embedded-base-container,
+.embedded-canvas-container,
+.base-embed-widget,
+.canvas-embed-widget {
+  line-height: 1.5 !important;
 }
 
 .cm-embed-widget.cm-canvas-embed-wrapper {
@@ -9355,6 +9371,7 @@ input:checked + .slider:before {
   min-height: 0px !important;
   margin-top: 2px !important;
   margin-bottom: 2px !important;
+  line-height: 1.5 !important;
 }
 
 /* Die störenden Puffer-Bilder (Widgets) komplett ausblenden */

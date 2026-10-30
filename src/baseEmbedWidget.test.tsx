@@ -390,4 +390,22 @@ views:
 
     expect(handleOpenNote).toHaveBeenCalledWith('Diagrams/Flow.canvas');
   });
+
+  it('does not override inline height/min-height of .canvas-embed-container with !important in styles.css and restores line-height inside embed widgets', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const css = fs.readFileSync(path.resolve(__dirname, 'styles.css'), 'utf-8');
+
+    // The shared rule for .canvas-embed-container must NOT have height: auto !important or min-height: 0px !important
+    const sharedBlockMatch = css.match(/\.canvas-embed-container,\s*\.canvas-embed-widget\s*\{([^}]+)\}/);
+    expect(sharedBlockMatch).toBeTruthy();
+    if (sharedBlockMatch) {
+      expect(sharedBlockMatch[1]).not.toContain('height: auto !important');
+      expect(sharedBlockMatch[1]).not.toContain('min-height: 0px !important');
+    }
+
+    // Inner embed widgets must restore line-height so tags and cards do not inherit line-height: 0 from .cm-lp-embed-line
+    expect(css).toContain('.cm-line.cm-lp-embed-line > *');
+    expect(css).toContain('line-height: 1.5 !important');
+  });
 });
