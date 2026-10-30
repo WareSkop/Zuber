@@ -1024,6 +1024,13 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
     - **Spalte entfernen:** Option „Remove column“ im Menü `⋮` entfernt den Spaltenwert aus `groupBy.columns`. Notizen mit diesem Wert wandern automatisch in die Spalte „Kein Status“ (No Status).
     - Bei der Spalte „Kein Status“ ist das Drei-Punkte-Menü ausgeblendet.
     - Standalone-Schaltflächen zum Hinzufügen von Spalten am Rand des Boards wurden zugunsten einer sauberen Toolbar-/Konfigurationsverwaltung (`⚙ Board`) entfernt.
+  - **Spaltenweises Sortieren mit dediziertem Sortier-Popover (`BaseBoardSortPopover.tsx`):**
+    - Unmittelbar links neben dem `+`-Button im Spaltenkopf (sowohl im 1D-Board als auch in allen Zellen des 2D-Swimlane-Boards) befindet sich der Sortier-Icon-Button (`.base-board-col-sort-btn.board-sort-btn`, Icon `ArrowUpDown`). Bei aktiver benutzerdefinierter Sortierung leuchtet der Button akzentuiert (`.is-active`).
+    - Ein Klick öffnet ein portal-gestütztes Popover (`BaseBoardSortPopover`) mit dynamischem Viewport-Clamping:
+      - **Eigenschaftsauswahl (`<select>`):** Bietet standardmäßig `file.name` (Name) und `file.ctime` (Erstelldatum) sowie alle in `view.order` der Base konfigurierten Frontmatter-Eigenschaften (z. B. `priority`, `deadline`).
+      - **Richtungsumschalter:** Segmentierte Buttons für Aufsteigend (`↑ A–Z / Älteste zuerst`) und Absteigend (`↓ Z–A / Neueste zuerst`).
+      - **Live-Vorschau & Persistenz:** Die Kartenreihenfolge wird sofort live im UI aktualisiert und im `.base`-YAML gespeichert (`view.boardSort` oder spaltenspezifisch in `groupBy.columns[].sort`).
+      - **Zurücksetzen:** Die Schaltfläche „Sortierung zurücksetzen“ setzt die Sortierung wieder auf die Standard-Reihenfolge (Änderungsdatum absteigend) zurück.
   - **„+ Add Card“-Button im Spaltenkopf:**
     - Klick auf `+` neben dem Zähler erstellt eine neue Notiz direkt im gefilterten Zielordner (z. B. `file.inFolder("Ordner")`) oder im Verzeichnis der `.base`-Datei bzw. Vault-Root.
     - Vergibt automatisch kollisionsfreie Dateinamen (`Neue Notiz.md`, `Neue Notiz 1.md` etc.), setzt das Frontmatter passend zum Spaltenwert (`status: Warte`, bei „Kein Status“ weggelassen) via `api.saveNote()` und öffnet die Notiz sofort im Haupteditor.

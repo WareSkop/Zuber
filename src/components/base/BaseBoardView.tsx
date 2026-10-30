@@ -10,17 +10,19 @@ import type {
   BaseBoard2DColumn,
   BaseBoardSwimlaneRow as BaseBoardSwimlaneRowData,
 } from '../../base/baseEngine';
-import { getPropertyValue, groupBoard2D } from '../../base/baseEngine';
+import { getPropertyValue, groupBoard2D, sortColumnNotes } from '../../base/baseEngine';
 import type {
   BaseConfig,
   BaseViewConfig,
   BaseBoardColumnConfig,
   BaseBoardSwimlaneItem,
+  BoardColumnSortRule,
 } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
 import { api } from '../../api';
 import { BaseBoardColumn, type BaseBoardColumnData } from './BaseBoardColumn';
 import { BaseBoardSwimlaneRow } from './BaseBoardSwimlaneRow';
+import { BaseBoardSortPopover } from './BaseBoardSortPopover';
 
 export interface BaseBoardViewProps {
   queryResult: BaseQueryResult;
@@ -102,9 +104,85 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   const explicitCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
   const columnConfigs: BaseBoardColumnConfig[] = useMemo(() => {
     return explicitCols.map((c) =>
-      typeof c === 'string' ? { name: c } : { name: c.name, limit: c.limit, color: c.color }
+      typeof c === 'string'
+        ? { name: c }
+        : { name: c.name, limit: c.limit, color: c.color, sort: c.sort }
     );
   }, [explicitCols]);
+
+  // Local column sort overrides
+  const [localColumnSorts, setLocalColumnSorts] = useState<
+    Record<string, BoardColumnSortRule | undefined>
+  >({});
+  const [activeSortCol, setActiveSortCol] = useState<{
+    colKey: string;
+    anchorEl: HTMLElement;
+  } | null>(null);
+
+  // Sync local sort overrides when view changes externally
+  useEffect(() => {
+    setLocalColumnSorts({});
+  }, [view]);
+
+  const getEffectiveColumnSort = (colKey: string): BoardColumnSortRule | undefined => {
+    if (Object.prototype.hasOwnProperty.call(localColumnSorts, colKey)) {
+      return localColumnSorts[colKey];
+    }
+    if (colKey === 'no_status') {
+      return view.boardSort;
+    }
+    const colCfg = columnConfigs.find((c) => c.name.toLowerCase() === colKey.toLowerCase());
+    return colCfg?.sort || view.boardSort;
+  };
+
+  const handleColumnSortChange = (colKey: string, sortRule?: BoardColumnSortRule) => {
+    setLocalColumnSorts((prev) => ({
+      ...prev,
+      [colKey]: sortRule,
+    }));
+
+    if (onUpdateConfig) {
+      if (colKey === 'no_status') {
+        onUpdateConfig({
+          ...view,
+          boardSort: sortRule,
+        });
+        return;
+      }
+
+      const curCols = view.groupBy?.columns || ['Open', 'inWork', 'Waiting', 'Finish'];
+      let found = false;
+      const updatedCols: (string | BaseBoardColumnConfig)[] = curCols.map((c) => {
+        const name = typeof c === 'string' ? c : c.name;
+        if (name.toLowerCase() === colKey.toLowerCase()) {
+          found = true;
+          if (!sortRule) {
+            if (typeof c === 'string') return c;
+            const { sort, ...rest } = c;
+            return Object.keys(rest).length === 1 && rest.name ? rest.name : rest;
+          }
+          if (typeof c === 'string') {
+            return { name: c, sort: sortRule };
+          }
+          return { ...c, sort: sortRule };
+        }
+        return c;
+      });
+
+      if (!found && sortRule) {
+        updatedCols.push({ name: colKey, sort: sortRule });
+      }
+
+      onUpdateConfig({
+        ...view,
+        groupBy: {
+          ...(view.groupBy || { property: 'status' }),
+          property: view.groupBy?.property || 'status',
+          columns: updatedCols,
+        },
+      });
+    }
+  };
 
   // All records (either passed explicitly or from queryResult)
   const allRecords: BaseRecord[] = useMemo(() => {
@@ -148,26 +226,29 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     const cols: BaseBoardColumnData[] = [];
 
     for (const col of columnConfigs) {
+      const recs = colMap.get(col.name) || [];
+      const sortRule = getEffectiveColumnSort(col.name);
       cols.push({
         key: col.name,
         label: col.name,
-        records: colMap.get(col.name) || [],
+        records: sortColumnNotes(recs, sortRule),
         limit: col.limit || view.columnLimit || 10,
         color: col.color,
       });
     }
 
     if (noStatusRecords.length > 0 || columnConfigs.length === 0) {
+      const noStatusSortRule = getEffectiveColumnSort('no_status');
       cols.push({
         key: 'no_status',
         label: t('base.noStatusColumn', 'Kein Status'),
-        records: noStatusRecords,
+        records: sortColumnNotes(noStatusRecords, noStatusSortRule),
         limit: view.columnLimit || 10,
       });
     }
 
     return cols;
-  }, [allRecords, optimisticOverrides, columnConfigs, groupByProp, view.columnLimit, t]);
+  }, [allRecords, optimisticOverrides, columnConfigs, groupByProp, view.columnLimit, localColumnSorts, view.boardSort, t]);
 
   // 2D Matrix grouping when swimlanes are enabled
   const board2DData = useMemo(() => {
@@ -178,19 +259,45 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
       getPropValue: getEffectivePropValue,
     });
 
-    // Apply local collapse overrides if any
+    // Apply local collapse overrides and sort cards per cell according to column sort rules
     const rows = raw2D.rows.map((r) => {
-      if (Object.prototype.hasOwnProperty.call(localCollapsedLanes, r.key)) {
-        return { ...r, collapsed: localCollapsedLanes[r.key] };
+      const collapsed = Object.prototype.hasOwnProperty.call(localCollapsedLanes, r.key)
+        ? localCollapsedLanes[r.key]
+        : r.collapsed;
+
+      const sortedCells: Record<string, BaseRecord[]> = {};
+      for (const [colKey, cellRecs] of Object.entries(r.cells)) {
+        sortedCells[colKey] = sortColumnNotes(cellRecs, getEffectiveColumnSort(colKey));
       }
-      return r;
+
+      return {
+        ...r,
+        collapsed,
+        cells: sortedCells,
+      };
     });
+
+    const sortedCols = raw2D.columns.map((col) => ({
+      ...col,
+      records: sortColumnNotes(col.records, getEffectiveColumnSort(col.key)),
+    }));
 
     return {
       ...raw2D,
+      columns: sortedCols,
       rows,
     };
-  }, [is2D, allRecords, view, optimisticOverrides, localCollapsedLanes, t]);
+  }, [is2D, allRecords, view, optimisticOverrides, localCollapsedLanes, localColumnSorts, columnConfigs, t]);
+
+  const columnSortRules = useMemo(() => {
+    const map: Record<string, BoardColumnSortRule | undefined> = {};
+    if (board2DData) {
+      for (const col of board2DData.columns) {
+        map[col.key] = getEffectiveColumnSort(col.key);
+      }
+    }
+    return map;
+  }, [board2DData, localColumnSorts, columnConfigs, view.boardSort]);
 
   const columns =
     Array.isArray(view?.order) && view.order.length > 0
@@ -446,64 +553,87 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   // ==========================================
   if (is2D && board2DData) {
     return (
-      <div
-        className="base-board-container base-board-2d-container scroller"
-        onDragEnd={() => {
-          setDraggingPath(null);
-          setDragOverCol(null);
-          setDragOverCell(null);
-        }}
-        onDrop={() => {
-          setDraggingPath(null);
-          setDragOverCol(null);
-          setDragOverCell(null);
-        }}
-      >
-        <div className="base-board-2d-grid">
-          {/* Horizontal Swimlane Rows with unified column blocks */}
-          <div className="base-board-2d-swimlanes-list">
-            {board2DData.rows.map((lane) => (
-              <BaseBoardSwimlaneRow
-                key={lane.key}
-                lane={lane}
-                columns={board2DData.columns}
-                cardColumns={columns}
-                displayNames={displayNames}
-                groupByProp={groupByProp}
-                groupByDisplayName={colPropDisplayName}
-                swimlaneProp={swimlaneProp}
-                swimlaneDisplayName={swimlaneDisplayName}
-                readOnly={readOnly}
-                dragOverCell={dragOverCell}
-                expandedCells={expandedCells}
-                onToggleCellExpand={toggleCellExpand}
-                onToggleCollapse={() => handleToggleSwimlane(lane)}
-                onAddCard={(colVal, laneVal) => onAddCard?.(colVal, laneVal)}
-                onRenameSwimlane={onRenameSwimlane}
-                onDeleteSwimlane={onDeleteSwimlane}
-                onDropOnCell={handleDropOnCell}
-                onDragOverCell={(e, cellKey) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = 'move';
-                  if (dragOverCell !== cellKey) setDragOverCell(cellKey);
-                }}
-                onDragLeaveCell={(e) => {
-                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                  setDragOverCell(null);
-                }}
-                onSelectNote={onSelectNote}
-                draggingPath={draggingPath}
-                onDragStart={(path) => setDraggingPath(path)}
-                onDragEnd={() => {
-                  setDraggingPath(null);
-                  setDragOverCol(null);
-                  setDragOverCell(null);
-                }}
-              />
-            ))}
+      <>
+        <div
+          className="base-board-container base-board-2d-container scroller"
+          onDragEnd={() => {
+            setDraggingPath(null);
+            setDragOverCol(null);
+            setDragOverCell(null);
+          }}
+          onDrop={() => {
+            setDraggingPath(null);
+            setDragOverCol(null);
+            setDragOverCell(null);
+          }}
+        >
+          <div className="base-board-2d-grid">
+            {/* Horizontal Swimlane Rows with unified column blocks */}
+            <div className="base-board-2d-swimlanes-list">
+              {board2DData.rows.map((lane) => (
+                <BaseBoardSwimlaneRow
+                  key={lane.key}
+                  lane={lane}
+                  columns={board2DData.columns}
+                  cardColumns={columns}
+                  displayNames={displayNames}
+                  groupByProp={groupByProp}
+                  groupByDisplayName={colPropDisplayName}
+                  swimlaneProp={swimlaneProp}
+                  swimlaneDisplayName={swimlaneDisplayName}
+                  readOnly={readOnly}
+                  dragOverCell={dragOverCell}
+                  expandedCells={expandedCells}
+                  onToggleCellExpand={toggleCellExpand}
+                  onToggleCollapse={() => handleToggleSwimlane(lane)}
+                  onAddCard={(colVal, laneVal) => onAddCard?.(colVal, laneVal)}
+                  onRenameSwimlane={onRenameSwimlane}
+                  onDeleteSwimlane={onDeleteSwimlane}
+                  onDropOnCell={handleDropOnCell}
+                  onDragOverCell={(e, cellKey) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverCell !== cellKey) setDragOverCell(cellKey);
+                  }}
+                  onDragLeaveCell={(e) => {
+                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                    setDragOverCell(null);
+                  }}
+                  onSelectNote={onSelectNote}
+                  draggingPath={draggingPath}
+                  onDragStart={(path) => setDraggingPath(path)}
+                  onDragEnd={() => {
+                    setDraggingPath(null);
+                    setDragOverCol(null);
+                    setDragOverCell(null);
+                  }}
+                  columnSortRules={columnSortRules}
+                  onOpenSort={(colKey, anchorEl) => setActiveSortCol({ colKey, anchorEl })}
+                />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+
+        {activeSortCol && (
+          <BaseBoardSortPopover
+            isOpen={Boolean(activeSortCol)}
+            onClose={() => setActiveSortCol(null)}
+            anchorEl={activeSortCol.anchorEl}
+            columnName={
+              activeSortCol.colKey === 'no_status'
+                ? t('base.noStatusColumn', 'Kein Status')
+                : activeSortCol.colKey
+            }
+            currentSort={getEffectiveColumnSort(activeSortCol.colKey)}
+            cardProperties={columns}
+            propertyDisplayNames={displayNames}
+            onApplySort={(rule) => {
+              handleColumnSortChange(activeSortCol.colKey, rule);
+            }}
+          />
+        )}
+      </>
     );
   }
 
@@ -511,51 +641,76 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   // 1D STANDARD BOARD RENDER
   // ==========================================
   return (
-    <div
-      className="base-board-container scroller"
-      onDragEnd={() => {
-        setDraggingPath(null);
-        setDragOverCol(null);
-      }}
-      onDrop={() => {
-        setDraggingPath(null);
-        setDragOverCol(null);
-      }}
-    >
-      {columnsData.map((col) => (
-        <BaseBoardColumn
-          key={col.key}
-          col={col}
-          columns={columns}
-          displayNames={displayNames}
-          groupByProp={groupByProp}
-          groupByDisplayName={colPropDisplayName}
-          readOnly={readOnly}
-          isOver={dragOverCol === col.key}
-          isExpanded={!!expandedColumns[col.key]}
-          onToggleExpand={() => toggleExpand(col.key)}
-          onDrop={handleDropOnColumn}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            if (dragOverCol !== col.key) setDragOverCol(col.key);
-          }}
-          onDragLeave={(e) => {
-            if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-            setDragOverCol(null);
-          }}
-          onAddCard={(colVal) => onAddCard?.(colVal)}
-          onRenameColumn={onRenameColumn}
-          onDeleteColumn={onDeleteColumn}
-          onSelectNote={onSelectNote}
-          draggingPath={draggingPath}
-          onDragStart={(path) => setDraggingPath(path)}
-          onDragEnd={() => {
-            setDraggingPath(null);
-            setDragOverCol(null);
+    <>
+      <div
+        className="base-board-container scroller"
+        onDragEnd={() => {
+          setDraggingPath(null);
+          setDragOverCol(null);
+        }}
+        onDrop={() => {
+          setDraggingPath(null);
+          setDragOverCol(null);
+        }}
+      >
+        {columnsData.map((col) => (
+          <BaseBoardColumn
+            key={col.key}
+            col={col}
+            columns={columns}
+            displayNames={displayNames}
+            groupByProp={groupByProp}
+            groupByDisplayName={colPropDisplayName}
+            readOnly={readOnly}
+            isOver={dragOverCol === col.key}
+            isExpanded={!!expandedColumns[col.key]}
+            onToggleExpand={() => toggleExpand(col.key)}
+            onDrop={handleDropOnColumn}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (dragOverCol !== col.key) setDragOverCol(col.key);
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setDragOverCol(null);
+            }}
+            onAddCard={(colVal) => onAddCard?.(colVal)}
+            onRenameColumn={onRenameColumn}
+            onDeleteColumn={onDeleteColumn}
+            onSelectNote={onSelectNote}
+            draggingPath={draggingPath}
+            onDragStart={(path) => setDraggingPath(path)}
+            onDragEnd={() => {
+              setDraggingPath(null);
+              setDragOverCol(null);
+            }}
+            sortRule={getEffectiveColumnSort(col.key)}
+            onOpenSort={(colKey, anchorEl) => setActiveSortCol({ colKey, anchorEl })}
+            onSortChange={(rule) => handleColumnSortChange(col.key, rule)}
+            cardProperties={columns}
+          />
+        ))}
+      </div>
+
+      {activeSortCol && (
+        <BaseBoardSortPopover
+          isOpen={Boolean(activeSortCol)}
+          onClose={() => setActiveSortCol(null)}
+          anchorEl={activeSortCol.anchorEl}
+          columnName={
+            activeSortCol.colKey === 'no_status'
+              ? t('base.noStatusColumn', 'Kein Status')
+              : activeSortCol.colKey
+          }
+          currentSort={getEffectiveColumnSort(activeSortCol.colKey)}
+          cardProperties={columns}
+          propertyDisplayNames={displayNames}
+          onApplySort={(rule) => {
+            handleColumnSortChange(activeSortCol.colKey, rule);
           }}
         />
-      ))}
-    </div>
+      )}
+    </>
   );
 };

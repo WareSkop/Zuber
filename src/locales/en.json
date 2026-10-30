@@ -575,7 +575,14 @@
     "unassignedSwimlane": "No Swimlane",
     "swimlaneHint": "Select a property (e.g. priority or project) to divide the board horizontally into swimlanes.",
     "cardProperties": "Card Properties",
-    "cardPropertiesHint": "Select and reorder the properties displayed on the cards:"
+    "cardPropertiesHint": "Select and reorder the properties displayed on the cards:",
+    "sortColumn": "Sort cards",
+    "sortBy": "Sort by",
+    "sortByName": "Name",
+    "sortByCreated": "Creation date",
+    "sortAsc": "Ascending (A-Z)",
+    "sortDesc": "Descending (Z-A)",
+    "clearSort": "Reset sort"
   },
   "research": {
     "title": "Research View",

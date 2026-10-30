@@ -8,11 +8,13 @@ import {
   Trash2,
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
 } from 'lucide-react';
 import type {
   BaseBoard2DColumn,
   BaseBoardSwimlaneRow as BaseBoardSwimlaneRowData,
 } from '../../base/baseEngine';
+import type { BoardColumnSortRule } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
 import { BaseBoardCard } from './BaseBoardCard';
 
@@ -40,6 +42,8 @@ export interface BaseBoardSwimlaneRowProps {
   draggingPath: string | null;
   onDragStart: (path: string) => void;
   onDragEnd: () => void;
+  columnSortRules?: Record<string, BoardColumnSortRule | undefined>;
+  onOpenSort?: (colKey: string, anchorEl: HTMLElement) => void;
 }
 
 export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
@@ -66,6 +70,8 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
   draggingPath,
   onDragStart,
   onDragEnd,
+  columnSortRules,
+  onOpenSort,
 }) => {
   const { t } = useTranslation();
   const laneValue = lane.name || lane.label;
@@ -300,7 +306,20 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                     <div className="base-board-col-header-actions board-column-actions">
                       <button
                         type="button"
-                        className="base-board-add-card-btn base-board-col-add-btn board-add-card-btn"
+                        className={`base-board-col-sort-btn board-sort-btn board-column-action-btn ${columnSortRules?.[col.key] ? 'is-active' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenSort?.(col.key, e.currentTarget);
+                        }}
+                        title={t('base.sortColumn', 'Karten sortieren')}
+                        aria-label={`${t('base.sortColumn', 'Karten sortieren')} (${col.label})`}
+                      >
+                        <ArrowUpDown size={13} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="base-board-add-card-btn base-board-col-add-btn board-add-card-btn board-column-action-btn"
                         onClick={(e) => {
                           e.stopPropagation();
                           onAddCard(

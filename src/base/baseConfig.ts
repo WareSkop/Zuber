@@ -24,6 +24,11 @@ export interface BaseSortRule {
   direction: 'asc' | 'desc';
 }
 
+export interface BoardColumnSortRule {
+  property: string; // 'file.name' | 'file.ctime' | custom frontmatter property
+  direction: 'asc' | 'desc';
+}
+
 export interface BasePropertyConfig {
   displayName?: string;
   hidden?: boolean;
@@ -36,6 +41,7 @@ export interface BaseBoardColumnConfig {
   name: string;
   limit?: number; // Optional per-column limit (defaults to view default or 10)
   color?: string; // Optional accent color badge for the column header
+  sort?: BoardColumnSortRule; // Column-level sort override
 }
 
 export interface BaseGroupBy {
@@ -67,6 +73,7 @@ export interface BaseViewConfig {
   };
   order?: string[];
   sort?: BaseSortRule[];
+  boardSort?: BoardColumnSortRule;
   groupBy?: BaseGroupBy;
   swimlanes?: BaseBoardSwimlaneConfig;
   columnSize?: Record<string, number>;
@@ -108,6 +115,12 @@ export function parseBaseYaml(rawYaml: string): BaseConfig {
                 direction: (s.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
               }))
             : undefined,
+          boardSort: v.boardSort && typeof v.boardSort === 'object' && v.boardSort.property
+            ? {
+                property: String(v.boardSort.property),
+                direction: (v.boardSort.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
+              }
+            : undefined,
           groupBy: v.groupBy && typeof v.groupBy === 'object' && v.groupBy.property
             ? {
                 property: v.groupBy.property,
@@ -120,6 +133,12 @@ export function parseBaseYaml(rawYaml: string): BaseConfig {
                             name: String(c.name || ''),
                             limit: typeof c.limit === 'number' ? c.limit : undefined,
                             color: c.color ? String(c.color) : undefined,
+                            sort: c.sort && typeof c.sort === 'object' && c.sort.property
+                              ? {
+                                  property: String(c.sort.property),
+                                  direction: (c.sort.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
+                                }
+                              : undefined,
                           }
                     )
                   : undefined,
@@ -497,13 +516,32 @@ export function stringifyBaseYaml(config: BaseConfig): string {
       }));
     }
 
+    if (v.boardSort && typeof v.boardSort === 'object' && v.boardSort.property) {
+      vObj.boardSort = {
+        property: v.boardSort.property,
+        direction: (v.boardSort.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
+      };
+    }
+
     if (v.groupBy && v.groupBy.property) {
       const gb: Record<string, any> = {
         property: v.groupBy.property,
         direction: (v.groupBy.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
       };
       if (Array.isArray(v.groupBy.columns) && v.groupBy.columns.length > 0) {
-        gb.columns = v.groupBy.columns;
+        gb.columns = v.groupBy.columns.map((c) => {
+          if (typeof c === 'string') return c;
+          const colClean: Record<string, any> = { name: c.name };
+          if (typeof c.limit === 'number') colClean.limit = c.limit;
+          if (c.color) colClean.color = c.color;
+          if (c.sort && typeof c.sort === 'object' && c.sort.property) {
+            colClean.sort = {
+              property: c.sort.property,
+              direction: (c.sort.direction || '').toLowerCase() === 'desc' ? 'desc' : 'asc',
+            };
+          }
+          return colClean;
+        });
       }
       vObj.groupBy = gb;
     }
@@ -548,7 +586,7 @@ export function stringifyBaseYaml(config: BaseConfig): string {
     // Preserve any custom view fields
     for (const [k, val] of Object.entries(v)) {
       if (
-        !['type', 'name', 'limit', 'columnLimit', 'order', 'columnSize', 'sort', 'groupBy', 'swimlanes', 'filters'].includes(k) &&
+        !['type', 'name', 'limit', 'columnLimit', 'order', 'columnSize', 'sort', 'boardSort', 'groupBy', 'swimlanes', 'filters'].includes(k) &&
         val !== undefined
       ) {
         vObj[k] = val;
@@ -691,3 +729,6 @@ export function extractPropertyValues(allNotes: any[], propKey: string): string[
 
   return values;
 }
+
+export { sortColumnNotes } from './baseEngine';
+

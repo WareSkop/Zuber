@@ -575,7 +575,14 @@
     "unassignedSwimlane": "Keine Zuordnung",
     "swimlaneHint": "Wähle eine Eigenschaft (z. B. Priorität oder Projekt), um das Board horizontal in Swimlanes zu unterteilen.",
     "cardProperties": "Karten-Inhalte",
-    "cardPropertiesHint": "Wähle und sortiere die Eigenschaften, die auf den Karten angezeigt werden sollen:"
+    "cardPropertiesHint": "Wähle und sortiere die Eigenschaften, die auf den Karten angezeigt werden sollen:",
+    "sortColumn": "Karten sortieren",
+    "sortBy": "Sortieren nach",
+    "sortByName": "Name",
+    "sortByCreated": "Erstellzeit",
+    "sortAsc": "Aufsteigend (A-Z)",
+    "sortDesc": "Absteigend (Z-A)",
+    "clearSort": "Sortierung zurücksetzen"
   },
   "research": {
     "title": "Rechercheansicht",

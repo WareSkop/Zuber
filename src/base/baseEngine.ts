@@ -9,6 +9,7 @@ import type {
   NoteData,
   NoteSummary,
 } from '../../shared/types';
+import type { BoardColumnSortRule } from './baseConfig';
 
 export interface BaseRecordFile {
   name: string;
@@ -16,6 +17,7 @@ export interface BaseRecordFile {
   folder: string;
   ext: string;
   mtime: number;
+  ctime?: number;
   inFolder: (folder: string) => boolean;
   hasTag: (tag: string) => boolean;
   hasLink: (link: string) => boolean;
@@ -206,12 +208,23 @@ export function createRecordFromNote(note: NoteData | NoteSummary | any): BaseRe
   const allTags: string[] = Array.from(tagsSet);
   const allLinks: string[] = Array.isArray(note.links) ? note.links.map(String) : [];
 
+  const ctime = typeof (note as any).ctime === 'number'
+    ? (note as any).ctime
+    : typeof (note as any).birthtime === 'number'
+      ? (note as any).birthtime
+      : typeof (note as any).created === 'number'
+        ? (note as any).created
+        : typeof properties.created === 'number'
+          ? properties.created
+          : mtime;
+
   const fileObj: BaseRecordFile = {
     name,
     path: filePath,
     folder,
     ext,
     mtime,
+    ctime,
     inFolder: (targetFolder: string) => {
       const cleanTarget = (targetFolder || '').trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '').toLowerCase();
       if (!cleanTarget) return true; // root or any
@@ -1027,6 +1040,9 @@ export function getPropertyValue(record: BaseRecord, propertyKey: string): any {
   if (propertyKey === 'file.path') return record.file.path;
   if (propertyKey === 'file.ext') return record.file.ext;
   if (propertyKey === 'file.mtime') return record.file.mtime;
+  if (propertyKey === 'file.ctime' || propertyKey === 'created') {
+    return record.file.ctime ?? (record.properties?.created || record.properties?.ctime || record.file.mtime);
+  }
 
   if (propertyKey.startsWith('formula.')) {
     const fKey = propertyKey.replace('formula.', '');
@@ -1258,3 +1274,88 @@ export function groupBoard2D(
     rows: swimlanes,
   };
 }
+
+/**
+ * Sorts column notes or records dynamically according to a BoardColumnSortRule.
+ */
+export function sortColumnNotes<T = any>(
+  notes: T[],
+  sortRule?: BoardColumnSortRule
+): T[] {
+  if (!sortRule || !sortRule.property) return notes;
+  const { property, direction } = sortRule;
+  const factor = direction === 'desc' ? -1 : 1;
+
+  return [...notes].sort((rawA, rawB) => {
+    const a = rawA as any;
+    const b = rawB as any;
+    let valA: any;
+    let valB: any;
+
+    if (property === 'file.name' || property === 'name') {
+      valA = a.name || a.file?.name || a.path || a.file?.path || '';
+      valB = b.name || b.file?.name || b.path || b.file?.path || '';
+      return String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }) * factor;
+    }
+
+    if (property === 'file.ctime' || property === 'created' || property === 'ctime') {
+      valA =
+        a.ctime ??
+        a.file?.ctime ??
+        a.properties?.created ??
+        a.frontmatter?.created ??
+        a.properties?.ctime ??
+        a.frontmatter?.ctime ??
+        a.mtime ??
+        a.file?.mtime ??
+        0;
+      valB =
+        b.ctime ??
+        b.file?.ctime ??
+        b.properties?.created ??
+        b.frontmatter?.created ??
+        b.properties?.ctime ??
+        b.frontmatter?.ctime ??
+        b.mtime ??
+        b.file?.mtime ??
+        0;
+
+      if (typeof valA === 'string' && isNaN(Number(valA))) {
+        const parsed = Date.parse(valA);
+        if (!isNaN(parsed)) valA = parsed;
+      }
+      if (typeof valB === 'string' && isNaN(Number(valB))) {
+        const parsed = Date.parse(valB);
+        if (!isNaN(parsed)) valB = parsed;
+      }
+
+      return (Number(valA) - Number(valB)) * factor;
+    }
+
+    // Custom frontmatter properties or BaseRecord properties
+    valA = a.frontmatter?.[property] ?? a.properties?.[property] ?? a[property] ?? '';
+    valB = b.frontmatter?.[property] ?? b.properties?.[property] ?? b[property] ?? '';
+
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return (valA - valB) * factor;
+    }
+
+    if (
+      typeof valA === 'string' &&
+      typeof valB === 'string' &&
+      valA.trim() !== '' &&
+      valB.trim() !== '' &&
+      !isNaN(Number(valA)) &&
+      !isNaN(Number(valB))
+    ) {
+      return (Number(valA) - Number(valB)) * factor;
+    }
+
+    if (valA === valB) return 0;
+    if (valA === undefined || valA === null || valA === '') return 1 * factor;
+    if (valB === undefined || valB === null || valB === '') return -1 * factor;
+
+    return String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }) * factor;
+  });
+}
+

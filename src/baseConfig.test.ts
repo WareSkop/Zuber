@@ -351,4 +351,123 @@ views:
     const serializedWithoutSwimlanes = stringifyBaseYaml(parsedPlain);
     expect(serializedWithoutSwimlanes).not.toContain('swimlanes:');
   });
+
+  it('parses and serializes view-level boardSort and per-column sort configurations in YAML', () => {
+    const yaml = `
+views:
+  - type: board
+    name: Kanban
+    boardSort:
+      property: file.name
+      direction: asc
+    groupBy:
+      property: status
+      columns:
+        - name: Open
+          sort:
+            property: priority
+            direction: desc
+        - name: In Progress
+          limit: 15
+          color: "#3b82f6"
+          sort:
+            property: file.ctime
+            direction: asc
+        - Done
+`;
+
+    const config = parseBaseYaml(yaml);
+    const view = config.views[0];
+    expect(view.boardSort).toEqual({ property: 'file.name', direction: 'asc' });
+    expect(view.groupBy?.columns).toHaveLength(3);
+
+    const openCol = view.groupBy?.columns?.[0] as any;
+    expect(openCol.name).toBe('Open');
+    expect(openCol.sort).toEqual({ property: 'priority', direction: 'desc' });
+
+    const inProgressCol = view.groupBy?.columns?.[1] as any;
+    expect(inProgressCol.name).toBe('In Progress');
+    expect(inProgressCol.limit).toBe(15);
+    expect(inProgressCol.color).toBe('#3b82f6');
+    expect(inProgressCol.sort).toEqual({ property: 'file.ctime', direction: 'asc' });
+
+    const doneCol = view.groupBy?.columns?.[2];
+    expect(doneCol).toBe('Done');
+
+    // Round-trip serialization
+    const serialized = stringifyBaseYaml(config);
+    expect(serialized).toContain('boardSort:');
+    expect(serialized).toContain('property: file.name');
+    expect(serialized).toContain('name: Open');
+    expect(serialized).toContain('property: priority');
+    expect(serialized).toContain('direction: desc');
+
+    const reparsed = parseBaseYaml(serialized);
+    expect(reparsed.views[0].boardSort).toEqual({ property: 'file.name', direction: 'asc' });
+    expect((reparsed.views[0].groupBy?.columns?.[0] as any).sort).toEqual({
+      property: 'priority',
+      direction: 'desc',
+    });
+  });
+
+  it('correctly sorts column notes by name, ctime, and custom frontmatter properties via sortColumnNotes', async () => {
+    const { sortColumnNotes } = await import('./base/baseConfig');
+
+    const sampleNotes = [
+      {
+        path: 'Tasks/Task B.md',
+        name: 'Task B',
+        folder: 'Tasks',
+        frontmatter: { priority: 2, assignee: 'Bob' },
+        properties: { priority: 2, assignee: 'Bob' },
+        file: { name: 'Task B', path: 'Tasks/Task B.md', folder: 'Tasks', ext: 'md', mtime: 200, ctime: 100 },
+        ctime: 100,
+        mtime: 200,
+      },
+      {
+        path: 'Tasks/Task A.md',
+        name: 'Task A',
+        folder: 'Tasks',
+        frontmatter: { priority: 5, assignee: 'Alice' },
+        properties: { priority: 5, assignee: 'Alice' },
+        file: { name: 'Task A', path: 'Tasks/Task A.md', folder: 'Tasks', ext: 'md', mtime: 300, ctime: 300 },
+        ctime: 300,
+        mtime: 300,
+      },
+      {
+        path: 'Tasks/Task C.md',
+        name: 'Task C',
+        folder: 'Tasks',
+        frontmatter: { priority: 1, assignee: 'Charlie' },
+        properties: { priority: 1, assignee: 'Charlie' },
+        file: { name: 'Task C', path: 'Tasks/Task C.md', folder: 'Tasks', ext: 'md', mtime: 100, ctime: 200 },
+        ctime: 200,
+        mtime: 100,
+      },
+    ];
+
+    // 1. Sort by name ascending
+    const sortedByNameAsc = sortColumnNotes(sampleNotes, { property: 'file.name', direction: 'asc' });
+    expect(sortedByNameAsc.map((n) => n.name)).toEqual(['Task A', 'Task B', 'Task C']);
+
+    // 2. Sort by name descending
+    const sortedByNameDesc = sortColumnNotes(sampleNotes, { property: 'file.name', direction: 'desc' });
+    expect(sortedByNameDesc.map((n) => n.name)).toEqual(['Task C', 'Task B', 'Task A']);
+
+    // 3. Sort by creation time (ctime) ascending (oldest first: 100, 200, 300)
+    const sortedByCtimeAsc = sortColumnNotes(sampleNotes, { property: 'file.ctime', direction: 'asc' });
+    expect(sortedByCtimeAsc.map((n) => n.name)).toEqual(['Task B', 'Task C', 'Task A']);
+
+    // 4. Sort by creation time (ctime) descending (newest first: 300, 200, 100)
+    const sortedByCtimeDesc = sortColumnNotes(sampleNotes, { property: 'file.ctime', direction: 'desc' });
+    expect(sortedByCtimeDesc.map((n) => n.name)).toEqual(['Task A', 'Task C', 'Task B']);
+
+    // 5. Sort by custom numeric property (priority) descending (5, 2, 1)
+    const sortedByPrioDesc = sortColumnNotes(sampleNotes, { property: 'priority', direction: 'desc' });
+    expect(sortedByPrioDesc.map((n) => n.name)).toEqual(['Task A', 'Task B', 'Task C']);
+
+    // 6. Sort by custom string property (assignee) ascending ('Alice', 'Bob', 'Charlie')
+    const sortedByAssigneeAsc = sortColumnNotes(sampleNotes, { property: 'assignee', direction: 'asc' });
+    expect(sortedByAssigneeAsc.map((n) => n.name)).toEqual(['Task A', 'Task B', 'Task C']);
+  });
 });

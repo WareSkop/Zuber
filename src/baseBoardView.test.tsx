@@ -170,7 +170,8 @@ views:
     folder: string,
     tags: string[],
     properties: Record<string, any>,
-    mtime: number = Date.now()
+    mtime: number = Date.now(),
+    ctime: number = mtime
   ): BaseRecord => ({
     file: {
       path,
@@ -178,6 +179,7 @@ views:
       folder,
       ext: 'md',
       mtime,
+      ctime,
       inFolder: (f: string) => folder.startsWith(f),
       hasTag: (t: string) => tags.includes(t),
       hasLink: () => false,
@@ -1459,5 +1461,212 @@ views:
     expect(card.textContent).toContain('Hoch');
     expect(card.textContent).toContain('Frist:');
     expect(card.textContent).toContain('2026-11-01');
+  });
+
+  it('renders sort icon button directly to the left of the + button in both 1D and 2D Kanban views', async () => {
+    const records = [
+      createMockRecord('Tasks/A.md', 'Task A', 'Tasks', [], { status: 'Open', prio: 'Prio 1' }, 1000),
+      createMockRecord('Tasks/B.md', 'Task B', 'Tasks', [], { status: 'inWork', prio: 'Prio 1' }, 2000),
+    ];
+
+    // 1. 1D Board View
+    const view1D = {
+      type: 'board' as const,
+      name: '1D Board',
+      groupBy: {
+        property: 'status',
+        columns: ['Open', 'inWork'],
+      },
+      columnLimit: 10,
+    };
+    const mockQueryResult1D: BaseQueryResult = {
+      definition: { views: [view1D] },
+      view: view1D,
+      columns: ['file.name'],
+      columnDisplayNames: {},
+      records,
+      groups: [],
+      totalCount: 2,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult1D}
+          view={view1D}
+          onSelectNote={vi.fn()}
+        />
+      );
+    });
+
+    const col1D = container.querySelector('.base-board-column') as HTMLElement;
+    expect(col1D).toBeTruthy();
+
+    const sortBtn1D = col1D.querySelector('.base-board-col-sort-btn') as HTMLButtonElement;
+    const addBtn1D = col1D.querySelector('.base-board-add-card-btn') as HTMLButtonElement;
+    expect(sortBtn1D).toBeTruthy();
+    expect(addBtn1D).toBeTruthy();
+    // Verify sort button is immediately to the left of the add card button
+    expect(sortBtn1D.nextElementSibling).toBe(addBtn1D);
+
+    // 2. 2D Board View
+    const view2D = {
+      type: 'board' as const,
+      name: '2D Board',
+      groupBy: {
+        property: 'status',
+        columns: ['Open', 'inWork'],
+      },
+      swimlanes: {
+        property: 'prio',
+        lanes: ['Prio 1'],
+      },
+      columnLimit: 10,
+    };
+    const mockQueryResult2D: BaseQueryResult = {
+      definition: { views: [view2D] },
+      view: view2D,
+      columns: ['file.name'],
+      columnDisplayNames: {},
+      records,
+      groups: [],
+      totalCount: 2,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult2D}
+          view={view2D}
+          onSelectNote={vi.fn()}
+        />
+      );
+    });
+
+    const cell2D = container.querySelector('.base-board-swimlane-cell') as HTMLElement;
+    expect(cell2D).toBeTruthy();
+    const sortBtn2D = cell2D.querySelector('.base-board-col-sort-btn') as HTMLButtonElement;
+    const addBtn2D = cell2D.querySelector('.base-board-add-card-btn') as HTMLButtonElement;
+    expect(sortBtn2D).toBeTruthy();
+    expect(addBtn2D).toBeTruthy();
+    expect(sortBtn2D.nextElementSibling).toBe(addBtn2D);
+  });
+
+  it('opens sort popover, sorts column cards dynamically by name, ctime and custom property, and persists configuration', async () => {
+    const handleUpdateConfig = vi.fn();
+    const records = [
+      createMockRecord('Tasks/Beta.md', 'Beta', 'Tasks', [], { status: 'Open', priority: 1 }, 1000, 200),
+      createMockRecord('Tasks/Alpha.md', 'Alpha', 'Tasks', [], { status: 'Open', priority: 5 }, 2000, 100),
+      createMockRecord('Tasks/Gamma.md', 'Gamma', 'Tasks', [], { status: 'Open', priority: 3 }, 3000, 300),
+    ];
+
+    const viewConfig = {
+      type: 'board' as const,
+      name: 'Kanban',
+      groupBy: {
+        property: 'status',
+        columns: ['Open'],
+      },
+      columnLimit: 10,
+      order: ['file.name', 'priority'],
+    };
+
+    const mockQueryResult: BaseQueryResult = {
+      definition: { views: [viewConfig] },
+      view: viewConfig,
+      columns: ['file.name', 'priority'],
+      columnDisplayNames: { priority: 'Priorität' },
+      records,
+      groups: [],
+      totalCount: 3,
+    };
+
+    await act(async () => {
+      root.render(
+        <BaseBoardView
+          queryResult={mockQueryResult}
+          view={viewConfig}
+          onSelectNote={vi.fn()}
+          onUpdateConfig={handleUpdateConfig}
+        />
+      );
+    });
+
+    // Initial order without sort rule (Beta, Alpha, Gamma)
+    let cardTitles = Array.from(container.querySelectorAll('.base-card-title')).map((el) => el.textContent);
+    expect(cardTitles).toEqual(['Beta', 'Alpha', 'Gamma']);
+
+    // 1. Click Sort button
+    const sortBtn = container.querySelector('.base-board-col-sort-btn') as HTMLButtonElement;
+    expect(sortBtn).toBeTruthy();
+
+    await act(async () => {
+      sortBtn.click();
+    });
+
+    // Popover is rendered in document.body
+    const popover = document.body.querySelector('.base-board-sort-popover') as HTMLDivElement;
+    expect(popover).toBeTruthy();
+
+    // Verify properties dropdown contains Name, Erstelldatum, and card property priority
+    const select = popover.querySelector('.base-board-sort-select') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    const optionValues = Array.from(select.options).map((o) => o.value);
+    expect(optionValues).toContain('file.name');
+    expect(optionValues).toContain('file.ctime');
+    expect(optionValues).toContain('priority');
+
+    // 2. Select file.name ascending
+    await act(async () => {
+      select.value = 'file.name';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Verify cards are sorted Alpha, Beta, Gamma
+    cardTitles = Array.from(container.querySelectorAll('.base-card-title')).map((el) => el.textContent);
+    expect(cardTitles).toEqual(['Alpha', 'Beta', 'Gamma']);
+
+    // Verify onUpdateConfig called with sort rule in groupBy.columns
+    expect(handleUpdateConfig).toHaveBeenCalled();
+    const lastConfigCall = handleUpdateConfig.mock.calls[handleUpdateConfig.mock.calls.length - 1][0];
+    expect(lastConfigCall.groupBy.columns[0]).toEqual({
+      name: 'Open',
+      sort: { property: 'file.name', direction: 'asc' },
+    });
+
+    // 3. Switch direction to descending
+    const descBtn = popover.querySelector('.board-sort-dir-desc') as HTMLButtonElement;
+    expect(descBtn).toBeTruthy();
+    await act(async () => {
+      descBtn.click();
+    });
+
+    // Verify cards are sorted Gamma, Beta, Alpha
+    cardTitles = Array.from(container.querySelectorAll('.base-card-title')).map((el) => el.textContent);
+    expect(cardTitles).toEqual(['Gamma', 'Beta', 'Alpha']);
+
+    // 4. Sort by custom property 'priority' (5: Alpha, 3: Gamma, 1: Beta)
+    await act(async () => {
+      select.value = 'priority';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    // Priority descending: Alpha (5), Gamma (3), Beta (1)
+    cardTitles = Array.from(container.querySelectorAll('.base-card-title')).map((el) => el.textContent);
+    expect(cardTitles).toEqual(['Alpha', 'Gamma', 'Beta']);
+
+    // 5. Reset to default sorting
+    const resetBtn = popover.querySelector('.base-board-sort-reset-btn') as HTMLButtonElement;
+    expect(resetBtn).toBeTruthy();
+    await act(async () => {
+      resetBtn.click();
+    });
+
+    // Popover closed
+    expect(document.body.querySelector('.base-board-sort-popover')).toBeNull();
+
+    // Default sorting restored (initial order: Beta, Alpha, Gamma)
+    cardTitles = Array.from(container.querySelectorAll('.base-card-title')).map((el) => el.textContent);
+    expect(cardTitles).toEqual(['Beta', 'Alpha', 'Gamma']);
   });
 });

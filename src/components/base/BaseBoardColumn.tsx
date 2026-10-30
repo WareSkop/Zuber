@@ -6,11 +6,14 @@ import {
   Trash2,
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   Check,
   X,
 } from 'lucide-react';
 import type { BaseRecord } from '../../base/baseEngine';
+import type { BoardColumnSortRule } from '../../base/baseConfig';
 import { BaseBoardCard } from './BaseBoardCard';
+import { BaseBoardSortPopover } from './BaseBoardSortPopover';
 import { useTranslation } from '../../i18n';
 
 export interface BaseBoardColumnData {
@@ -42,6 +45,10 @@ export interface BaseBoardColumnProps {
   onDragStart: (path: string) => void;
   onDragEnd: () => void;
   headerOnly?: boolean;
+  sortRule?: BoardColumnSortRule;
+  onSortChange?: (sortRule?: BoardColumnSortRule) => void;
+  onOpenSort?: (colKey: string, anchorEl: HTMLElement) => void;
+  cardProperties?: string[];
 }
 
 export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
@@ -65,6 +72,10 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   onDragStart,
   onDragEnd,
   headerOnly = false,
+  sortRule,
+  onSortChange,
+  onOpenSort,
+  cardProperties,
 }) => {
   const { t } = useTranslation();
   const colPropDisplayName = groupByDisplayName || groupByProp.toUpperCase();
@@ -72,9 +83,11 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftColName, setDraftColName] = useState(col.label);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSortOpen, setIsSortOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const sortBtnRef = useRef<HTMLButtonElement>(null);
   const isEscapingRef = useRef(false);
 
   // Sync draftColName when label changes externally
@@ -200,8 +213,26 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
         {!readOnly && (
           <div className="base-board-col-header-actions board-column-actions">
             <button
+              ref={sortBtnRef}
               type="button"
-              className="base-board-add-card-btn board-add-card-btn"
+              className={`base-board-col-sort-btn board-sort-btn board-column-action-btn ${sortRule ? 'is-active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenSort && sortBtnRef.current) {
+                  onOpenSort(col.key, sortBtnRef.current);
+                } else {
+                  setIsSortOpen((prev) => !prev);
+                }
+              }}
+              title={t('base.sortColumn', 'Karten sortieren')}
+              aria-label={t('base.sortColumn', 'Karten sortieren')}
+            >
+              <ArrowUpDown size={13} />
+            </button>
+
+            <button
+              type="button"
+              className="base-board-add-card-btn board-add-card-btn board-column-action-btn"
               onClick={() => onAddCard?.(col.key === 'no_status' ? '' : col.key)}
               title={t('base.addCard', 'Karte hinzufügen')}
               aria-label={t('base.addCard', 'Karte hinzufügen')}
@@ -306,6 +337,22 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
             </button>
           )}
         </div>
+      )}
+
+      {/* Standalone Fallback Sort Popover */}
+      {isSortOpen && !onOpenSort && (
+        <BaseBoardSortPopover
+          isOpen={isSortOpen}
+          onClose={() => setIsSortOpen(false)}
+          anchorEl={sortBtnRef.current}
+          currentSort={sortRule}
+          onApplySort={(rule) => {
+            onSortChange?.(rule);
+          }}
+          columnName={col.label}
+          cardProperties={cardProperties || columns}
+          propertyDisplayNames={displayNames}
+        />
       )}
     </div>
   );

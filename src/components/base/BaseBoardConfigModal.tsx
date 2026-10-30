@@ -433,7 +433,19 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanCols = columns.map((c) => c.name.trim()).filter(Boolean);
+    const cleanCols = columns
+      .map((c) => {
+        const trimmed = c.name.trim();
+        if (!trimmed) return null;
+        const existing = (view.groupBy?.columns || []).find((ec) =>
+          (typeof ec === 'string' ? ec : ec.name).toLowerCase() === trimmed.toLowerCase()
+        );
+        if (typeof existing === 'object' && existing !== null) {
+          return { ...existing, name: trimmed };
+        }
+        return trimmed;
+      })
+      .filter((c): c is string | any => c !== null);
     const finalCols = cleanCols.length > 0 ? cleanCols : ['Open', 'inWork', 'Waiting', 'Finish'];
     const finalLimit = Math.max(1, Number(columnLimit) || 10);
 
