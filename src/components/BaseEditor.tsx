@@ -842,6 +842,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
           <BaseBoardView
             queryResult={queryResult}
             view={activeView}
+            config={config}
             onSelectNote={onSelectNote}
             onCellChange={onCellChange}
             onAddCard={handleBoardAddCard}

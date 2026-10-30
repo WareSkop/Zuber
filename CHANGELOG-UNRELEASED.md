@@ -1,3 +1,15 @@
+### Changed
+- Ergonomisches 2D-Kanban-Board Layout mit wiederholten Spaltenköpfen je Swimlane-Reihe (`BaseBoardView.tsx`, `BaseBoardSwimlaneRow.tsx`, `src/styles.css`):
+  - **Wiederholte Spaltenköpfe pro Swimlane-Reihe:** Die losgelöste, weit entfernte globale Sticky-Spaltenkopfzeile wurde eliminiert. Jede ausgeklappte Swimlane-Reihe rendert nun direkt über ihren Kartenzellen ein eigenes, bündig ausgerichtetes Spaltenkopf-Band (`.base-board-swimlane-columns-header`) mit Farb-Badges, Spaltentitel, Zellenzähler und individuellem `+`-Button.
+  - **Explizite Property-Name + Wert Swimlane-Kopfzeile:** Der Zeilenkopf (`.base-board-swimlane-header`) zeigt nun sowohl den konfigurierten Property-Namen (bzw. den Display-Namen aus den Base-Properties) als auch den Wert in einem klar abgesetzten Badge an (`${displayName}: ${laneValue}`, z. B. `Prio: (1) High`), bei Notizen ohne Zuordnung `Keine Zuordnung`.
+  - **Saubere leere Zellen:** Leere Zellen werden dezent gestrichelt ohne starre graue Platzhalterboxen gerendert (`.base-board-swimlane-cell.is-empty`), behalten aber eine intuitive Drop-Zone von 300px Breite bei.
+
+### Added
+- Kontextuelle Notizerstellung über Spaltenköpfe in 2D-Swimlane-Reihen (`BaseBoardSwimlaneRow.tsx`, `BaseBoardView.tsx`, `BaseEditor.tsx`, `src/baseBoardView.test.tsx`):
+  - Klick auf den `+`-Button in einem spezifischen Spaltenkopf einer Swimlane-Reihe öffnet den standardmäßigen Notizerstellungsdialog mit **beiden** Attributen vorausgefüllt (Spalten-Status wie `status: "Facing Backlog"` und Swimlane-Property wie `prio: "(1) High"`).
+  - Zielordner wird automatisch anhand aktiver Base-Filter (`file.inFolder`) vorausgewählt.
+  - Dedizierte Komponente `BaseBoardSwimlaneRow.tsx` für modulare, selbstständige Swimlane-Reihen mit unabhängigem Einklapp-Status (`collapsed`), Drei-Punkte-Menü für Rename/Remove und 2D-Drag-&-Drop auf Header-Items und Zellen.
+
 ### Fixed
 - Darstellung von Tags in eingebetteten Bases und Sichtbarkeit von eingebetteten Canvas-Dateien (`src/styles.css`, `src/baseEmbedWidget.test.tsx`):
   - **Base-Tags & Kartentext-Überlappung behoben:** Durch `line-height: 0 !important;` auf `.cm-line.cm-lp-embed-line` erbten alle Kind-Elemente innerhalb von eingebetteten Widgets eine Zeilenhöhe von `0`, wodurch Tag-Pills (`.base-tag-pill`) und Karteneigenschaften kollabierten, sich überlappten und nicht mehr anklickbar waren. `.cm-line.cm-lp-embed-line > *`, `.cm-embed-widget` und die Embed-Container setzen `line-height: 1.5 !important;` nun explizit zurück.
@@ -214,6 +226,18 @@
   - Redundante doppelte Übertragung von `notes` neben `files` in `GET /api/vault/tree` entfernt.
 - Fehleranfällige Zwischenspeicher-Funktion „Cut / Ausschneiden“ aus dem Dateibaum-Kontextmenü entfernt und durch den modalen Verschiebe-Workflow ersetzt.
 - Dynamisches Kontextmenü bei Mehrfachauswahl („X Elemente verschieben nach…“, „X Elemente löschen“).
+
+### Changed
+- Ergonomisches 2D-Kanban-Board Layout mit wiederholten Spaltenköpfen je Swimlane-Reihe (`BaseBoardView.tsx`, `BaseBoardSwimlaneRow.tsx`, `src/styles.css`):
+  - **Wiederholte Spaltenköpfe pro Swimlane-Reihe:** Die losgelöste, weit entfernte globale Sticky-Spaltenkopfzeile wurde eliminiert. Jede ausgeklappte Swimlane-Reihe rendert nun direkt über ihren Kartenzellen ein eigenes, bündig ausgerichtetes Spaltenkopf-Band (`.base-board-swimlane-columns-header`) mit Farb-Badges, Spaltentitel, Zellenzähler und individuellem `+`-Button.
+  - **Explizite Property-Name + Wert Swimlane-Kopfzeile:** Der Zeilenkopf (`.base-board-swimlane-header`) zeigt nun sowohl den konfigurierten Property-Namen (bzw. den Display-Namen aus den Base-Properties) als auch den Wert in einem klar abgesetzten Badge an (`${displayName}: ${laneValue}`, z. B. `Prio: (1) High`), bei Notizen ohne Zuordnung `Keine Zuordnung`.
+  - **Saubere leere Zellen:** Leere Zellen werden dezent gestrichelt ohne starre graue Platzhalterboxen gerendert (`.base-board-swimlane-cell.is-empty`), behalten aber eine intuitive Drop-Zone von 300px Breite bei.
+
+### Added
+- Kontextuelle Notizerstellung über Spaltenköpfe in 2D-Swimlane-Reihen (`BaseBoardSwimlaneRow.tsx`, `BaseBoardView.tsx`, `BaseEditor.tsx`, `src/baseBoardView.test.tsx`):
+  - Klick auf den `+`-Button in einem spezifischen Spaltenkopf einer Swimlane-Reihe öffnet den standardmäßigen Notizerstellungsdialog mit **beiden** Attributen vorausgefüllt (Spalten-Status wie `status: "Facing Backlog"` und Swimlane-Property wie `prio: "(1) High"`).
+  - Zielordner wird automatisch anhand aktiver Base-Filter (`file.inFolder`) vorausgewählt.
+  - Dedizierte Komponente `BaseBoardSwimlaneRow.tsx` für modulare, selbstständige Swimlane-Reihen mit unabhängigem Einklapp-Status (`collapsed`), Drei-Punkte-Menü für Rename/Remove und 2D-Drag-&-Drop auf Header-Items und Zellen.
 
 ### Fixed
 - Fokusverlust in „Board konfigurieren“ (`BaseBoardConfigModal.tsx`): Behebung des Fokusverlusts nach jedem einzelnen Tastenanschlag durch Auslagern von `ColumnConfigRow` außerhalb der Modal-Komponente und Verwendung stabiler interner Keys (`key={col.id}`).

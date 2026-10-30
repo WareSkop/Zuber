@@ -3,20 +3,16 @@ import {
   Plus,
   Check,
   X,
-  MoreVertical,
-  Edit2,
-  Trash2,
-  ArrowDown,
-  ArrowUp,
 } from 'lucide-react';
 import type {
   BaseQueryResult,
   BaseRecord,
   BaseBoard2DColumn,
-  BaseBoardSwimlaneRow,
+  BaseBoardSwimlaneRow as BaseBoardSwimlaneRowData,
 } from '../../base/baseEngine';
 import { getPropertyValue, groupBoard2D } from '../../base/baseEngine';
 import type {
+  BaseConfig,
   BaseViewConfig,
   BaseBoardColumnConfig,
   BaseBoardSwimlaneItem,
@@ -24,11 +20,12 @@ import type {
 import { useTranslation } from '../../i18n';
 import { api } from '../../api';
 import { BaseBoardColumn, type BaseBoardColumnData } from './BaseBoardColumn';
-import { BaseBoardCard } from './BaseBoardCard';
+import { BaseBoardSwimlaneRow } from './BaseBoardSwimlaneRow';
 
 export interface BaseBoardViewProps {
   queryResult: BaseQueryResult;
   view: BaseViewConfig;
+  config?: BaseConfig;
   onSelectNote: (path: string) => void;
   onCellChange?: (notePath: string, key: string, value: any) => Promise<void>;
   readOnly?: boolean;
@@ -43,310 +40,10 @@ export interface BaseBoardViewProps {
   onUpdateConfig?: (updatedView: BaseViewConfig) => void;
 }
 
-interface SwimlaneBandProps {
-  lane: BaseBoardSwimlaneRow;
-  columns: BaseBoard2DColumn[];
-  cardColumns: string[];
-  displayNames: Record<string, string>;
-  groupByProp: string;
-  swimlaneProp: string;
-  readOnly: boolean;
-  dragOverCell: string | null;
-  expandedCells: Record<string, boolean>;
-  onToggleCellExpand: (cellKey: string) => void;
-  onToggleCollapse: () => void;
-  onAddCardInLane: () => void;
-  onRenameSwimlane?: (oldName: string, newName: string) => void;
-  onDeleteSwimlane?: (laneName: string) => void;
-  onDropOnCell: (e: React.DragEvent, colKey: string, laneKey: string) => void;
-  onDragOverCell: (e: React.DragEvent, cellKey: string) => void;
-  onDragLeaveCell: (e: React.DragEvent) => void;
-  onSelectNote: (path: string) => void;
-  draggingPath: string | null;
-  onDragStart: (path: string) => void;
-  onDragEnd: () => void;
-}
-
-const SwimlaneBand: React.FC<SwimlaneBandProps> = ({
-  lane,
-  columns,
-  cardColumns,
-  displayNames,
-  groupByProp,
-  swimlaneProp,
-  readOnly,
-  dragOverCell,
-  expandedCells,
-  onToggleCellExpand,
-  onToggleCollapse,
-  onAddCardInLane,
-  onRenameSwimlane,
-  onDeleteSwimlane,
-  onDropOnCell,
-  onDragOverCell,
-  onDragLeaveCell,
-  onSelectNote,
-  draggingPath,
-  onDragStart,
-  onDragEnd,
-}) => {
-  const { t } = useTranslation();
-  const [isRenaming, setIsRenaming] = useState(false);
-  const [draftName, setDraftName] = useState(lane.label);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  const inputRef = useRef<HTMLInputElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const isEscapingRef = useRef(false);
-
-  useEffect(() => {
-    setDraftName(lane.label);
-  }, [lane.label]);
-
-  useEffect(() => {
-    if (isRenaming) {
-      isEscapingRef.current = false;
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.select();
-      }
-    }
-  }, [isRenaming]);
-
-  useEffect(() => {
-    if (!isMenuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMenuOpen]);
-
-  const handleCommitRename = () => {
-    if (isEscapingRef.current) {
-      isEscapingRef.current = false;
-      return;
-    }
-    const trimmed = draftName.trim();
-    setIsRenaming(false);
-    if (trimmed && trimmed !== lane.key) {
-      onRenameSwimlane?.(lane.key, trimmed);
-    } else {
-      setDraftName(lane.label);
-    }
-  };
-
-  const handleCancelRename = () => {
-    isEscapingRef.current = true;
-    setIsRenaming(false);
-    setDraftName(lane.label);
-  };
-
-  return (
-    <div
-      className={`base-board-swimlane-band ${lane.collapsed ? 'is-collapsed' : 'is-expanded'}`}
-      data-swimlane-key={lane.key}
-    >
-      {/* Swimlane Header Bar */}
-      <div className="base-board-swimlane-header">
-        <div className="base-board-swimlane-title-cluster">
-          <button
-            type="button"
-            className="base-board-swimlane-collapse-btn"
-            onClick={onToggleCollapse}
-            aria-label={lane.collapsed ? 'Swimlane ausklappen' : 'Swimlane einklappen'}
-            title={lane.collapsed ? 'Swimlane ausklappen' : 'Swimlane einklappen'}
-          >
-            <span className="collapse-chevron">{lane.collapsed ? '▶' : '▼'}</span>
-          </button>
-
-          {isRenaming ? (
-            <div className="base-board-col-edit-inline" onClick={(e) => e.stopPropagation()}>
-              <input
-                ref={inputRef}
-                type="text"
-                className="base-board-col-rename-input"
-                value={draftName}
-                autoFocus
-                onChange={(e) => setDraftName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleCommitRename();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    handleCancelRename();
-                  }
-                }}
-                onBlur={handleCommitRename}
-              />
-              <button
-                type="button"
-                className="base-board-col-confirm-btn"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCommitRename}
-                title="Bestätigen"
-              >
-                <Check size={12} />
-              </button>
-              <button
-                type="button"
-                className="base-board-col-cancel-btn"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={handleCancelRename}
-                title="Abbrechen"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ) : (
-            <span className="base-board-swimlane-title">{lane.label}</span>
-          )}
-
-          <span className="base-board-swimlane-count">({lane.totalCount})</span>
-        </div>
-
-        {!readOnly && (
-          <div className="base-board-swimlane-actions">
-            <button
-              type="button"
-              className="base-board-add-card-btn"
-              onClick={onAddCardInLane}
-              title={t('base.addCard', 'Karte hinzufügen')}
-              aria-label={`${t('base.addCard', 'Karte hinzufügen')} (${lane.label})`}
-            >
-              <Plus size={13} />
-            </button>
-
-            {!lane.isUnassigned && (
-              <div className="base-board-col-menu-wrapper" ref={menuRef}>
-                <button
-                  type="button"
-                  className="base-board-col-menu-trigger"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsMenuOpen((prev) => !prev);
-                  }}
-                  title="Swimlane-Optionen"
-                  aria-label={`Swimlane-Optionen (${lane.label})`}
-                >
-                  <MoreVertical size={13} />
-                </button>
-
-                {isMenuOpen && (
-                  <div
-                    className="base-dropdown-menu col-dropdown"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      className="base-dropdown-item"
-                      onClick={() => {
-                        setIsMenuOpen(false);
-                        setDraftName(lane.label);
-                        setIsRenaming(true);
-                      }}
-                    >
-                      <Edit2 size={13} />
-                      <span>{t('base.renameSwimlane', 'Swimlane umbenennen')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="base-dropdown-item danger"
-                      onClick={() => {
-                        setIsMenuOpen(false);
-                        onDeleteSwimlane?.(lane.key);
-                      }}
-                    >
-                      <Trash2 size={13} />
-                      <span>{t('base.removeSwimlane', 'Swimlane entfernen')}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Swimlane Cells Row (only rendered when expanded) */}
-      {!lane.collapsed && (
-        <div className="base-board-swimlane-cells-row">
-          {columns.map((col) => {
-            const cellKey = `${lane.key}::${col.key}`;
-            const cellRecords = lane.cells[col.key] || [];
-            const isExpanded = !!expandedCells[cellKey];
-            const visibleCards = isExpanded ? cellRecords : cellRecords.slice(0, col.limit);
-            const remainingCount = cellRecords.length - visibleCards.length;
-            const isOver = dragOverCell === cellKey;
-
-            return (
-              <div
-                key={col.key}
-                className={`base-board-swimlane-cell ${isOver ? 'drag-over' : ''}`}
-                data-column-key={col.key}
-                data-swimlane-key={lane.key}
-                onDragOver={(e) => onDragOverCell(e, cellKey)}
-                onDragLeave={onDragLeaveCell}
-                onDrop={(e) => onDropOnCell(e, col.key, lane.key)}
-              >
-                {visibleCards.map((rec) => (
-                  <BaseBoardCard
-                    key={rec.file.path}
-                    record={rec}
-                    columns={cardColumns}
-                    displayNames={displayNames}
-                    groupByProp={groupByProp}
-                    swimlaneProp={swimlaneProp}
-                    readOnly={readOnly}
-                    isDragging={draggingPath === rec.file.path}
-                    onSelectNote={onSelectNote}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                  />
-                ))}
-
-                {remainingCount > 0 && (
-                  <button
-                    type="button"
-                    className="base-board-show-more-btn"
-                    onClick={() => onToggleCellExpand(cellKey)}
-                  >
-                    <ArrowDown size={12} />
-                    <span>
-                      {t(
-                        'base.showMoreCards',
-                        { count: remainingCount },
-                        `${remainingCount} weitere anzeigen...`
-                      )}
-                    </span>
-                  </button>
-                )}
-
-                {isExpanded && cellRecords.length > col.limit && (
-                  <button
-                    type="button"
-                    className="base-board-show-more-btn"
-                    onClick={() => onToggleCellExpand(cellKey)}
-                  >
-                    <ArrowUp size={12} />
-                    <span>{t('base.showFewerCards', 'Weniger anzeigen')}</span>
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
 export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   queryResult,
   view,
+  config,
   onSelectNote,
   onCellChange,
   readOnly = false,
@@ -652,7 +349,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     }));
   };
 
-  const handleToggleSwimlane = (lane: BaseBoardSwimlaneRow) => {
+  const handleToggleSwimlane = (lane: BaseBoardSwimlaneRowData) => {
     const nextCollapsed = !lane.collapsed;
     setLocalCollapsedLanes((prev) => ({
       ...prev,
@@ -759,13 +456,38 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     );
   };
 
+  const swimlaneDisplayName = useMemo(() => {
+    const propName = view.swimlanes?.property?.trim() || '';
+    if (!propName) return 'Swimlane';
+    const effectiveConfig = config || queryResult?.definition;
+    if (effectiveConfig?.properties?.[propName]?.displayName) {
+      return effectiveConfig.properties[propName].displayName!;
+    }
+    const lower = propName.toLowerCase();
+    if (effectiveConfig?.properties) {
+      for (const [k, v] of Object.entries(effectiveConfig.properties)) {
+        if (k.toLowerCase() === lower && v?.displayName) {
+          return v.displayName;
+        }
+      }
+    }
+    if (queryResult?.columnDisplayNames?.[propName]) {
+      return queryResult.columnDisplayNames[propName];
+    }
+    if (queryResult?.columnDisplayNames) {
+      for (const [k, v] of Object.entries(queryResult.columnDisplayNames)) {
+        if (k.toLowerCase() === lower && v) {
+          return v;
+        }
+      }
+    }
+    return propName;
+  }, [view.swimlanes?.property, config, queryResult]);
+
   // ==========================================
   // 2D SWIMLANE BOARD RENDER
   // ==========================================
   if (is2D && board2DData) {
-    const firstValidColumnKey =
-      board2DData.columns.find((c) => c.key !== 'no_status')?.key || '';
-
     return (
       <div
         className="base-board-container base-board-2d-container scroller"
@@ -781,60 +503,16 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
         }}
       >
         <div className="base-board-2d-grid">
-          {/* 1. Sticky Column Headers Row (rendered once at the top) */}
-          <div className="base-board-2d-header-row">
-            {board2DData.columns.map((col) => {
-              const colData: BaseBoardColumnData = {
-                key: col.key,
-                label: col.label,
-                records: new Array(col.totalCount).fill(null) as any,
-                limit: col.limit,
-                color: col.color,
-              };
-              return (
-                <BaseBoardColumn
-                  key={col.key}
-                  col={colData}
-                  columns={columns}
-                  displayNames={displayNames}
-                  groupByProp={groupByProp}
-                  readOnly={readOnly}
-                  isOver={dragOverCol === col.key}
-                  isExpanded={false}
-                  onToggleExpand={() => {}}
-                  onDrop={handleDropOnColumn}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    if (dragOverCol !== col.key) setDragOverCol(col.key);
-                  }}
-                  onDragLeave={(e) => {
-                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                    setDragOverCol(null);
-                  }}
-                  onAddCard={(colVal) => onAddCard?.(colVal)}
-                  onRenameColumn={onRenameColumn}
-                  onDeleteColumn={onDeleteColumn}
-                  onSelectNote={onSelectNote}
-                  draggingPath={draggingPath}
-                  onDragStart={(path) => setDraggingPath(path)}
-                  onDragEnd={() => {
-                    setDraggingPath(null);
-                    setDragOverCol(null);
-                    setDragOverCell(null);
-                  }}
-                  headerOnly={true}
-                />
-              );
-            })}
+          {!readOnly && (
+            <div className="base-board-2d-top-actions">
+              {renderAddColumnWidget()}
+            </div>
+          )}
 
-            {renderAddColumnWidget()}
-          </div>
-
-          {/* 2. Horizontal Swimlane Bands */}
+          {/* Horizontal Swimlane Rows with repeated column headers */}
           <div className="base-board-2d-swimlanes-list">
             {board2DData.rows.map((lane) => (
-              <SwimlaneBand
+              <BaseBoardSwimlaneRow
                 key={lane.key}
                 lane={lane}
                 columns={board2DData.columns}
@@ -842,14 +520,13 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
                 displayNames={displayNames}
                 groupByProp={groupByProp}
                 swimlaneProp={swimlaneProp}
+                swimlaneDisplayName={swimlaneDisplayName}
                 readOnly={readOnly}
                 dragOverCell={dragOverCell}
                 expandedCells={expandedCells}
                 onToggleCellExpand={toggleCellExpand}
                 onToggleCollapse={() => handleToggleSwimlane(lane)}
-                onAddCardInLane={() =>
-                  onAddCard?.(firstValidColumnKey, lane.isUnassigned ? '' : lane.key)
-                }
+                onAddCard={(colVal, laneVal) => onAddCard?.(colVal, laneVal)}
                 onRenameSwimlane={onRenameSwimlane}
                 onDeleteSwimlane={onDeleteSwimlane}
                 onDropOnCell={handleDropOnCell}

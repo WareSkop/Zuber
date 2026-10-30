@@ -1063,6 +1063,7 @@ export interface BaseBoard2DColumn {
 
 export interface BaseBoardSwimlaneRow {
   key: string;
+  name?: string;
   label: string;
   collapsed: boolean;
   isUnassigned: boolean;
@@ -1225,6 +1226,7 @@ export function groupBoard2D(
         : lane.collapsed;
     return {
       key: lane.name,
+      name: lane.name,
       label: lane.name,
       collapsed: isCollapsed,
       isUnassigned: false,
@@ -1241,6 +1243,7 @@ export function groupBoard2D(
 
     swimlanes.push({
       key: 'unassigned_swimlane',
+      name: unassignedSwimlaneLabel,
       label: unassignedSwimlaneLabel,
       collapsed: isUnassignedCollapsed,
       isUnassigned: true,

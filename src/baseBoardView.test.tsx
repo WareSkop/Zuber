@@ -984,7 +984,7 @@ views:
     ]);
   });
 
-  it('renders 2D Swimlane Board with single sticky column header row, horizontal swimlane bands, and collapsible rows', async () => {
+  it('renders 2D Swimlane Board with repeated column headers per swimlane row, property-value badges, and collapsible rows', async () => {
     const records: BaseRecord[] = [
       createMockRecord('Tasks/T1.md', 'T1.md', 'Tasks', [], { status: 'Open', prio: 'Prio 1' }, 1000),
       createMockRecord('Tasks/T2.md', 'T2.md', 'Tasks', [], { status: 'inWork', prio: 'Prio 2' }, 2000),
@@ -1009,16 +1009,22 @@ views:
     };
 
     const mockQueryResult: BaseQueryResult = {
-      definition: { views: [viewConfig] },
+      definition: {
+        views: [viewConfig],
+        properties: {
+          prio: { displayName: 'Priorität' },
+        },
+      },
       view: viewConfig,
       columns: ['file.name', 'status', 'prio'],
-      columnDisplayNames: {},
+      columnDisplayNames: { prio: 'Priorität' },
       records,
       groups: [],
       totalCount: records.length,
     };
 
     const handleToggleCollapse = vi.fn();
+    const handleAddCard = vi.fn();
 
     await act(async () => {
       root.render(
@@ -1027,27 +1033,48 @@ views:
           view={viewConfig}
           onSelectNote={vi.fn()}
           onToggleSwimlaneCollapse={handleToggleCollapse}
+          onAddCard={handleAddCard}
         />
       );
     });
 
-    // 1. Verify 2D container and single column header row at top
+    // 1. Verify 2D container and verify detached single sticky header row is ELIMINATED
     expect(container.querySelector('.base-board-2d-container')).toBeTruthy();
-    const headerRow = container.querySelector('.base-board-2d-header-row');
-    expect(headerRow).toBeTruthy();
-    const columnHeaders = headerRow!.querySelectorAll('.base-board-column-header-only');
-    expect(columnHeaders.length).toBe(3); // Open, inWork, Finish
+    expect(container.querySelector('.base-board-2d-header-row')).toBeNull();
 
-    // 2. Verify swimlane bands: Prio 1, Prio 2, and automatic catch-all "Keine Zuordnung"
+    // 2. Verify swimlane rows: Prio 1, Prio 2, and automatic catch-all "Keine Zuordnung"
     const bands = container.querySelectorAll('.base-board-swimlane-band');
     expect(bands.length).toBe(3);
-    expect(bands[0].querySelector('.base-board-swimlane-title')?.textContent).toBe('Prio 1');
-    expect(bands[1].querySelector('.base-board-swimlane-title')?.textContent).toBe('Prio 2');
+
+    // Explicit property name (or displayName) + value in swimlane header
+    expect(bands[0].querySelector('.base-board-swimlane-title')?.textContent).toBe('Priorität: Prio 1');
+    expect(bands[1].querySelector('.base-board-swimlane-title')?.textContent).toBe('Priorität: Prio 2');
     expect(bands[2].querySelector('.base-board-swimlane-title')?.textContent).toMatch(
       /Keine Zuordnung|No Swimlane/i
     );
 
-    // 3. Collapsing Prio 1 hides its cells row and calls onToggleSwimlaneCollapse('Prio 1', true, false)
+    // 3. Verify repeated column header strip inside expanded swimlane row
+    const colHeaderStrip0 = bands[0].querySelector('.base-board-swimlane-columns-header');
+    expect(colHeaderStrip0).toBeTruthy();
+    const colHeaderItems = colHeaderStrip0!.querySelectorAll('.base-board-swimlane-col-header-item');
+    expect(colHeaderItems.length).toBe(3); // Open, inWork, Finish
+
+    // Verify each column header has title and individual + button
+    const titles = Array.from(colHeaderItems).map(
+      (item) => item.querySelector('.base-board-swimlane-col-header-title')?.textContent
+    );
+    expect(titles).toEqual(['Open', 'inWork', 'Finish']);
+
+    const addButtons = colHeaderStrip0!.querySelectorAll('.base-board-col-add-btn');
+    expect(addButtons.length).toBe(3);
+
+    // 4. Click "+" button on the second column header ("inWork") in the first swimlane ("Prio 1")
+    await act(async () => {
+      (addButtons[1] as HTMLButtonElement).click();
+    });
+    expect(handleAddCard).toHaveBeenCalledWith('inWork', 'Prio 1');
+
+    // 5. Collapsing Prio 1 hides its column header strip and cells row
     expect(bands[0].querySelector('.base-board-swimlane-cells-row')).toBeTruthy();
     const collapseBtn = bands[0].querySelector('.base-board-swimlane-collapse-btn') as HTMLButtonElement;
     expect(collapseBtn).toBeTruthy();
@@ -1057,6 +1084,7 @@ views:
     });
 
     expect(handleToggleCollapse).toHaveBeenCalledWith('Prio 1', true, false);
+    expect(bands[0].querySelector('.base-board-swimlane-columns-header')).toBeNull();
     expect(bands[0].querySelector('.base-board-swimlane-cells-row')).toBeNull();
   });
 
