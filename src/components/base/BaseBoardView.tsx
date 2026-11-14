@@ -23,6 +23,7 @@ import { api } from '../../api';
 import { BaseBoardColumn, type BaseBoardColumnData } from './BaseBoardColumn';
 import { BaseBoardSwimlaneRow } from './BaseBoardSwimlaneRow';
 import { BaseBoardSortPopover } from './BaseBoardSortPopover';
+import { BottomSheet } from '../BottomSheet';
 
 export interface BaseBoardViewProps {
   queryResult: BaseQueryResult;
@@ -118,6 +119,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
     colKey: string;
     anchorEl: HTMLElement;
   } | null>(null);
+  const [moveCardRecord, setMoveCardRecord] = useState<BaseRecord | null>(null);
 
   const viewRef = useRef(view);
   viewRef.current = view;
@@ -259,13 +261,13 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
       // 2. Queue sort rule for debounced persistence
       pendingSortRulesRef.current[colKey] = sortRule;
 
-      // 3. Debounce save (450ms) to avoid overlapping writes on rapid clicks
+      // 3. Debounce save (400ms) to avoid overlapping writes on rapid clicks
       if (sortDebounceTimerRef.current) {
         clearTimeout(sortDebounceTimerRef.current);
       }
       sortDebounceTimerRef.current = setTimeout(() => {
         flushPendingSortConfig();
-      }, 450);
+      }, 400);
     },
     [flushPendingSortConfig]
   );
@@ -695,6 +697,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
                   }}
                   columnSortRules={columnSortRules}
                   onOpenSort={(colKey, anchorEl) => setActiveSortCol({ colKey, anchorEl })}
+                  onOpenMoveSheet={setMoveCardRecord}
                 />
               ))}
             </div>
@@ -736,6 +739,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
               onOpenSort={(colKey, anchorEl) => setActiveSortCol({ colKey, anchorEl })}
               onSortChange={(rule) => handleColumnSortChange(col.key, rule)}
               cardProperties={columns}
+              onOpenMoveSheet={setMoveCardRecord}
             />
           ))
         )}
@@ -763,6 +767,92 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
           }}
         />
       )}
+
+      {moveCardRecord && (() => {
+        const liveMoveRecord =
+          allRecords.find((r) => r.file.path === moveCardRecord.file.path) || moveCardRecord;
+        const cardTitle = liveMoveRecord.file.name
+          ? liveMoveRecord.file.name.replace(/\.md$/i, '')
+          : liveMoveRecord.file.path;
+        const curColVal = String(getEffectivePropValue(liveMoveRecord, groupByProp) || '');
+        const curLaneVal = swimlaneProp
+          ? String(getEffectivePropValue(liveMoveRecord, swimlaneProp) || '')
+          : '';
+        const targetColumns = is2D && board2DData ? board2DData.columns : columnsData;
+
+        return (
+          <BottomSheet
+            isOpen={Boolean(moveCardRecord)}
+            onClose={() => setMoveCardRecord(null)}
+            title={`${t('board.moveCard', 'Move Card')}: ${cardTitle}`}
+          >
+            <div className="bottom-sheet-section">
+              <div className="bottom-sheet-section-label">
+                {t('board.targetColumn', 'Column')} ({colPropDisplayName})
+              </div>
+              {targetColumns.map((col) => {
+                const targetVal = col.key === 'no_status' ? '' : col.key;
+                const isCurrent =
+                  col.key === 'no_status'
+                    ? curColVal === ''
+                    : curColVal.toLowerCase() === targetVal.toLowerCase();
+
+                return (
+                  <button
+                    key={col.key}
+                    type="button"
+                    className={`bottom-sheet-action-btn ${isCurrent ? 'is-active' : ''}`}
+                    onClick={async () => {
+                      await updateNoteProperties(liveMoveRecord.file.path, [
+                        { prop: groupByProp, value: targetVal },
+                      ]);
+                      if (!is2D) {
+                        setMoveCardRecord(null);
+                      }
+                    }}
+                  >
+                    <span className="bottom-sheet-action-label">{col.label}</span>
+                    {isCurrent && <Check size={16} className="bottom-sheet-check-icon" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {is2D && board2DData && swimlaneProp && (
+              <div className="bottom-sheet-section">
+                <div className="bottom-sheet-section-label">
+                  {t('board.targetSwimlane', 'Swimlane')} ({swimlaneDisplayName})
+                </div>
+                {board2DData.rows.map((lane) => {
+                  const targetLaneVal = lane.isUnassigned ? '' : lane.key;
+                  const isCurrentLane = lane.isUnassigned
+                    ? curLaneVal === ''
+                    : curLaneVal.toLowerCase() === targetLaneVal.toLowerCase();
+                  const laneTitle = lane.isUnassigned
+                    ? t('base.unassignedSwimlane', 'No Swimlane')
+                    : lane.name || lane.label;
+
+                  return (
+                    <button
+                      key={lane.key}
+                      type="button"
+                      className={`bottom-sheet-action-btn ${isCurrentLane ? 'is-active' : ''}`}
+                      onClick={async () => {
+                        await updateNoteProperties(liveMoveRecord.file.path, [
+                          { prop: swimlaneProp, value: targetLaneVal },
+                        ]);
+                      }}
+                    >
+                      <span className="bottom-sheet-action-label">{laneTitle}</span>
+                      {isCurrentLane && <Check size={16} className="bottom-sheet-check-icon" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </BottomSheet>
+        );
+      })()}
     </>
   );
 };

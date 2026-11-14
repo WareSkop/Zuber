@@ -1122,6 +1122,22 @@ Zuber bietet neben der Einzelansicht eine asymmetrische, resizable **Recherche- 
   - Auch der Lokale Graph in der rechten Leiste zentriert sich automatisch auf die aktive Referenznotiz.
   - Sobald die Rechercheansicht geschlossen wird oder auf den globalen Graph umgeschaltet wird, fällt die Anzeige automatisch auf die aktive Hauptnotiz (`activeNote.path`) zurück.
 
+---
+
+## 31. Mobile Touch Bottom-Sheets, Android Back-Handler & React Error #310 Schutz
+
+- **Wiederverwendbares `<BottomSheet>` & `useMobileBackHandler` (`src/components/BottomSheet.tsx`):**
+  - Portal-basiertes Bottom-Sheet (`z-index: 1100`, `max-height: 85dvh`, abgedunkelter Backdrop, Drag-Handle-Pille `36px × 4px`, Swipe-Down > `60px` zum Schließen, `min-height: 48px` Touch-Zeilen, Safe-Area-Footer).
+  - `useMobileBackHandler` integriert offene `<BottomSheet>`-Instanzen und mobile Seitenleisten-Drawer (`leftSidebarOpen`, `rightSidebarOpen`) per LIFO-Stack mit `window.history.pushState` / `popstate`, sodass die Android-Zurück-Geste stets das oberste geöffnete Overlay schließt.
+- **Header-beschränktes Sidebar-Swipe-to-Open (`src/App.tsx`):**
+  - Bei geöffneten `.base`-Boards, `.canvas`-Dateien oder innerhalb horizontaler Scroll-Container (`.base-board-view`, `.base-editor`, `.base-table-wrapper`, `.canvas-editor-wrapper`) öffnet ein Rechts-Wisch die linke Seitenleiste nur noch, wenn die Berührung in der oberen Kopfzeile (`.workspace-topbar`) begonnen hat.
+- **Kanban-Board & Dateibaum Touch-Upgrades (`< 768px`):**
+  - Spalten-/Swimlane-Menüs (`⋮`), Sortier-Popover (`BaseBoardSortPopover`), Toolbar-Menüs (`BaseToolbar`), Filter-Builder (`BaseFilterPopover`), Spalten-Manager (`BaseColumnsModal`) und das Dateibaum-Kontextmenü (`FileSidebar`) rendern auf mobilen Viewports (`< 768px`) als `<BottomSheet>`, während Desktop-Ansichten (`>= 768px`) unverändert bleiben.
+  - Auf Touch-Geräten/Mobile bieten Kanban-Karten einen `⋮`-Button (`min. 36×36px`), der ein „Karte verschieben“-`<BottomSheet>` für 1D-Spalten und 2D-Swimlanes öffnet.
+- **Sichere `.base`-Speicherung & `ErrorBoundary`-Wiederherstellung:**
+  - `BaseEditor.tsx` und `BaseBoardView.tsx` entprellen `.base`-Schreibvorgänge auf `400ms` und serialisieren laufende `onChange`-Promises zur Vermeidung von WebSocket-Echo-Thrashing und React Error #310.
+  - `ErrorBoundary.tsx` bietet die Aktion **„Ansicht zurücksetzen & neu laden“** / **„Reset Active View & Reload“**, die ausschließlich `knowmesh_last_active_note`, `zuber_last_active_note`, `knowmesh_open_tabs` und `zuber_open_tabs` aus `localStorage` löscht, ohne IndexedDB (`localDb`) anzutasten.
+
 
 
 

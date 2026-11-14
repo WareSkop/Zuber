@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, ArrowDown, X, RotateCcw } from 'lucide-react';
+import { ArrowUp, ArrowDown, X, RotateCcw, Check } from 'lucide-react';
 import type { BoardColumnSortRule } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseBoardSortPopoverProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
   propertyDisplayNames = {},
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // 1. Local state hooks
@@ -165,6 +167,66 @@ export const BaseBoardSortPopover: React.FC<BaseBoardSortPopoverProps> = ({
 
   // Early return MUST happen ONLY AFTER all hooks have executed
   if (!isOpen) return null;
+
+  if (isMobile) {
+    const sheetTitle = `${t('base.sortBy', 'Sortieren nach')}${columnName ? ` (${columnName})` : ''}`;
+    return (
+      <BottomSheet isOpen={isOpen} onClose={onClose} title={sheetTitle}>
+        <div className="bottom-sheet-section">
+          <div className="bottom-sheet-direction-row">
+            <button
+              type="button"
+              className={`bottom-sheet-action-btn bottom-sheet-dir-btn board-sort-dir-asc ${selectedDirection === 'asc' ? 'is-active' : ''}`}
+              onClick={() => handleDirectionChange('asc')}
+              aria-label="↑ (A-Z)"
+            >
+              <ArrowUp size={16} />
+              <span>↑ (A-Z)</span>
+            </button>
+            <button
+              type="button"
+              className={`bottom-sheet-action-btn bottom-sheet-dir-btn board-sort-dir-desc ${selectedDirection === 'desc' ? 'is-active' : ''}`}
+              onClick={() => handleDirectionChange('desc')}
+              aria-label="↓ (Z-A)"
+            >
+              <ArrowDown size={16} />
+              <span>↓ (Z-A)</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="bottom-sheet-section">
+          {propertyOptions.map((opt) => {
+            const isSelected = selectedProperty === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                className={`bottom-sheet-action-btn ${isSelected ? 'is-active' : ''}`}
+                onClick={() => handlePropertyChange(opt.key)}
+              >
+                <span className="bottom-sheet-action-label">{opt.label}</span>
+                {isSelected && <Check size={16} className="bottom-sheet-check-icon" />}
+              </button>
+            );
+          })}
+        </div>
+
+        {currentSort && (
+          <div className="bottom-sheet-section">
+            <button
+              type="button"
+              className="bottom-sheet-action-btn danger"
+              onClick={handleResetSort}
+            >
+              <RotateCcw size={16} />
+              <span>{t('base.clearSort', 'Sortierung zurücksetzen')}</span>
+            </button>
+          </div>
+        )}
+      </BottomSheet>
+    );
+  }
 
   return createPortal(
     <div

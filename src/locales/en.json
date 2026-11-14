@@ -591,5 +591,13 @@
     "toggleOrientation": "Switch Split Orientation (Left/Right ⇄ Top/Bottom)",
     "showGraph": "Show Graph in Research View",
     "close": "Close Research View"
+  },
+  "board": {
+    "moveCard": "Move Card",
+    "targetColumn": "Column",
+    "targetSwimlane": "Swimlane"
+  },
+  "error": {
+    "resetView": "Reset View & Reload"
   }
 }

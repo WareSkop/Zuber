@@ -49,6 +49,16 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
+  private handleResetActiveView = (): void => {
+    try {
+      localStorage.removeItem('knowmesh_last_active_note');
+      localStorage.removeItem('zuber_last_active_note');
+      localStorage.removeItem('knowmesh_open_tabs');
+      localStorage.removeItem('zuber_open_tabs');
+    } catch {}
+    window.location.reload();
+  };
+
   public render(): ReactNode {
     if (this.state.hasError) {
       const errorMessage = this.state.error?.message || 'Unbekannter Anwendungsfehler';
@@ -111,6 +121,28 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={this.handleResetActiveView}
+                style={{
+                  backgroundColor: '#d4af37',
+                  color: '#0d1117',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '10px 18px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                {typeof localStorage !== 'undefined' && localStorage.getItem('zuber_language') === 'en'
+                  ? 'Reset Active View & Reload'
+                  : 'Ansicht zurücksetzen & neu laden'}
+              </button>
+
               <button
                 type="button"
                 onClick={this.handleReload}

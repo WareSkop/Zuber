@@ -108,8 +108,45 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
     }
   }, [rawContent]);
 
-  // Debounced auto-save
+  // Debounced & serialized auto-save (400ms)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queuedYamlRef = useRef<string | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const flushSerializedSave = useCallback(async (yamlToSave: string) => {
+    if (isSavingBaseRef.current) {
+      queuedYamlRef.current = yamlToSave;
+      return;
+    }
+
+    isSavingBaseRef.current = true;
+    let nextYaml: string | null = yamlToSave;
+    try {
+      while (nextYaml !== null) {
+        const current = nextYaml;
+        queuedYamlRef.current = null;
+        lastRawContentRef.current = current;
+        await Promise.resolve(onChangeRef.current(current));
+        nextYaml = queuedYamlRef.current;
+      }
+    } catch (err) {
+      console.error('Failed to save Base config:', err);
+    } finally {
+      isSavingBaseRef.current = false;
+      queuedYamlRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const commitConfigChange = useCallback(
     (newConfig: BaseConfig) => {
       setConfig(newConfig);
@@ -118,22 +155,17 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
       }
-      saveTimerRef.current = setTimeout(async () => {
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
         try {
           const yaml = stringifyBaseYaml(newConfig);
-          lastRawContentRef.current = yaml;
-          isSavingBaseRef.current = true;
-          try {
-            await Promise.resolve(onChange(yaml));
-          } finally {
-            isSavingBaseRef.current = false;
-          }
+          void flushSerializedSave(yaml);
         } catch (err) {
           console.error('Failed to serialize Base config:', err);
         }
-      }, 500);
+      }, 400);
     },
-    [onChange]
+    [flushSerializedSave]
   );
 
   // Extract Vault metadata for auto-completion

@@ -36,6 +36,7 @@ import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
 import { MoveToModal } from './MoveToModal';
+import { BottomSheet, useIsMobile } from './BottomSheet';
 import {
   sortTreeNodes,
   getTreeSortMode,
@@ -266,6 +267,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   const [moveToModalPaths, setMoveToModalPaths] = useState<string[] | null>(null);
 
   // Clipboard & Context menu states
+  const isMobile = useIsMobile();
   const [clipboard, setClipboard] = useState<ClipboardItem | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -354,9 +356,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   };
 
-  // Close context menu on click outside or escape key
+  // Close context menu on click outside or escape key (desktop only; mobile uses BottomSheet)
   useEffect(() => {
-    if (!contextMenu) return;
+    if (!contextMenu || isMobile) return;
 
     const handleClickOutside = (e: MouseEvent) => {
       if (contextMenuRef.current?.contains(e.target as Node)) return;
@@ -373,7 +375,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [contextMenu]);
+  }, [contextMenu, isMobile]);
 
   // Dynamic viewport collision detection & smart positioning for context menu
   useLayoutEffect(() => {
@@ -1458,18 +1460,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         </div>
       )}
 
-      {/* Context Menu Portal */}
-      {contextMenu &&
-        createPortal(
-          <div
-            ref={contextMenuRef}
-            className="tree-context-menu"
-            style={{
-              top: `${contextMenu.y}px`,
-              left: `${contextMenu.x}px`,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      {/* Context Menu: BottomSheet on Mobile, Floating Portal on Desktop */}
+      {contextMenu && (() => {
+        const menuItems = (
+          <>
             {contextMenu.node ? (
               <>
                 {contextMenu.node.type === 'folder' ? (
@@ -1981,9 +1975,36 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 )}
               </>
             )}
+          </>
+        );
+
+        if (isMobile) {
+          return (
+            <BottomSheet
+              isOpen={true}
+              onClose={() => setContextMenu(null)}
+              title={contextMenu.node ? contextMenu.node.name : t('sidebar.files', 'Files')}
+            >
+              <div className="bottom-sheet-context-list">{menuItems}</div>
+            </BottomSheet>
+          );
+        }
+
+        return createPortal(
+          <div
+            ref={contextMenuRef}
+            className="tree-context-menu"
+            style={{
+              top: `${contextMenu.y}px`,
+              left: `${contextMenu.x}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {menuItems}
           </div>,
           document.body
-        )}
+        );
+      })()}
 
       {/* Hidden file & folder inputs for tree uploads */}
       <input

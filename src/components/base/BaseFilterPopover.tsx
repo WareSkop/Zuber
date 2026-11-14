@@ -2,6 +2,7 @@ import React from 'react';
 import { Filter, Plus, Trash2, X, Folder, Tag, FileText } from 'lucide-react';
 import type { BaseFilterRule, FilterOperator } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseFilterPopoverProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
   vaultNotes = [],
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
 
   if (!isOpen) return null;
 
@@ -73,6 +75,168 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
     onChangeRules(updated);
   };
 
+  const filterBody = rules.length === 0 ? (
+    <div className="base-popover-empty">
+      <p>{t('base.noFilters') || 'Keine aktiven Filter. Alle Notizen werden angezeigt.'}</p>
+    </div>
+  ) : (
+    <div className="base-filter-rule-list">
+      {rules.map((rule, idx) => {
+        const isSpecialFunc = rule.field === 'file.inFolder' || rule.field === 'file.hasTag' || rule.field === 'file.hasLink';
+        const isValueless = rule.operator === 'isEmpty' || rule.operator === '!isEmpty';
+
+        return (
+          <div key={rule.id} className="base-filter-rule-row">
+            {/* Field Selector */}
+            <select
+              className="base-filter-select field-select"
+              value={rule.field}
+              onChange={(e) => handleUpdateRule(idx, { field: e.target.value })}
+            >
+              <optgroup label="Funktionen & Verknüpfungen">
+                <option value="file.inFolder">📁 Liegt in Ordner... (file.inFolder)</option>
+                <option value="file.hasTag">🏷️ Hat Tag... (file.hasTag)</option>
+                <option value="file.hasLink">🔗 Verlinkt auf... (file.hasLink)</option>
+              </optgroup>
+              <optgroup label="Datei-Eigenschaften">
+                <option value="file.name">Dateiname (file.name)</option>
+                <option value="file.folder">Ordnerpfad (file.folder)</option>
+                <option value="file.ext">Dateiendung (file.ext)</option>
+              </optgroup>
+              {availableProperties.length > 0 && (
+                <optgroup label="Frontmatter-Eigenschaften">
+                  {availableProperties.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+
+            {/* Operator Selector */}
+            <select
+              className="base-filter-select operator-select"
+              value={rule.operator}
+              onChange={(e) => handleUpdateRule(idx, { operator: e.target.value as FilterOperator })}
+            >
+              {isSpecialFunc ? (
+                <>
+                  <option value="==">ist</option>
+                  <option value="!=">ist nicht</option>
+                </>
+              ) : (
+                <>
+                  <option value="==">ist gleich (==)</option>
+                  <option value="!=">ist ungleich (!=)</option>
+                  <option value="contains">enthält</option>
+                  <option value="startsWith">beginnt mit</option>
+                  <option value="!isEmpty">ist nicht leer</option>
+                  <option value="isEmpty">ist leer</option>
+                  <option value=">">&gt; (größer als)</option>
+                  <option value="<">&lt; (kleiner als)</option>
+                  <option value=">=">&gt;= (größer gleich)</option>
+                  <option value="<=">&lt;= (kleiner gleich)</option>
+                </>
+              )}
+            </select>
+
+            {/* Value Input */}
+            <div className="base-filter-val-wrapper">
+              {rule.field === 'file.inFolder' ? (
+                <select
+                  className="base-filter-select val-select"
+                  value={String(rule.value || '')}
+                  onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
+                >
+                  <option value="">(Wurzelverzeichnis)</option>
+                  {vaultFolders.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              ) : rule.field === 'file.hasTag' ? (
+                <select
+                  className="base-filter-select val-select"
+                  value={String(rule.value || '')}
+                  onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
+                >
+                  <option value="" disabled>
+                    Tag auswählen...
+                  </option>
+                  {vaultTags.map((t) => (
+                    <option key={t} value={t}>
+                      #{t}
+                    </option>
+                  ))}
+                </select>
+              ) : rule.field === 'file.hasLink' ? (
+                <div className="base-filter-note-input-wrapper">
+                  <input
+                    type="text"
+                    list={`datalist-notes-${rule.id}`}
+                    className="base-filter-input val-input"
+                    placeholder={t('base.targetNotePlaceholder') || 'Zielnotiz auswählen...'}
+                    value={String(rule.value ?? '')}
+                    onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
+                  />
+                  <datalist id={`datalist-notes-${rule.id}`}>
+                    {vaultNotes.map((n) => (
+                      <option key={n.path} value={n.name}>
+                        {n.path}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+              ) : isValueless ? (
+                <span className="base-filter-val-placeholder">—</span>
+              ) : (
+                <input
+                  type="text"
+                  className="base-filter-input"
+                  placeholder="Wert..."
+                  value={String(rule.value ?? '')}
+                  onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
+                />
+              )}
+            </div>
+
+            {/* Remove Button */}
+            <button
+              type="button"
+              className="base-icon-btn remove-rule-btn"
+              onClick={() => handleRemoveRule(idx)}
+              title={t('common.delete') || 'Bedingung entfernen'}
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const filterFooterBtn = (
+    <button type="button" className="base-btn add-filter-btn" onClick={handleAddRule}>
+      <Plus size={14} />
+      <span>{t('base.addFilter') || 'Bedingung hinzufügen'}</span>
+    </button>
+  );
+
+  if (isMobile) {
+    return (
+      <BottomSheet
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t('base.filterTitle') || 'Filter konfigurieren'}
+        footer={<div className="bottom-sheet-footer-actions">{filterFooterBtn}</div>}
+      >
+        {filterBody}
+      </BottomSheet>
+    );
+  }
+
   return (
     <div className="base-popover-container base-filter-popover" role="dialog" aria-label="Filter Konfiguration">
       <div className="base-popover-header">
@@ -90,156 +254,9 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
         </button>
       </div>
 
-      <div className="base-popover-body">
-        {rules.length === 0 ? (
-          <div className="base-popover-empty">
-            <p>{t('base.noFilters') || 'Keine aktiven Filter. Alle Notizen werden angezeigt.'}</p>
-          </div>
-        ) : (
-          <div className="base-filter-rule-list">
-            {rules.map((rule, idx) => {
-              const isSpecialFunc = rule.field === 'file.inFolder' || rule.field === 'file.hasTag' || rule.field === 'file.hasLink';
-              const isValueless = rule.operator === 'isEmpty' || rule.operator === '!isEmpty';
+      <div className="base-popover-body">{filterBody}</div>
 
-              return (
-                <div key={rule.id} className="base-filter-rule-row">
-                  {/* Field Selector */}
-                  <select
-                    className="base-filter-select field-select"
-                    value={rule.field}
-                    onChange={(e) => handleUpdateRule(idx, { field: e.target.value })}
-                  >
-                    <optgroup label="Funktionen & Verknüpfungen">
-                      <option value="file.inFolder">📁 Liegt in Ordner... (file.inFolder)</option>
-                      <option value="file.hasTag">🏷️ Hat Tag... (file.hasTag)</option>
-                      <option value="file.hasLink">🔗 Verlinkt auf... (file.hasLink)</option>
-                    </optgroup>
-                    <optgroup label="Datei-Eigenschaften">
-                      <option value="file.name">Dateiname (file.name)</option>
-                      <option value="file.folder">Ordnerpfad (file.folder)</option>
-                      <option value="file.ext">Dateiendung (file.ext)</option>
-                    </optgroup>
-                    {availableProperties.length > 0 && (
-                      <optgroup label="Frontmatter-Eigenschaften">
-                        {availableProperties.map((p) => (
-                          <option key={p.key} value={p.key}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-
-                  {/* Operator Selector */}
-                  <select
-                    className="base-filter-select operator-select"
-                    value={rule.operator}
-                    onChange={(e) => handleUpdateRule(idx, { operator: e.target.value as FilterOperator })}
-                  >
-                    {isSpecialFunc ? (
-                      <>
-                        <option value="==">ist</option>
-                        <option value="!=">ist nicht</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="==">ist gleich (==)</option>
-                        <option value="!=">ist ungleich (!=)</option>
-                        <option value="contains">enthält</option>
-                        <option value="startsWith">beginnt mit</option>
-                        <option value="!isEmpty">ist nicht leer</option>
-                        <option value="isEmpty">ist leer</option>
-                        <option value=">">&gt; (größer als)</option>
-                        <option value="<">&lt; (kleiner als)</option>
-                        <option value=">=">&gt;= (größer gleich)</option>
-                        <option value="<=">&lt;= (kleiner gleich)</option>
-                      </>
-                    )}
-                  </select>
-
-                  {/* Value Input */}
-                  <div className="base-filter-val-wrapper">
-                    {rule.field === 'file.inFolder' ? (
-                      <select
-                        className="base-filter-select val-select"
-                        value={String(rule.value || '')}
-                        onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
-                      >
-                        <option value="">(Wurzelverzeichnis)</option>
-                        {vaultFolders.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                    ) : rule.field === 'file.hasTag' ? (
-                      <select
-                        className="base-filter-select val-select"
-                        value={String(rule.value || '')}
-                        onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
-                      >
-                        <option value="" disabled>
-                          Tag auswählen...
-                        </option>
-                        {vaultTags.map((t) => (
-                          <option key={t} value={t}>
-                            #{t}
-                          </option>
-                        ))}
-                      </select>
-                    ) : rule.field === 'file.hasLink' ? (
-                      <div className="base-filter-note-input-wrapper">
-                        <input
-                          type="text"
-                          list={`datalist-notes-${rule.id}`}
-                          className="base-filter-input val-input"
-                          placeholder={t('base.targetNotePlaceholder') || 'Zielnotiz auswählen...'}
-                          value={String(rule.value ?? '')}
-                          onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
-                        />
-                        <datalist id={`datalist-notes-${rule.id}`}>
-                          {vaultNotes.map((n) => (
-                            <option key={n.path} value={n.name}>
-                              {n.path}
-                            </option>
-                          ))}
-                        </datalist>
-                      </div>
-                    ) : isValueless ? (
-                      <span className="base-filter-val-placeholder">—</span>
-                    ) : (
-                      <input
-                        type="text"
-                        className="base-filter-input"
-                        placeholder="Wert..."
-                        value={String(rule.value ?? '')}
-                        onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
-                      />
-                    )}
-                  </div>
-
-                  {/* Remove Button */}
-                  <button
-                    type="button"
-                    className="base-icon-btn remove-rule-btn"
-                    onClick={() => handleRemoveRule(idx)}
-                    title={t('common.delete') || 'Bedingung entfernen'}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="base-popover-footer">
-        <button type="button" className="base-btn add-filter-btn" onClick={handleAddRule}>
-          <Plus size={14} />
-          <span>{t('base.addFilter') || 'Bedingung hinzufügen'}</span>
-        </button>
-      </div>
+      <div className="base-popover-footer">{filterFooterBtn}</div>
     </div>
   );
 };

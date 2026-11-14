@@ -12,6 +12,14 @@
   - **Saubere leere Zellen:** Leere Zellen werden dezent gestrichelt ohne starre graue Platzhalterboxen gerendert (`.base-board-swimlane-cell.is-empty`), behalten aber eine intuitive Drop-Zone von 300px Breite bei.
 
 ### Added
+- Wiederverwendbares `<BottomSheet>`-System & Android Back-Gesture Support (`src/components/BottomSheet.tsx`, `src/App.tsx`, `src/styles.css`):
+  - Portal-basiertes `<BottomSheet>` (`z-index: 1100`, `85dvh`, Drag-Handle `36px × 4px`, Swipe-Down > `60px` zum Schließen, `48px` Touch-Zeilen, Safe-Area-Footer).
+  - `useMobileBackHandler` mit `window.history.pushState` / `popstate` (LIFO-Stack) für `<BottomSheet>` und mobile Drawer (`leftSidebarOpen`, `rightSidebarOpen`).
+- Touch-optimierte Kanban- & Dateibaum-Bottom-Sheets (`< 768px`) unter Erhalt der Desktop-Ansicht (`>= 768px`):
+  - Upgrade von `BaseBoardColumn`, `BaseBoardSwimlaneRow`, `BaseBoardSortPopover`, `BaseToolbar`, `BaseFilterPopover`, `BaseColumnsModal` und `FileSidebar`-Kontextmenü auf `<BottomSheet>` auf Mobilgeräten (`@media (pointer: coarse)` mit `42px` Mindesthöhe für Dateibaum-Zeilen).
+  - Touch-Karten-Verschieben (`⋮`-Button, mind. `36×36px`) auf Kanban-Karten (`BaseBoardCard.tsx`, `BaseBoardView.tsx`) mit 1D-Spalten- und 2D-Swimlane-Auswahl im `<BottomSheet>`.
+- Sichere Wiederherstellung im `ErrorBoundary` (`src/components/ErrorBoundary.tsx`):
+  - Button „Ansicht zurücksetzen & neu laden“ / „Reset Active View & Reload“ zum gezielten Zurücksetzen der aktiven Ansicht in `localStorage` ohne Verlust von Offline-Notizen in IndexedDB.
 - Kartensortierung pro Spalte mit dediziertem Sortier-Popover im Kanban-Board (`BaseBoardColumn.tsx`, `BaseBoardSwimlaneRow.tsx`, `BaseBoardView.tsx`, `BaseBoardSortPopover.tsx`, `src/base/baseConfig.ts`, `src/base/baseEngine.ts`, `src/styles.css`, `src/locales/de.json`, `src/locales/en.json`, `src/baseBoardView.test.tsx`, `src/baseConfig.test.ts`):
   - **Sortier-Icon-Button im Spaltenkopf:** Unmittelbar links neben dem `+`-Button zur Notizerstellung platziert (`.base-board-col-sort-btn.board-sort-btn`, Icon `ArrowUpDown`). Sowohl im 1D-Standard-Board als auch in allen Zellen des 2D-Swimlane-Boards verfügbar. Aktive Sortierregeln werden durch einen Akzent-Highlight (`.is-active`) hervorgehoben.
   - **Portal-gestütztes Sortier-Popover (`BaseBoardSortPopover.tsx`):** Leichtgewichtiges Popover unterhalb des Sortier-Buttons mit dynamischem Viewport-Clamping. Unterstützt standardmäßig die Sortierung nach Name (`file.name`) und Erstelldatum (`file.ctime` / `created`) sowie nach allen unter „Board konfigurieren“ aktivierten Frontmatter-Karteneigenschaften (`view.order`).
@@ -23,6 +31,12 @@
   - Dedizierte Komponente `BaseBoardSwimlaneRow.tsx` für modulare, selbstständige Swimlane-Reihen mit unabhängigem Einklapp-Status (`collapsed`), Drei-Punkte-Menü für Rename/Remove und 2D-Drag-&-Drop auf Header-Items und Zellen.
 
 ### Fixed
+- React Error #310 & `.base`-Speicher-Serialisierung (`BaseEditor.tsx`, `BaseBoardView.tsx`, `src/components/base/*`):
+  - Strikte Hook-Normalisierung (alle Hooks vor bedingten Returns) in allen Base-/Board-Komponenten.
+  - Entprellte (`400ms`) und serialisierte `.base`-Speicherwarteschlange (`queuedYamlRef` / `flushSerializedSave`) in `BaseEditor.tsx` und `BaseBoardView.tsx` zur Vermeidung überlappender Schreibvorgänge und WebSocket-Echo-Thrashing.
+- Header-beschränktes Sidebar-Swipe-to-Open in Boards & Canvases (`src/App.tsx`):
+  - Horizontales Wischen in `.base`-Boards, `.canvas`-Dateien und horizontalen Scroll-Containern scrollt nun flüssig ohne versehentliches Öffnen der linken Seitenleiste (Sidebar-Swipe-to-Open nur noch über die Kopfzeile).
+- Responsives Viewport-Clamping (`max-height: min(90dvh, 860px)`) und Safe-Area-Footer in `BaseBoardConfigModal` (`src/styles.css`).
 - Responsives Viewport-Clamping & fixierter Footer im „Board konfigurieren“-Dialog (`BaseBoardConfigModal.tsx`, `src/styles.css`, `src/baseBoardView.test.tsx`):
   - **Flex-Column Modal-Struktur mit Viewport-Clamping:** Der Modal-Container (`.board-config-modal`) wird über `max-height: calc(100vh - 48px) !important;` und `padding: 0 !important;` verlässlich an die Viewport-Höhe geklemmt und passt sich auch auf Standard-1080p-Laptops und Displays mit Browserleisten perfekt ein, ohne über den Bildschirmrand zu laufen.
   - **Fixierte Kopf- und Fußzeilen:** Die Kopfzeile (`.board-config-header`) mit Schließen-Button (`✕`) bleibt stets fest oben arretiert (`flex-shrink: 0 !important;`). Die Fußzeile (`.board-config-footer`) mit „Abbrechen“- und „Speichern“-Schaltflächen ist dauerhaft am unteren Rand fixiert (`flex-shrink: 0 !important;`), sodass der Speichern-Button nie aus dem sichtbaren Bereich geschoben wird.

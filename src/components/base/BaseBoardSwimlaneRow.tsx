@@ -17,6 +17,7 @@ import type {
 import type { BoardColumnSortRule } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
 import { BaseBoardCard } from './BaseBoardCard';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseBoardSwimlaneRowProps {
   lane: BaseBoardSwimlaneRowData;
@@ -44,6 +45,7 @@ export interface BaseBoardSwimlaneRowProps {
   onDragEnd: () => void;
   columnSortRules?: Record<string, BoardColumnSortRule | undefined>;
   onOpenSort?: (colKey: string, anchorEl: HTMLElement) => void;
+  onOpenMoveSheet?: (record: BaseBoard2DColumn['records'] extends (infer R)[] ? R : any) => void;
 }
 
 export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
@@ -72,8 +74,10 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
   onDragEnd,
   columnSortRules,
   onOpenSort,
+  onOpenMoveSheet,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const laneValue = lane.name || lane.label;
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftName, setDraftName] = useState(laneValue);
@@ -225,7 +229,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                 <MoreVertical size={13} />
               </button>
 
-              {isMenuOpen && (
+              {isMenuOpen && !isMobile && (
                 <div
                   className="base-dropdown-menu col-dropdown"
                   onClick={(e) => e.stopPropagation()}
@@ -254,6 +258,40 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                     <span>{t('base.removeSwimlane', 'Swimlane entfernen')}</span>
                   </button>
                 </div>
+              )}
+
+              {isMenuOpen && isMobile && (
+                <BottomSheet
+                  isOpen={isMenuOpen}
+                  onClose={() => setIsMenuOpen(false)}
+                  title={headerLabel}
+                >
+                  <div className="bottom-sheet-section">
+                    <button
+                      type="button"
+                      className="bottom-sheet-action-btn"
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        setDraftName(laneValue);
+                        setIsRenaming(true);
+                      }}
+                    >
+                      <Edit2 size={16} />
+                      <span>{t('base.renameSwimlane', 'Swimlane umbenennen')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="bottom-sheet-action-btn danger"
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onDeleteSwimlane?.(lane.key);
+                      }}
+                    >
+                      <Trash2 size={16} />
+                      <span>{t('base.removeSwimlane', 'Swimlane entfernen')}</span>
+                    </button>
+                  </div>
+                </BottomSheet>
               )}
             </div>
           </div>
@@ -351,6 +389,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                       onSelectNote={onSelectNote}
                       onDragStart={onDragStart}
                       onDragEnd={onDragEnd}
+                      onOpenMoveSheet={onOpenMoveSheet}
                     />
                   ))}
                   {cellRecords.length === 0 && (

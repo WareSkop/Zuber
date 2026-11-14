@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { BaseConfig, BaseSortRule } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseToolbarProps {
   config: BaseConfig;
@@ -62,6 +63,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
   onToggleEditorMode,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
 
   // New View popover state
   const [isAddViewOpen, setIsAddViewOpen] = useState(false);
@@ -201,7 +203,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                   <MoreVertical size={13} />
                 </button>
 
-                {tabMenuIndex === idx && (
+                {tabMenuIndex === idx && !isMobile && (
                   <div
                     className="base-dropdown-menu tab-dropdown"
                     onClick={(e) => e.stopPropagation()}
@@ -302,7 +304,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
               <span className="btn-label-desktop">{t('base.addView') || 'Ansicht'}</span>
             </button>
 
-            {isAddViewOpen && (
+            {isAddViewOpen && !isMobile && (
               <form
                 className="base-dropdown-menu add-view-dropdown"
                 onSubmit={handleCreateViewSubmit}
@@ -397,7 +399,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             </span>
           </button>
 
-          {isSortDropdownOpen && (
+          {isSortDropdownOpen && !isMobile && (
             <div className="base-dropdown-menu sort-dropdown">
               <button
                 type="button"
@@ -459,7 +461,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             </span>
           </button>
 
-          {isGroupDropdownOpen && (
+          {isGroupDropdownOpen && !isMobile && (
             <div className="base-dropdown-menu group-dropdown">
               <button
                 type="button"
@@ -543,6 +545,248 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Mobile BottomSheets for Toolbar Menus */}
+      {isMobile && tabMenuIndex !== null && config.views[tabMenuIndex] && (() => {
+        const idx = tabMenuIndex;
+        const v = config.views[idx];
+        return (
+          <BottomSheet
+            isOpen={true}
+            onClose={() => setTabMenuIndex(null)}
+            title={v.name}
+          >
+            <div className="bottom-sheet-section">
+              {v.type !== 'table' && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-btn"
+                  onClick={() => {
+                    setTabMenuIndex(null);
+                    onSwitchViewType?.(idx, 'table');
+                  }}
+                >
+                  <TableIcon size={16} />
+                  <span>{t('base.switchToTable') || 'Zu Tabellenansicht wechseln'}</span>
+                </button>
+              )}
+              {v.type !== 'cards' && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-btn"
+                  onClick={() => {
+                    setTabMenuIndex(null);
+                    onSwitchViewType?.(idx, 'cards');
+                  }}
+                >
+                  <LayoutGrid size={16} />
+                  <span>{t('base.switchToCards') || 'Zu Kartenansicht wechseln'}</span>
+                </button>
+              )}
+              {v.type !== 'board' && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-btn"
+                  onClick={() => {
+                    setTabMenuIndex(null);
+                    onSwitchViewType?.(idx, 'board');
+                  }}
+                >
+                  <Kanban size={16} />
+                  <span>{t('base.switchToBoard') || 'Zu Boardansicht wechseln'}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="bottom-sheet-action-btn"
+                onClick={() => handleStartRename(idx, v.name)}
+              >
+                <Edit2 size={16} />
+                <span>{t('base.renameView') || t('base.rename') || 'Umbenennen'}</span>
+              </button>
+              <button
+                type="button"
+                className="bottom-sheet-action-btn"
+                onClick={() => {
+                  setTabMenuIndex(null);
+                  onDuplicateView(idx);
+                }}
+              >
+                <Copy size={16} />
+                <span>{t('base.duplicateView') || t('base.duplicate') || 'Duplizieren'}</span>
+              </button>
+              {config.views.length > 1 && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-btn danger"
+                  onClick={() => {
+                    setTabMenuIndex(null);
+                    onDeleteView(idx);
+                  }}
+                >
+                  <Trash2 size={16} />
+                  <span>{t('base.deleteView') || t('base.delete') || 'Ansicht löschen'}</span>
+                </button>
+              )}
+            </div>
+          </BottomSheet>
+        );
+      })()}
+
+      {isMobile && isAddViewOpen && (
+        <BottomSheet
+          isOpen={isAddViewOpen}
+          onClose={() => setIsAddViewOpen(false)}
+          title={t('base.addView') || 'Neue Ansicht hinzufügen'}
+        >
+          <form className="bottom-sheet-form" onSubmit={handleCreateViewSubmit}>
+            <div className="add-view-field">
+              <label className="add-view-label">{t('base.viewName') || 'Name der Ansicht'}</label>
+              <input
+                type="text"
+                className="base-input"
+                placeholder={t('base.viewName') || 'Name der Ansicht'}
+                value={newViewName}
+                autoFocus
+                onChange={(e) => setNewViewName(e.target.value)}
+              />
+            </div>
+            <div className="add-view-field">
+              <label className="add-view-label">{t('base.viewType') || 'Layout-Typ'}</label>
+              <div className="add-view-types">
+                <button
+                  type="button"
+                  className={`type-btn ${newViewType === 'table' ? 'active' : ''}`}
+                  onClick={() => setNewViewType('table')}
+                >
+                  <TableIcon size={15} />
+                  <span>{t('base.typeTable') || 'Tabelle'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`type-btn ${newViewType === 'cards' ? 'active' : ''}`}
+                  onClick={() => setNewViewType('cards')}
+                >
+                  <LayoutGrid size={15} />
+                  <span>{t('base.typeCards') || 'Karten'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`type-btn ${newViewType === 'board' ? 'active' : ''}`}
+                  onClick={() => setNewViewType('board')}
+                >
+                  <Kanban size={15} />
+                  <span>{t('base.typeBoard') || 'Board'}</span>
+                </button>
+              </div>
+            </div>
+            <div className="add-view-actions">
+              <button
+                type="button"
+                className="base-btn secondary-btn"
+                onClick={() => setIsAddViewOpen(false)}
+              >
+                {t('base.cancel') || 'Abbrechen'}
+              </button>
+              <button type="submit" className="base-btn primary-btn add-btn-submit">
+                {t('base.create') || 'Erstellen'}
+              </button>
+            </div>
+          </form>
+        </BottomSheet>
+      )}
+
+      {isMobile && isSortDropdownOpen && (
+        <BottomSheet
+          isOpen={isSortDropdownOpen}
+          onClose={() => setIsSortDropdownOpen(false)}
+          title={t('base.sortBy', 'Sortieren nach')}
+        >
+          <div className="bottom-sheet-section">
+            <button
+              type="button"
+              className={`bottom-sheet-action-btn ${!currentSort ? 'is-active' : ''}`}
+              onClick={() => {
+                onSortChange(undefined);
+                setIsSortDropdownOpen(false);
+              }}
+            >
+              <span className="bottom-sheet-action-label">(Keine Sortierung)</span>
+              {!currentSort && <Check size={16} className="bottom-sheet-check-icon" />}
+            </button>
+            {availableProperties.map((p) => {
+              const isSelected = currentSort?.property === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={`bottom-sheet-action-btn ${isSelected ? 'is-active' : ''}`}
+                  onClick={() => {
+                    if (isSelected) {
+                      const nextDir = currentSort.direction === 'asc' ? 'desc' : 'asc';
+                      onSortChange([{ property: p.key, direction: nextDir }]);
+                    } else {
+                      onSortChange([{ property: p.key, direction: 'asc' }]);
+                    }
+                    setIsSortDropdownOpen(false);
+                  }}
+                >
+                  <span className="bottom-sheet-action-label">{p.label}</span>
+                  {isSelected && (
+                    <span className="sort-dir-badge">
+                      {currentSort.direction === 'asc' ? 'A-Z' : 'Z-A'}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </BottomSheet>
+      )}
+
+      {isMobile && isGroupDropdownOpen && (
+        <BottomSheet
+          isOpen={isGroupDropdownOpen}
+          onClose={() => setIsGroupDropdownOpen(false)}
+          title={t('base.groupByProperty', 'Gruppieren nach')}
+        >
+          <div className="bottom-sheet-section">
+            <button
+              type="button"
+              className={`bottom-sheet-action-btn ${!currentGroupBy ? 'is-active' : ''}`}
+              onClick={() => {
+                onGroupByChange(undefined);
+                setIsGroupDropdownOpen(false);
+              }}
+            >
+              <span className="bottom-sheet-action-label">(Keine Gruppierung)</span>
+              {!currentGroupBy && <Check size={16} className="bottom-sheet-check-icon" />}
+            </button>
+            {availableProperties.map((p) => {
+              const isSelected = currentGroupBy?.property === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={`bottom-sheet-action-btn ${isSelected ? 'is-active' : ''}`}
+                  onClick={() => {
+                    if (isSelected) {
+                      const nextDir = currentGroupBy.direction === 'asc' ? 'desc' : 'asc';
+                      onGroupByChange({ property: p.key, direction: nextDir });
+                    } else {
+                      onGroupByChange({ property: p.key, direction: 'asc' });
+                    }
+                    setIsGroupDropdownOpen(false);
+                  }}
+                >
+                  <span className="bottom-sheet-action-label">{p.label}</span>
+                  {isSelected && <Check size={16} className="bottom-sheet-check-icon" />}
+                </button>
+              );
+            })}
+          </div>
+        </BottomSheet>
+      )}
     </div>
   );
 };

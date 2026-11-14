@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { FileText, Folder } from 'lucide-react';
+import { FileText, Folder, MoreVertical } from 'lucide-react';
 import type { BaseRecord } from '../../base/baseEngine';
 import { getPropertyValue, formatDateTime } from '../../base/baseEngine';
 
@@ -14,6 +14,7 @@ export interface BaseBoardCardProps {
   onSelectNote: (path: string) => void;
   onDragStart: (path: string, e: React.DragEvent) => void;
   onDragEnd: () => void;
+  onOpenMoveSheet?: (record: BaseRecord) => void;
 }
 
 export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
@@ -27,6 +28,7 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
   onSelectNote,
   onDragStart,
   onDragEnd,
+  onOpenMoveSheet,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const noteName = record.file.name ? record.file.name.replace(/\.md$/i, '') : record.file.path;
@@ -65,16 +67,32 @@ export const BaseBoardCard: React.FC<BaseBoardCardProps> = ({
     >
       {/* Card Top: Title & Folder */}
       <div className="base-card-top">
-        <div
-          className="base-card-title-link"
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectNote(record.file.path);
-          }}
-          title={record.file.path}
-        >
-          <FileText size={15} className="base-card-icon" />
-          <span className="base-card-title">{noteName}</span>
+        <div className="base-card-top-row">
+          <div
+            className="base-card-title-link"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectNote(record.file.path);
+            }}
+            title={record.file.path}
+          >
+            <FileText size={15} className="base-card-icon" />
+            <span className="base-card-title">{noteName}</span>
+          </div>
+          {!readOnly && onOpenMoveSheet && (
+            <button
+              type="button"
+              className="base-card-mobile-move-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenMoveSheet(record);
+              }}
+              aria-label={`Move ${noteName}`}
+              title={`Move ${noteName}`}
+            >
+              <MoreVertical size={15} />
+            </button>
+          )}
         </div>
         {record.file.folder && (
           <span className="base-card-folder" title={record.file.folder}>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Columns, GripVertical, CheckSquare, Square, X, RotateCcw } from 'lucide-react';
 import { useTranslation } from '../../i18n';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseColumnsModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const BaseColumnsModal: React.FC<BaseColumnsModalProps> = ({
   onResetColumns,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const [draggedColIndex, setDraggedColIndex] = useState<number | null>(null);
 
   if (!isOpen) return null;
@@ -92,6 +94,82 @@ export const BaseColumnsModal: React.FC<BaseColumnsModalProps> = ({
     setDraggedColIndex(null);
   };
 
+  const columnsBody = (
+    <>
+      <p className="base-modal-hint">
+        {t('base.columnsHint') ||
+          'Wähle aus, welche Spalten in der Tabelle sichtbar sein sollen und ziehe sie per Drag & Drop in die gewünschte Reihenfolge:'}
+      </p>
+
+      <div className="base-columns-checklist scroller">
+        {allColumnsList.map((col, idx) => {
+          const isOrderable = idx < order.length;
+
+          return (
+            <div
+              key={col.key}
+              className={`base-column-item ${col.isVisible ? 'visible' : ''} ${draggedColIndex === idx ? 'dragging' : ''}`}
+              draggable={isOrderable}
+              onDragStart={() => isOrderable && handleDragStart(idx)}
+              onDragOver={(e) => isOrderable && handleDragOver(e, idx)}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="base-column-left">
+                {isOrderable ? (
+                  <span className="base-col-drag-handle" title="Ziehen zum Neuanordnen">
+                    <GripVertical size={14} />
+                  </span>
+                ) : (
+                  <span className="base-col-drag-spacer" />
+                )}
+                <button
+                  type="button"
+                  className="base-checkbox-toggle"
+                  onClick={() => onToggleColumn(col.key, !col.isVisible)}
+                  title={col.isVisible ? 'Spalte ausblenden' : 'Spalte einblenden'}
+                >
+                  {col.isVisible ? (
+                    <CheckSquare size={16} className="checked-icon" />
+                  ) : (
+                    <Square size={16} className="unchecked-icon" />
+                  )}
+                </button>
+                <span className="base-col-name">{col.label}</span>
+              </div>
+
+              {col.key !== col.label && <span className="base-col-raw-key">({col.key})</span>}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+
+  const columnsFooter = (
+    <>
+      <button type="button" className="base-btn secondary-btn" onClick={onResetColumns}>
+        <RotateCcw size={14} />
+        <span>{t('base.resetDefault', 'Standard wiederherstellen')}</span>
+      </button>
+      <button type="button" className="base-btn primary-btn" onClick={onClose}>
+        <span>{t('common.done', 'Fertig')}</span>
+      </button>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <BottomSheet
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t('base.manageColumns') || 'Spalten verwalten'}
+        footer={<div className="bottom-sheet-footer-actions">{columnsFooter}</div>}
+      >
+        {columnsBody}
+      </BottomSheet>
+    );
+  }
+
   return (
     <div className="modal-backdrop base-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
       <div className="modal-container base-modal-container base-columns-modal" onClick={(e) => e.stopPropagation()}>
@@ -110,64 +188,9 @@ export const BaseColumnsModal: React.FC<BaseColumnsModalProps> = ({
           </button>
         </div>
 
-        <div className="modal-body base-modal-body scroller">
-          <p className="base-modal-hint">
-            {t('base.columnsHint') ||
-              'Wähle aus, welche Spalten in der Tabelle sichtbar sein sollen und ziehe sie per Drag & Drop in die gewünschte Reihenfolge:'}
-          </p>
+        <div className="modal-body base-modal-body scroller">{columnsBody}</div>
 
-          <div className="base-columns-checklist scroller">
-            {allColumnsList.map((col, idx) => {
-              const isOrderable = idx < order.length;
-
-              return (
-                <div
-                  key={col.key}
-                  className={`base-column-item ${col.isVisible ? 'visible' : ''} ${draggedColIndex === idx ? 'dragging' : ''}`}
-                  draggable={isOrderable}
-                  onDragStart={() => isOrderable && handleDragStart(idx)}
-                  onDragOver={(e) => isOrderable && handleDragOver(e, idx)}
-                  onDragEnd={handleDragEnd}
-                >
-                  <div className="base-column-left">
-                    {isOrderable ? (
-                      <span className="base-col-drag-handle" title="Ziehen zum Neuanordnen">
-                        <GripVertical size={14} />
-                      </span>
-                    ) : (
-                      <span className="base-col-drag-spacer" />
-                    )}
-                    <button
-                      type="button"
-                      className="base-checkbox-toggle"
-                      onClick={() => onToggleColumn(col.key, !col.isVisible)}
-                      title={col.isVisible ? 'Spalte ausblenden' : 'Spalte einblenden'}
-                    >
-                      {col.isVisible ? (
-                        <CheckSquare size={16} className="checked-icon" />
-                      ) : (
-                        <Square size={16} className="unchecked-icon" />
-                      )}
-                    </button>
-                    <span className="base-col-name">{col.label}</span>
-                  </div>
-
-                  {col.key !== col.label && <span className="base-col-raw-key">({col.key})</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="modal-footer base-modal-footer">
-          <button type="button" className="base-btn secondary-btn" onClick={onResetColumns}>
-            <RotateCcw size={14} />
-            <span>{t('base.resetDefault', 'Standard wiederherstellen')}</span>
-          </button>
-          <button type="button" className="base-btn primary-btn" onClick={onClose}>
-            <span>{t('common.done', 'Fertig')}</span>
-          </button>
-        </div>
+        <div className="modal-footer base-modal-footer">{columnsFooter}</div>
       </div>
     </div>
   );

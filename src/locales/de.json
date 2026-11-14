@@ -591,5 +591,13 @@
     "toggleOrientation": "Split-Ausrichtung wechseln (Links/Rechts ⇄ Oben/Unten)",
     "showGraph": "Graph in Rechercheansicht zeigen",
     "close": "Rechercheansicht schließen"
+  },
+  "board": {
+    "moveCard": "Karte verschieben",
+    "targetColumn": "Spalte",
+    "targetSwimlane": "Swimlane"
+  },
+  "error": {
+    "resetView": "Ansicht zurücksetzen & neu laden"
   }
 }

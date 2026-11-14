@@ -47,6 +47,7 @@ import {
   LayoutTemplate,
 } from 'lucide-react';
 import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
+import { useMobileBackHandler } from './components/BottomSheet';
 import {
   recordRecentNote,
   notifyVaultEntryRenamed,
@@ -410,13 +411,37 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  useMobileBackHandler(isMobile && leftSidebarOpen, () => setLeftSidebarOpen(false));
+  useMobileBackHandler(isMobile && rightSidebarOpen, () => setRightSidebarOpen(false));
+
+  const touchStartRef = useRef<{ x: number; y: number; allowSwipeOpen: boolean } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
+      const target = e.target as HTMLElement | null;
+      const startedInHeader = Boolean(
+        target?.closest('.workspace-topbar, .top-bar, .app-header, .editor-header')
+      );
+      const isBoardOrCanvasView = Boolean(
+        activeNote?.path.endsWith('.base') ||
+          activeNote?.path.endsWith('.canvas') ||
+          target?.closest('.base-board-view, .base-editor, .base-table-wrapper, .canvas-editor-wrapper')
+      );
+      let insideHorizontalScroll = false;
+      let el: HTMLElement | null = target;
+      while (el && el !== e.currentTarget) {
+        if (el.scrollWidth > el.clientWidth + 4) {
+          insideHorizontalScroll = true;
+          break;
+        }
+        el = el.parentElement;
+      }
+      const allowSwipeOpen = (!isBoardOrCanvasView && !insideHorizontalScroll) || startedInHeader;
+
       touchStartRef.current = {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
+        allowSwipeOpen,
       };
     }
   };
@@ -425,6 +450,7 @@ export const App: React.FC = () => {
     if (!touchStartRef.current || e.changedTouches.length === 0) return;
     const startX = touchStartRef.current.x;
     const startY = touchStartRef.current.y;
+    const allowSwipeOpen = touchStartRef.current.allowSwipeOpen;
     const endX = e.changedTouches[0].clientX;
     const endY = e.changedTouches[0].clientY;
     touchStartRef.current = null;
@@ -452,10 +478,10 @@ export const App: React.FC = () => {
           setRightSidebarOpen(false);
         }
       } else {
-        // Neither sidebar is open: swipe right opens left sidebar
+        // Neither sidebar is open: swipe right opens left sidebar (restricted to header on boards/canvases)
         const isEdgeStart = startX <= 35;
         const isStrongSwipe = deltaX > 65;
-        if (isEdgeStart || isStrongSwipe) {
+        if (allowSwipeOpen && (isEdgeStart || isStrongSwipe)) {
           setLeftSidebarOpen(true);
         }
       }

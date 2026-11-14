@@ -15,6 +15,7 @@ import type { BoardColumnSortRule } from '../../base/baseConfig';
 import { BaseBoardCard } from './BaseBoardCard';
 import { BaseBoardSortPopover } from './BaseBoardSortPopover';
 import { useTranslation } from '../../i18n';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseBoardColumnData {
   key: string;
@@ -49,6 +50,7 @@ export interface BaseBoardColumnProps {
   onSortChange?: (sortRule?: BoardColumnSortRule) => void;
   onOpenSort?: (colKey: string, anchorEl: HTMLElement) => void;
   cardProperties?: string[];
+  onOpenMoveSheet?: (record: BaseRecord) => void;
 }
 
 export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
@@ -76,8 +78,10 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   onSortChange,
   onOpenSort,
   cardProperties,
+  onOpenMoveSheet,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
   const colPropDisplayName = groupByDisplayName || groupByProp.toUpperCase();
 
   const [isRenaming, setIsRenaming] = useState(false);
@@ -254,7 +258,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
                   <MoreVertical size={13} />
                 </button>
 
-                {isMenuOpen && (
+                {isMenuOpen && !isMobile && (
                   <div
                     className="base-dropdown-menu col-dropdown"
                     onClick={(e) => e.stopPropagation()}
@@ -284,6 +288,40 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
                     </button>
                   </div>
                 )}
+
+                {isMenuOpen && isMobile && (
+                  <BottomSheet
+                    isOpen={isMenuOpen}
+                    onClose={() => setIsMenuOpen(false)}
+                    title={col.label}
+                  >
+                    <div className="bottom-sheet-section">
+                      <button
+                        type="button"
+                        className="bottom-sheet-action-btn"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          setDraftColName(col.label);
+                          setIsRenaming(true);
+                        }}
+                      >
+                        <Edit2 size={16} />
+                        <span>{t('base.renameColumn', 'Spalte umbenennen')}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="bottom-sheet-action-btn danger"
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          onDeleteColumn?.(col.key);
+                        }}
+                      >
+                        <Trash2 size={16} />
+                        <span>{t('base.deleteColumn', 'Spalte entfernen')}</span>
+                      </button>
+                    </div>
+                  </BottomSheet>
+                )}
               </div>
             )}
           </div>
@@ -305,6 +343,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
               onSelectNote={onSelectNote}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
+              onOpenMoveSheet={onOpenMoveSheet}
             />
           ))}
 
