@@ -16,6 +16,9 @@
   - **Saubere leere Zellen:** Leere Zellen werden dezent gestrichelt ohne starre graue Platzhalterboxen gerendert (`.base-board-swimlane-cell.is-empty`), behalten aber eine intuitive Drop-Zone von 300px Breite bei.
 
 ### Added
+- Illustriertes englisches Benutzerhandbuch für das GitHub Wiki & automatisierte Screenshot-Generierung (`docs/wiki/`, `scripts/generate-manual-screenshots.mjs`):
+  - **Vollständige Wiki-Dokumentation (`docs/wiki/`):** `Home.md` (mit Entstehungsgeschichte, Obsidian-Inspiration statt Ersatz und Zuber-Metapher), `_Sidebar.md` sowie 7 detaillierte Kapitel (`01-Markdown-Editor-and-Workflows.md` bis `07-Mobile-PWA-and-Deployment.md`).
+  - **Automatisierter Screenshot-Generator (`scripts/generate-manual-screenshots.mjs`):** Erstellt ein temporäres Demo-Vault mit echter Git-Historie in `os.tmpdir()` (ohne `vault/` zu berühren) und erfasst 16 hochauflösende PNG-Screenshots (`docs/wiki/images/01-...png` bis `16-...png`) über headless Chromium (`playwright-core`).
 - Mobile Column Switcher Bar, Spaltenauswahl-`<BottomSheet>` & erweiterte Karten-Aktionen im Kanban-Board (`< 768px`) (`BaseBoardView.tsx`, `BaseBoardCard.tsx`, `src/locales/de.json`, `src/locales/en.json`):
   - **Mobile Column Switcher Bar (`min-height: 48px`):** Zeigt am oberen Rand des mobilen Kanban-Boards das Property-Badge und den Namen der aktiven Spalte, den Kartenzähler, den Dropdown-Trigger (`▾`) für das Spaltenauswahl-`<BottomSheet>`, schnelle `‹` / `›`-Spaltenwechsel-Buttons (`44×44px`) sowie rechts die Aktions-Buttons `+` (`Add Card`), `⇅` (`Sort`) und `⋮` (`Column Menu`) mit `44×44px` Touch-Targets.
   - **Karten-Aktions- & Verschieben-`<BottomSheet>` (`40×40px` `⋮`-Button):** Bietet `48px` hohe Auswahlzeilen zum sofortigen Verschieben in eine andere Spalte (1D & 2D) oder Swimlane (2D) mit direkter Speicherung via `api.saveNote()` sowie eine direkte Aktionszeile **„Notiz öffnen“** (`board.openNote`).
