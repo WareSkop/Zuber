@@ -438,6 +438,7 @@ export const App: React.FC = () => {
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       const target = e.target as HTMLElement | null;
+      const startedInSwipeIgnore = Boolean(target?.closest('[data-swipe-ignore="true"]'));
       const startedInHeader = Boolean(
         target?.closest('.workspace-topbar, .top-bar, .app-header, .editor-header')
       );
@@ -445,7 +446,7 @@ export const App: React.FC = () => {
         activeNote?.path.endsWith('.canvas') ||
           target?.closest('.canvas-editor-wrapper, .react-flow')
       );
-      const allowSwipeOpen = !isCanvasView || startedInHeader;
+      const allowSwipeOpen = !startedInSwipeIgnore && (!isCanvasView || startedInHeader);
 
       touchStartRef.current = {
         x: e.touches[0].clientX,

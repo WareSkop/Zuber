@@ -10,6 +10,7 @@ import { BaseBoardSortPopover } from './components/base/BaseBoardSortPopover';
 import { BaseFilterPopover } from './components/base/BaseFilterPopover';
 import { BaseColumnsModal } from './components/base/BaseColumnsModal';
 import { BaseBoardConfigModal } from './components/base/BaseBoardConfigModal';
+import { BaseToolbar } from './components/base/BaseToolbar';
 import { BaseBoardView } from './components/base/BaseBoardView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { api } from './api';
@@ -395,42 +396,41 @@ describe('Phase 1: BottomSheet, Mobile Back Handler, Hook Safety, Board Move She
       );
     });
 
-    // Only 1 column ('Open') is rendered in the DOM on mobile
-    expect(container.querySelector('.base-board-mobile-switcher')).toBeTruthy();
+    // Only 1 column ('Open') is rendered in the DOM on mobile, with horizontal full-text status pills
+    const switcher = container.querySelector('.base-board-mobile-switcher');
+    expect(switcher).toBeTruthy();
+    expect(switcher?.getAttribute('data-active-column')).toBe('Open');
+    const pillStrip = container.querySelector('.board-mobile-status-pills');
+    expect(pillStrip?.getAttribute('data-swipe-ignore')).toBe('true');
+
+    const pills = Array.from(
+      container.querySelectorAll('.board-mobile-status-pill')
+    ) as HTMLButtonElement[];
+    expect(pills.length).toBe(3);
+    expect(pills[0].textContent).toContain('Open');
+    expect(pills[0].textContent).toContain('(2)');
+    expect(pills[0].classList.contains('is-active')).toBe(true);
+    expect(pills[1].textContent).toContain('inWork');
+    expect(pills[2].textContent).toContain('Finish');
+
     expect(container.querySelectorAll('.base-board-column').length).toBe(1);
-    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('Open');
     expect(container.querySelectorAll('.base-board-card').length).toBe(2);
 
-    // Step next (›) -> 'inWork'
-    const nextBtn = container.querySelector('.mobile-col-next-btn') as HTMLButtonElement;
-    expect(nextBtn).toBeTruthy();
+    // Tap 'inWork' pill -> switches active column to 'inWork'
     act(() => {
-      nextBtn.click();
+      pills[1].click();
     });
-    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('inWork');
+    expect(switcher?.getAttribute('data-active-column')).toBe('inWork');
+    expect(pills[1].classList.contains('is-active')).toBe(true);
     expect(container.querySelectorAll('.base-board-column').length).toBe(1);
     expect(container.querySelectorAll('.base-board-card').length).toBe(1);
     expect(container.querySelector('.base-card-title')?.textContent).toBe('Task3');
 
-    // Open Column Selector BottomSheet via dropdown trigger (▾) and select 'Finish'
-    const selectorTrigger = container.querySelector('.mobile-col-selector-trigger') as HTMLButtonElement;
-    expect(selectorTrigger).toBeTruthy();
+    // Tap 'Finish' pill -> switches active column to 'Finish'
     act(() => {
-      selectorTrigger.click();
+      pills[2].click();
     });
-
-    const colOptions = Array.from(
-      document.querySelectorAll('.mobile-col-option-btn')
-    ) as HTMLButtonElement[];
-    expect(colOptions.length).toBe(3);
-    const finishOption = colOptions.find((b) => b.textContent?.includes('Finish'));
-    expect(finishOption).toBeTruthy();
-
-    act(() => {
-      finishOption!.click();
-    });
-
-    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('Finish');
+    expect(switcher?.getAttribute('data-active-column')).toBe('Finish');
     expect(container.querySelector('.base-card-title')?.textContent).toBe('Task4');
 
     // Clicking '+' in mobile switcher bar adds card to active column ('Finish')
@@ -496,12 +496,17 @@ describe('Phase 1: BottomSheet, Mobile Back Handler, Hook Safety, Board Move She
     expect(swimlaneBands[0].querySelectorAll('.base-board-swimlane-cell').length).toBe(1);
     expect(swimlaneBands[1].querySelectorAll('.base-board-swimlane-cell').length).toBe(1);
 
-    // Switch active column to 'inWork' via next step button (›)
-    const nextBtn = container.querySelector('.mobile-col-next-btn') as HTMLButtonElement;
+    // Switch active column to 'inWork' via status pill
+    const inWorkPill = Array.from(
+      container.querySelectorAll('.board-mobile-status-pill')
+    ).find((p) => p.textContent?.includes('inWork')) as HTMLButtonElement;
+    expect(inWorkPill).toBeTruthy();
     act(() => {
-      nextBtn.click();
+      inWorkPill.click();
     });
-    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('inWork');
+    expect(
+      container.querySelector('.base-board-mobile-switcher')?.getAttribute('data-active-column')
+    ).toBe('inWork');
 
     // Click '+' on the second swimlane ('Prio 2') -> must pre-fill activeMobileColumn ('inWork') and swimlane ('Prio 2')
     const lane2AddBtn = swimlaneBands[1].querySelector('.mobile-swimlane-add-btn') as HTMLButtonElement;
@@ -633,5 +638,84 @@ describe('Phase 1: BottomSheet, Mobile Back Handler, Hook Safety, Board Move She
     });
     expect(onSave).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('BaseToolbar on mobile (< 768px) renders single View dropdown, icon-only controls, and opens View Selector BottomSheet', () => {
+    setViewportWidth(390);
+    const onSelectView = vi.fn();
+    const onToggleEditorMode = vi.fn();
+    const config = {
+      views: [
+        { type: 'board' as const, name: 'Kanban Board' },
+        { type: 'table' as const, name: 'Table View' },
+      ],
+    };
+
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <BaseToolbar
+            config={config}
+            activeViewIndex={0}
+            onSelectView={onSelectView}
+            onAddView={vi.fn()}
+            onRenameView={vi.fn()}
+            onDuplicateView={vi.fn()}
+            onDeleteView={vi.fn()}
+            activeFilterCount={2}
+            isFilterPopoverOpen={false}
+            onToggleFilterPopover={vi.fn()}
+            onOpenColumnsModal={vi.fn()}
+            onOpenBoardConfigModal={vi.fn()}
+            availableProperties={[{ key: 'status', label: 'Status' }]}
+            onSortChange={vi.fn()}
+            onGroupByChange={vi.fn()}
+            editorMode="visual"
+            onToggleEditorMode={onToggleEditorMode}
+          />
+        </I18nProvider>
+      );
+    });
+
+    const toolbar = container.querySelector('.base-toolbar-container');
+    expect(toolbar?.getAttribute('data-swipe-ignore')).toBe('true');
+
+    // Desktop tabs are replaced by a single View Dropdown button on mobile
+    expect(container.querySelector('.base-view-tabs')).toBeNull();
+    const dropdownBtn = container.querySelector('.base-mobile-view-dropdown-btn') as HTMLButtonElement;
+    expect(dropdownBtn).toBeTruthy();
+    expect(dropdownBtn.textContent).toContain('Kanban Board');
+
+    // Filter button is icon-only with numeric badge (no 'Filter' label text)
+    const filterBtn = container.querySelector('.filter-toggle-btn') as HTMLButtonElement;
+    expect(filterBtn.textContent).toBe('2');
+
+    // Single source toggle icon button on mobile
+    const sourceBtn = container.querySelector('.base-mobile-source-toggle-btn') as HTMLButtonElement;
+    expect(sourceBtn).toBeTruthy();
+    act(() => {
+      sourceBtn.click();
+    });
+    expect(onToggleEditorMode).toHaveBeenCalledWith('source');
+
+    // Tap View dropdown -> opens BottomSheet listing all views + Add View button
+    act(() => {
+      dropdownBtn.click();
+    });
+    expect(document.querySelector('.bottom-sheet-container')).toBeTruthy();
+    const viewRows = Array.from(
+      document.querySelectorAll('.base-mobile-view-sheet-row .bottom-sheet-action-btn')
+    ) as HTMLButtonElement[];
+    expect(viewRows.length).toBe(2);
+    act(() => {
+      viewRows[1].click();
+    });
+    expect(onSelectView).toHaveBeenCalledWith(1);
+
+    // Switch back to Desktop (>= 768px) -> desktop tabs & dual toggle render cleanly without Error #310
+    setViewportWidth(1280);
+    expect(container.querySelector('.base-view-tabs')).toBeTruthy();
+    expect(container.querySelector('.base-mobile-view-dropdown-btn')).toBeNull();
+    expect(container.querySelector('.base-editor-mode-toggle')).toBeTruthy();
   });
 });

@@ -3,9 +3,6 @@ import {
   Plus,
   Check,
   X,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
   ArrowUpDown,
   MoreVertical,
   Edit2,
@@ -89,6 +86,15 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
   const [draftMobileColName, setDraftMobileColName] = useState<string>('');
   const mobileRenameInputRef = useRef<HTMLInputElement>(null);
   const isMobileEscapingRef = useRef<boolean>(false);
+  const statusPillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const pillEl = statusPillRefs.current[activeMobileColumn];
+    if (pillEl && typeof pillEl.scrollIntoView === 'function') {
+      pillEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, [isMobile, activeMobileColumn]);
 
   // Optimistic in-memory overrides for zero-latency card moves: notePath -> { [propKey]: value }
   const [optimisticOverrides, setOptimisticOverrides] = useState<
@@ -782,102 +788,79 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
         {/* Mobile Column Switcher Bar (< 768px) */}
         {isMobile && activeColObj && (
           <div className="base-board-mobile-switcher" data-active-column={activeColObj.key}>
-            <div className="mobile-col-switcher-nav">
-              <button
-                type="button"
-                className="mobile-col-step-btn mobile-col-prev-btn"
-                disabled={boardColumnsList.length <= 1}
-                onClick={() => {
-                  if (boardColumnsList.length <= 1) return;
-                  const prevIdx =
-                    (activeColIndex - 1 + boardColumnsList.length) % boardColumnsList.length;
-                  setActiveMobileColumn(boardColumnsList[prevIdx].key);
-                }}
-                title="Vorherige Spalte"
-                aria-label="Previous Column"
-              >
-                <ChevronLeft size={18} />
-              </button>
-
-              {isMobileRenamingCol ? (
-                <div className="base-board-col-edit-inline" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    ref={mobileRenameInputRef}
-                    type="text"
-                    className="base-board-col-rename-input"
-                    value={draftMobileColName}
-                    autoFocus
-                    onChange={(e) => setDraftMobileColName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleCommitMobileColRename();
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        handleCancelMobileColRename();
-                      }
-                    }}
-                    onBlur={handleCommitMobileColRename}
-                  />
-                  <button
-                    type="button"
-                    className="base-board-col-confirm-btn"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={handleCommitMobileColRename}
-                    title="Bestätigen"
-                  >
-                    <Check size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="base-board-col-cancel-btn"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={handleCancelMobileColRename}
-                    title="Abbrechen"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
+            {isMobileRenamingCol ? (
+              <div className="base-board-col-edit-inline mobile-col-rename-bar" onClick={(e) => e.stopPropagation()}>
+                <input
+                  ref={mobileRenameInputRef}
+                  type="text"
+                  className="base-board-col-rename-input"
+                  value={draftMobileColName}
+                  autoFocus
+                  onChange={(e) => setDraftMobileColName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCommitMobileColRename();
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      handleCancelMobileColRename();
+                    }
+                  }}
+                  onBlur={handleCommitMobileColRename}
+                />
                 <button
                   type="button"
-                  className="mobile-col-selector-trigger"
-                  onClick={() => setIsColumnSelectorOpen(true)}
-                  title={t('board.selectColumn', 'Select Column')}
-                  aria-label={t('board.selectColumn', 'Select Column')}
+                  className="base-board-col-confirm-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCommitMobileColRename}
+                  title="Bestätigen"
                 >
-                  {activeColObj.color && (
-                    <span
-                      className="base-board-column-badge"
-                      style={{ backgroundColor: activeColObj.color }}
-                    />
-                  )}
-                  <span className="base-board-column-prop-badge board-column-prop-badge board-prop-badge">
-                    {colPropDisplayName}:
-                  </span>
-                  <span className="base-board-column-title mobile-col-active-title">
-                    {activeColObj.label}
-                  </span>
-                  <span className="base-board-column-count">({activeColObj.records.length})</span>
-                  <ChevronDown size={15} className="mobile-col-selector-chevron" />
+                  <Check size={14} />
                 </button>
-              )}
-
-              <button
-                type="button"
-                className="mobile-col-step-btn mobile-col-next-btn"
-                disabled={boardColumnsList.length <= 1}
-                onClick={() => {
-                  if (boardColumnsList.length <= 1) return;
-                  const nextIdx = (activeColIndex + 1) % boardColumnsList.length;
-                  setActiveMobileColumn(boardColumnsList[nextIdx].key);
-                }}
-                title="Nächste Spalte"
-                aria-label="Next Column"
+                <button
+                  type="button"
+                  className="base-board-col-cancel-btn"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCancelMobileColRename}
+                  title="Abbrechen"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="board-mobile-status-pills"
+                data-swipe-ignore="true"
+                role="tablist"
+                aria-label={colPropDisplayName}
               >
-                <ChevronRight size={18} />
-              </button>
-            </div>
+                {boardColumnsList.map((col) => {
+                  const isActive = col.key.toLowerCase() === activeColObj.key.toLowerCase();
+                  return (
+                    <button
+                      key={col.key}
+                      ref={(el) => {
+                        statusPillRefs.current[col.key] = el;
+                      }}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      className={`board-mobile-status-pill ${isActive ? 'is-active' : ''}`}
+                      onClick={() => setActiveMobileColumn(col.key)}
+                    >
+                      {col.color && (
+                        <span
+                          className="base-board-column-badge"
+                          style={{ backgroundColor: col.color }}
+                        />
+                      )}
+                      <span className="board-mobile-status-pill-label">{col.label}</span>
+                      <span className="board-mobile-status-pill-count">({col.records.length})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {!readOnly && (
               <div className="mobile-col-switcher-actions">

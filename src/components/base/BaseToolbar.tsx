@@ -16,6 +16,7 @@ import {
   Trash2,
   Check,
   Settings,
+  ChevronDown,
 } from 'lucide-react';
 import type { BaseConfig, BaseSortRule } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
@@ -78,6 +79,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
   // Sort & Group dropdowns
   const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
   const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false);
+  const [isViewSelectorOpen, setIsViewSelectorOpen] = useState(false);
 
   const toolbarRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +118,9 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
     setTabMenuIndex(null);
     setEditingTabNameIndex(idx);
     setDraftTabName(curName);
+    if (isMobile) {
+      setIsViewSelectorOpen(true);
+    }
   };
 
   const handleCommitRename = (idx: number) => {
@@ -143,10 +148,30 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
     setIsAddViewOpen(false);
   };
 
+  const ActiveViewIcon =
+    activeView?.type === 'board'
+      ? Kanban
+      : activeView?.type === 'cards'
+      ? LayoutGrid
+      : TableIcon;
+
   return (
-    <div className="base-toolbar-container" ref={toolbarRef}>
-      {/* LEFT: View Tabs */}
+    <div className="base-toolbar-container" ref={toolbarRef} data-swipe-ignore="true">
+      {/* LEFT: View Tabs (Desktop) or Single View Dropdown (Mobile) */}
       <div className="base-toolbar-views-group">
+        {isMobile ? (
+          <button
+            type="button"
+            className="base-mobile-view-dropdown-btn"
+            onClick={() => setIsViewSelectorOpen(true)}
+            title={activeView?.name || t('base.views', 'Ansichten')}
+            aria-label={activeView?.name || t('base.views', 'Ansichten')}
+          >
+            <ActiveViewIcon size={15} className="base-tab-icon" />
+            <span className="base-mobile-view-dropdown-label">{activeView?.name}</span>
+            <ChevronDown size={14} className="base-mobile-view-dropdown-chevron" />
+          </button>
+        ) : (
         <div className="base-view-tabs">
           {config.views.map((v, idx) => {
             const isTabActive = idx === activeViewIndex;
@@ -366,6 +391,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* RIGHT: Actions & Controls */}
@@ -375,10 +401,11 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
           type="button"
           className={`base-toolbar-btn filter-toggle-btn ${activeFilterCount > 0 ? 'has-filters' : ''} ${isFilterPopoverOpen ? 'active' : ''}`}
           onClick={onToggleFilterPopover}
-          title="Filter anpassen"
+          title={t('base.filter', 'Filter anpassen')}
+          aria-label={t('base.filter', 'Filter anpassen')}
         >
-          <Filter size={14} />
-          <span>Filter</span>
+          <Filter size={15} />
+          {!isMobile && <span>Filter</span>}
           {activeFilterCount > 0 && <span className="base-badge-count">{activeFilterCount}</span>}
         </button>
 
@@ -392,11 +419,14 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
               setIsGroupDropdownOpen(false);
             }}
             title="Sortierung festlegen"
+            aria-label="Sortierung festlegen"
           >
-            <ArrowUpDown size={14} />
-            <span className="btn-label-desktop">
-              {currentSort ? `Sortiert (${currentSort.property})` : 'Sortieren'}
-            </span>
+            <ArrowUpDown size={15} />
+            {!isMobile && (
+              <span className="btn-label-desktop">
+                {currentSort ? `Sortiert (${currentSort.property})` : 'Sortieren'}
+              </span>
+            )}
           </button>
 
           {isSortDropdownOpen && !isMobile && (
@@ -454,11 +484,14 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
               setIsSortDropdownOpen(false);
             }}
             title="Gruppierung festlegen"
+            aria-label="Gruppierung festlegen"
           >
-            <Layers size={14} />
-            <span className="btn-label-desktop">
-              {currentGroupBy ? `Gruppiert (${currentGroupBy.property})` : 'Gruppieren'}
-            </span>
+            <Layers size={15} />
+            {!isMobile && (
+              <span className="btn-label-desktop">
+                {currentGroupBy ? `Gruppiert (${currentGroupBy.property})` : 'Gruppieren'}
+              </span>
+            )}
           </button>
 
           {isGroupDropdownOpen && !isMobile && (
@@ -507,9 +540,10 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             className="base-toolbar-btn columns-btn"
             onClick={onOpenColumnsModal}
             title="Spalten einblenden / ausblenden"
+            aria-label="Spalten einblenden / ausblenden"
           >
-            <Columns size={14} />
-            <span className="btn-label-desktop">Spalten</span>
+            <Columns size={15} />
+            {!isMobile && <span className="btn-label-desktop">Spalten</span>}
           </button>
         ) : onOpenBoardConfigModal ? (
           <button
@@ -517,13 +551,37 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             className="base-toolbar-btn board-config-btn"
             onClick={onOpenBoardConfigModal}
             title={t('base.configureBoard', 'Board konfigurieren')}
+            aria-label={t('base.configureBoard', 'Board konfigurieren')}
           >
-            <Settings size={14} />
-            <span className="btn-label-desktop">{t('base.configureBoard', 'Board')}</span>
+            <Settings size={15} />
+            {!isMobile && (
+              <span className="btn-label-desktop">{t('base.configureBoard', 'Board')}</span>
+            )}
           </button>
         ) : null}
 
-        {/* Editor Mode Toggle [ Ansicht | Quellcode ] */}
+        {/* Editor Mode Toggle [ Ansicht | Quellcode ] (Desktop) or Single Code Toggle (Mobile) */}
+        {isMobile ? (
+          <button
+            type="button"
+            className={`base-toolbar-btn base-mobile-source-toggle-btn ${
+              editorMode === 'source' ? 'active' : ''
+            }`}
+            onClick={() => onToggleEditorMode(editorMode === 'visual' ? 'source' : 'visual')}
+            title={
+              editorMode === 'source'
+                ? t('base.visualView') || 'Visuelle Ansicht'
+                : t('base.sourceView') || 'YAML-Quellcode bearbeiten'
+            }
+            aria-label={
+              editorMode === 'source'
+                ? t('base.visualView') || 'Visuelle Ansicht'
+                : t('base.sourceView') || 'YAML-Quellcode bearbeiten'
+            }
+          >
+            <Code size={15} />
+          </button>
+        ) : (
         <div className="base-editor-mode-toggle">
           <button
             type="button"
@@ -544,7 +602,98 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             <span className="btn-label-desktop">{t('base.sourceView') || 'Quelltext'}</span>
           </button>
         </div>
+        )}
       </div>
+
+      {/* Mobile View Selector BottomSheet */}
+      {isMobile && isViewSelectorOpen && (
+        <BottomSheet
+          isOpen={isViewSelectorOpen}
+          onClose={() => {
+            setIsViewSelectorOpen(false);
+            setEditingTabNameIndex(null);
+          }}
+          title={t('base.views', 'Ansichten')}
+          footer={
+            <button
+              type="button"
+              className="bottom-sheet-action-btn base-mobile-add-view-sheet-btn"
+              onClick={() => {
+                setIsViewSelectorOpen(false);
+                handleOpenAddView();
+              }}
+            >
+              <Plus size={16} />
+              <span className="bottom-sheet-action-label">
+                {t('base.addView') || 'Ansicht hinzufügen'}
+              </span>
+            </button>
+          }
+        >
+          <div className="bottom-sheet-section">
+            {config.views.map((v, idx) => {
+              const isTabActive = idx === activeViewIndex;
+              const IconComponent =
+                v.type === 'board' ? Kanban : v.type === 'cards' ? LayoutGrid : TableIcon;
+              const isRenaming = editingTabNameIndex === idx;
+
+              if (isRenaming) {
+                return (
+                  <div key={`${v.name}-${idx}`} className="base-mobile-view-rename-row">
+                    <input
+                      type="text"
+                      className="base-input"
+                      value={draftTabName}
+                      autoFocus
+                      onChange={(e) => setDraftTabName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCommitRename(idx);
+                        if (e.key === 'Escape') setEditingTabNameIndex(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="base-btn primary-btn"
+                      onClick={() => handleCommitRename(idx)}
+                    >
+                      <Check size={15} />
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={`${v.name}-${idx}`} className="base-mobile-view-sheet-row">
+                  <button
+                    type="button"
+                    className={`bottom-sheet-action-btn ${isTabActive ? 'is-active' : ''}`}
+                    onClick={() => {
+                      onSelectView(idx);
+                      setIsViewSelectorOpen(false);
+                    }}
+                  >
+                    <IconComponent size={16} />
+                    <span className="bottom-sheet-action-label">{v.name}</span>
+                    {isTabActive && <Check size={16} className="bottom-sheet-check-icon" />}
+                  </button>
+                  <button
+                    type="button"
+                    className="base-mobile-view-row-menu-btn"
+                    onClick={() => {
+                      setIsViewSelectorOpen(false);
+                      setTabMenuIndex(idx);
+                    }}
+                    title="Ansichts-Optionen"
+                    aria-label="Ansichts-Optionen"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </BottomSheet>
+      )}
 
       {/* Mobile BottomSheets for Toolbar Menus */}
       {isMobile && tabMenuIndex !== null && config.views[tabMenuIndex] && (() => {

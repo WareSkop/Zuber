@@ -11897,13 +11897,67 @@ p:has(.embedded-canvas-container) {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  min-width: 44px !important;
-  min-height: 44px !important;
-  width: 44px !important;
-  height: 44px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  width: 36px !important;
+  height: 36px !important;
   padding: 0 !important;
   border-radius: 8px;
   flex-shrink: 0;
+}
+
+.board-mobile-status-pills {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 4px 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.board-mobile-status-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.board-mobile-status-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.board-mobile-status-pill.is-active {
+  background: var(--accent-color, #d4af37);
+  border-color: var(--accent-color, #d4af37);
+  color: var(--bg-primary, #111);
+  font-weight: 600;
+}
+
+.board-mobile-status-pill-count {
+  font-size: 12px;
+  opacity: 0.82;
+}
+
+.mobile-col-rename-bar {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .mobile-col-option-right {
@@ -11964,6 +12018,143 @@ p:has(.embedded-canvas-container) {
     padding: 4px 0 !important;
     max-height: none !important;
     overflow: visible !important;
+  }
+
+  /* Compact Single-Row Mobile BaseToolbar (< 768px) */
+  .base-toolbar-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 6px 8px;
+    height: auto;
+    min-height: 50px;
+    overflow: hidden;
+  }
+
+  .base-toolbar-views-group {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .base-mobile-view-dropdown-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 38px;
+    height: 38px;
+    max-width: 100%;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-width: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .base-mobile-view-dropdown-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .base-mobile-view-dropdown-chevron {
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+
+  .base-toolbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .base-toolbar-controls .base-toolbar-btn {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 8px;
+  }
+
+  .base-toolbar-controls .base-toolbar-btn .base-badge-count {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    font-size: 10px;
+    line-height: 15px;
+    border-radius: 999px;
+    background: var(--accent-color, #d4af37);
+    color: var(--bg-primary, #111);
+    font-weight: 700;
+  }
+
+  .btn-label-desktop {
+    display: none;
+  }
+
+  /* Hide permanent FILTERS bar on mobile (< 768px) */
+  .base-filter-chips-bar {
+    display: none !important;
+  }
+
+  .base-mobile-view-sheet-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .base-mobile-view-sheet-row .bottom-sheet-action-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .base-mobile-view-row-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .base-mobile-view-rename-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .base-mobile-view-rename-row .base-input {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .base-mobile-add-view-sheet-btn {
+    justify-content: center;
+    border-style: dashed;
+    color: var(--accent-color, #d4af37);
   }
 }
 
