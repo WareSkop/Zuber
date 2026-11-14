@@ -1676,9 +1676,17 @@ export const App: React.FC = () => {
         }
       };
 
-      // 1. Clearly offline according to navigator
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        if (canProceedOffline) {
+      let forceOfflineBoot = false;
+      try {
+        if (localStorage.getItem('zuber_force_offline_boot') === '1') {
+          forceOfflineBoot = true;
+          localStorage.removeItem('zuber_force_offline_boot');
+        }
+      } catch {}
+
+      // 1. Clearly offline according to navigator or forced offline cache boot from ErrorBoundary
+      if (forceOfflineBoot || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+        if (canProceedOffline || forceOfflineBoot) {
           await activateOfflineMode();
         } else {
           if (cancelled) return;
@@ -3268,7 +3276,10 @@ export const App: React.FC = () => {
   );
 
   const renderPrimaryEditor = (customStyle?: React.CSSProperties) => (
-    <section className="editor-pane-container" style={customStyle}>
+    <section
+      className="editor-pane-container"
+      style={customStyle && typeof customStyle === 'object' ? customStyle : undefined}
+    >
       {isCanvasNote && activeNote ? (
         <div className="canvas-workspace-pane">
           <Suspense fallback={<div className="empty-state">Lade Canvas…</div>}>
@@ -3440,7 +3451,10 @@ export const App: React.FC = () => {
   );
 
   const renderResearchPane = (customStyle?: React.CSSProperties) => (
-    <div className="research-pane-wrapper" style={customStyle}>
+    <div
+      className="research-pane-wrapper"
+      style={customStyle && typeof customStyle === 'object' ? customStyle : undefined}
+    >
       <ResearchPane
         target={researchTarget}
         orientation={splitOrientation}

@@ -1136,7 +1136,11 @@ Zuber bietet neben der Einzelansicht eine asymmetrische, resizable **Recherche- 
   - Auf Touch-Geräten/Mobile bieten Kanban-Karten einen `⋮`-Button (`min. 36×36px`), der ein „Karte verschieben“-`<BottomSheet>` für 1D-Spalten und 2D-Swimlanes öffnet.
 - **Sichere `.base`-Speicherung & `ErrorBoundary`-Wiederherstellung:**
   - `BaseEditor.tsx` und `BaseBoardView.tsx` entprellen `.base`-Schreibvorgänge auf `400ms` und serialisieren laufende `onChange`-Promises zur Vermeidung von WebSocket-Echo-Thrashing und React Error #310.
-  - `ErrorBoundary.tsx` bietet die Aktion **„Ansicht zurücksetzen & neu laden“** / **„Reset Active View & Reload“**, die ausschließlich `knowmesh_last_active_note`, `zuber_last_active_note`, `knowmesh_open_tabs` und `zuber_open_tabs` aus `localStorage` löscht, ohne IndexedDB (`localDb`) anzutasten.
+  - In `LivePreviewEditor.tsx` (`mode === 'reading'`) ist `.reading-view-container` (`dangerouslySetInnerHTML`) strikt selbstschließend ohne Kind-Elemente (Kontextmenü, Canvas-Modal und Datei-Input liegen als Geschwister im Fragment), um React Error #60 auszuschließen.
+  - `ErrorBoundary.tsx` rendert als Vollbild-Overlay (`position: fixed; inset: 0; z-index: 99999; pointer-events: auto;`) mit drei eigenständigen, Touch-optimierten Recovery-Buttons (`min-height: 44px; touch-action: manipulation;`):
+    1. **„Ansicht zurücksetzen & neu laden“**: Löscht alle aktiven Ansichts-, Tab- und Split-Schlüssel (`zuber_*`, `knowmesh_*`, `basalt_*`) unter Erhalt von Auth-Tokens und IndexedDB (`localDb`) und navigiert per `window.location.replace(origin + '/')`.
+    2. **„Lokalen Cache laden / App neu starten“**: Setzt zusätzlich `zuber_force_offline_boot = '1'`, sodass `App.tsx` beim nächsten Start blockierende Netzwerk-Checks überspringt und direkt aus IndexedDB startet.
+    3. **„Erneut versuchen“**: Setzt den Fehlerstatus (`hasError: false`) direkt zurück.
 
 ---
 

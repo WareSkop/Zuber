@@ -2966,7 +2966,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     const isDark =
       document.documentElement.getAttribute('data-theme') !== 'light' &&
       (document.documentElement.getAttribute('data-theme') === 'dark' ||
-        window.matchMedia('(prefers-color-scheme: dark)').matches ||
+        window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ||
         document.documentElement.classList.contains('dark'));
 
     const mermaidBlocks = container.querySelectorAll<HTMLElement>('.reading-mermaid-container');
@@ -3453,18 +3453,19 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
   if (mode === 'reading') {
     return (
-      <div
-        className="reading-view-container markdown-rendered"
-        onClick={handleReadingClick}
-        onDoubleClick={handleReadingDoubleClick}
-        onTouchEnd={handleReadingTouchEnd}
-        onContextMenu={handleReadingContextMenu}
-        dangerouslySetInnerHTML={readingHtmlObj}
-      >
+      <>
+        <div
+          className="reading-view-container markdown-rendered"
+          onClick={handleReadingClick}
+          onDoubleClick={handleReadingDoubleClick}
+          onTouchEnd={handleReadingTouchEnd}
+          onContextMenu={handleReadingContextMenu}
+          dangerouslySetInnerHTML={readingHtmlObj}
+        />
         {contextMenuElement}
         {canvasModalElement}
         {hiddenFileInput}
-      </div>
+      </>
     );
   }
 
