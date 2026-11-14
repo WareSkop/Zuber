@@ -323,6 +323,7 @@
     "langDe": "Deutsch",
     "editorTitle": "Editor & File Settings",
     "editorDesc": "Configure note behavior and how Zuber starts.",
+    "mobileReadingDefault": "Open notes in Reading Mode on mobile",
     "startupHeading": "Startup Note Behavior",
     "startupDesc": "Choose which note opens when launching Zuber:",
     "startupLast": "Open last active note (Recommended)",
@@ -599,5 +600,24 @@
   },
   "error": {
     "resetView": "Reset View & Reload"
+  },
+  "mobile": {
+    "files": "Files",
+    "search": "Search",
+    "edit": "Edit",
+    "quickNote": "New",
+    "more": "More",
+    "moreActions": "More Actions",
+    "heading": "Heading",
+    "insertImage": "Insert Image",
+    "camera": "Take Photo (Camera)",
+    "gallery": "Choose from Gallery",
+    "formatAndInsert": "Formatting & Insert",
+    "formatting": "Formatting",
+    "insert": "Insert",
+    "insertTable": "Insert Table",
+    "insertCallout": "Insert Callout",
+    "addFavorite": "Add to Favorites",
+    "removeFavorite": "Remove from Favorites"
   }
 }

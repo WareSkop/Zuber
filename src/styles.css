@@ -11552,4 +11552,227 @@ p:has(.embedded-canvas-container) {
   }
 }
 
+/* ==========================================================================
+   Phase 2: Mobile One-Thumb Ergonomics (< 768px)
+   ========================================================================== */
+
+@media (max-width: 767px) {
+  /* Slim Mobile Topbar: Back (←), Truncated Title, Compact Sync/Save */
+  .workspace-topbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .workspace-topbar .topbar-sidebar-toggle,
+  .workspace-topbar .editor-mode-switcher,
+  .workspace-topbar .topbar-action-btn,
+  .workspace-topbar .topbar-settings-btn,
+  .workspace-topbar .sync-status-text,
+  .workspace-topbar .canvas-mode-indicator,
+  .workspace-topbar .base-mode-indicator {
+    display: none !important;
+  }
+
+  .workspace-topbar .topbar-nav-back-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .workspace-topbar .topbar-breadcrumbs {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .workspace-topbar .breadcrumb-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .workspace-topbar .save-indicator {
+    display: none;
+  }
+
+  .workspace-topbar .topbar-sync-indicator {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0 8px;
+    justify-content: center;
+  }
+
+  .workspace-topbar .sync-status-icon-mobile {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+  }
+}
+
+/* State A: Mobile Navigation Bottom Bar (56px + safe-area-inset-bottom) */
+.mobile-bottom-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-shrink: 0;
+  width: 100%;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 8px env(safe-area-inset-bottom, 0px);
+  background: var(--bg-secondary, var(--bg-primary));
+  border-top: 1px solid var(--border-color);
+  z-index: 40;
+  box-sizing: border-box;
+}
+
+.mobile-bottom-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-muted));
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-bottom-nav-btn:active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.mobile-bottom-nav-edit-btn {
+  background: var(--accent-color, #d4af37);
+  color: var(--accent-contrast, #111);
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 14px;
+}
+
+.mobile-bottom-nav-edit-btn:active {
+  opacity: 0.9;
+  background: var(--accent-color, #d4af37);
+  color: var(--accent-contrast, #111);
+}
+
+.mobile-bottom-nav-label {
+  line-height: 1.1;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* State B: Keyboard-Docked Mobile Edit Bar */
+.mobile-edit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex-shrink: 0;
+  width: 100%;
+  min-height: 48px;
+  padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg-secondary, var(--bg-primary));
+  border-top: 1px solid var(--border-color);
+  z-index: 45;
+  box-sizing: border-box;
+}
+
+.mobile-edit-bar-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-edit-bar-btn:active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+}
+
+.mobile-edit-done-btn {
+  background: var(--accent-color, #d4af37);
+  color: var(--accent-contrast, #111);
+  font-weight: 700;
+}
+
+.mobile-edit-done-btn:active {
+  opacity: 0.9;
+  background: var(--accent-color, #d4af37);
+  color: var(--accent-contrast, #111);
+}
+
+/* Hybrid + More BottomSheet Grid & Action Rows */
+.hybrid-format-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.hybrid-format-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 48px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-tertiary, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.hybrid-format-tile:active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+}
+
+.hybrid-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 8px 4px 4px;
+}
+
+.hybrid-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobile-sheet-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 6px 0;
+}
+
+
 

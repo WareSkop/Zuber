@@ -323,6 +323,7 @@
     "langDe": "Deutsch",
     "editorTitle": "Editor- & Datei-Einstellungen",
     "editorDesc": "Konfiguriere das Verhalten des Editors und das Startverhalten von Zuber.",
+    "mobileReadingDefault": "Notizen mobil standardmäßig im Lesemodus öffnen",
     "startupHeading": "Startverhalten / Startup Note",
     "startupDesc": "Wähle, welche Notiz beim Start von Zuber geöffnet werden soll:",
     "startupLast": "Letzte geöffnete Notiz öffnen (Standard & Empfohlen)",
@@ -599,5 +600,24 @@
   },
   "error": {
     "resetView": "Ansicht zurücksetzen & neu laden"
+  },
+  "mobile": {
+    "files": "Dateien",
+    "search": "Suche",
+    "edit": "Bearbeiten",
+    "quickNote": "Neu",
+    "more": "Mehr",
+    "moreActions": "Weitere Aktionen",
+    "heading": "Überschrift",
+    "insertImage": "Bild einfügen",
+    "camera": "Foto aufnehmen (Kamera)",
+    "gallery": "Aus Galerie wählen",
+    "formatAndInsert": "Formatierung & Einfügen",
+    "formatting": "Formatierung",
+    "insert": "Einfügen",
+    "insertTable": "Tabelle einfügen",
+    "insertCallout": "Callout einfügen",
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Aus Favoriten entfernen"
   }
 }

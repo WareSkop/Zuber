@@ -1138,6 +1138,23 @@ Zuber bietet neben der Einzelansicht eine asymmetrische, resizable **Recherche- 
   - `BaseEditor.tsx` und `BaseBoardView.tsx` entprellen `.base`-Schreibvorgänge auf `400ms` und serialisieren laufende `onChange`-Promises zur Vermeidung von WebSocket-Echo-Thrashing und React Error #310.
   - `ErrorBoundary.tsx` bietet die Aktion **„Ansicht zurücksetzen & neu laden“** / **„Reset Active View & Reload“**, die ausschließlich `knowmesh_last_active_note`, `zuber_last_active_note`, `knowmesh_open_tabs` und `zuber_open_tabs` aus `localStorage` löscht, ohne IndexedDB (`localDb`) anzutasten.
 
+---
+
+## 32. Mobile Ein-Daumen-Navigation, Lesemodus-Standard & Keyboard-Edit-Leiste (`< 768px`)
+
+Auf Mobilgeräten (`< 768px`) nutzt die App eine zweistufige kontextuelle Bodenleiste (Desktop `>= 768px` bleibt 100 % unverändert):
+
+- **Schlanke mobile Kopfleiste (`src/App.tsx`, `src/styles.css`):**
+  - Links: Zurück-Button (`←`, `44×44px`), Mitte: gekürzter Dateipfad/-titel, Rechts: kompakter Sync-/Speicherindikator. Modus-Umschalter, Zen-Button und Sidebar-Toggles sind auf `< 768px` in die Bodenleiste bzw. das `Mehr (⋮)`-Sheet verlagert.
+- **State A – Lese- & Navigationsmodus (`<MobileBottomNav />` in `src/components/MobileBottomNav.tsx`):**
+  - Markdown-Notizen öffnen mobil standardmäßig im **Lesemodus** (`mode === 'reading'`, abschaltbar in `SettingsModal` über `getMobileReadingDefault` / `zuber_mobile_reading_default`).
+  - Feste 5-Button-Leiste (`56px + env(safe-area-inset-bottom)`): **Dateien**, **Suche**, **Bearbeiten** (primärer Akzent-Button, ausgeblendet bei `.base`/`.canvas`/Graph), **Neu (+)** und **Mehr (⋮)** (`<BottomSheet>` mit Source/Reading-Wechsel, Recherche-Split, Rechte Seitenleiste, Zen-Modus, Umbenennen, Löschen, Einstellungen).
+- **Doppeltipp-zu-Bearbeiten (`src/components/LivePreviewEditor.tsx`):**
+  - Doppeltipp (`<= 300ms`, `<= 24px`) oder Doppelklick im Lesemodus wechselt in den Live-Preview-Editor, ermittelt über `view.posAtCoords` (mit Text-Snippet-Fallback) die angetippte Stelle und fokussiert CodeMirror.
+  - `useMobileBackHandler` in `App.tsx` beendet beim Android-Zurück-Button den mobilen Bearbeitungsmodus zurück in den Lesemodus (`blur()` + `setEditorMode('reading')`).
+- **State B – Keyboard-Docked Edit-Toolbar (`<MobileEditBar />` in `src/components/MobileEditBar.tsx`):**
+  - Ersetzt `<MobileBottomNav />` im mobilen Bearbeitungsmodus (`live` / `source`) direkt über der virtuellen Tastatur (`--vvh`): 7 Buttons in einer Zeile (`Todo`, `Einrücken`, `Überschrift` -> `<BottomSheet>`, `[[WikiLink]]`, `Bild/Kamera` -> `<BottomSheet>`, `+ Mehr` -> Hybrid-`<BottomSheet>` mit 2×3 Formatierungs-Raster + Einfüge-Aktionen/Tabellen/Callouts, `Fertig ✓`).
+
 
 
 

@@ -16,6 +16,25 @@ export interface DailyNoteConfig {
 export const STARTUP_CONFIG_KEY = 'zuber_startup_config';
 export const LAST_ACTIVE_NOTE_KEY = 'zuber_last_active_note';
 export const DAILY_NOTE_CONFIG_KEY = 'zuber_daily_config';
+export const MOBILE_READING_DEFAULT_KEY = 'zuber_mobile_reading_default';
+
+export function getMobileReadingDefault(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const val = localStorage.getItem(MOBILE_READING_DEFAULT_KEY);
+    if (val === null) return true;
+    return val !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function setMobileReadingDefault(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(MOBILE_READING_DEFAULT_KEY, enabled ? 'true' : 'false');
+  } catch {}
+}
 
 export const DEFAULT_STARTUP_CONFIG: StartupConfig = {
   behavior: 'last',

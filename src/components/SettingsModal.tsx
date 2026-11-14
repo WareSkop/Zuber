@@ -53,6 +53,8 @@ import {
   getDailyNoteConfig,
   saveDailyNoteConfig,
   type DailyNoteConfig,
+  getMobileReadingDefault,
+  setMobileReadingDefault,
 } from '../startupConfig';
 import {
   getFontSettings,
@@ -93,6 +95,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Daily note configuration state
   const [dailyConfig, setDailyConfigState] = useState<DailyNoteConfig>(getDailyNoteConfig);
+  const [mobileReadingDefault, setMobileReadingDefaultState] = useState<boolean>(getMobileReadingDefault);
 
   // Font settings state
   const [fontSettings, setFontSettings] = useState<FontSettings>(getFontSettings);
@@ -1071,6 +1074,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </select>
                   </div>
                 </div>
+              </div>
+
+              {/* Mobile Reading Mode Default */}
+              <div
+                style={{
+                  background: 'var(--bg-secondary)',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  marginBottom: '20px',
+                }}
+              >
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={mobileReadingDefault}
+                    onChange={(e) => {
+                      const next = e.target.checked;
+                      setMobileReadingDefaultState(next);
+                      setMobileReadingDefault(next);
+                    }}
+                  />
+                  <span>
+                    {t('settings.mobileReadingDefault', 'Open notes in Reading Mode on mobile')}
+                  </span>
+                </label>
               </div>
 
               {/* Font Sizes Matrix */}

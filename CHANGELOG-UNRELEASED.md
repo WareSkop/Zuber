@@ -12,6 +12,10 @@
   - **Saubere leere Zellen:** Leere Zellen werden dezent gestrichelt ohne starre graue Platzhalterboxen gerendert (`.base-board-swimlane-cell.is-empty`), behalten aber eine intuitive Drop-Zone von 300px Breite bei.
 
 ### Added
+- Mobile Ein-Daumen-Ergonomie (`< 768px`, Desktop `>= 768px` unverändert) (`MobileBottomNav.tsx`, `MobileEditBar.tsx`, `LivePreviewEditor.tsx`, `SettingsModal.tsx`, `startupConfig.ts`, `App.tsx`, `styles.css`, `locales/de.json`, `locales/en.json`, `mobileBottomNavAndEditBar.test.tsx`):
+  - **Standard-Lesemodus auf Mobilgeräten & Doppeltipp-Bearbeitung:** Markdown-Notizen öffnen auf `< 768px` standardmäßig im Lesemodus (in den Einstellungen unter „Editor & Dateien“ konfigurierbar). Ein Doppeltipp auf beliebigen Text im Lesemodus wechselt direkt an die angetippte Position in den Live-Preview-Editor; die Android-Zurück-Geste kehrt zurück in den Lesemodus.
+  - **Schlanke mobile Topbar & State A (`<MobileBottomNav />`):** Reduzierte Kopfleiste (`←`, Titel, kompakter Sync-Status) und 5-Button-Navigationsleiste (`Dateien`, `Suche`, `Bearbeiten`, `Neu`, `Mehr ⋮` mit `<BottomSheet>`).
+  - **State B (`<MobileEditBar />`):** Tastatur-angedockte 7-Button-Bearbeitungsleiste (`Todo`, `Einrücken`, `Überschrift`-Sheet, `[[Link]]`, `Kamera/Galerie`-Sheet, Hybrid `+ Mehr`-Sheet mit 2×3 Formatierungs-Grid, Tabellen- & Callout-Menüs, `Fertig ✓`).
 - Wiederverwendbares `<BottomSheet>`-System & Android Back-Gesture Support (`src/components/BottomSheet.tsx`, `src/App.tsx`, `src/styles.css`):
   - Portal-basiertes `<BottomSheet>` (`z-index: 1100`, `85dvh`, Drag-Handle `36px × 4px`, Swipe-Down > `60px` zum Schließen, `48px` Touch-Zeilen, Safe-Area-Footer).
   - `useMobileBackHandler` mit `window.history.pushState` / `popstate` (LIFO-Stack) für `<BottomSheet>` und mobile Drawer (`leftSidebarOpen`, `rightSidebarOpen`).

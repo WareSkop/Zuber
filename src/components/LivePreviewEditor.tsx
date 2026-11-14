@@ -231,6 +231,7 @@ export interface LivePreviewEditorRef {
   hasSelection: () => boolean;
   replaceSelection: (newText: string) => void;
   focus: () => void;
+  blur: () => void;
 }
 
 export interface LivePreviewEditorProps {
@@ -248,6 +249,7 @@ export interface LivePreviewEditorProps {
   onUploadAttachment?: (file: File) => Promise<string>;
   onSendToTargetNote?: () => void;
   onOpenNote?: (path: string) => void;
+  onRequestEditMode?: () => void;
 }
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
@@ -1819,6 +1821,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onChangeRaw,
     onNavigateWikiLink,
     onSelectTag,
+    onRequestEditMode,
   } = props;
 
   const { t } = useTranslation();
@@ -1832,6 +1835,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const [newCanvasInsertPos, setNewCanvasInsertPos] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeClickPosRef = useRef<number | null>(null);
+  const pendingEditTapRef = useRef<{ x: number; y: number; textSnippet: string } | null>(null);
+  const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
 
   useLayoutEffect(() => {
     if (!editorContextMenu || !editorContextMenuRef.current) return;
@@ -2425,6 +2430,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     hasSelection,
     replaceSelection,
     focus: () => viewRef.current?.focus(),
+    blur: () => viewRef.current?.contentDOM.blur(),
   }));
 
   const activeDocText = mode === 'source' ? rawContent : body;
@@ -2884,6 +2890,28 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       parent: container,
     });
     viewRef.current = view;
+
+    const pendingTap = pendingEditTapRef.current;
+    if (pendingTap) {
+      pendingEditTapRef.current = null;
+      requestAnimationFrame(() => {
+        if (viewRef.current !== view) return;
+        let pos: number | null = view.posAtCoords({ x: pendingTap.x, y: pendingTap.y });
+        if (pos === null && pendingTap.textSnippet) {
+          const docText = view.state.doc.toString();
+          const idx = docText.indexOf(pendingTap.textSnippet);
+          if (idx >= 0) {
+            pos = idx;
+          }
+        }
+        const safePos = Math.max(0, Math.min(pos ?? 0, view.state.doc.length));
+        view.dispatch({
+          selection: { anchor: safePos },
+          effects: EditorView.scrollIntoView(safePos, { y: 'center' }),
+        });
+        view.focus();
+      });
+    }
 
     return () => {
       view.destroy();
@@ -3387,11 +3415,49 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     />
   );
 
+  const triggerEditAtPoint = (clientX: number, clientY: number, target: EventTarget | null) => {
+    if (!onRequestEditMode) return;
+    const el = target instanceof HTMLElement ? target : null;
+    if (el?.closest('a, button, input, select, textarea, .reading-task-checkbox, .reading-base-wrapper, .reading-canvas-wrapper')) {
+      return;
+    }
+    const textSnippet = (el?.closest('p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th')?.textContent || el?.textContent || '')
+      .trim()
+      .slice(0, 48);
+    pendingEditTapRef.current = { x: clientX, y: clientY, textSnippet };
+    onRequestEditMode();
+  };
+
+  const handleReadingDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onRequestEditMode) return;
+    triggerEditAtPoint(e.clientX, e.clientY, e.target);
+  };
+
+  const handleReadingTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!onRequestEditMode || e.changedTouches.length !== 1) return;
+    const touch = e.changedTouches[0];
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    if (
+      prev &&
+      now - prev.time <= 300 &&
+      Math.hypot(touch.clientX - prev.x, touch.clientY - prev.y) <= 24
+    ) {
+      lastTapRef.current = null;
+      e.preventDefault();
+      triggerEditAtPoint(touch.clientX, touch.clientY, e.target);
+    } else {
+      lastTapRef.current = { time: now, x: touch.clientX, y: touch.clientY };
+    }
+  };
+
   if (mode === 'reading') {
     return (
       <div
         className="reading-view-container markdown-rendered"
         onClick={handleReadingClick}
+        onDoubleClick={handleReadingDoubleClick}
+        onTouchEnd={handleReadingTouchEnd}
         onContextMenu={handleReadingContextMenu}
         dangerouslySetInnerHTML={readingHtmlObj}
       >

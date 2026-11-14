@@ -102,6 +102,8 @@ const BaseEditor = React.lazy(() =>
 );
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { EditorToolbar } from './components/EditorToolbar';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { MobileEditBar } from './components/MobileEditBar';
 import { syncEngine, isFastForwardCompatible, type SyncState, type ConflictItem } from './sync/syncEngine';
 import { cleanShareUrlQuery } from './sync/shareTargetService';
 import { clientLogger } from './utils/logger';
@@ -111,6 +113,7 @@ import {
   clearLastActiveNote,
   resolveStartupNotePath,
   getDailyNoteConfig,
+  getMobileReadingDefault,
 } from './startupConfig';
 import {
   getFontSettings,
@@ -173,7 +176,11 @@ export const App: React.FC = () => {
   const historyIndexRef = useRef<number>(-1);
   historyRef.current = history;
   historyIndexRef.current = historyIndex;
-  const [editorMode, setEditorMode] = useState<EditorMode>('live');
+  const [editorMode, setEditorMode] = useState<EditorMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth < 768 && getMobileReadingDefault()
+      ? 'reading'
+      : 'live'
+  );
   const [workspaceView, setWorkspaceView] = useState<MainWorkspaceView>('editor');
 
   // Asymmetric Research Split-View (70/30) State & Orientation
@@ -413,6 +420,18 @@ export const App: React.FC = () => {
 
   useMobileBackHandler(isMobile && leftSidebarOpen, () => setLeftSidebarOpen(false));
   useMobileBackHandler(isMobile && rightSidebarOpen, () => setRightSidebarOpen(false));
+  useMobileBackHandler(
+    isMobile &&
+      workspaceView !== 'graph' &&
+      Boolean(activeNote) &&
+      !activeNote?.path.endsWith('.base') &&
+      !activeNote?.path.endsWith('.canvas') &&
+      (editorMode === 'live' || editorMode === 'source'),
+    () => {
+      editorRef.current?.blur();
+      setEditorMode('reading');
+    }
+  );
 
   const touchStartRef = useRef<{ x: number; y: number; allowSwipeOpen: boolean } | null>(null);
 
@@ -875,6 +894,14 @@ export const App: React.FC = () => {
         const note = await syncEngine.getNote(relPath);
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
         setActiveNote(note);
+        if (
+          isMobile &&
+          getMobileReadingDefault() &&
+          !relPath.endsWith('.base') &&
+          !relPath.endsWith('.canvas')
+        ) {
+          setEditorMode('reading');
+        }
         setSaveState('saved');
         recordLastActiveNote(relPath);
         recordRecentNote(relPath);
@@ -3301,8 +3328,8 @@ export const App: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Sticky Formatting Toolbar at the top */}
-          {activeNote && editorMode !== 'reading' && !zenMode && (
+          {/* Sticky Formatting Toolbar at the top (Desktop only; mobile uses MobileEditBar) */}
+          {!isMobile && activeNote && editorMode !== 'reading' && !zenMode && (
             <EditorToolbar
               editorRef={editorRef}
               onUploadImage={handleUploadImageFile}
@@ -3346,6 +3373,7 @@ export const App: React.FC = () => {
                   }}
                   onUploadAttachment={handleUploadImageFile}
                   onSendToTargetNote={handleOpenSendToTarget}
+                  onRequestEditMode={isMobile ? () => setEditorMode('live') : undefined}
                   onOpenNote={(targetPath) => {
                     handleNavigateWikiLink(targetPath);
                     if (isMobile) setLeftSidebarOpen(false);
@@ -3748,6 +3776,75 @@ export const App: React.FC = () => {
             )
           )}
         </div>
+
+        {/* Mobile Contextual Bottom Bar: State A (Navigation) vs State B (Keyboard-Docked Edit Bar) */}
+        {isMobile && !zenMode && (
+          activeNote &&
+          !isBaseNote &&
+          !isCanvasNote &&
+          workspaceView !== 'graph' &&
+          (editorMode === 'live' || editorMode === 'source') ? (
+            <MobileEditBar
+              editorRef={editorRef}
+              onUploadImage={handleUploadImageFile}
+              onSendToTarget={handleOpenSendToTarget}
+              onDone={() => {
+                editorRef.current?.blur();
+                setEditorMode('reading');
+              }}
+            />
+          ) : (
+            <MobileBottomNav
+              editorMode={editorMode}
+              canEditNote={Boolean(activeNote && !isBaseNote && !isCanvasNote && workspaceView !== 'graph')}
+              hasActiveNote={Boolean(activeNote)}
+              activeNoteName={activeNote?.path.split('/').pop()}
+              isResearchOpen={workspaceView === 'split'}
+              zenMode={zenMode}
+              onOpenFiles={() => setLeftSidebarOpen(true)}
+              onOpenSearch={() => setCommandPaletteOpen(true)}
+              onStartEdit={() => {
+                setEditorMode('live');
+                requestAnimationFrame(() => editorRef.current?.focus());
+              }}
+              onQuickNote={() => openCreateNoteDialog()}
+              onSwitchMode={(mode) => {
+                setEditorMode(mode);
+                if (mode !== 'reading') {
+                  requestAnimationFrame(() => editorRef.current?.focus());
+                } else {
+                  editorRef.current?.blur();
+                }
+              }}
+              onToggleResearch={handleToggleSplit}
+              onOpenRightSidebar={() => setRightSidebarOpen(true)}
+              onToggleZen={() => setZenMode((z) => !z)}
+              onRenameActive={
+                activeNote
+                  ? () => {
+                      const currentName = activeNote.path.split('/').pop() || activeNote.path;
+                      setDialog({ type: 'rename', targetPath: activeNote.path, initialValue: currentName });
+                      setDialogInput(currentName);
+                    }
+                  : undefined
+              }
+              onDeleteActive={
+                activeNote
+                  ? () => {
+                      const name = activeNote.path.split('/').pop() || activeNote.path;
+                      setDialog({
+                        type: 'delete',
+                        targetPath: activeNote.path,
+                        initialValue: name,
+                        prompt: t('dialogs.deleteNotePrompt', { name }),
+                      });
+                    }
+                  : undefined
+              }
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          )
+        )}
       </main>
 
       {/* Right Sidebar: Backlinks, Outline, and Local Graph */}
