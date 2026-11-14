@@ -210,11 +210,32 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
             </span>
           )}
 
-          <span className="base-board-swimlane-count">({lane.totalCount})</span>
+          <span className="base-board-swimlane-count">
+            ({isMobile && columns.length === 1 ? (lane.cells[columns[0].key]?.length ?? 0) : lane.totalCount})
+          </span>
         </div>
 
-        {!readOnly && !lane.isUnassigned && (
+        {!readOnly && (isMobile || !lane.isUnassigned) && (
           <div className="base-board-swimlane-actions">
+            {isMobile && columns.length > 0 && (
+              <button
+                type="button"
+                className="base-board-add-card-btn base-board-col-add-btn board-add-card-btn board-column-action-btn mobile-swimlane-add-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const activeColKey = columns[0]?.key || '';
+                  onAddCard(
+                    activeColKey === 'no_status' ? '' : activeColKey,
+                    lane.isUnassigned ? '' : lane.key
+                  );
+                }}
+                title={t('base.addCard', 'Karte hinzufügen')}
+                aria-label={`${t('base.addCard', 'Karte hinzufügen')} (${columns[0]?.label || ''} - ${laneValue})`}
+              >
+                <Plus size={14} />
+              </button>
+            )}
+            {!lane.isUnassigned && (
             <div className="base-board-col-menu-wrapper" ref={menuRef}>
               <button
                 type="button"
@@ -294,6 +315,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                 </BottomSheet>
               )}
             </div>
+            )}
           </div>
         )}
       </div>
@@ -320,7 +342,8 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                 onDragLeave={onDragLeaveCell}
                 onDrop={(e) => onDropOnCell(e, col.key, lane.key)}
               >
-                {/* Integrated Column Header inside the box */}
+                {/* Integrated Column Header inside the box (Desktop only) */}
+                {!isMobile && (
                 <div className="base-board-column-header board-column-header">
                   <div className="base-board-column-title-cluster board-column-title-group board-column-title-wrap">
                     {col.color && (
@@ -373,6 +396,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Cards list and drop area inside the same box */}
                 <div className="base-board-cards-list base-board-swimlane-cards-list board-column-cards-container">

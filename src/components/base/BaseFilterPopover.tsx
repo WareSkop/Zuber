@@ -230,7 +230,14 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
         isOpen={isOpen}
         onClose={onClose}
         title={t('base.filterTitle') || 'Filter konfigurieren'}
-        footer={<div className="bottom-sheet-footer-actions">{filterFooterBtn}</div>}
+        footer={
+          <div className="bottom-sheet-footer-actions">
+            {filterFooterBtn}
+            <button type="button" className="base-btn primary-btn" onClick={onClose}>
+              {t('common.save', 'Speichern')}
+            </button>
+          </div>
+        }
       >
         {filterBody}
       </BottomSheet>

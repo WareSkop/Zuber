@@ -46,6 +46,7 @@ export interface BaseBoardColumnProps {
   onDragStart: (path: string) => void;
   onDragEnd: () => void;
   headerOnly?: boolean;
+  hideHeader?: boolean;
   sortRule?: BoardColumnSortRule;
   onSortChange?: (sortRule?: BoardColumnSortRule) => void;
   onOpenSort?: (colKey: string, anchorEl: HTMLElement) => void;
@@ -74,6 +75,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
   onDragStart,
   onDragEnd,
   headerOnly = false,
+  hideHeader = false,
   sortRule,
   onSortChange,
   onOpenSort,
@@ -153,6 +155,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
       onDrop={(e) => onDrop(e, col.key)}
     >
       {/* Column Header */}
+      {!hideHeader && (
       <div className="base-board-column-header board-column-header">
         <div className="base-board-column-title-cluster board-column-title-group board-column-title-wrap">
           {col.color && (
@@ -327,6 +330,7 @@ export const BaseBoardColumn: React.FC<BaseBoardColumnProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Column Drop Zone / Card List */}
       {!headerOnly && (

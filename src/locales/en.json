@@ -594,9 +594,11 @@
     "close": "Close Research View"
   },
   "board": {
+    "selectColumn": "Select Column",
     "moveCard": "Move Card",
     "targetColumn": "Column",
-    "targetSwimlane": "Swimlane"
+    "targetSwimlane": "Swimlane",
+    "openNote": "Open Note"
   },
   "error": {
     "resetView": "Reset View & Reload"

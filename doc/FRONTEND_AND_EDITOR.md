@@ -1159,6 +1159,26 @@ Auf Mobilgeräten (`< 768px`) nutzt die App eine zweistufige kontextuelle Bodenl
 - **State B – Keyboard-Docked Edit-Toolbar (`<MobileEditBar />` in `src/components/MobileEditBar.tsx`):**
   - Ersetzt `<MobileBottomNav />` im mobilen Bearbeitungsmodus (`live` / `source`) direkt über der virtuellen Tastatur (`--vvh`): 7 Buttons in einer Zeile (`Todo`, `Einrücken`, `Überschrift` -> `<BottomSheet>`, `[[WikiLink]]`, `Bild/Kamera` -> `<BottomSheet>`, `+ Mehr` -> Hybrid-`<BottomSheet>` mit 2×3 Formatierungs-Raster + Einfüge-Aktionen/Tabellen/Callouts, `Fertig ✓`).
 
+---
+
+## 33. Mobiles Ein-Spalten-Kanban-Board, `<BottomSheet>`-Steuerung & Vollbild-Dateibaum-Swipe (`< 768px`)
+
+Auf Smartphones (`< 768px`) ersetzt ein vollbreites Ein-Spalten-Layout das horizontale Mehrspalten-Scrollen, während die Desktop-Ansicht (`>= 768px`) zu 100 % unverändert bleibt:
+
+- **Mobiles Ein-Spalten-Kanban-Layout (`BaseBoardView.tsx`, `BaseBoardColumn.tsx`, `BaseBoardSwimlaneRow.tsx`, `src/styles.css`):**
+  - **Strikte Hook-Sicherheit (`BaseBoardView.tsx`):** Alle React-Hooks (`useState`, `useMemo`, `useEffect`, `useCallback`, `useRef`) inklusive `activeMobileColumn` sind bedingungslos am Anfang von `BaseBoardView.tsx` deklariert, sodass der Wechsel zwischen `< 768px` und `>= 768px` niemals React Error #310 auslöst.
+  - **Mobile Column Switcher Bar (`min-height: 48px`):** Oben im Board zeigt `.base-board-mobile-switcher` das Property-Badge und den Namen der aktiven Spalte (z. B. `STATUS: Offen`), den Kartenzähler `(4)`, den Dropdown-Trigger (`▾`) zum Öffnen des **Spaltenauswahl-`<BottomSheet>`** sowie schnelle `‹` / `›`-Schritt-Buttons (`44×44px` Touch-Targets). Rechts daneben liegen `+` (`Karte hinzufügen`), `⇅` (`Sortieren`) und `⋮` (`Spalten-Optionen`) mit `44×44px` Touch-Targets.
+  - **1D-Board mobil (`100%` Breite):** Rendert ausschließlich `activeMobileColumn` mit `width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden;`.
+  - **2D-Swimlane-Board mobil (Vertikal gestapelt):** Rendert für die aktive Spalte (`activeMobileColumn`) alle Swimlanes (`PRIO: 1`, `PRIO: 2`, `Keine Zuordnung` etc.) vertikal untereinander auf `100%` Breite, jeweils mit einklappbarem Header (`▼` / `▶`) und eigenem `+`-Button (der sowohl `activeMobileColumn` als auch die jeweilige `swimlane` beim Erstellen einer neuen Notiz vorbefüllt).
+- **Vollbild-Swipe-Geste für den Dateibaum auf Kanban-Boards (`src/App.tsx`):**
+  - Da das mobile Kanban-Board (`< 768px`) nicht mehr horizontal scrollt, ist die Header-Beschränkung für `.base`, `.base-editor` und `.base-board-view` aufgehoben und gilt exklusiv für `.canvas-editor-wrapper` / `.react-flow`.
+  - Ein Wischen von links nach rechts (`deltaX > 65px` mit `Math.abs(deltaX) > Math.abs(deltaY) * 1.5`) an beliebiger Stelle auf dem Kanban-Board öffnet auf `< 768px` flüssig den `100vw` Dateibaum-Drawer.
+- **Vollständige `<BottomSheet>`-Steuerung für Karten, Spalten & Base-Konfiguration (`< 768px`):**
+  - **Spaltenauswahl-`<BottomSheet>`:** Listet alle Board-Spalten (inkl. `Kein Status`, sofern Karten vorhanden sind) mit Kartenzähler als `48px` hohe Zeilen und wechselt sofort beim Antippen.
+  - **Karten-Aktionen & Verschieben-`<BottomSheet>` (`BaseBoardCard.tsx`, `BaseBoardView.tsx`):** Der `⋮`-Button (`40×40px` Touch-Target) rechts auf jeder Karte öffnet ein `<BottomSheet>` mit 1D-Spaltenauswahl, 2D-Swimlane-Auswahl (sofortige Frontmatter-Speicherung via `api.saveNote()`) und der Direktaktion **„Notiz öffnen“** (`board.openNote`).
+  - **Spaltenmenü (`⋮`), Sortierung (`⇅`) & `BaseBoardConfigModal` im `<BottomSheet>`:** Spalte umbenennen/entfernen, Kartensortierung (`BaseBoardSortPopover`) sowie Ansichten-Wechsler, Filter-Builder (`BaseFilterPopover`), Gruppierung, Spalten-Manager (`BaseColumnsModal`) und `BaseBoardConfigModal` öffnen auf `< 768px` im `<BottomSheet>` mit unten fixiertem `Speichern` / `Abbrechen`-Footer (`padding-bottom: max(12px, env(safe-area-inset-bottom))`).
+
+
 
 
 

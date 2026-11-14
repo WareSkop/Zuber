@@ -11523,8 +11523,10 @@ p:has(.embedded-canvas-container) {
   display: none;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 40px;
+  min-height: 40px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -11790,6 +11792,181 @@ p:has(.embedded-canvas-container) {
   pointer-events: auto;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* ==========================================================================
+   Mobile Single-Column Kanban Board Layout & Switcher Bar (< 768px)
+   ========================================================================== */
+
+.base-board-mobile-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 48px;
+  width: 100%;
+  padding: 4px 6px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary, var(--bg-tertiary));
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.mobile-col-switcher-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-col-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, var(--text-primary));
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-col-step-btn:active:not(:disabled) {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.mobile-col-step-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mobile-col-selector-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-col-selector-trigger:active {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.mobile-col-active-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.mobile-col-selector-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+.mobile-col-switcher-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mobile-col-action-btn,
+.mobile-swimlane-add-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.mobile-col-option-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+  .base-board-container,
+  .base-board-container.is-mobile-single-col {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    padding: 8px !important;
+    gap: 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  .base-board-column,
+  .base-board-column.base-board-swimlane-cell {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .base-board-2d-container,
+  .base-board-2d-grid,
+  .base-board-2d-swimlanes-list,
+  .base-board-swimlane-band,
+  .base-board-swimlane-cells-row {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .base-board-swimlane-header {
+    min-height: 44px;
+    padding: 4px 8px;
+  }
+
+  .base-board-config-mobile-content .base-board-config-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    padding: 4px 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
 
 
 

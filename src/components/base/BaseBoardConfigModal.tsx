@@ -8,6 +8,7 @@ import {
   type BaseBoardSwimlaneConfig,
 } from '../../base/baseConfig';
 import { useTranslation } from '../../i18n';
+import { BottomSheet, useIsMobile } from '../BottomSheet';
 
 export interface BaseBoardConfigModalProps {
   isOpen: boolean;
@@ -172,6 +173,7 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   onSave,
 }) => {
   const { t } = useTranslation();
+  const isMobile = useIsMobile();
 
   const [property, setProperty] = useState<string>('status');
   const [columns, setColumns] = useState<ColumnItem[]>([]);
@@ -502,37 +504,8 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
     onClose();
   };
 
-  return (
-    <div
-      className="board-config-modal-overlay modal-backdrop base-modal-backdrop"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="board-config-modal modal-container base-modal-container base-board-config-modal base-board-config-modal-2col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* 1. Header (Fixed at top) */}
-        <div className="board-config-header modal-header base-modal-header">
-          <div className="board-config-title modal-title-cluster base-modal-title">
-            <span className="board-config-icon modal-title-icon">
-              <Kanban size={18} className="modal-icon" />
-            </span>
-            <h3 className="modal-title">{t('base.configureBoard', 'Board konfigurieren')}</h3>
-          </div>
-          <button
-            type="button"
-            className="board-config-close-btn base-modal-close-btn close-btn"
-            onClick={onClose}
-            aria-label={t('common.close', 'Schließen')}
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* 2. Body (Scrollable in between) */}
-        <div className="board-config-body modal-body base-modal-body base-board-config-grid scroller">
+  const configBodyContent = (
+    <div className="board-config-body modal-body base-modal-body base-board-config-grid scroller">
             {/* LEFT COLUMN: Vertical Columns */}
             <div className="base-board-config-column base-board-config-col base-board-config-left">
               {/* 1. Group By Property */}
@@ -725,7 +698,7 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
                 </p>
 
                 <div className="base-columns-checklist base-board-card-props-list scroller">
-                  {allCardPropertyItems.map((prop, idx) => {
+                  {allCardPropertyItems.map((prop) => {
                     const isOrderable = prop.isVisible;
                     const selectedIdx = isOrderable ? selectedCardProps.indexOf(prop.key) : -1;
 
@@ -811,23 +784,81 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
               </div>
             </div>
         </div>
+  );
+
+  const configFooterButtons = (
+    <>
+      <button
+        type="button"
+        className="board-config-cancel-btn base-btn secondary-btn"
+        onClick={onClose}
+      >
+        <span>{t('common.cancel', 'Abbrechen')}</span>
+      </button>
+      <button
+        type="button"
+        className="board-config-save-btn base-btn primary-btn btn-primary"
+        onClick={() => handleSubmit()}
+      >
+        <span>{t('common.save', 'Speichern')}</span>
+      </button>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <BottomSheet
+        isOpen={isOpen}
+        onClose={onClose}
+        title={t('base.configureBoard', 'Board konfigurieren')}
+        footer={
+          <div className="bottom-sheet-footer-actions board-config-mobile-footer">
+            {configFooterButtons}
+          </div>
+        }
+      >
+        <div className="base-board-config-modal base-board-config-mobile-content">
+          {configBodyContent}
+        </div>
+      </BottomSheet>
+    );
+  }
+
+  return (
+    <div
+      className="board-config-modal-overlay modal-backdrop base-modal-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="board-config-modal modal-container base-modal-container base-board-config-modal base-board-config-modal-2col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 1. Header (Fixed at top) */}
+        <div className="board-config-header modal-header base-modal-header">
+          <div className="board-config-title modal-title-cluster base-modal-title">
+            <span className="board-config-icon modal-title-icon">
+              <Kanban size={18} className="modal-icon" />
+            </span>
+            <h3 className="modal-title">{t('base.configureBoard', 'Board konfigurieren')}</h3>
+          </div>
+          <button
+            type="button"
+            className="board-config-close-btn base-modal-close-btn close-btn"
+            onClick={onClose}
+            aria-label={t('common.close', 'Schließen')}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* 2. Body (Scrollable in between) */}
+        {configBodyContent}
 
         {/* 3. Footer (Always pinned at bottom) */}
         <div className="board-config-footer modal-footer base-modal-footer">
-          <button
-            type="button"
-            className="board-config-cancel-btn base-btn secondary-btn"
-            onClick={onClose}
-          >
-            <span>{t('common.cancel', 'Abbrechen')}</span>
-          </button>
-          <button
-            type="button"
-            className="board-config-save-btn base-btn primary-btn btn-primary"
-            onClick={() => handleSubmit()}
-          >
-            <span>{t('common.save', 'Speichern')}</span>
-          </button>
+          {configFooterButtons}
         </div>
       </div>
     </div>

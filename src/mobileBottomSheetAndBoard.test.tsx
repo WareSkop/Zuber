@@ -9,8 +9,10 @@ import { BottomSheet, useMobileBackHandler, __resetMobileBackHandlerForTests } f
 import { BaseBoardSortPopover } from './components/base/BaseBoardSortPopover';
 import { BaseFilterPopover } from './components/base/BaseFilterPopover';
 import { BaseColumnsModal } from './components/base/BaseColumnsModal';
+import { BaseBoardConfigModal } from './components/base/BaseBoardConfigModal';
 import { BaseBoardView } from './components/base/BaseBoardView';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { api } from './api';
 import type { BaseQueryResult, BaseRecord } from './base/baseEngine';
 import type { BaseViewConfig } from './base/baseConfig';
 
@@ -352,5 +354,284 @@ describe('Phase 1: BottomSheet, Mobile Back Handler, Hook Safety, Board Move She
     expect(localStorage.getItem('zuber_open_tabs')).toBeNull();
     expect(localStorage.getItem('zuber_theme')).toBe('dark-cold');
     expect(reloadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('Mobile 1D Board (< 768px): renders single active column, switches via ‹/› and Column Selector BottomSheet, and switches cleanly between mobile and desktop without hook errors', async () => {
+    const records: BaseRecord[] = [
+      makeRecord('Tasks/T1.md', 'Task1', { status: 'Open' }),
+      makeRecord('Tasks/T2.md', 'Task2', { status: 'Open' }),
+      makeRecord('Tasks/T3.md', 'Task3', { status: 'inWork' }),
+      makeRecord('Tasks/T4.md', 'Task4', { status: 'Finish' }),
+    ];
+    const view: BaseViewConfig = {
+      type: 'board',
+      name: 'Mobile 1D Board',
+      groupBy: { property: 'status', columns: ['Open', 'inWork', 'Finish'] },
+    };
+    const queryResult: BaseQueryResult = {
+      definition: { views: [view] },
+      view,
+      records,
+      columns: ['file.name', 'status'],
+      columnDisplayNames: {},
+      groups: [],
+      totalCount: records.length,
+    };
+
+    const onAddCard = vi.fn();
+
+    // Start on mobile (< 768px)
+    setViewportWidth(375);
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <BaseBoardView
+            queryResult={queryResult}
+            view={view}
+            onSelectNote={vi.fn()}
+            onAddCard={onAddCard}
+          />
+        </I18nProvider>
+      );
+    });
+
+    // Only 1 column ('Open') is rendered in the DOM on mobile
+    expect(container.querySelector('.base-board-mobile-switcher')).toBeTruthy();
+    expect(container.querySelectorAll('.base-board-column').length).toBe(1);
+    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('Open');
+    expect(container.querySelectorAll('.base-board-card').length).toBe(2);
+
+    // Step next (›) -> 'inWork'
+    const nextBtn = container.querySelector('.mobile-col-next-btn') as HTMLButtonElement;
+    expect(nextBtn).toBeTruthy();
+    act(() => {
+      nextBtn.click();
+    });
+    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('inWork');
+    expect(container.querySelectorAll('.base-board-column').length).toBe(1);
+    expect(container.querySelectorAll('.base-board-card').length).toBe(1);
+    expect(container.querySelector('.base-card-title')?.textContent).toBe('Task3');
+
+    // Open Column Selector BottomSheet via dropdown trigger (▾) and select 'Finish'
+    const selectorTrigger = container.querySelector('.mobile-col-selector-trigger') as HTMLButtonElement;
+    expect(selectorTrigger).toBeTruthy();
+    act(() => {
+      selectorTrigger.click();
+    });
+
+    const colOptions = Array.from(
+      document.querySelectorAll('.mobile-col-option-btn')
+    ) as HTMLButtonElement[];
+    expect(colOptions.length).toBe(3);
+    const finishOption = colOptions.find((b) => b.textContent?.includes('Finish'));
+    expect(finishOption).toBeTruthy();
+
+    act(() => {
+      finishOption!.click();
+    });
+
+    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('Finish');
+    expect(container.querySelector('.base-card-title')?.textContent).toBe('Task4');
+
+    // Clicking '+' in mobile switcher bar adds card to active column ('Finish')
+    const addBtn = container.querySelector(
+      '.base-board-mobile-switcher .base-board-add-card-btn'
+    ) as HTMLButtonElement;
+    expect(addBtn).toBeTruthy();
+    act(() => {
+      addBtn.click();
+    });
+    expect(onAddCard).toHaveBeenCalledWith('Finish');
+
+    // Switch viewport to Desktop (>= 768px) -> all 3 columns render without React Error #310
+    setViewportWidth(1280);
+    expect(container.querySelector('.base-board-mobile-switcher')).toBeNull();
+    expect(container.querySelectorAll('.base-board-column').length).toBe(3);
+
+    // Switch back to Mobile (< 768px) -> single column again
+    setViewportWidth(375);
+    expect(container.querySelector('.base-board-mobile-switcher')).toBeTruthy();
+    expect(container.querySelectorAll('.base-board-column').length).toBe(1);
+  });
+
+  it('Mobile 2D Swimlane Board (< 768px): stacks swimlanes vertically for activeMobileColumn and pre-fills both column and swimlane on + click', async () => {
+    setViewportWidth(375);
+    const records: BaseRecord[] = [
+      makeRecord('Tasks/S1.md', 'SwimCard1', { status: 'Open', prio: 'Prio 1' }),
+      makeRecord('Tasks/S2.md', 'SwimCard2', { status: 'inWork', prio: 'Prio 2' }),
+    ];
+    const view: BaseViewConfig = {
+      type: 'board',
+      name: 'Mobile 2D Board',
+      groupBy: { property: 'status', columns: ['Open', 'inWork'] },
+      swimlanes: { property: 'prio', lanes: ['Prio 1', 'Prio 2'] },
+    };
+    const queryResult: BaseQueryResult = {
+      definition: { views: [view] },
+      view,
+      records,
+      columns: ['file.name', 'status', 'prio'],
+      columnDisplayNames: {},
+      groups: [],
+      totalCount: records.length,
+    };
+
+    const onAddCard = vi.fn();
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <BaseBoardView
+            queryResult={queryResult}
+            view={view}
+            onSelectNote={vi.fn()}
+            onAddCard={onAddCard}
+          />
+        </I18nProvider>
+      );
+    });
+
+    // Active column defaults to 'Open'; both swimlanes are rendered vertically, each with only 1 cell ('Open')
+    const swimlaneBands = container.querySelectorAll('.base-board-swimlane-band');
+    expect(swimlaneBands.length).toBe(2);
+    expect(swimlaneBands[0].querySelectorAll('.base-board-swimlane-cell').length).toBe(1);
+    expect(swimlaneBands[1].querySelectorAll('.base-board-swimlane-cell').length).toBe(1);
+
+    // Switch active column to 'inWork' via next step button (›)
+    const nextBtn = container.querySelector('.mobile-col-next-btn') as HTMLButtonElement;
+    act(() => {
+      nextBtn.click();
+    });
+    expect(container.querySelector('.mobile-col-active-title')?.textContent).toBe('inWork');
+
+    // Click '+' on the second swimlane ('Prio 2') -> must pre-fill activeMobileColumn ('inWork') and swimlane ('Prio 2')
+    const lane2AddBtn = swimlaneBands[1].querySelector('.mobile-swimlane-add-btn') as HTMLButtonElement;
+    expect(lane2AddBtn).toBeTruthy();
+    act(() => {
+      lane2AddBtn.click();
+    });
+    expect(onAddCard).toHaveBeenCalledWith('inWork', 'Prio 2');
+  });
+
+  it('Card Action & Move BottomSheet persists frontmatter via api.saveNote and supports Open Note action', async () => {
+    setViewportWidth(375);
+    const getNoteSpy = vi.spyOn(api, 'getNote').mockResolvedValue({
+      path: 'Tasks/CardM.md',
+      body: '# Card M',
+      properties: [
+        { key: 'status', value: 'Open', type: 'text' },
+        { key: 'prio', value: 'Prio 1', type: 'text' },
+      ],
+    } as any);
+    const saveNoteSpy = vi.spyOn(api, 'saveNote').mockResolvedValue({} as any);
+    const onSelectNote = vi.fn();
+
+    const records: BaseRecord[] = [
+      makeRecord('Tasks/CardM.md', 'CardM', { status: 'Open', prio: 'Prio 1' }),
+    ];
+    const view: BaseViewConfig = {
+      type: 'board',
+      name: 'Board 2D',
+      groupBy: { property: 'status', columns: ['Open', 'Finish'] },
+      swimlanes: { property: 'prio', lanes: ['Prio 1', 'Prio 2'] },
+    };
+    const queryResult: BaseQueryResult = {
+      definition: { views: [view] },
+      view,
+      records,
+      columns: ['file.name', 'status', 'prio'],
+      columnDisplayNames: {},
+      groups: [],
+      totalCount: records.length,
+    };
+
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <BaseBoardView
+            queryResult={queryResult}
+            view={view}
+            onSelectNote={onSelectNote}
+          />
+        </I18nProvider>
+      );
+    });
+
+    const moveBtn = container.querySelector('button[aria-label="Move CardM"]') as HTMLButtonElement;
+    expect(moveBtn).toBeTruthy();
+    act(() => {
+      moveBtn.click();
+    });
+
+    // Move to column 'Finish' -> saves via api.saveNote
+    let sheetButtons = Array.from(
+      document.querySelectorAll('.bottom-sheet-action-btn')
+    ) as HTMLButtonElement[];
+    const finishColBtn = sheetButtons.find((b) => b.textContent?.includes('Finish'));
+    expect(finishColBtn).toBeTruthy();
+
+    await act(async () => {
+      finishColBtn!.click();
+    });
+
+    expect(saveNoteSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: 'Tasks/CardM.md',
+        properties: expect.arrayContaining([{ key: 'status', value: 'Finish', type: 'text' }]),
+        forceOverwrite: true,
+      })
+    );
+
+    // Click 'Open Note' action row -> calls onSelectNote('Tasks/CardM.md')
+    sheetButtons = Array.from(
+      document.querySelectorAll('.bottom-sheet-action-btn')
+    ) as HTMLButtonElement[];
+    const openNoteBtn = sheetButtons.find((b) =>
+      b.classList.contains('bottom-sheet-open-note-btn')
+    );
+    expect(openNoteBtn).toBeTruthy();
+    act(() => {
+      openNoteBtn!.click();
+    });
+    expect(onSelectNote).toHaveBeenCalledWith('Tasks/CardM.md');
+
+    getNoteSpy.mockRestore();
+    saveNoteSpy.mockRestore();
+  });
+
+  it('BaseBoardConfigModal renders inside BottomSheet with pinned Save/Cancel footer on < 768px', () => {
+    setViewportWidth(375);
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    const view: BaseViewConfig = {
+      type: 'board',
+      name: 'Board',
+      groupBy: { property: 'status', columns: ['Open', 'Finish'] },
+    };
+
+    act(() => {
+      root.render(
+        <I18nProvider>
+          <BaseBoardConfigModal
+            isOpen={true}
+            onClose={onClose}
+            view={view}
+            availableProperties={[{ key: 'status', label: 'Status' }]}
+            onSave={onSave}
+          />
+        </I18nProvider>
+      );
+    });
+
+    expect(document.querySelector('.bottom-sheet-container')).toBeTruthy();
+    const saveBtn = document.querySelector(
+      '.bottom-sheet-footer .board-config-save-btn'
+    ) as HTMLButtonElement;
+    expect(saveBtn).toBeTruthy();
+
+    act(() => {
+      saveBtn.click();
+    });
+    expect(onSave).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalled();
   });
 });

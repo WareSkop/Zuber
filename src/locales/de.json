@@ -594,9 +594,11 @@
     "close": "Rechercheansicht schließen"
   },
   "board": {
+    "selectColumn": "Spalte wählen",
     "moveCard": "Karte verschieben",
     "targetColumn": "Spalte",
-    "targetSwimlane": "Swimlane"
+    "targetSwimlane": "Swimlane",
+    "openNote": "Notiz öffnen"
   },
   "error": {
     "resetView": "Ansicht zurücksetzen & neu laden"

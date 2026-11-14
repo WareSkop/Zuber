@@ -441,21 +441,11 @@ export const App: React.FC = () => {
       const startedInHeader = Boolean(
         target?.closest('.workspace-topbar, .top-bar, .app-header, .editor-header')
       );
-      const isBoardOrCanvasView = Boolean(
-        activeNote?.path.endsWith('.base') ||
-          activeNote?.path.endsWith('.canvas') ||
-          target?.closest('.base-board-view, .base-editor, .base-table-wrapper, .canvas-editor-wrapper')
+      const isCanvasView = Boolean(
+        activeNote?.path.endsWith('.canvas') ||
+          target?.closest('.canvas-editor-wrapper, .react-flow')
       );
-      let insideHorizontalScroll = false;
-      let el: HTMLElement | null = target;
-      while (el && el !== e.currentTarget) {
-        if (el.scrollWidth > el.clientWidth + 4) {
-          insideHorizontalScroll = true;
-          break;
-        }
-        el = el.parentElement;
-      }
-      const allowSwipeOpen = (!isBoardOrCanvasView && !insideHorizontalScroll) || startedInHeader;
+      const allowSwipeOpen = !isCanvasView || startedInHeader;
 
       touchStartRef.current = {
         x: e.touches[0].clientX,
@@ -497,9 +487,9 @@ export const App: React.FC = () => {
           setRightSidebarOpen(false);
         }
       } else {
-        // Neither sidebar is open: swipe right opens left sidebar (restricted to header on boards/canvases)
+        // Neither sidebar is open: swipe right opens left sidebar (restricted to header exclusively on canvases)
         const isEdgeStart = startX <= 35;
-        const isStrongSwipe = deltaX > 65;
+        const isStrongSwipe = deltaX > 65 && absX > absY * 1.5;
         if (allowSwipeOpen && (isEdgeStart || isStrongSwipe)) {
           setLeftSidebarOpen(true);
         }
