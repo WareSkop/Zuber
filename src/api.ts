@@ -22,7 +22,9 @@ import type {
 } from '../shared/types';
 import { clientLogger } from './utils/logger';
 import {
+  extractHeadings,
   extractLinksAndEmbeds,
+  extractTags,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
 } from '../shared/markdownUtils';
@@ -394,7 +396,7 @@ export const rawApi = {
       const plainText = await decryptText(rawBytes, unlocked.key);
       const logicalPath = stripZencExt(zencPath);
       const ext = getLogicalExtension(zencPath);
-      const name = logicalPath.split('/').pop() || logicalPath;
+      const name = (logicalPath.split('/').pop() || logicalPath).replace(/\.(md|canvas|base)$/i, '');
       const now = Date.now();
       if (ext === 'canvas' || ext === 'base') {
         return {
@@ -413,14 +415,8 @@ export const rawApi = {
       }
       const { frontmatter, properties, body } = parseMarkdownWithFrontmatter(plainText);
       const { links, embeds } = extractLinksAndEmbeds(body);
-      const tags = Array.from(
-        new Set(
-          [
-            ...(Array.isArray(frontmatter?.tags) ? frontmatter.tags.map(String) : []),
-            ...(body.match(/(?:^|\s)#([a-zA-Z0-9_/-]+)/g) || []).map((s) => s.trim().slice(1)),
-          ].filter(Boolean)
-        )
-      );
+      const tags = extractTags(properties, body);
+      const headings = extractHeadings(body);
       return {
         path: zencPath,
         name,
@@ -431,7 +427,7 @@ export const rawApi = {
         tags,
         links,
         embeds,
-        headings: [],
+        headings,
         updatedAt: now,
       };
     }
@@ -475,7 +471,7 @@ export const rawApi = {
       const fileName = slashIdx >= 0 ? zencPath.slice(slashIdx + 1) : zencPath;
       await rawApi.uploadRawFile(folder, fileName, encrypted);
 
-      const name = logicalPath.split('/').pop() || logicalPath;
+      const name = (logicalPath.split('/').pop() || logicalPath).replace(/\.(md|canvas|base)$/i, '');
       const now = Date.now();
       if (ext === 'canvas' || ext === 'base') {
         return {
@@ -494,6 +490,8 @@ export const rawApi = {
       }
       const { frontmatter, properties, body } = parseMarkdownWithFrontmatter(finalRaw);
       const { links, embeds } = extractLinksAndEmbeds(body);
+      const tags = extractTags(properties, body);
+      const headings = extractHeadings(body);
       return {
         path: zencPath,
         name,
@@ -501,10 +499,10 @@ export const rawApi = {
         properties,
         body,
         rawContent: finalRaw,
-        tags: [],
+        tags,
         links,
         embeds,
-        headings: [],
+        headings,
         updatedAt: now,
       };
     }

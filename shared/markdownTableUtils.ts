@@ -19,7 +19,8 @@ export const isTableRowLine = (text: string): boolean =>
   text.includes('|') && text.trim().length > 0;
 
 /**
- * Splits a Markdown table row into trimmed cell strings, respecting escaped pipes (\|).
+ * Splits a Markdown table row into trimmed cell strings, respecting escaped pipes (\|)
+ * and pipes inside `[[WikiLink|Alias]]` brackets.
  */
 export function splitTableCells(rowText: string): string[] {
   let trimmed = rowText.trim();
@@ -28,12 +29,21 @@ export function splitTableCells(rowText: string): string[] {
 
   const cells: string[] = [];
   let current = '';
+  let wikiDepth = 0;
   for (let i = 0; i < trimmed.length; i++) {
     const ch = trimmed[i];
-    if (ch === '\\' && trimmed[i + 1] === '|') {
-      current += '\\|';
+    if (ch === '[' && trimmed[i + 1] === '[') {
+      wikiDepth++;
+      current += '[[';
       i++;
-    } else if (ch === '|') {
+    } else if (ch === ']' && trimmed[i + 1] === ']' && wikiDepth > 0) {
+      wikiDepth--;
+      current += ']]';
+      i++;
+    } else if (ch === '\\' && trimmed[i + 1] === '|') {
+      current += wikiDepth > 0 ? '|' : '\\|';
+      i++;
+    } else if (ch === '|' && wikiDepth === 0) {
       cells.push(current.trim());
       current = '';
     } else {

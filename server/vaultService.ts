@@ -86,7 +86,7 @@ export function ensureDemoVaultSeeded(vaultDir: string, seedDir?: string): boole
     fs.mkdirSync(resolvedVault, { recursive: true });
   }
 
-  const entries = fs.readdirSync(resolvedVault).filter((e) => !e.startsWith('.'));
+  const entries = fs.readdirSync(resolvedVault).filter((e) => !e.startsWith('.') || e === '.zuber-lock.json');
   if (entries.length > 0) return false;
 
   const resolvedSeed = seedDir ? path.resolve(seedDir) : resolveDemoVaultSeedDir();
@@ -148,7 +148,7 @@ export class VaultService {
     const walk = (dir: string) => {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+        if ((entry.name.startsWith('.') && entry.name !== '.zuber-lock.json') || entry.isSymbolicLink()) continue;
         const fullPath = path.join(dir, entry.name);
         const relPath = this.toRelativePath(fullPath);
         if (entry.isDirectory()) {
@@ -314,7 +314,7 @@ export class VaultService {
     this.folders.add(relDir);
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
+        if ((entry.name.startsWith('.') && entry.name !== '.zuber-lock.json') || entry.isSymbolicLink()) continue;
         const full = path.join(dir, entry.name);
         const rel = this.toRelativePath(full);
         if (entry.isDirectory()) {

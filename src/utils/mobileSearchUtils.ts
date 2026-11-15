@@ -107,6 +107,7 @@ export function searchVaultFiles(
 
   for (const f of files) {
     const fileName = f.name || f.path.split('/').pop() || f.path;
+    if (fileName === '.zuber-lock.json') continue;
     const folder =
       f.folder !== undefined
         ? f.folder
@@ -147,6 +148,7 @@ export function searchNotesFullTextOffline(
   const hits: FullTextNoteHit[] = [];
 
   for (const note of notes) {
+    if (note.path.toLowerCase().endsWith('.zenc') || note.path.endsWith('.zuber-lock.json')) continue;
     const body = note.body || '';
     const lowerBody = body.toLowerCase();
     const firstIdx = lowerBody.indexOf(lowerQuery);

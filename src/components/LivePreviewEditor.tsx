@@ -352,15 +352,19 @@ function formatCellInlineHtml(cell: string, notePath: string): string {
         : api.getAttachmentUrl(target, notePath);
       return `<img src="${url}" alt="${alt || target}" class="cm-table-inline-img" loading="lazy" decoding="async" />`;
     })
-    // [[WikiLink|Alias]]
-    .replace(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|([^\]]+))?\]\]/g, (_m, t, alias) => {
+    // [[WikiLink|Alias]] or [[WikiLink\|Alias]]
+    .replace(/\[\[([^\]|#\\]+)(?:#[^\]|\\]+)?(?:\\?\|([^\]]+))?\]\]/g, (_m, t, alias) => {
       const target = String(t).trim();
-      const label = alias ? String(alias).trim() : target;
+      const label = alias ? String(alias).trim().replace(/^\\/, '') : target;
       return `<span class="cm-wikilink-widget" data-wikilink="${target}">${label}</span>`;
     })
     // [label](url)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, href) => {
-      return `<span class="cm-wikilink-widget" data-wikilink="${String(href).trim()}">${label}</span>`;
+      const target = String(href).trim();
+      if (/^https?:\/\//i.test(target)) {
+        return `<a href="${target}" class="cm-external-link" data-external-href="${target}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+      }
+      return `<span class="cm-wikilink-widget" data-wikilink="${target}">${label}</span>`;
     })
     // **bold**
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
@@ -372,7 +376,7 @@ function formatCellInlineHtml(cell: string, notePath: string): string {
     .replace(/`([^`]+)`/g, '<code class="cm-lp-inline-code">$1</code>');
 
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-tag', 'target', 'loading', 'decoding', 'align'],
+    ADD_ATTR: ['data-wiki-target', 'data-wikilink', 'data-external-href', 'data-tag', 'target', 'rel', 'loading', 'decoding', 'align'],
   });
 }
 
@@ -489,7 +493,8 @@ class TableWidget extends WidgetType {
     readonly t: (key: string) => string,
     readonly colWidths?: number[],
     readonly onUpdateTableWidths?: (headerSignature: string, widths: number[], currentBody?: string) => void,
-    readonly onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void
+    readonly onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void,
+    readonly getExternalLinkOptions?: () => ExternalLinkOptions
   ) {
     super();
   }
@@ -749,6 +754,11 @@ class TableWidget extends WidgetType {
         if ((e.target as HTMLElement).closest('.col-resize-handle, .cm-table-sort-btn, .cm-table-cell-menu-btn')) {
           return;
         }
+        const extLinkEl = (e.target as HTMLElement).closest('a[data-external-href], a.cm-external-link') as HTMLAnchorElement | null;
+        if (extLinkEl && activeEditKey !== `${row}:${col}`) {
+          e.stopPropagation();
+          return;
+        }
         const linkEl = (e.target as HTMLElement).closest('[data-wikilink]');
         if (linkEl && activeEditKey !== `${row}:${col}`) {
           if (e.altKey) e.preventDefault();
@@ -762,6 +772,24 @@ class TableWidget extends WidgetType {
         if (activeEditKey !== `${row}:${col}`) {
           e.preventDefault();
           activateCell(row, col);
+        }
+      });
+
+      containerEl.addEventListener('click', (e) => {
+        const extLinkEl = (e.target as HTMLElement).closest('a[data-external-href], a.cm-external-link') as HTMLAnchorElement | null;
+        if (extLinkEl && activeEditKey !== `${row}:${col}`) {
+          const href = extLinkEl.getAttribute('data-external-href') || extLinkEl.getAttribute('href') || '';
+          if (!/^https?:/i.test(href)) return;
+          const opts = this.getExternalLinkOptions?.();
+          if (!opts?.isResearchOpen) return;
+          e.stopPropagation();
+          routeExternalLinkClick({
+            url: href,
+            isResearchOpen: opts.isResearchOpen,
+            event: e,
+            onOpenInResearch: opts.onOpenInResearch,
+            openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+          });
         }
       });
 
@@ -1589,11 +1617,20 @@ class EmbedWidget extends WidgetType {
       }
     };
     document.addEventListener('pointerdown', onDocClick);
+    (wrapper as any)._cleanupDocClick = () => document.removeEventListener('pointerdown', onDocClick);
 
     return wrapper;
   }
 
   override destroy(dom: HTMLElement) {
+    if (dom.dataset?.decryptedBlobUrl) {
+      URL.revokeObjectURL(dom.dataset.decryptedBlobUrl);
+      delete dom.dataset.decryptedBlobUrl;
+    }
+    const cleanupDocClick = (dom as any)._cleanupDocClick as (() => void) | undefined;
+    if (cleanupDocClick) {
+      cleanupDocClick();
+    }
     const root = (dom as any)._reactRoot as Root | undefined;
     if (root) {
       setTimeout(() => {
@@ -2211,7 +2248,8 @@ function buildLivePreviewDecorations(
             translate,
             colWidths,
             onUpdateTableWidths,
-            onRenameTableWidthSignature
+            onRenameTableWidthSignature,
+            getExternalLinkOptions
           ),
         })
       );
