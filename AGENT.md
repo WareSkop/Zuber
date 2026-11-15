@@ -24,3 +24,12 @@
     5. Commit the release changes (e.g., `git commit -m "chore(release): bump version to 0.3.0"`).
     6. Tag the release: `git tag -a v0.3.0 -m "Release v0.3.0"`.
     7. Push branch and tag to GitHub: `git push origin main --tags`. Dadurch baut GitHub Actions das offizielle Release-Image `ghcr.io/wareskop/zuber:latest` sowie das versionierte Image `ghcr.io/wareskop/zuber:0.3.0`.
+
+## 4. Demo Vault & User Wiki Maintenance (Mandatory for Every New Feature)
+- **Public Demo Vault (`vault/`):**
+  - `vault/` is tracked in Git and serves as the out-of-the-box onboarding vault seeded on fresh installations when `VAULT_DIR` is empty.
+  - NEVER commit private user notes, secrets, or `.env` files into `vault/`.
+  - Whenever a new user-facing feature, syntax, or workflow is added, update or add a concise, self-explanatory example in `vault/` demonstrating how to use it.
+- **User Manual & GitHub Wiki (`docs/wiki/`):**
+  - Whenever a new feature or significant UI change is implemented, update the corresponding chapter(s) in `docs/wiki/` (`Home.md`, `_Sidebar.md`, and numbered guides) and regenerate affected screenshots in `docs/wiki/images/` using `scripts/generate-manual-screenshots.mjs` (running against a temporary copy in `os.tmpdir()`).
+  - Push updated Wiki pages and images to `https://github.com/WareSkop/Zuber.wiki.git` when Git credentials are available.

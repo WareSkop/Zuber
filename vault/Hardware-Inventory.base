@@ -1,0 +1,20 @@
+filters:
+  and:
+    - file.ext == "md"
+    - status != ""
+properties:
+  prio:
+    displayName: Priority
+  status:
+    displayName: Status
+  created:
+    displayName: Created
+views:
+  - type: table
+    name: Task & Hardware Overview
+    order:
+      - file.name
+      - status
+      - prio
+      - tags
+      - created

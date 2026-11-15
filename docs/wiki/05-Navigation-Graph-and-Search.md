@@ -46,6 +46,9 @@ Next to the **Files**, **Search**, and **Tags** tabs in the left sidebar are two
 - **Quick Switcher (`Ctrl+O` / `Cmd+O`):** Fuzzy-search across all note titles, paths, and aliases and jump immediately with `Enter`.
 - **Full-Text & Tag Search (`Ctrl+Shift+F`):** Searches note titles, body content, frontmatter aliases, and `#tags` across the entire vault.
 - **Command Palette (`Ctrl+P` / `Cmd+P`):** Instant access to every Zuber command—creating notes, bases, canvases, switching themes, toggling Zen Mode, inserting timestamps, opening Version History, and triggering Git commits.
+- **Mobile 4-in-1 Search Modal (`< 768px`):** Tapping **Search** in the mobile bottom bar opens a unified modal with a scope selector (`In Note` default with floating `▲` / `▼` match jump bar, `Files`, offline IndexedDB `Full Text`, and `Settings`).
+
+![Mobile 4-in-1 Search Modal](images/19-mobile-4in1-search.png)
 
 ---
 

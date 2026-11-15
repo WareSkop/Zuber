@@ -1,0 +1,22 @@
+filters:
+  file.ext == "md"
+properties:
+  prio:
+    displayName: Priority
+  status:
+    displayName: Status
+views:
+  - type: board
+    name: Project Board
+    groupBy:
+      property: status
+      columns:
+        - Open
+        - In Progress
+        - Review
+        - Done
+    columnLimit: 10
+    order:
+      - file.name
+      - tags
+      - prio

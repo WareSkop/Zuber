@@ -1,6 +1,8 @@
 node_modules/
 dist/
-vault/
+dist-desktop/
+vault/.git
+config/
 certs/
 .env
 server-config.json

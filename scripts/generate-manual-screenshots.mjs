@@ -62,6 +62,8 @@ Your self-hosted, offline-first Markdown knowledge base and visual workspace.
 | Kanban Tracking | [[Project-Board.base]] | 1D & 2D task workflows |
 | Diagrams | [[System-Architecture.canvas]] | JSON Canvas 1.0 network topology |
 
+External Reference: [Zuber on GitHub](https://github.com/WareSkop/Zuber)
+
 ## Architecture Flow
 
 \`\`\`mermaid
@@ -866,6 +868,40 @@ async function run() {
     await page.waitForSelector('.version-history-modal-container', { timeout: 6000 });
     await page.waitForTimeout(700);
     await capture(page, '13-git-version-history.png');
+    await page.locator('.version-history-close-btn').click();
+    await page.waitForTimeout(300);
+
+    // 17. 17-visual-table-editing.png (Welcome.md -> click inside table cell for in-place editing)
+    await openFileFromTree(page, 'Welcome');
+    await page.waitForSelector('.cm-interactive-table .cm-table-cell-content', { timeout: 6000 });
+    await page.locator('.cm-interactive-table .cm-table-cell-content').nth(3).click();
+    await page.waitForTimeout(400);
+    await capture(page, '17-visual-table-editing.png');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
+
+    // 18. 18-research-web-browser.png (Open Research Split-View + click external link)
+    const researchToggle = page.locator('.ribbon-btn[title*="Research"], .ribbon-btn[title*="Recherche"]').first();
+    await researchToggle.click();
+    await page.waitForSelector('.research-pane-container', { timeout: 5000 });
+    await page.waitForTimeout(400);
+    const extLink = page.locator('a[href*="github.com"], .cm-external-link').first();
+    await extLink.click();
+    await page.waitForSelector('[data-testid="research-web-bar"]', { timeout: 6000 });
+    await page.waitForTimeout(1200);
+    await capture(page, '18-research-web-browser.png');
+    await researchToggle.click();
+    await page.waitForTimeout(300);
+
+    // 21. 21-folder-encryption-unlock.png (Right-click folder -> Encrypt Folder…)
+    const folderItem = page.locator('.tree-folder-item').first();
+    await folderItem.click({ button: 'right' });
+    await page.waitForTimeout(300);
+    const encryptMenuItem = page.locator('.tree-context-item', { hasText: /Encrypt Folder|Ordner verschlüsseln/i }).first();
+    await encryptMenuItem.click();
+    await page.waitForSelector('[data-testid="folder-encrypt-modal"]', { timeout: 6000 });
+    await page.waitForTimeout(400);
+    await capture(page, '21-folder-encryption-unlock.png');
     await page.keyboard.press('Escape');
 
     await context.close();
@@ -931,8 +967,32 @@ async function run() {
     await mobilePage.waitForTimeout(400);
     await capture(mobilePage, '16-mobile-kanban-bottomsheet.png');
 
+    // Close BottomSheet before next mobile captures
+    await mobilePage.locator('.bottom-sheet-backdrop').click({ position: { x: 20, y: 20 } }).catch(() => {});
+    await mobilePage.waitForTimeout(300);
+
+    // 19. 19-mobile-4in1-search.png (Open Project-Alpha, tap Search in bottom nav, search "Alpha")
+    await mobilePage.locator('.mobile-bottom-nav-btn').first().click();
+    await mobilePage.waitForTimeout(350);
+    await mobilePage.locator('.tree-item', { hasText: 'Project-Alpha' }).first().click();
+    await mobilePage.waitForTimeout(600);
+    await mobilePage.locator('.mobile-bottom-nav-btn').nth(1).click();
+    await mobilePage.waitForSelector('[data-testid="mobile-search-input"]', { timeout: 5000 });
+    await mobilePage.locator('[data-testid="mobile-search-input"]').fill('Alpha');
+    await mobilePage.waitForTimeout(400);
+    await capture(mobilePage, '19-mobile-4in1-search.png');
+    await mobilePage.keyboard.press('Escape');
+    await mobilePage.waitForTimeout(300);
+
+    // 20. 20-mobile-filetree-new-menu.png (Open Files sidebar -> tap + New dropdown)
+    await mobilePage.locator('.mobile-bottom-nav-btn').first().click();
+    await mobilePage.waitForSelector('.sidebar-mobile-new-btn', { timeout: 5000 });
+    await mobilePage.locator('.sidebar-mobile-new-btn').click();
+    await mobilePage.waitForTimeout(400);
+    await capture(mobilePage, '20-mobile-filetree-new-menu.png');
+
     await mobileContext.close();
-    console.log('[Done] All 16 screenshots captured successfully.');
+    console.log('[Done] All 21 screenshots captured successfully.');
   } finally {
     if (browser) await browser.close();
     serverProc.kill('SIGTERM');

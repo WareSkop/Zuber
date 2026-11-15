@@ -10,9 +10,12 @@ On viewports narrower than `768px`, Zuber automatically switches to a touch-firs
 
 - **Mobile Reading Mode Default & Double-Tap Editing:** Notes open in clean **Reading Mode** by default on mobile (configurable under **Settings → Editor & Files**). Double-tap any paragraph to jump straight into **Live-Preview** at the exact tapped coordinate; the Android Back gesture exits edit mode back to Reading Mode.
 - **Slim Mobile Topbar:** Shows only the Back button (`←`), truncated file title, and compact sync status.
-- **State A — Bottom Navigation Bar:** A fixed 5-button bar (`56px + env(safe-area-inset-bottom)`) with **Files**, **Search**, **Edit** (accent pill), **New (+)**, and **More (⋮)** (`<BottomSheet>` for Source/Reading toggle, Research Split, Right Sidebar, Zen Mode, Rename, Delete, and Settings).
+- **State A — Bottom Navigation Bar:** A fixed 5-button bar (`56px + env(safe-area-inset-bottom)`) with **Files**, **Search** (4-in-1 Search Modal with `In Note`, `Files`, `Full Text`, and `Settings` scopes), **Edit** (accent pill), **New (+)**, and **More (⋮)** (`<BottomSheet>` for Source/Reading toggle, Research Split, Right Sidebar, Zen Mode, Rename, Delete, and Settings).
+- **Mobile Filetree Touch Toolbar (`< 768px`):** All top-bar action buttons are enlarged to `42×42px` touch targets, and creation actions are consolidated into a prominent **`+ New ▾`** dropdown (New Note, New from Template…, New Canvas, New Base, New Folder).
 
 ![Mobile Reading Mode with Bottom Navigation Bar](images/14-mobile-reading-bottom-nav.png)
+
+![Mobile Filetree + New Dropdown](images/20-mobile-filetree-new-menu.png)
 
 - **State B — Keyboard-Docked Edit Bar:** Entering edit mode swaps the bottom navigation for a 7-button editing bar docked above the virtual keyboard (`Todo`, `Indent`, `Heading` sheet, `[[WikiLink]]`, `Camera/Gallery` sheet, Hybrid `+ More` formatting sheet with a 2×3 grid + tables/callouts, and `Done ✓`).
 
@@ -47,11 +50,14 @@ Zuber caches your entire vault tree, notes, canvases, and bases in **IndexedDB**
 
 When installed as an Android PWA, Zuber registers as a **System Share Target**:
 - Share **URLs, text snippets, Markdown files, images, or PDFs** from any Android app directly to Zuber.
-- The Service Worker (`public/sw.js`) queues the payload into IndexedDB and hands it off to `shareTargetService.ts`, which saves attachments to `attachments/` and creates a clean Markdown note inside `Inbox/` with automatic deduplication.
+- The Service Worker (`public/sw.js`) queues the payload into IndexedDB and hands it off to `shareTargetService.ts`, which saves attachments to `attachments/` and creates a clean Markdown note inside `Inbox/` prefixed with the current `YYYY-MM-DD` date (e.g. `Inbox/2026-11-15 Article-Title.md`) with automatic deduplication.
 
 ---
 
 ## 5. Production Deployment: Docker Compose + Nginx Proxy Manager (NPM)
+
+### First-Install Demo Vault Seeding
+When starting Zuber for the first time with a fresh, empty `/data/vault` directory (ignoring hidden files like `.git` or `.DS_Store`), Zuber automatically copies the bundled interactive **Demo Vault** (`Welcome to Zuber.md`, example `.base` Kanban boards, `.canvas` diagrams, templates, and feature guides) into `VAULT_DIR`. Existing non-empty vaults are never touched or overwritten.
 
 ### Step 1: `docker-compose.yml`
 

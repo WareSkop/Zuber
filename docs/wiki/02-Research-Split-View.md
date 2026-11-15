@@ -38,6 +38,13 @@ The Research Pane renders all major vault formats natively:
 4. **Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`):** Centered viewer with Zoom In / Zoom Out / Fit controls.
 5. **PDF Documents (`.pdf`):** Embedded PDF viewer.
 6. **Knowledge Graph (`graph`):** Toggle directly to the interactive Knowledge Graph inside the Research Pane header.
+7. **Integrated Split-View Web Browser (`http://` / `https://`):**
+   - When Research Split-View is **open**, normal left-clicks on external `http://` or `https://` links inside notes load the web page directly inside the right Research Pane instead of opening a new browser tab.
+   - **`Ctrl + Click` / `Cmd + Click` / Middle-Click:** Bypasses the split-pane browser and opens the URL in a new external system browser tab.
+   - **Address Bar & Controls:** Edit URLs directly in the top address bar, reload, copy the URL, or navigate back (`←`) through mixed note/web `researchHistory`.
+   - **Embed-Blocked Fallback:** Websites that disallow iframe embedding via `X-Frame-Options` or CSP `frame-ancestors` automatically display a clean **Embed-Blocked Fallback Card** with a one-click **Open in Browser ↗** button.
+
+![Integrated Web Browser in Research Split-View](images/18-research-web-browser.png)
 
 ---
 

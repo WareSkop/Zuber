@@ -116,6 +116,9 @@ services:
    docker compose up -d
    ```
 
+> [!NOTE]
+> **First-Install Demo Vault Seeding:** If `/data/vault` is empty on first startup, Zuber automatically copies the bundled interactive Demo Vault (`Welcome to Zuber.md`, sample `.base` boards, `.canvas` diagrams, and feature guides) into `VAULT_DIR`. Existing non-empty vaults are never touched.
+
 3. **Nginx Proxy Manager Configuration:**
    - **Scheme:** `http`
    - **Forward Host / IP:** Container name (`zuber`) or Docker host IP

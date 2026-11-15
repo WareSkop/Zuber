@@ -11,7 +11,7 @@ import {
   refactorCanvasContent,
   isNoteSendTarget,
 } from '../shared/markdownUtils';
-import { VaultService } from './vaultService';
+import { VaultService, ensureDemoVaultSeeded } from './vaultService';
 import { ensureTlsCredentials } from './tls';
 import { ConfigService } from './configService';
 import { createSessionToken, verifySessionToken } from './auth';
@@ -94,8 +94,31 @@ describe('VaultService & Sync Engine', () => {
     expect(graph.nodes.length).toBeGreaterThanOrEqual(4);
     expect(graph.edges.length).toBeGreaterThan(0);
 
-    const archBacklinks = service.getBacklinks('Projekte/Projekt-Architektur.md');
-    expect(archBacklinks.linked.length).toBeGreaterThan(0);
+    const guideBacklinks = service.getBacklinks('01 - Markdown & Visual Tables.md');
+    expect(guideBacklinks.linked.length).toBeGreaterThan(0);
+  });
+
+  it('ensureDemoVaultSeeded populates empty directory and leaves non-empty directory untouched', () => {
+    const emptyTarget = fs.mkdtempSync(path.join(os.tmpdir(), 'zuber-seed-empty-'));
+    const existingTarget = fs.mkdtempSync(path.join(os.tmpdir(), 'zuber-seed-existing-'));
+    try {
+      // Hidden files (like .DS_Store or .git) must still count as empty
+      fs.writeFileSync(path.join(emptyTarget, '.DS_Store'), '');
+      const seeded = ensureDemoVaultSeeded(emptyTarget);
+      expect(seeded).toBe(true);
+      expect(fs.existsSync(path.join(emptyTarget, 'Welcome to Zuber.md'))).toBe(true);
+      expect(fs.existsSync(path.join(emptyTarget, 'Project-Board.base'))).toBe(true);
+
+      // Non-empty directory must never be touched or overwritten
+      fs.writeFileSync(path.join(existingTarget, 'My-Existing-Note.md'), '# Keep me');
+      const seededExisting = ensureDemoVaultSeeded(existingTarget);
+      expect(seededExisting).toBe(false);
+      expect(fs.existsSync(path.join(existingTarget, 'My-Existing-Note.md'))).toBe(true);
+      expect(fs.existsSync(path.join(existingTarget, 'Welcome to Zuber.md'))).toBe(false);
+    } finally {
+      fs.rmSync(emptyTarget, { recursive: true, force: true });
+      fs.rmSync(existingTarget, { recursive: true, force: true });
+    }
   });
 
   it('resolves URL-encoded and folder-relative attachment paths in O(1)', () => {
@@ -172,13 +195,13 @@ describe('VaultService & Sync Engine', () => {
 
   it('updates WikiLinks across the vault when a note is renamed', () => {
     const res = service.renameOrMove(
-      'Projekte/Projekt-Architektur.md',
-      'Projekte/System-Architektur.md'
+      '01 - Markdown & Visual Tables.md',
+      '01 - Markdown & Tables Renamed.md'
     );
-    expect(res.newPath).toBe('Projekte/System-Architektur.md');
+    expect(res.newPath).toBe('01 - Markdown & Tables Renamed.md');
 
-    const welcome = service.getNote('Willkommen in Zuber.md');
-    expect(welcome.body).toContain('[[System-Architektur]]');
+    const welcome = service.getNote('Welcome to Zuber.md');
+    expect(welcome.body).toContain('[[01 - Markdown & Tables Renamed]]');
   });
 
   it('generates sync manifest and supports batch note downloads in O(1)', () => {
@@ -971,6 +994,9 @@ describe('Knowmesh - Vault Entry Operations (copyEntry & deleteEntry)', () => {
     };
 
     const rawJson = JSON.stringify(canvasDoc, null, 2);
+
+    // Ensure target note exists for graph/backlink resolution
+    service.saveNote('Projekte/Projekt-Architektur.md', { body: '# Projekt-Architektur' });
 
     // 1. Save .canvas file in VaultService
     const saved = service.saveNote('Diagramme/Infrastruktur.canvas', {

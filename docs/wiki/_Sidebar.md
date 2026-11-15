@@ -8,3 +8,4 @@
 - **[5. Navigation, Graph & Search](05-Navigation-Graph-and-Search)**
 - **[6. Git Versioning & History](06-Git-Versioning-and-History)**
 - **[7. Mobile PWA & Deployment](07-Mobile-PWA-and-Deployment)**
+- **[8. Folder Encryption & Security](08-Folder-Encryption-and-Security)**

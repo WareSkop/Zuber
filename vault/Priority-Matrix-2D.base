@@ -1,0 +1,27 @@
+filters:
+  file.ext == "md"
+properties:
+  prio:
+    displayName: Priority
+  status:
+    displayName: Status
+views:
+  - type: board
+    name: Priority Matrix
+    groupBy:
+      property: status
+      columns:
+        - Open
+        - In Progress
+        - Review
+        - Done
+    swimlanes:
+      property: prio
+      lanes:
+        - Prio 1
+        - Prio 2
+        - Prio 3
+    columnLimit: 10
+    order:
+      - file.name
+      - tags

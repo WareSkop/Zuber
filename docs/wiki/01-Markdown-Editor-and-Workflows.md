@@ -41,8 +41,18 @@ Use Obsidian-compatible callout syntax (`> [!NOTE]`, `> [!TIP]`, `> [!INFO]`, `>
 > You can embed any `.base` board or `.canvas` diagram inside a note using `![[Name.base]]` or `![[Diagram.canvas]]`.
 ```
 
-### Interactive Markdown Tables
-Standard GFM tables (`| Column | Column |`) render as formatted tables in Live-Preview and Reading modes. Clicking inside a table switches to inline cell/row editing.
+### Interactive Visual Markdown Tables (In-Place Editing, `_tableWidths` & Sorting)
+Standard GFM tables (`| Column | Column |`) render as interactive HTML tables in Live-Preview and Reading modes:
+- **Stay Rendered on Click:** Clicking any header or body cell edits that cell directly in-place without collapsing back into raw pipe-delimited Markdown. (Switch to **Source Mode** anytime to edit raw pipes.)
+- **Excel-Style Keyboard Navigation:**
+  - `Enter` commits the current cell and moves focus to the cell **below** (automatically appending a new empty row at the bottom). `Shift+Enter` inserts `<br>` for multi-line content.
+  - `Tab` / `Shift+Tab` moves horizontally across cells and appends a new row when pressed in the bottom-right cell.
+  - `Escape` exits active cell editing cleanly.
+- **Hover Quick-Add Bars & Context Menu:** Hovering the right or bottom edge reveals `+ Column` and `+ Row` bars; right-clicking any cell opens alignment (`Left`, `Center`, `Right`) and row/column insertion/deletion controls.
+- **Hidden YAML Column Widths (`_tableWidths`):** Drag any column header divider to resize columns. Widths are persisted per table in YAML frontmatter under `_tableWidths` (keyed by header signature) and automatically hidden from the visual **Properties** panel.
+- **Physical Column Sorting:** Click `↑` / `↓` in any header cell to sort rows physically in the underlying Markdown file using natural numeric, ISO-date, and alphabetical comparison.
+
+![Visual In-Place Markdown Table Editing](images/17-visual-table-editing.png)
 
 ### Mermaid Diagrams & Sandboxed HTML Blocks
 Fenced code blocks marked with `mermaid` or `html` render live previews directly inside your note:

@@ -40,6 +40,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY server ./server
 COPY shared ./shared
+COPY vault ./demo-vault-seed
 
 RUN mkdir -p /data/vault /data/config /data/certs
 

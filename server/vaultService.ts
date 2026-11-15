@@ -46,6 +46,58 @@ interface FileEntry {
   isTemplate?: boolean;
 }
 
+function copyDirRecursive(srcDir: string, destDir: string): void {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.name === '.git' || entry.name === '.DS_Store' || entry.isSymbolicLink()) continue;
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+export function resolveDemoVaultSeedDir(): string | null {
+  const candidates = [
+    '/app/demo-vault-seed',
+    path.resolve(process.cwd(), 'vault'),
+    path.resolve(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), '..', 'vault'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      const entries = fs.readdirSync(candidate).filter((e) => !e.startsWith('.'));
+      if (entries.length > 0) return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Seeds `vaultDir` with the bundled public Demo Vault if `vaultDir` does not
+ * exist or is completely empty (ignoring hidden files like `.git` or `.DS_Store`).
+ * Never overwrites or touches an existing non-empty vault.
+ */
+export function ensureDemoVaultSeeded(vaultDir: string, seedDir?: string): boolean {
+  const resolvedVault = path.resolve(vaultDir);
+  if (!fs.existsSync(resolvedVault)) {
+    fs.mkdirSync(resolvedVault, { recursive: true });
+  }
+
+  const entries = fs.readdirSync(resolvedVault).filter((e) => !e.startsWith('.'));
+  if (entries.length > 0) return false;
+
+  const resolvedSeed = seedDir ? path.resolve(seedDir) : resolveDemoVaultSeedDir();
+  if (!resolvedSeed || resolvedSeed === resolvedVault || !fs.existsSync(resolvedSeed)) {
+    return false;
+  }
+
+  copyDirRecursive(resolvedSeed, resolvedVault);
+  return true;
+}
+
 export class VaultService {
   private vaultDir: string;
   private watcher: FSWatcher | null = null;
@@ -80,163 +132,7 @@ export class VaultService {
   }
 
   private ensureVaultAndSeed(): void {
-    if (!fs.existsSync(this.vaultDir)) {
-      fs.mkdirSync(this.vaultDir, { recursive: true });
-    }
-
-    const entries = fs.readdirSync(this.vaultDir).filter((e) => !e.startsWith('.'));
-    if (entries.length > 0) return;
-
-    // Seed initial interconnected Obsidian notes so the user has an immediate rich experience
-    const folders = ['Projekte', 'Wissensbasis', 'Tägliche Notizen', 'Attachments'];
-    for (const folder of folders) {
-      fs.mkdirSync(path.join(this.vaultDir, folder), { recursive: true });
-    }
-
-    // Create sample SVG diagram in Attachments
-    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" width="640" height="200">
-  <rect width="640" height="200" rx="14" fill="#1e1e2e"/>
-  <rect x="30" y="55" width="160" height="90" rx="10" fill="#313244" stroke="#cba6f7" stroke-width="2"/>
-  <text x="110" y="95" fill="#cdd6f4" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">Browser (HTTPS)</text>
-  <text x="110" y="118" fill="#a6adc8" font-family="sans-serif" font-size="11" text-anchor="middle">Live-Preview &amp; Graph</text>
-  <path d="M 195 100 L 235 100" stroke="#89b4fa" stroke-width="2.5" stroke-dasharray="4 3"/>
-  <rect x="240" y="55" width="160" height="90" rx="10" fill="#313244" stroke="#89b4fa" stroke-width="2"/>
-  <text x="320" y="95" fill="#cdd6f4" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">Web-Vault Server</text>
-  <text x="320" y="118" fill="#a6adc8" font-family="sans-serif" font-size="11" text-anchor="middle">TLS + WebSocket Sync</text>
-  <path d="M 405 100 L 445 100" stroke="#a6e3a1" stroke-width="2.5" stroke-dasharray="4 3"/>
-  <rect x="450" y="55" width="160" height="90" rx="10" fill="#313244" stroke="#a6e3a1" stroke-width="2"/>
-  <text x="530" y="95" fill="#cdd6f4" font-family="sans-serif" font-size="14" font-weight="bold" text-anchor="middle">Markdown Vault</text>
-  <text x="530" y="118" fill="#a6adc8" font-family="sans-serif" font-size="11" text-anchor="middle">Lokale .md Dateien</text>
-</svg>`;
-    fs.writeFileSync(path.join(this.vaultDir, 'Attachments', 'architektur-diagramm.svg'), svgContent, 'utf-8');
-
-    const welcomeNote = `---
-tags:
-  - willkommen
-  - zuber
-  - dashboard
-aliases:
-  - Startseite
-  - Home
-status: Aktiv
-erstellt: 2026-10-16
-favorit: true
-priorität: 1
----
-
-# Willkommen in Zuber
-
-Dies ist deine selbstgehostete **Zuber Web-Applikation** mit verschlüsselter HTTPS-Verbindung, Echtzeit-Dateisystem-Synchronisation, visuellem **Frontmatter-Manager (Eigenschaften)** und interaktiver **Graph-Ansicht**.
-
-> [!tip] Live-Preview Editor
-> Klicke in eine beliebige Zeile, um den Markdown-Quellcode direkt zu bearbeiten. Sobald der Cursor die Zeile verlässt, werden Überschriften, **Fettdruck**, *Kursivschrift*, ==Markierungen==, \`Inline-Code\`, Aufgabenlisten und \`[[Wiki-Links]]\` interaktiv gerendert!
-
-## Vernetzte Notizen im Vault
-
-- [[Projekt-Architektur]] – Technische Übersicht zu Server, HTTPS, WebSockets und Editor
-- [[Zettelkasten Methode]] – Wie du Notizen effektiv über bidirektionale Links vernetzt
-- [[2026-10-16]] – Heutige tägliche Notiz & Aufgabenliste
-
-## Eingebettetes Architektur-Diagramm
-
-Über die Wiki-Embed-Syntax \`![[architektur-diagramm.svg]]\` werden Bilder und Anhänge direkt eingebettet:
-
-![[architektur-diagramm.svg]]
-
-## Wichtige Aufgaben
-
-- [x] Verschlüsselte HTTPS-Verbindung und Passwort-Login einrichten
-- [x] Visuelle Frontmatter-Eigenschaften (ohne rohes YAML) verwalten
-- [x] Interaktive Graph-Ansicht mit Tag- und Link-Knoten testen
-- [ ] Eigene Notizen im Dateibaum links anlegen oder bestehenden Vault einbinden
-
-Probiere auch Inline-Tags wie #produktivität oder #wissen aus – ein Klick darauf filtert sofort deine Notizen!
-`;
-
-    const archNote = `---
-tags:
-  - architektur
-  - sicherheit
-  - knowmesh
-autor: Ingo
-status: Abgeschlossen
-erstellt: 2026-10-16
-verschlüsselt: true
----
-
-# Projekt-Architektur
-
-Diese Notiz beschreibt den Aufbau der Web-Applikation, die auf der [[Willkommen in Zuber|Startseite]] vorgestellt wird.
-
-> [!info] Echtzeit-Synchronisation (Chokidar + WebSockets)
-> Alle Dateien liegen als reguläre \`.md\`-Dateien auf dem Server. Wenn du Dateien parallel mit externen Editoren, Git oder Syncthing bearbeitest, erkennt der Server die Änderung sofort und aktualisiert den Browser live.
-
-## Kernkomponenten
-
-1. **Live-Preview Editor (CodeMirror 6)**
-   - Unterstützt \`[[Wiki-Links]]\` mit Autovervollständigung (tippe einfach \`[[\`)
-   - Unterstützt \`![[Einbettungen]]\` von Bildern und anderen Notizen
-   - Interaktive Checklisten (\`- [ ]\`) und Callouts (\`> [!note]\`)
-2. **Visuelle Eigenschaften (Frontmatter)**
-   - Statt YAML-Code anzuzeigen, werden Metadaten oben als interaktive Formularfelder (Tags, Text, Datum, Checkbox, Zahl) dargestellt.
-3. **Wissensgraph**
-   - Sowohl als **Globaler Graph** als auch als **Lokaler Graph** in der rechten Seitenleiste verfügbar.
-   - Verknüpft mit [[Zettelkasten Methode]] und [[2026-10-16]].
-
-#webdev #markdown
-`;
-
-    const zettelkastenNote = `---
-tags:
-  - wissen
-  - zettelkasten
-  - produktivität
-kategorie: Methodik
-erstellt: 2026-10-16
-bewertung: 5
----
-
-# Zettelkasten Methode
-
-Die **Zettelkasten Methode** lebt von atomaren Notizen und bidirektionalen Verknüpfungen.
-
-> [!important] Backlinks automatisch erkennen
-> In der rechten Seitenleiste siehst du unter **Backlinks** sofort alle Notizen, die auf diese Notiz verweisen – zum Beispiel [[Willkommen in Zuber]] und [[Projekt-Architektur]].
-
-## Prinzipien
-
-- **Atomarität**: Ein Gedanke pro Notiz.
-- **Vernetzung**: Verlinke verwandte Konzepte mit \`[[Wiki-Links]]\`, z. B. zur [[Projekt-Architektur]].
-- **Graph-Exploration**: Nutze die Graph-Ansicht, um Wissenscluster über #wissen und #zuber sichtbar zu machen.
-`;
-
-    const dailyNote = `---
-tags:
-  - daily
-  - produktivität
-datum: 2026-10-16
-stimmung: Fokussiert
-erledigt: false
----
-
-# 2026-10-16
-
-Heutiges Journal und Arbeitsprotokoll. Zurück zur [[Willkommen in Zuber|Startseite]].
-
-> [!warning] Erinnerung
-> Vergiss nicht, neue Erkenntnisse direkt mit der [[Zettelkasten Methode]] zu verknüpfen!
-
-## Tagesziele
-
-- [x] Server-Backend für [[Projekt-Architektur]] starten
-- [x] Frontmatter-UI ohne YAML-Code testen
-- [ ] Neue Ideen für das nächste Quartal sammeln
-`;
-
-    fs.writeFileSync(path.join(this.vaultDir, 'Willkommen in Zuber.md'), welcomeNote, 'utf-8');
-    fs.writeFileSync(path.join(this.vaultDir, 'Projekte', 'Projekt-Architektur.md'), archNote, 'utf-8');
-    fs.writeFileSync(path.join(this.vaultDir, 'Wissensbasis', 'Zettelkasten Methode.md'), zettelkastenNote, 'utf-8');
-    fs.writeFileSync(path.join(this.vaultDir, 'Tägliche Notizen', '2026-10-16.md'), dailyNote, 'utf-8');
+    ensureDemoVaultSeeded(this.vaultDir);
   }
 
   // ---------------------------------------------------------------------------
