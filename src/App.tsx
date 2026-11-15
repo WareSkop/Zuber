@@ -110,6 +110,14 @@ const BaseEditor = React.lazy(() =>
 );
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { MobileSearchModal } from './components/MobileSearchModal';
+import { FolderEncryptModal } from './components/FolderEncryptModal';
+import { FolderUnlockCard } from './components/FolderUnlockCard';
+import { LOCK_FILENAME, stripZencExt } from './crypto/folderCrypto';
+import {
+  FolderLockedError,
+  findEncryptedFolderForPath,
+  unlockedFoldersStore,
+} from './crypto/unlockedFoldersStore';
 import type { SettingsTab } from './components/SettingsModal';
 import { wrapMatchIndex } from './utils/mobileSearchUtils';
 import { EditorToolbar } from './components/EditorToolbar';
@@ -363,6 +371,45 @@ export const App: React.FC = () => {
   const [inNoteSearchQuery, setInNoteSearchQuery] = useState('');
   const [inNoteSearchIndex, setInNoteSearchIndex] = useState(0);
   const [inNoteMatchCount, setInNoteMatchCount] = useState(0);
+  const [folderEncryptModal, setFolderEncryptModal] = useState<{
+    mode: 'encrypt' | 'decrypt';
+    folderPath: string;
+  } | null>(null);
+  const [lockedFolderTarget, setLockedFolderTarget] = useState<{
+    folderPath: string;
+    pendingFilePath?: string;
+  } | null>(null);
+
+  const encryptedFolders = useMemo(() => {
+    const set = new Set<string>();
+    const walk = (nodes: FileTreeNode[]) => {
+      for (const n of nodes) {
+        if (n.type === 'folder' && n.children) {
+          if (n.children.some((c) => c.type === 'file' && c.name === LOCK_FILENAME)) {
+            set.add(n.path);
+          }
+          walk(n.children);
+        }
+      }
+    };
+    walk(tree);
+    return set;
+  }, [tree]);
+
+  const encryptedFoldersRef = useRef<Set<string>>(encryptedFolders);
+  encryptedFoldersRef.current = encryptedFolders;
+
+  useEffect(() => {
+    return unlockedFoldersStore.subscribe(() => {
+      const curPath = activePathRef.current;
+      if (!curPath) return;
+      const encFolder = findEncryptedFolderForPath(curPath, encryptedFoldersRef.current);
+      if (encFolder && !unlockedFoldersStore.isFolderUnlocked(encFolder)) {
+        setActiveNote(null);
+        setLockedFolderTarget({ folderPath: encFolder, pendingFilePath: curPath });
+      }
+    });
+  }, []);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
@@ -886,6 +933,13 @@ export const App: React.FC = () => {
 
   const openNoteByPath = useCallback(
     async (relPath: string) => {
+      const encFolder = findEncryptedFolderForPath(relPath, encryptedFoldersRef.current);
+      if (encFolder && !unlockedFoldersStore.isFolderUnlocked(encFolder)) {
+        setActiveNote(null);
+        setLockedFolderTarget({ folderPath: encFolder, pendingFilePath: relPath });
+        return;
+      }
+
       const prevPath = activePathRef.current;
       const wasDirty = saveStateRef.current === 'dirty' || Boolean(pendingSaveTaskRef.current);
       await flushPendingSave();
@@ -900,6 +954,7 @@ export const App: React.FC = () => {
       try {
         const note = await syncEngine.getNote(relPath);
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
+        setLockedFolderTarget(null);
         setActiveNote(note);
         if (
           isMobile &&
@@ -914,6 +969,11 @@ export const App: React.FC = () => {
         recordRecentNote(relPath);
         refreshBacklinks(relPath);
       } catch (err) {
+        if (err instanceof FolderLockedError) {
+          setActiveNote(null);
+          setLockedFolderTarget({ folderPath: err.folderPath, pendingFilePath: relPath });
+          return;
+        }
         console.error('Fehler beim Laden der Notiz:', err);
       }
     },
@@ -1524,16 +1584,23 @@ export const App: React.FC = () => {
         if (workspaceViewRef.current === 'split' && !event?.altKey) {
           openInResearch(path);
         } else {
+          const logicalPath = stripZencExt(path);
           const isDoc =
-            path.endsWith('.md') ||
-            path.endsWith('.canvas') ||
-            path.endsWith('.base') ||
-            !path.includes('.');
+            logicalPath.endsWith('.md') ||
+            logicalPath.endsWith('.canvas') ||
+            logicalPath.endsWith('.base') ||
+            !logicalPath.includes('.');
           if (isDoc) {
             openNoteByPath(path);
             if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
           } else {
-            window.open(api.getAttachmentUrl(path), '_blank');
+            const encFolder = findEncryptedFolderForPath(path, encryptedFoldersRef.current);
+            if (encFolder && !unlockedFoldersStore.isFolderUnlocked(encFolder)) {
+              setActiveNote(null);
+              setLockedFolderTarget({ folderPath: encFolder, pendingFilePath: path });
+            } else {
+              window.open(api.getAttachmentUrl(path), '_blank');
+            }
           }
         }
         if (isMobile) {
@@ -1542,6 +1609,26 @@ export const App: React.FC = () => {
       },
       isResearchOpen: workspaceView === 'split',
       onOpenInResearch: openInResearch,
+      onEncryptFolder: (folderPath: string) =>
+        setFolderEncryptModal({ mode: 'encrypt', folderPath }),
+      onDecryptFolder: (folderPath: string) =>
+        setFolderEncryptModal({ mode: 'decrypt', folderPath }),
+      onUnlockFolder: (folderPath: string) => {
+        setActiveNote(null);
+        setLockedFolderTarget({ folderPath });
+        if (isMobile) setLeftSidebarOpen(false);
+      },
+      onLockFolder: (folderPath: string) => {
+        unlockedFoldersStore.lockFolder(folderPath);
+        if (
+          activePathRef.current &&
+          (activePathRef.current === folderPath ||
+            activePathRef.current.startsWith(`${folderPath}/`))
+        ) {
+          setActiveNote(null);
+          setLockedFolderTarget({ folderPath, pendingFilePath: activePathRef.current });
+        }
+      },
       onCreateNote: (parentFolder?: string) => {
         openCreateNoteDialog(parentFolder);
       },
@@ -3243,8 +3330,8 @@ export const App: React.FC = () => {
   const linkedMentions = activeNote ? backlinks.linked : [];
   const unlinkedMentions = activeNote ? backlinks.unlinked : [];
   const currentBacklinks = linkedMentions;
-  const isCanvasNote = Boolean(activeNote?.path.endsWith('.canvas'));
-  const isBaseNote = Boolean(activeNote?.path.endsWith('.base'));
+  const isCanvasNote = Boolean(stripZencExt(activeNote?.path || '').endsWith('.canvas'));
+  const isBaseNote = Boolean(stripZencExt(activeNote?.path || '').endsWith('.base'));
 
   const wordCount = activeNote
     ? activeNote.body
@@ -3357,7 +3444,18 @@ export const App: React.FC = () => {
       className="editor-pane-container"
       style={customStyle && typeof customStyle === 'object' ? customStyle : undefined}
     >
-      {isCanvasNote && activeNote ? (
+      {lockedFolderTarget ? (
+        <FolderUnlockCard
+          folderPath={lockedFolderTarget.folderPath}
+          onUnlocked={() => {
+            const pending = lockedFolderTarget.pendingFilePath;
+            setLockedFolderTarget(null);
+            if (pending) {
+              openNoteByPath(pending);
+            }
+          }}
+        />
+      ) : isCanvasNote && activeNote ? (
         <div className="canvas-workspace-pane">
           <Suspense fallback={<div className="empty-state">Lade Canvas…</div>}>
             <CanvasEditor
@@ -4372,6 +4470,20 @@ export const App: React.FC = () => {
           onOpenSettingsTab={(tab) => {
             setSettingsInitialTab(tab);
             setSettingsOpen(true);
+          }}
+        />
+      )}
+
+      {/* Zero-Knowledge Folder Encryption / Decryption Modal */}
+      {folderEncryptModal && (
+        <FolderEncryptModal
+          isOpen={Boolean(folderEncryptModal)}
+          mode={folderEncryptModal.mode}
+          folderPath={folderEncryptModal.folderPath}
+          tree={tree}
+          onClose={() => setFolderEncryptModal(null)}
+          onCompleted={async () => {
+            await loadVaultIndex();
           }}
         />
       )}

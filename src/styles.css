@@ -12791,3 +12791,180 @@ p:has(.embedded-canvas-container) {
   font-weight: 600;
   cursor: pointer;
 }
+
+/* ==========================================================================
+   Zero-Knowledge Folder Encryption (.zenc) & Unlock Card
+   ========================================================================== */
+
+.tree-folder-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8e8e93);
+  flex-shrink: 0;
+}
+
+.tree-folder-lock-badge.is-locked {
+  color: var(--accent-color, #d4af37);
+}
+
+.tree-folder-lock-badge.is-unlocked {
+  color: #34c759;
+  cursor: pointer;
+}
+
+.tree-folder-lock-badge.is-unlocked:hover {
+  background: rgba(52, 199, 89, 0.14);
+}
+
+.folder-encrypt-modal {
+  max-width: 440px;
+  width: 92vw;
+}
+
+.folder-encrypt-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.folder-encrypt-target code,
+.folder-unlock-path {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bg-primary, #121214);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  font-size: 13px;
+  color: var(--accent-color, #d4af37);
+}
+
+.folder-encrypt-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.folder-password-strength {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folder-password-strength-bars {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.folder-password-strength-bars .strength-bar {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--border-color, rgba(255, 255, 255, 0.12));
+}
+
+.folder-password-strength[data-strength="1"] .strength-bar.is-filled {
+  background: #ff453a;
+}
+
+.folder-password-strength[data-strength="2"] .strength-bar.is-filled {
+  background: #ff9f0a;
+}
+
+.folder-password-strength[data-strength="3"] .strength-bar.is-filled,
+.folder-password-strength[data-strength="4"] .strength-bar.is-filled {
+  background: #34c759;
+}
+
+.folder-password-strength .strength-label {
+  font-size: 12px;
+  color: var(--text-muted, #8e8e93);
+}
+
+.folder-biometric-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary, #f5f5f5);
+  cursor: pointer;
+}
+
+.folder-encrypt-progress {
+  font-size: 13px;
+  color: var(--accent-color, #d4af37);
+  font-weight: 500;
+}
+
+.folder-unlock-workspace {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.folder-unlock-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-secondary, #1c1c1e);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+}
+
+.folder-unlock-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--accent-color, #d4af37);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-unlock-card h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.folder-unlock-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted, #8e8e93);
+  line-height: 1.5;
+}
+
+.folder-unlock-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.folder-biometric-btn,
+.folder-unlock-submit {
+  width: 100%;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}

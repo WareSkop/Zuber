@@ -35,6 +35,7 @@ import {
 } from '../api';
 import { syncEngine, type SyncState } from '../sync/syncEngine';
 import { clientLogger } from '../utils/logger';
+import { getAutoLockMinutes, setAutoLockMinutes } from '../crypto/unlockedFoldersStore';
 import type {
   FileTreeNode,
   VaultProfile,
@@ -131,6 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [securityStatusMsg, setSecurityStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [securityLoading, setSecurityLoading] = useState(false);
+  const [autoLockMinutes, setAutoLockMinutesState] = useState<number>(() => getAutoLockMinutes());
 
   // Profiles state
   const [profiles, setProfiles] = useState<VaultProfile[]>([]);
@@ -1347,6 +1349,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {securityLoading ? t('common.loading') : t('settings.saveSecurity')}
                 </button>
               </form>
+
+              <div className="settings-divider" style={{ margin: '18px 0', borderTop: '1px solid var(--border-color)' }} />
+
+              <div className="form-group">
+                <label>{t('encryption.autoLockLabel')}</label>
+                <p className="form-hint">{t('encryption.autoLockDesc')}</p>
+                <select
+                  className="settings-select"
+                  value={autoLockMinutes}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setAutoLockMinutesState(val);
+                    setAutoLockMinutes(val);
+                  }}
+                >
+                  <option value={5}>{t('encryption.autoLockMinutes').replace('{{minutes}}', '5')}</option>
+                  <option value={15}>{t('encryption.autoLockMinutes').replace('{{minutes}}', '15')}</option>
+                  <option value={30}>{t('encryption.autoLockMinutes').replace('{{minutes}}', '30')}</option>
+                  <option value={60}>{t('encryption.autoLockMinutes').replace('{{minutes}}', '60')}</option>
+                  <option value={0}>{t('encryption.autoLockNever')}</option>
+                </select>
+              </div>
             </div>
           )}
 

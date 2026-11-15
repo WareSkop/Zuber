@@ -525,7 +525,12 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
         fs.mkdirSync(absFolder, { recursive: true });
         cb(null, absFolder);
       },
-      filename: (_req, file, cb) => {
+      filename: (req, file, cb) => {
+        if (req.query.exactName === '1' || req.query.exactName === 'true') {
+          const safeExact = path.basename(file.originalname || 'file').replace(/[\\/\0]/g, '_');
+          cb(null, safeExact);
+          return;
+        }
         let ext = path.extname(file.originalname || '');
         if (!ext && file.mimetype) {
           if (file.mimetype === 'image/png') ext = '.png';

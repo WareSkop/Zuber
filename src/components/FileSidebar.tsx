@@ -30,9 +30,13 @@ import {
   Upload,
   Download,
   History,
+  Lock,
+  LockOpen,
   X,
 } from 'lucide-react';
 import type { FileTreeNode } from '../../shared/types';
+import { LOCK_FILENAME, getLogicalExtension, stripZencExt } from '../crypto/folderCrypto';
+import { unlockedFoldersStore } from '../crypto/unlockedFoldersStore';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
@@ -104,6 +108,10 @@ interface FileSidebarProps {
   onOpenDailyNote?: () => void;
   onLeftResizeStart?: (e: React.MouseEvent) => void;
   isResizingLeft?: boolean;
+  onEncryptFolder?: (folderPath: string) => void;
+  onDecryptFolder?: (folderPath: string) => void;
+  onUnlockFolder?: (folderPath: string) => void;
+  onLockFolder?: (folderPath: string) => void;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -131,8 +139,33 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onOpenDailyNote,
   onLeftResizeStart,
   isResizingLeft = false,
+  onEncryptFolder,
+  onDecryptFolder,
+  onUnlockFolder,
+  onLockFolder,
 }) => {
   const { t } = useTranslation();
+  const [, setLockTick] = useState(0);
+
+  useEffect(() => {
+    return unlockedFoldersStore.subscribe(() => setLockTick((n) => n + 1));
+  }, []);
+
+  const encryptedFolders = useMemo(() => {
+    const set = new Set<string>();
+    const walk = (nodes: FileTreeNode[]) => {
+      for (const n of nodes) {
+        if (n.type === 'folder' && n.children) {
+          if (n.children.some((c) => c.type === 'file' && c.name === LOCK_FILENAME)) {
+            set.add(n.path);
+          }
+          walk(n.children);
+        }
+      }
+    };
+    walk(tree);
+    return set;
+  }, [tree]);
   const [activeTab, setActiveTab] = useState<'files' | 'search' | 'tags'>('files');
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
     Projekte: true,
@@ -846,10 +879,15 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const renderTreeNode = (node: FileTreeNode, depth = 0) => {
+    if (node.type === 'file' && node.name === LOCK_FILENAME) {
+      return null;
+    }
     if (node.type === 'folder') {
       const isExpanded = Boolean(expandedFolders[node.path]);
       const isSelected = selectedPaths.has(node.path);
       const isDropTarget = dropTargetFolder === node.path;
+      const isEncrypted = encryptedFolders.has(node.path);
+      const isUnlocked = isEncrypted && unlockedFoldersStore.isFolderUnlocked(node.path);
       return (
         <div key={node.path} className="tree-folder-group">
           <div
@@ -860,7 +898,12 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             onDragOver={(e) => handleDragOverItem(e, node)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, node.path)}
-            onClick={(e) => handleFolderClick(e, node)}
+            onClick={(e) => {
+              handleFolderClick(e, node);
+              if (isEncrypted && !isUnlocked && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                onUnlockFolder?.(node.path);
+              }
+            }}
             onContextMenu={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -879,6 +922,33 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             <span className="tree-label" title={node.path}>
               {node.name}
             </span>
+            {isEncrypted && (
+              isUnlocked ? (
+                <button
+                  type="button"
+                  className="tree-folder-lock-badge is-unlocked"
+                  title={t('encryption.lockFolder')}
+                  aria-label={t('encryption.lockFolder')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onLockFolder) {
+                      onLockFolder(node.path);
+                    } else {
+                      unlockedFoldersStore.lockFolder(node.path);
+                    }
+                  }}
+                >
+                  <LockOpen size={13} />
+                </button>
+              ) : (
+                <span
+                  className="tree-folder-lock-badge is-locked"
+                  title={t('encryption.unlockFolder')}
+                >
+                  <Lock size={13} />
+                </span>
+              )
+            )}
             <button
               type="button"
               className="tree-item-more-btn"
@@ -902,25 +972,27 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       );
     }
 
-    const isMd = node.extension === 'md';
+    const logicalName = stripZencExt(node.name);
+    const logicalExt = getLogicalExtension(node.name);
+    const isMd = logicalExt === 'md';
     const isCanvas =
-      node.extension === 'canvas' ||
-      node.path.endsWith('.canvas') ||
+      logicalExt === 'canvas' ||
+      stripZencExt(node.path).endsWith('.canvas') ||
       node.attachmentKind === 'canvas';
     const isBase =
-      node.extension === 'base' ||
-      node.path.endsWith('.base') ||
+      logicalExt === 'base' ||
+      stripZencExt(node.path).endsWith('.base') ||
       node.attachmentKind === 'base';
     const isActive = activePath === node.path;
     const isSelected = selectedPaths.has(node.path);
     const isDropTarget = dropTargetFolder === getParentFolder(node.path);
     const displayName = isMd
-      ? node.name.replace(/\.md$/i, '')
+      ? logicalName.replace(/\.md$/i, '')
       : isCanvas
-      ? node.name.replace(/\.canvas$/i, '')
+      ? logicalName.replace(/\.canvas$/i, '')
       : isBase
-      ? node.name.replace(/\.base$/i, '')
-      : node.name;
+      ? logicalName.replace(/\.base$/i, '')
+      : logicalName;
 
     return (
       <div
@@ -1655,6 +1727,73 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <Download size={15} />
                       <span>{t('sidebar.downloadFolder')}</span>
                     </button>
+                    {(() => {
+                      const folderP = contextMenu.node!.path;
+                      const isEnc = encryptedFolders.has(folderP);
+                      const isUnl = isEnc && unlockedFoldersStore.isFolderUnlocked(folderP);
+                      return (
+                        <>
+                          {!isEnc && onEncryptFolder && (
+                            <button
+                              type="button"
+                              className="tree-context-item"
+                              onClick={() => {
+                                onEncryptFolder(folderP);
+                                setContextMenu(null);
+                              }}
+                            >
+                              <Lock size={15} />
+                              <span>{t('encryption.encryptFolder')}</span>
+                            </button>
+                          )}
+                          {isEnc && !isUnl && onUnlockFolder && (
+                            <button
+                              type="button"
+                              className="tree-context-item"
+                              onClick={() => {
+                                onUnlockFolder(folderP);
+                                setContextMenu(null);
+                              }}
+                            >
+                              <LockOpen size={15} />
+                              <span>{t('encryption.unlockFolder')}</span>
+                            </button>
+                          )}
+                          {isEnc && isUnl && (
+                            <>
+                              <button
+                                type="button"
+                                className="tree-context-item"
+                                onClick={() => {
+                                  if (onLockFolder) {
+                                    onLockFolder(folderP);
+                                  } else {
+                                    unlockedFoldersStore.lockFolder(folderP);
+                                  }
+                                  setContextMenu(null);
+                                }}
+                              >
+                                <Lock size={15} />
+                                <span>{t('encryption.lockFolder')}</span>
+                              </button>
+                              {onDecryptFolder && (
+                                <button
+                                  type="button"
+                                  className="tree-context-item"
+                                  onClick={() => {
+                                    onDecryptFolder(folderP);
+                                    setContextMenu(null);
+                                  }}
+                                >
+                                  <LockOpen size={15} />
+                                  <span>{t('encryption.decryptFolder')}</span>
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                     <div className="tree-context-separator" />
                   </>
                 ) : (

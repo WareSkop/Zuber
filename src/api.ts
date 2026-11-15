@@ -21,6 +21,23 @@ import type {
   LogsResponse,
 } from '../shared/types';
 import { clientLogger } from './utils/logger';
+import {
+  extractLinksAndEmbeds,
+  parseMarkdownWithFrontmatter,
+  serializeMarkdownWithFrontmatter,
+} from '../shared/markdownUtils';
+import {
+  LOCK_FILENAME,
+  decryptText,
+  encryptBytes,
+  encryptText,
+  getLogicalExtension,
+  isZencPath,
+  stripZencExt,
+  toZencPath,
+  type FolderLockMetadata,
+} from './crypto/folderCrypto';
+import { FolderLockedError, unlockedFoldersStore } from './crypto/unlockedFoldersStore';
 
 const TOKEN_STORAGE_KEY = 'zuber_token';
 const ACTIVE_PROFILE_KEY = 'zuber_active_profile_id';
@@ -365,11 +382,63 @@ export const rawApi = {
     return apiFetch('/api/vault/overview');
   },
 
-  getNote(path: string): Promise<NoteData> {
+  async getNote(path: string): Promise<NoteData> {
+    const unlocked = unlockedFoldersStore.findUnlockedFolderForPath(path);
+    if (isZencPath(path) || unlocked) {
+      if (!unlocked) {
+        const folderGuess = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : path;
+        throw new FolderLockedError(folderGuess);
+      }
+      const zencPath = toZencPath(path);
+      const rawBytes = await rawApi.downloadRawFile(zencPath);
+      const plainText = await decryptText(rawBytes, unlocked.key);
+      const logicalPath = stripZencExt(zencPath);
+      const ext = getLogicalExtension(zencPath);
+      const name = logicalPath.split('/').pop() || logicalPath;
+      const now = Date.now();
+      if (ext === 'canvas' || ext === 'base') {
+        return {
+          path: zencPath,
+          name,
+          frontmatter: {},
+          properties: [],
+          body: plainText,
+          rawContent: plainText,
+          tags: [],
+          links: [],
+          embeds: [],
+          headings: [],
+          updatedAt: now,
+        };
+      }
+      const { frontmatter, properties, body } = parseMarkdownWithFrontmatter(plainText);
+      const { links, embeds } = extractLinksAndEmbeds(body);
+      const tags = Array.from(
+        new Set(
+          [
+            ...(Array.isArray(frontmatter?.tags) ? frontmatter.tags.map(String) : []),
+            ...(body.match(/(?:^|\s)#([a-zA-Z0-9_/-]+)/g) || []).map((s) => s.trim().slice(1)),
+          ].filter(Boolean)
+        )
+      );
+      return {
+        path: zencPath,
+        name,
+        frontmatter,
+        properties,
+        body,
+        rawContent: plainText,
+        tags,
+        links,
+        embeds,
+        headings: [],
+        updatedAt: now,
+      };
+    }
     return apiFetch(`/api/vault/note?path=${encodeURIComponent(path)}`);
   },
 
-  saveNote(payload: {
+  async saveNote(payload: {
     path: string;
     rawContent?: string;
     body?: string;
@@ -378,10 +447,113 @@ export const rawApi = {
     forceOverwrite?: boolean;
     explicitClear?: boolean;
   }): Promise<NoteData> {
+    const unlocked = unlockedFoldersStore.findUnlockedFolderForPath(payload.path);
+    if (isZencPath(payload.path) || unlocked) {
+      if (!unlocked) {
+        const folderGuess = payload.path.includes('/')
+          ? payload.path.slice(0, payload.path.lastIndexOf('/'))
+          : payload.path;
+        throw new FolderLockedError(folderGuess);
+      }
+      const logicalBase = stripZencExt(payload.path);
+      const hasKnownExt = /\.(md|canvas|base)$/i.test(logicalBase);
+      const logicalPath = hasKnownExt ? logicalBase : `${logicalBase}.md`;
+      const zencPath = toZencPath(logicalPath);
+      const ext = getLogicalExtension(zencPath);
+
+      const raw = payload.rawContent;
+      const finalRaw =
+        typeof raw === 'string'
+          ? raw
+          : ext === 'canvas' || ext === 'base'
+            ? (payload.body ?? '')
+            : serializeMarkdownWithFrontmatter(payload.properties ?? [], payload.body ?? '');
+
+      const encrypted = await encryptText(finalRaw, unlocked.key);
+      const slashIdx = zencPath.lastIndexOf('/');
+      const folder = slashIdx >= 0 ? zencPath.slice(0, slashIdx) : '';
+      const fileName = slashIdx >= 0 ? zencPath.slice(slashIdx + 1) : zencPath;
+      await rawApi.uploadRawFile(folder, fileName, encrypted);
+
+      const name = logicalPath.split('/').pop() || logicalPath;
+      const now = Date.now();
+      if (ext === 'canvas' || ext === 'base') {
+        return {
+          path: zencPath,
+          name,
+          frontmatter: {},
+          properties: [],
+          body: finalRaw,
+          rawContent: finalRaw,
+          tags: [],
+          links: [],
+          embeds: [],
+          headings: [],
+          updatedAt: now,
+        };
+      }
+      const { frontmatter, properties, body } = parseMarkdownWithFrontmatter(finalRaw);
+      const { links, embeds } = extractLinksAndEmbeds(body);
+      return {
+        path: zencPath,
+        name,
+        frontmatter,
+        properties,
+        body,
+        rawContent: finalRaw,
+        tags: [],
+        links,
+        embeds,
+        headings: [],
+        updatedAt: now,
+      };
+    }
+
     return apiFetch('/api/vault/note', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+
+  async downloadRawFile(filePath: string): Promise<Uint8Array> {
+    const token = getStoredToken();
+    const params = new URLSearchParams({ target: filePath });
+    if (token) params.set('token', token);
+    const headers = new Headers();
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    const res = await fetch(`${getBaseUrl()}/api/vault/attachment?${params.toString()}`, {
+      headers,
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      throw new ApiHttpError(`Download failed (${res.status}): ${filePath}`, res.status);
+    }
+    const buf = await res.arrayBuffer();
+    return new Uint8Array(buf);
+  },
+
+  async uploadRawFile(
+    folder: string,
+    fileName: string,
+    data: Uint8Array | Blob
+  ): Promise<UploadResponse> {
+    const formData = new FormData();
+    const blob =
+      data instanceof Blob
+        ? data
+        : new Blob([data as BlobPart], { type: 'application/octet-stream' });
+    formData.append('file', blob, fileName);
+    const params = new URLSearchParams({ folder, exactName: '1' });
+    return apiFetch<UploadResponse>(`/api/vault/upload?${params.toString()}`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  async getFolderLockMetadata(folderPath: string): Promise<FolderLockMetadata> {
+    const clean = folderPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const bytes = await rawApi.downloadRawFile(`${clean}/${LOCK_FILENAME}`);
+    return JSON.parse(new TextDecoder().decode(bytes)) as FolderLockMetadata;
   },
 
   createFolder(path: string): Promise<{ ok: boolean; path: string }> {
@@ -631,11 +803,25 @@ export const api = {
     return `${baseUrl}/api/vault/attachment?${params.toString()}`;
   },
 
-  async uploadAttachment(file: File): Promise<UploadResponse> {
+  async uploadAttachment(file: File, targetFolder = 'attachments'): Promise<UploadResponse> {
+    const unlocked = unlockedFoldersStore.findUnlockedFolderForPath(targetFolder);
+    if (unlocked) {
+      const plainBytes = new Uint8Array(await file.arrayBuffer());
+      const encrypted = await encryptBytes(plainBytes, unlocked.key);
+      const safeName = file.name.replace(/[\\/\0]/g, '_');
+      const zencName = toZencPath(safeName);
+      const res = await rawApi.uploadRawFile(targetFolder, zencName, encrypted);
+      const logicalRel = stripZencExt(res.path || `${targetFolder}/${zencName}`);
+      return {
+        ...res,
+        wikiEmbed: `![[${logicalRel}]]`,
+      };
+    }
+
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('folder', 'attachments');
-    const res = await apiFetch<UploadResponse>('/api/vault/upload', {
+    formData.append('folder', targetFolder);
+    const res = await apiFetch<UploadResponse>(`/api/vault/upload?folder=${encodeURIComponent(targetFolder)}`, {
       method: 'POST',
       body: formData,
     });
@@ -643,6 +829,18 @@ export const api = {
       ...res,
       wikiEmbed: res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`),
     };
+  },
+
+  downloadRawFile(filePath: string): Promise<Uint8Array> {
+    return rawApi.downloadRawFile(filePath);
+  },
+
+  uploadRawFile(folder: string, fileName: string, data: Uint8Array | Blob): Promise<UploadResponse> {
+    return rawApi.uploadRawFile(folder, fileName, data);
+  },
+
+  getFolderLockMetadata(folderPath: string): Promise<FolderLockMetadata> {
+    return rawApi.getFolderLockMetadata(folderPath);
   },
 
   getGitStatus(): Promise<GitStatusInfo> {

@@ -42,6 +42,7 @@ import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
 import { renderReadingHtml } from '../utils/readingMode';
 import { routeExternalLinkClick } from '../utils/researchLinkUtils';
+import { resolveDecryptedAttachmentUrl } from '../crypto/encryptedAttachmentUrl';
 import {
   parseMarkdownTable,
   serializeMarkdownTable,
@@ -1347,6 +1348,20 @@ class EmbedWidget extends WidgetType {
         </div>
         <iframe src="${iframeSrc}" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe>
       `;
+      if (!/^(https?:|data:)/i.test(cleanTarget)) {
+        resolveDecryptedAttachmentUrl(cleanTarget, this.notePath)
+          .then((res) => {
+            if (!res) return;
+            const frame = container.querySelector('iframe.cm-lp-pdf-frame') as HTMLIFrameElement | null;
+            if (frame && container.isConnected) {
+              if (res.isObjectUrl) container.dataset.decryptedBlobUrl = res.url;
+              frame.src = `${res.url}#toolbar=1&view=FitH`;
+            } else if (res.isObjectUrl) {
+              URL.revokeObjectURL(res.url);
+            }
+          })
+          .catch(() => {});
+      }
       return container;
     }
 
@@ -1380,6 +1395,19 @@ class EmbedWidget extends WidgetType {
     img.src = /^(https?:|data:)/i.test(cleanTarget)
       ? cleanTarget
       : api.getAttachmentUrl(cleanTarget, this.notePath);
+    if (!/^(https?:|data:)/i.test(cleanTarget)) {
+      resolveDecryptedAttachmentUrl(cleanTarget, this.notePath)
+        .then((res) => {
+          if (!res) return;
+          if (wrapper.isConnected) {
+            if (res.isObjectUrl) wrapper.dataset.decryptedBlobUrl = res.url;
+            img.src = res.url;
+          } else if (res.isObjectUrl) {
+            URL.revokeObjectURL(res.url);
+          }
+        })
+        .catch(() => {});
+    }
     img.alt = this.alt || cleanTarget;
     img.className = 'cm-embedded-image';
     img.loading = 'lazy';
@@ -3848,6 +3876,46 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       }
     });
   }, [mode, isResearchOpen, renderedHtml, t]);
+
+  useEffect(() => {
+    if (mode !== 'reading' || !readingContainerRef.current) return;
+    const container = readingContainerRef.current;
+    let cancelled = false;
+    const revokedUrls: string[] = [];
+
+    const mediaEls = container.querySelectorAll<HTMLImageElement | HTMLIFrameElement>(
+      'img[src*="/api/vault/attachment"], iframe[src*="/api/vault/attachment"]'
+    );
+    mediaEls.forEach((el) => {
+      try {
+        const parsed = new URL(el.src, window.location.origin);
+        const targetParam = parsed.searchParams.get('target');
+        if (!targetParam) return;
+        resolveDecryptedAttachmentUrl(targetParam, notePath)
+          .then((res) => {
+            if (!res) return;
+            if (cancelled) {
+              if (res.isObjectUrl) URL.revokeObjectURL(res.url);
+              return;
+            }
+            if (res.isObjectUrl) revokedUrls.push(res.url);
+            if (el.tagName === 'IFRAME') {
+              el.src = `${res.url}#toolbar=1&view=FitH`;
+            } else {
+              el.src = res.url;
+            }
+          })
+          .catch(() => {});
+      } catch {}
+    });
+
+    return () => {
+      cancelled = true;
+      for (const u of revokedUrls) {
+        URL.revokeObjectURL(u);
+      }
+    };
+  }, [mode, renderedHtml, notePath]);
 
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const extLink = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;

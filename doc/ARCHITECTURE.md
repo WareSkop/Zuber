@@ -287,3 +287,19 @@ Zuber behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als e
 
 
 
+---
+
+## 12. Zero-Knowledge-Ordnerverschlüsselung (`.zenc` AES-256-GCM)
+
+- **Clientseitige Kryptografie (`src/crypto/folderCrypto.ts`):**
+  - Klartext-Passwörter und abgeleitete `CryptoKey`-Objekte verlassen niemals den Browser.
+  - **Schlüsselableitung:** `PBKDF2-HMAC-SHA256` mit `310.000` Iterationen und zufälligem 16-Byte-Salt (`deriveFolderKey`).
+  - **Metadaten-Datei (`.zuber-lock.json`):** Speichert `version: 1`, `kdf`, `iterations`, `salt`, `iv` und den AES-GCM-Verifikator (`"ZUBER_VAULT_OK"`).
+  - **Dateiformat (`<name>.<ext>.zenc`):** Binärcontainer `[8 Byte ASCII "ZENC0001"][12 Byte IV][AES-256-GCM Ciphertext + 16 Byte Auth-Tag]` für alle Dateitypen (`.md`, `.canvas`, `.base`, `.pdf`, Bilder, Binäranhänge).
+- **Session-Keystore & Auto-Lock (`src/crypto/unlockedFoldersStore.ts`, `src/sync/localDb.ts`, `src/sync/syncEngine.ts`):**
+  - Entsperrte Schlüssel liegen ausschließlich im Arbeitsspeicher (`Map<folderPath, CryptoKey>`).
+  - **Auto-Lock & Purge:** Konfigurierbarer Inaktivitäts-Timer (Standard: `15` Minuten; `zuber_folder_autolock_minutes`), sofortiges Leeren bei `beforeunload` oder manuellem Sperren (`🔓`) sowie automatisches Bereinigen entschlüsselter Einträge aus IndexedDB (`purgeFolderNotes`), während `.zenc`-Dateien den lokalen Klartext-Cache umgehen.
+- **Geräte-lokale Biometrie (`src/crypto/biometricUnlock.ts`):**
+  - Optionale WebAuthn-Plattform-Registrierung (`authenticatorAttachment: "platform"`, `userVerification: "required"`) mit Schlüsselablage in `zuber_biometric_keys` (IndexedDB).
+- **Server-Integration (`server/index.ts`, `server/vaultService.ts`):**
+  - `/api/vault/upload?exactName=1` erhält exakte Dateinamen für `.zenc` und `.zuber-lock.json`; `VaultService` indiziert beide für Dateibaum, `/api/vault/sync-manifest` und Git-Backups ohne serverseitige Entschlüsselung.

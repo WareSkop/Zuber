@@ -18,6 +18,8 @@ import {
   type ProcessShareOptions,
 } from './shareTargetService';
 import { clientLogger } from '../utils/logger';
+import { isZencPath } from '../crypto/folderCrypto';
+import { unlockedFoldersStore } from '../crypto/unlockedFoldersStore';
 import type {
   BacklinkItem,
   FileTreeNode,
@@ -92,6 +94,9 @@ class SyncEngine {
     this.currentProfile = getActiveProfile();
     this.localDb = new LocalDb(this.currentProfile.id);
     registerOfflineSyncDelegate(this);
+    unlockedFoldersStore.registerPurgeHandler((folder) =>
+      this.localDb.purgeFolderNotes(folder)
+    );
     this.init();
   }
 
@@ -597,6 +602,10 @@ class SyncEngine {
   }
 
   public async getNote(path: string): Promise<NoteData> {
+    if (isZencPath(path) || unlockedFoldersStore.findUnlockedFolderForPath(path)) {
+      return rawApi.getNote(path);
+    }
+
     // Check local database first if we have local uncommitted changes
     const localNote = await this.localDb.getNote(path);
     const outbox = await this.localDb.getOutbox();
@@ -631,6 +640,10 @@ class SyncEngine {
     forceOverwrite?: boolean;
     explicitClear?: boolean;
   }): Promise<NoteData> {
+    if (isZencPath(payload.path) || unlockedFoldersStore.findUnlockedFolderForPath(payload.path)) {
+      return rawApi.saveNote(payload);
+    }
+
     const prevLock = this.activeSaveLocks.get(payload.path) || Promise.resolve(null as any);
     const execute = async (): Promise<NoteData> => {
       try {

@@ -1223,3 +1223,15 @@ Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `htt
 - **`X-Frame-Options` / `CSP`-Erkennung & Fallback-Karte (`server/linkEmbedCheck.ts`, `server/index.ts`, `src/api.ts`):**
   - `GET /api/link-embed-check?url=...` prüft (mit `2500ms`-Timeout und SSRF-Schutz gegen private/Loopback-Hosts) `X-Frame-Options` und `Content-Security-Policy` (`frame-ancestors`).
   - Blockiert die Zielseite das Embedding (oder schlägt das Laden fehl), zeigt `ResearchPane` eine zentrierte Fallback-Karte (`.research-web-blocked-card`) mit Erklärung, URL-Vorschau und prominentem Button **„Im Browser öffnen ↗“**.
+
+---
+
+## 36. Zero-Knowledge-Ordnerverschlüsselung im UI (`.zenc` & Fingerabdruck-Entsperrung)
+
+- **Dateibaum & Kontextmenü (`src/components/FileSidebar.tsx`, `src/components/FolderEncryptModal.tsx`):**
+  - Unverschlüsselte Ordner bieten im Kontextmenü (Desktop-Rechtsklick & mobiles `⋮`-`<BottomSheet>`) **„Ordner verschlüsseln…“** mit Passwort-Stärkeanzeige und optionaler WebAuthn-Fingerabdruck-Aktivierung.
+  - Verschlüsselte Ordner verstecken `.zuber-lock.json`, zeigen ein `🔒`-/`🔓`-Badge (Klick auf `🔓` sperrt sofort) und blenden beim Entsperren die `.zenc`-Endung im Dateibaum transparent aus. Entschlüsselte Ordner lassen sich über **„Ordner entschlüsseln…“** wieder in Klartext-Dateien zurückführen.
+- **Entsperr-Karte & transparente Medien-Entschlüsselung (`src/components/FolderUnlockCard.tsx`, `src/crypto/encryptedAttachmentUrl.ts`, `LivePreviewEditor.tsx`, `ResearchPane.tsx`, `SettingsModal.tsx`):**
+  - Das Anklicken eines gesperrten Ordners oder einer `.zenc`-Datei öffnet `FolderUnlockCard` mit Passwortfeld und optionalem **„Mit Fingerabdruck / Biometrie entsperren“**-Button.
+  - Eingebettete Bilder (`![[photo.png]]`) und PDFs (`![[invoice.pdf]]`) in entsperrten Ordnern werden im Arbeitsspeicher entschlüsselt und über temporäre `URL.createObjectURL(...)`-URLs dargestellt (mit automatischem `revokeObjectURL` beim Unmount).
+  - Unter *Einstellungen → Sicherheit* lässt sich der **Auto-Lock-Timeout** (`5`, `15`, `30`, `60` Minuten oder `Nie`) konfigurieren.

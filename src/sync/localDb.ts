@@ -335,6 +335,26 @@ export class LocalDb {
     });
   }
 
+  public async purgeFolderNotes(folderPath: string): Promise<void> {
+    const prefix = folderPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!prefix) return;
+    const notes = await this.getAllNotes();
+    const targets = notes.filter(
+      (n) => n.path === prefix || n.path.startsWith(`${prefix}/`)
+    );
+    if (targets.length === 0) return;
+    const db = await this.openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('notes', 'readwrite');
+      const store = tx.objectStore('notes');
+      for (const n of targets) {
+        store.delete(n.path);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   public async deleteAttachment(path: string): Promise<void> {
     const db = await this.openDb();
     return new Promise((resolve, reject) => {

@@ -30,6 +30,8 @@ import { BaseView } from './BaseView';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 import { normalizeWebUrl, routeExternalLinkClick } from '../utils/researchLinkUtils';
+import { resolveDecryptedAttachmentUrl } from '../crypto/encryptedAttachmentUrl';
+import { stripZencExt } from '../crypto/folderCrypto';
 
 const GraphView = lazy(() =>
   import('./GraphView').then((m) => ({ default: m.GraphView }))
@@ -41,7 +43,7 @@ const CanvasEditor = lazy(() =>
 export type ResearchContentType = 'note' | 'canvas' | 'image' | 'pdf' | 'graph' | 'base' | 'web';
 
 export function detectFileType(path: string): ResearchContentType {
-  const lower = path.toLowerCase();
+  const lower = stripZencExt(path).toLowerCase();
   if (lower.endsWith('.canvas')) return 'canvas';
   if (lower.endsWith('.base')) return 'base';
   if (lower.endsWith('.pdf')) return 'pdf';
@@ -92,7 +94,30 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   const [iframeReloadKey, setIframeReloadKey] = useState<number>(0);
   const [embedBlocked, setEmbedBlocked] = useState<boolean>(false);
   const [urlCopied, setUrlCopied] = useState<boolean>(false);
+  const [decryptedMediaUrl, setDecryptedMediaUrl] = useState<string | null>(null);
   const readingContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let revokedUrl: string | null = null;
+    let cancelled = false;
+    setDecryptedMediaUrl(null);
+    if (!target || (target.type !== 'image' && target.type !== 'pdf')) return;
+    resolveDecryptedAttachmentUrl(target.path)
+      .then((res) => {
+        if (!res) return;
+        if (cancelled) {
+          if (res.isObjectUrl) URL.revokeObjectURL(res.url);
+          return;
+        }
+        if (res.isObjectUrl) revokedUrl = res.url;
+        setDecryptedMediaUrl(res.url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (revokedUrl) URL.revokeObjectURL(revokedUrl);
+    };
+  }, [target?.path, target?.type]);
   const webInputRef = useRef<HTMLInputElement>(null);
 
   // Sync address bar input and check X-Frame-Options / CSP when web target changes
@@ -753,7 +778,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             </div>
             <div className="research-image-canvas">
               <img
-                src={api.getAttachmentUrl(target.path)}
+                src={decryptedMediaUrl || api.getAttachmentUrl(target.path)}
                 alt={fileName}
                 className="research-image-element"
                 style={{
@@ -767,7 +792,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
         ) : target?.type === 'pdf' ? (
           <div className="research-pdf-wrapper">
             <iframe
-              src={`${api.getAttachmentUrl(target.path)}#toolbar=1&view=FitH`}
+              src={`${decryptedMediaUrl || api.getAttachmentUrl(target.path)}#toolbar=1&view=FitH`}
               className="research-pdf-frame"
               title={fileName}
             />
