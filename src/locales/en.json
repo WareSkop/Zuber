@@ -639,5 +639,19 @@
     "sortDesc": "Sort descending",
     "resizeColumn": "Drag to resize column",
     "cellActions": "Cell actions"
+  },
+  "search": {
+    "scopeInNote": "In Note",
+    "scopeFiles": "Files",
+    "scopeFullText": "Full Text",
+    "scopeSettings": "Settings",
+    "nextMatch": "Next match",
+    "prevMatch": "Previous match",
+    "noMatches": "No matches",
+    "matchesCount": "{{count}} matches",
+    "placeholderInNote": "Search in current note...",
+    "placeholderFiles": "Search files by name or folder...",
+    "placeholderFullText": "Search full text across all offline notes...",
+    "placeholderSettings": "Search settings & commands..."
   }
 }

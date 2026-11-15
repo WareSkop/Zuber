@@ -1189,3 +1189,20 @@ Auf Smartphones (`< 768px`) ersetzt ein vollbreites Ein-Spalten-Layout das horiz
 
 
 
+
+
+---
+
+## 34. Mobile 4-in-1-Suche (`In Notiz`, `Dateien`, `Volltext`, `Einstellungen`) & In-Note-Trefferleiste (`< 768px`)
+
+Auf Mobilgeräten (`< 768px`) öffnet der **Suche**-Button in `<MobileBottomNav />` das einheitliche `<MobileSearchModal />` (`src/components/MobileSearchModal.tsx`), während auf Desktop (`>= 768px`) die bestehende `Ctrl+P` / `Ctrl+O` Command Palette (`CommandPalette.tsx`) unverändert erhalten bleibt:
+
+- **4-Modus-Such-Dropdown (`src/components/MobileSearchModal.tsx`, `src/utils/mobileSearchUtils.ts`):**
+  - Kombinierte Kopfzeile aus `<select>`-Dropdown (`min-height: 44px`) und Suchfeld (`min-height: 44px`):
+    1. **`in-note` („In Notiz“ – Standard bei geöffneter Notiz; Fallback auf `files`, falls keine Notiz offen ist):** Durchsucht den Text der aktiven Notiz (case-insensitive) via `findInNoteMatches`, zeigt die Trefferanzahl sowie Zeilen-Vorschauen mit hervorgehobenen Treffern und springt bei Auswahl oder `Enter` direkt zum Treffer.
+    2. **`files` („Dateien“):** Durchsucht alle Notizen, `.canvas`- und `.base`-Dateien offline über `searchVaultFiles` nach Dateiname und Ordnerpfad.
+    3. **`fulltext` („Volltext“):** Durchsucht offline über `syncEngine.getLocalDb().getAllNotes()` und `searchNotesFullTextOffline` den gesamten Body aller im IndexedDB-Store gespeicherten Markdown-Notizen, zeigt Notiztitel, Trefferanzahl und Kontext-Snippet, öffnet beim Tippen die Zielnotiz und aktiviert direkt die schwebende In-Note-Trefferleiste mit dem Suchbegriff.
+    4. **`settings` („Einstellungen“):** Filtert alle Einstellungs-Tabs (`SettingsModal` mit `initialTab`-Prop: Darstellung, Editor & Dateien, Sync & Offline, Git-Backup, Protokolle, Sicherheit, Server) sowie Schnellbefehle.
+- **In-Note-Treffer-Highlighting & Schwebende Sprungleiste (`src/components/LivePreviewEditor.tsx`, `src/App.tsx`, `src/styles.css`):**
+  - Markiert alle Treffer sowohl im **Lesemodus** (`<mark class="in-note-search-match">` / `.is-active`) als auch im **CodeMirror-Bearbeitungsmodus** (`setInNoteSearchEffect` + `inNoteSearchField` mit `Decoration.mark`) und scrollt den aktiven Treffer zentriert in den Viewport (`scrollIntoView({ behavior: 'smooth', block: 'center' })`).
+  - Die schwebende Leiste (`.in-note-search-jump-bar`) dockt direkt über `<MobileBottomNav />` bzw. `<MobileEditBar />` und bietet Suchbegriff, `X / Y`-Zähler sowie `44×44px`-Buttons für Vorheriger (`▲`), Nächster (`▼`, mit nahtlosem Wrap-Around via `wrapMatchIndex`) und Schließen (`✕`).

@@ -45,6 +45,8 @@ import {
   Calendar,
   Database,
   LayoutTemplate,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { WorkflowCanvasIcon } from './components/canvas/WorkflowCanvasIcon';
 import { useMobileBackHandler } from './components/BottomSheet';
@@ -107,6 +109,9 @@ const BaseEditor = React.lazy(() =>
   import('./components/BaseEditor').then((m) => ({ default: m.BaseEditor }))
 );
 import { CommandPalette, type CommandItem } from './components/CommandPalette';
+import { MobileSearchModal } from './components/MobileSearchModal';
+import type { SettingsTab } from './components/SettingsModal';
+import { wrapMatchIndex } from './utils/mobileSearchUtils';
 import { EditorToolbar } from './components/EditorToolbar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileEditBar } from './components/MobileEditBar';
@@ -350,9 +355,14 @@ export const App: React.FC = () => {
   const [wsConnected, setWsConnected] = useState(false);
   const [theme, setTheme] = useState<string>(() => localStorage.getItem('zuber_theme') || localStorage.getItem('knowmesh_theme') || localStorage.getItem('basalt_theme') || 'zuber');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [syncState, setSyncState] = useState<SyncState>('offline');
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [inNoteSearchQuery, setInNoteSearchQuery] = useState('');
+  const [inNoteSearchIndex, setInNoteSearchIndex] = useState(0);
+  const [inNoteMatchCount, setInNoteMatchCount] = useState(0);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
   );
@@ -3442,6 +3452,9 @@ export const App: React.FC = () => {
                   allNotes={allNotesForEditor}
                   allTags={allTagNames}
                   scrollToLine={scrollToLine}
+                  inNoteSearchQuery={isMobile ? inNoteSearchQuery : ''}
+                  inNoteSearchIndex={inNoteSearchIndex}
+                  onInNoteMatchCountChange={setInNoteMatchCount}
                   tableWidths={getTableWidthsFromProperties(activeNote.properties)}
                   onUpdateTableWidths={handleUpdateTableWidths}
                   onRenameTableWidthSignature={handleRenameTableWidthSignature}
@@ -3861,6 +3874,51 @@ export const App: React.FC = () => {
           )}
         </div>
 
+        {/* Floating In-Note Match Jump Bar (Mobile) */}
+        {isMobile && inNoteSearchQuery.trim() && activeNote && (
+          <div className="in-note-search-jump-bar" data-testid="in-note-search-jump-bar">
+            <span className="in-note-search-jump-query" title={inNoteSearchQuery}>
+              {inNoteSearchQuery}
+            </span>
+            <span className="in-note-search-jump-counter" data-testid="in-note-search-jump-counter">
+              {inNoteMatchCount > 0 ? `${(inNoteSearchIndex % inNoteMatchCount) + 1} / ${inNoteMatchCount}` : '0 / 0'}
+            </span>
+            <button
+              type="button"
+              className="in-note-search-jump-btn"
+              data-testid="in-note-search-prev-btn"
+              aria-label={t('search.prevMatch')}
+              disabled={inNoteMatchCount === 0}
+              onClick={() => setInNoteSearchIndex((prev) => wrapMatchIndex(prev, -1, inNoteMatchCount))}
+            >
+              <ChevronUp size={18} />
+            </button>
+            <button
+              type="button"
+              className="in-note-search-jump-btn"
+              data-testid="in-note-search-next-btn"
+              aria-label={t('search.nextMatch')}
+              disabled={inNoteMatchCount === 0}
+              onClick={() => setInNoteSearchIndex((prev) => wrapMatchIndex(prev, 1, inNoteMatchCount))}
+            >
+              <ChevronDown size={18} />
+            </button>
+            <button
+              type="button"
+              className="in-note-search-jump-btn"
+              data-testid="in-note-search-clear-btn"
+              aria-label={t('common.close')}
+              onClick={() => {
+                setInNoteSearchQuery('');
+                setInNoteSearchIndex(0);
+                setInNoteMatchCount(0);
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
         {/* Mobile Contextual Bottom Bar: State A (Navigation) vs State B (Keyboard-Docked Edit Bar) */}
         {isMobile && !zenMode && (
           activeNote &&
@@ -3886,7 +3944,7 @@ export const App: React.FC = () => {
               isResearchOpen={workspaceView === 'split'}
               zenMode={zenMode}
               onOpenFiles={() => setLeftSidebarOpen(true)}
-              onOpenSearch={() => setCommandPaletteOpen(true)}
+              onOpenSearch={() => setMobileSearchOpen(true)}
               onStartEdit={() => {
                 setEditorMode('live');
                 requestAnimationFrame(() => editorRef.current?.focus());
@@ -4213,7 +4271,11 @@ export const App: React.FC = () => {
         <Suspense fallback={null}>
           <SettingsModal
             isOpen={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
+            initialTab={settingsInitialTab}
+            onClose={() => {
+              setSettingsOpen(false);
+              setSettingsInitialTab(undefined);
+            }}
             currentTheme={theme}
             onThemeChange={(newTheme) => setTheme(newTheme)}
             fileTree={tree}
@@ -4281,6 +4343,35 @@ export const App: React.FC = () => {
         onClose={() => setCommandPaletteOpen(false)}
         commands={commands}
       />
+
+      {/* Mobile 4-in-1 Search Modal */}
+      {isMobile && (
+        <MobileSearchModal
+          isOpen={mobileSearchOpen}
+          onClose={() => setMobileSearchOpen(false)}
+          activeNote={activeNote ? { path: activeNote.path, body: activeNote.body, rawContent: activeNote.rawContent } : null}
+          allFiles={allNotesForEditor}
+          commands={commands}
+          onOpenFile={(targetPath) => {
+            openNote(targetPath);
+            setLeftSidebarOpen(false);
+          }}
+          onJumpToInNoteMatch={(query, matchIndex) => {
+            setInNoteSearchQuery(query);
+            setInNoteSearchIndex(matchIndex);
+          }}
+          onJumpToNoteWithSearch={(targetPath, query, matchIndex) => {
+            setInNoteSearchQuery(query);
+            setInNoteSearchIndex(matchIndex);
+            openNote(targetPath);
+            setLeftSidebarOpen(false);
+          }}
+          onOpenSettingsTab={(tab) => {
+            setSettingsInitialTab(tab);
+            setSettingsOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 };

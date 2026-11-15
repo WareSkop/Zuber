@@ -639,5 +639,19 @@
     "sortDesc": "Absteigend sortieren",
     "resizeColumn": "Ziehen zum Ändern der Spaltenbreite",
     "cellActions": "Zellenaktionen"
+  },
+  "search": {
+    "scopeInNote": "In Notiz",
+    "scopeFiles": "Dateien",
+    "scopeFullText": "Volltext",
+    "scopeSettings": "Einstellungen",
+    "nextMatch": "Nächster Treffer",
+    "prevMatch": "Vorheriger Treffer",
+    "noMatches": "Keine Treffer",
+    "matchesCount": "{{count}} Treffer",
+    "placeholderInNote": "In aktueller Notiz suchen...",
+    "placeholderFiles": "Dateien nach Name oder Ordner suchen...",
+    "placeholderFullText": "Volltext offline in allen Notizen durchsuchen...",
+    "placeholderSettings": "Einstellungen & Befehle suchen..."
   }
 }

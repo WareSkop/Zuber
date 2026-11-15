@@ -272,7 +272,55 @@ export interface LivePreviewEditorProps {
   tableWidths?: TableWidthsMap;
   onUpdateTableWidths?: (headerSignature: string, widths: number[], currentBody?: string) => void;
   onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void;
+  inNoteSearchQuery?: string;
+  inNoteSearchIndex?: number;
+  onInNoteMatchCountChange?: (count: number) => void;
 }
+
+interface InNoteSearchState {
+  query: string;
+  activeIndex: number;
+}
+
+const setInNoteSearchEffect = StateEffect.define<InNoteSearchState>();
+
+const inNoteSearchField = StateField.define<InNoteSearchState>({
+  create: () => ({ query: '', activeIndex: 0 }),
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setInNoteSearchEffect)) {
+        return effect.value;
+      }
+    }
+    return value;
+  },
+  provide: (f) =>
+    EditorView.decorations.compute([f], (state) => {
+      const { query, activeIndex } = state.field(f);
+      const trimmed = query.trim();
+      if (!trimmed) return Decoration.none;
+      const lowerDoc = state.doc.toString().toLowerCase();
+      const lowerQuery = trimmed.toLowerCase();
+      const builder = new RangeSetBuilder<Decoration>();
+      let pos = 0;
+      let matchIdx = 0;
+      while (pos <= lowerDoc.length - lowerQuery.length) {
+        const found = lowerDoc.indexOf(lowerQuery, pos);
+        if (found === -1) break;
+        const isActive = matchIdx === activeIndex;
+        builder.add(
+          found,
+          found + lowerQuery.length,
+          Decoration.mark({
+            class: isActive ? 'in-note-search-match is-active' : 'in-note-search-match',
+          })
+        );
+        matchIdx++;
+        pos = found + Math.max(1, lowerQuery.length);
+      }
+      return builder.finish();
+    }),
+});
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 const isTableRow = (text: string) => text.includes('|') && text.trim().length > 0;
@@ -2422,10 +2470,14 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     onNavigateWikiLink,
     onSelectTag,
     onRequestEditMode,
+    inNoteSearchQuery = '',
+    inNoteSearchIndex = 0,
+    onInNoteMatchCountChange,
   } = props;
 
   const { t } = useTranslation();
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const readingContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
   const livePluginCompartment = useRef(new Compartment());
   const [editorContextMenu, setEditorContextMenu] = useState<{ x: number; y: number; clickPos?: number } | null>(null);
@@ -3446,6 +3498,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       doc: activeDocText,
       extensions: [
         blockModesField,
+        inNoteSearchField,
         history(),
         Prec.highest(
           keymap.of([
@@ -4074,10 +4127,125 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     }
   };
 
+  const onInNoteMatchCountChangeRef = useRef(onInNoteMatchCountChange);
+  onInNoteMatchCountChangeRef.current = onInNoteMatchCountChange;
+
+  useEffect(() => {
+    const trimmed = inNoteSearchQuery.trim();
+    if (mode === 'reading') {
+      const container = readingContainerRef.current;
+      if (!container) return;
+
+      // Unwrap any previous search marks
+      const existingMarks = Array.from(container.querySelectorAll('mark.in-note-search-match'));
+      for (const mark of existingMarks) {
+        const parent = mark.parentNode;
+        if (!parent) continue;
+        while (mark.firstChild) {
+          parent.insertBefore(mark.firstChild, mark);
+        }
+        parent.removeChild(mark);
+        parent.normalize();
+      }
+
+      if (!trimmed) {
+        onInNoteMatchCountChangeRef.current?.(0);
+        return;
+      }
+
+      const lowerQuery = trimmed.toLowerCase();
+      const textNodes: Text[] = [];
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let currentNode = walker.nextNode();
+      while (currentNode) {
+        if (currentNode.nodeValue && currentNode.nodeValue.toLowerCase().includes(lowerQuery)) {
+          textNodes.push(currentNode as Text);
+        }
+        currentNode = walker.nextNode();
+      }
+
+      const createdMarks: HTMLElement[] = [];
+      for (const textNode of textNodes) {
+        const text = textNode.nodeValue || '';
+        const lowerText = text.toLowerCase();
+        const frag = document.createDocumentFragment();
+        let cursor = 0;
+        while (cursor <= lowerText.length - lowerQuery.length) {
+          const found = lowerText.indexOf(lowerQuery, cursor);
+          if (found === -1) break;
+          if (found > cursor) {
+            frag.appendChild(document.createTextNode(text.slice(cursor, found)));
+          }
+          const mark = document.createElement('mark');
+          mark.className = 'in-note-search-match';
+          mark.textContent = text.slice(found, found + lowerQuery.length);
+          frag.appendChild(mark);
+          createdMarks.push(mark);
+          cursor = found + Math.max(1, lowerQuery.length);
+        }
+        if (cursor < text.length) {
+          frag.appendChild(document.createTextNode(text.slice(cursor)));
+        }
+        textNode.parentNode?.replaceChild(frag, textNode);
+      }
+
+      onInNoteMatchCountChangeRef.current?.(createdMarks.length);
+      if (createdMarks.length > 0) {
+        const safeIdx = ((inNoteSearchIndex % createdMarks.length) + createdMarks.length) % createdMarks.length;
+        const activeMark = createdMarks[safeIdx];
+        activeMark.classList.add('is-active');
+        if (typeof activeMark.scrollIntoView === 'function') {
+          activeMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+      return;
+    }
+
+    const view = viewRef.current;
+    if (!view) return;
+    if (!trimmed) {
+      onInNoteMatchCountChangeRef.current?.(0);
+      view.dispatch({ effects: setInNoteSearchEffect.of({ query: '', activeIndex: 0 }) });
+      return;
+    }
+
+    const lowerDoc = view.state.doc.toString().toLowerCase();
+    const lowerQuery = trimmed.toLowerCase();
+    const positions: number[] = [];
+    let pos = 0;
+    while (pos <= lowerDoc.length - lowerQuery.length) {
+      const found = lowerDoc.indexOf(lowerQuery, pos);
+      if (found === -1) break;
+      positions.push(found);
+      pos = found + Math.max(1, lowerQuery.length);
+    }
+
+    onInNoteMatchCountChangeRef.current?.(positions.length);
+    const safeIdx = positions.length > 0
+      ? ((inNoteSearchIndex % positions.length) + positions.length) % positions.length
+      : 0;
+    const effects: StateEffect<unknown>[] = [
+      setInNoteSearchEffect.of({ query: inNoteSearchQuery, activeIndex: safeIdx }),
+    ];
+    if (positions.length > 0) {
+      effects.push(EditorView.scrollIntoView(positions[safeIdx], { y: 'center' }));
+    }
+    view.dispatch({ effects });
+    if (positions.length > 0) {
+      requestAnimationFrame(() => {
+        const activeEl = view.dom.querySelector('.in-note-search-match.is-active') as HTMLElement | null;
+        if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+          activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+  }, [inNoteSearchQuery, inNoteSearchIndex, mode, body, rawContent, notePath]);
+
   if (mode === 'reading') {
     return (
       <>
         <div
+          ref={readingContainerRef}
           className="reading-view-container markdown-rendered"
           onClick={handleReadingClick}
           onDoubleClick={handleReadingDoubleClick}

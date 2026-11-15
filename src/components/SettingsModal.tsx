@@ -64,6 +64,8 @@ import {
   type FontSettings,
 } from '../fontSettings';
 
+export type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git' | 'logs';
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -73,9 +75,8 @@ interface SettingsModalProps {
   onInstallApp?: () => void;
   isInstalledApp?: boolean;
   onFontSettingsChange?: (settings: FontSettings) => void;
+  initialTab?: SettingsTab;
 }
-
-type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git' | 'logs';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -86,9 +87,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onInstallApp,
   isInstalledApp = false,
   onFontSettingsChange,
+  initialTab,
 }) => {
   const { t, language, setLanguage } = useTranslation();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('appearance');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'appearance');
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   // Startup configuration state
   const [startupConfig, setStartupConfigState] = useState<StartupConfig>(getStartupConfig);
