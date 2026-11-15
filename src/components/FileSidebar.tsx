@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import { resolveTargetFolder, collectAncestorFolders } from '../utils/fileTreeUtils';
 import {
   ArrowUpDown,
   Calendar,
@@ -112,6 +113,7 @@ interface FileSidebarProps {
   onDecryptFolder?: (folderPath: string) => void;
   onUnlockFolder?: (folderPath: string) => void;
   onLockFolder?: (folderPath: string) => void;
+  onTargetFolderChange?: (folder: string) => void;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -143,6 +145,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onDecryptFolder,
   onUnlockFolder,
   onLockFolder,
+  onTargetFolderChange,
 }) => {
   const { t } = useTranslation();
   const [, setLockTick] = useState(0);
@@ -471,6 +474,39 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       lastClickedPathRef.current = activePath;
     }
   }, [activePath]);
+
+  const targetFolder = useMemo(() => resolveTargetFolder(selectedPaths, tree), [selectedPaths, tree]);
+
+  useEffect(() => {
+    onTargetFolderChange?.(targetFolder);
+  }, [targetFolder, onTargetFolderChange]);
+
+  const expandTargetFolderAncestors = useCallback((folder: string) => {
+    const ancestors = collectAncestorFolders(folder);
+    if (ancestors.length === 0) return;
+    setExpandedFolders((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of ancestors) {
+        if (!next[p]) {
+          next[p] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
+  const triggerCreateInTarget = useCallback(
+    (fn?: (parentFolder?: string) => void) => {
+      if (!fn) return;
+      if (targetFolder) {
+        expandTargetFolderAncestors(targetFolder);
+      }
+      fn(targetFolder || undefined);
+    },
+    [targetFolder, expandTargetFolderAncestors]
+  );
 
   // Global Escape key listener to clear selection
   useEffect(() => {
@@ -1159,7 +1195,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                     className="sidebar-icon-btn icon-only"
                     title={t('sidebar.newNoteTitle')}
                     aria-label={t('sidebar.newNote')}
-                    onClick={() => onCreateNote()}
+                    onClick={() => triggerCreateInTarget(onCreateNote)}
                   >
                     <FilePlus size={16} />
                   </button>
@@ -1169,7 +1205,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       className="sidebar-icon-btn icon-only"
                       title={t('sidebar.newFromTemplate')}
                       aria-label={t('sidebar.newFromTemplate')}
-                      onClick={() => onOpenTemplateSelect()}
+                      onClick={() => triggerCreateInTarget(onOpenTemplateSelect)}
                     >
                       <LayoutTemplate size={15} />
                     </button>
@@ -1244,7 +1280,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   type="button"
                   className="sidebar-icon-btn icon-only"
                   title={t('canvas.newCanvas')}
-                  onClick={() => onCreateCanvas()}
+                  onClick={() => triggerCreateInTarget(onCreateCanvas)}
                 >
                   <WorkflowCanvasIcon size={15} />
                 </button>
@@ -1255,7 +1291,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   className="sidebar-icon-btn icon-only"
                   title={t('sidebar.newBase') || 'Neue Base'}
                   aria-label={t('sidebar.newBase') || 'Neue Base'}
-                  onClick={() => onCreateBase()}
+                  onClick={() => triggerCreateInTarget(onCreateBase)}
                 >
                   <Database size={15} />
                 </button>
@@ -1265,7 +1301,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   type="button"
                   className="sidebar-icon-btn icon-only"
                   title={t('sidebar.newFolder')}
-                  onClick={() => onCreateFolder()}
+                  onClick={() => triggerCreateInTarget(onCreateFolder)}
                 >
                   <FolderPlus size={16} />
                 </button>
@@ -1288,12 +1324,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             title={`+ ${t('sidebar.newMenu')}`}
           >
             <div className="bottom-sheet-action-list">
+              {targetFolder && (
+                <div className="bottom-sheet-target-folder">
+                  {t('sidebar.createIn', { folder: targetFolder })}
+                </div>
+              )}
               <button
                 type="button"
                 className="bottom-sheet-action-row"
                 onClick={() => {
                   setIsMobileNewMenuOpen(false);
-                  onCreateNote();
+                  triggerCreateInTarget(onCreateNote);
                 }}
               >
                 <FilePlus size={18} />
@@ -1305,7 +1346,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   className="bottom-sheet-action-row"
                   onClick={() => {
                     setIsMobileNewMenuOpen(false);
-                    onOpenTemplateSelect();
+                    triggerCreateInTarget(onOpenTemplateSelect);
                   }}
                 >
                   <LayoutTemplate size={18} />
@@ -1318,7 +1359,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   className="bottom-sheet-action-row"
                   onClick={() => {
                     setIsMobileNewMenuOpen(false);
-                    onCreateCanvas();
+                    triggerCreateInTarget(onCreateCanvas);
                   }}
                 >
                   <WorkflowCanvasIcon size={18} />
@@ -1331,7 +1372,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   className="bottom-sheet-action-row"
                   onClick={() => {
                     setIsMobileNewMenuOpen(false);
-                    onCreateBase();
+                    triggerCreateInTarget(onCreateBase);
                   }}
                 >
                   <Database size={18} />
@@ -1343,7 +1384,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 className="bottom-sheet-action-row"
                 onClick={() => {
                   setIsMobileNewMenuOpen(false);
-                  onCreateFolder();
+                  triggerCreateInTarget(onCreateFolder);
                 }}
               >
                 <FolderPlus size={18} />

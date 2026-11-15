@@ -674,6 +674,8 @@ export const App: React.FC = () => {
     setIsNewBaseModalOpen(true);
   }, []);
 
+  const [sidebarTargetFolder, setSidebarTargetFolder] = useState<string>('');
+
   const openCreateFolderDialog = useCallback(
     (parentFolder?: string) => {
       const baseName = language === 'de' ? 'Neuer Ordner' : 'New Folder';
@@ -1666,6 +1668,7 @@ export const App: React.FC = () => {
       onToggleTemplate: handleToggleTemplate,
       onOpenTemplateSelect: handleOpenTemplateModal,
       onOpenDailyNote: handleOpenDailyNote,
+      onTargetFolderChange: setSidebarTargetFolder,
     }),
     [
       openNoteByPath,
@@ -4050,7 +4053,7 @@ export const App: React.FC = () => {
                 setEditorMode('live');
                 requestAnimationFrame(() => editorRef.current?.focus());
               }}
-              onQuickNote={() => openCreateNoteDialog()}
+              onQuickNote={() => openCreateNoteDialog(sidebarTargetFolder || undefined)}
               onSwitchMode={(mode) => {
                 setEditorMode(mode);
                 if (mode !== 'reading') {

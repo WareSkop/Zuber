@@ -66,6 +66,7 @@
     "tagsTitle": "All tags",
     "closeLeft": "Close left sidebar",
     "newMenu": "New",
+    "createIn": "Create in: {{folder}}",
     "newNote": "New Note",
     "newNoteTitle": "Create new note",
     "newBase": "New Base",

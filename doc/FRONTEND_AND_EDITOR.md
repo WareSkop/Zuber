@@ -1235,3 +1235,14 @@ Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `htt
   - Das Anklicken eines gesperrten Ordners oder einer `.zenc`-Datei öffnet `FolderUnlockCard` mit Passwortfeld und optionalem **„Mit Fingerabdruck / Biometrie entsperren“**-Button.
   - Eingebettete Bilder (`![[photo.png]]`) und PDFs (`![[invoice.pdf]]`) in entsperrten Ordnern werden im Arbeitsspeicher entschlüsselt und über temporäre `URL.createObjectURL(...)`-URLs dargestellt (mit automatischem `revokeObjectURL` beim Unmount).
   - Unter *Einstellungen → Sicherheit* lässt sich der **Auto-Lock-Timeout** (`5`, `15`, `30`, `60` Minuten oder `Nie`) konfigurieren.
+
+---
+
+## 37. Mobiler Drawer (Ribbon & Sidebar-Tabs) sowie Zielordner-Auflösung (`resolveTargetFolder`)
+
+- **Vergrößerte Touch-Targets im mobilen Drawer (`< 768px`, `src/styles.css`):**
+  - Die linke Aktivitätsleiste (`.left-drawer-panel .knowmesh-ribbon`) wird auf `56px` verbreitert; alle Ribbon-Buttons erhalten `44×44px` (`border-radius: 10px`, `22px` SVG-Icons).
+  - Die obere Sidebar-Tableiste (`.left-drawer-panel .sidebar-tabs`) wächst auf `48px` Höhe; alle Tab- und Schließen-Buttons (`×`) erhalten mindestens `44×44px` mit `20px` Icons (Desktop `>= 768px` bleibt unverändert).
+- **Deterministische Zielordner-Auflösung (`src/utils/fileTreeUtils.ts`, `FileSidebar.tsx`, `App.tsx`):**
+  - `resolveTargetFolder(selectedPaths, tree)` bestimmt bei **Neue Notiz**, **Neu aus Vorlage…**, **Neues Canvas**, **Neue Base** und **Neuer Ordner** den Zielordner: ausgewählter Ordner → exakt dieser Ordner; ausgewählte Datei → deren Elternordner; leere Auswahl → Vault-Root (`""`).
+  - Beim Erstellen werden der Zielordner und seine Vorfahren automatisch in `expandedFolders` aufgeklappt; im mobilen `+ Neu ▾`-Menü wird bei ausgewähltem Unterordner ein Hinweis (`sidebar.createIn`) angezeigt.
