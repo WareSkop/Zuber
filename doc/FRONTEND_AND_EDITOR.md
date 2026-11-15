@@ -1206,3 +1206,20 @@ Auf Mobilgeräten (`< 768px`) öffnet der **Suche**-Button in `<MobileBottomNav 
 - **In-Note-Treffer-Highlighting & Schwebende Sprungleiste (`src/components/LivePreviewEditor.tsx`, `src/App.tsx`, `src/styles.css`):**
   - Markiert alle Treffer sowohl im **Lesemodus** (`<mark class="in-note-search-match">` / `.is-active`) als auch im **CodeMirror-Bearbeitungsmodus** (`setInNoteSearchEffect` + `inNoteSearchField` mit `Decoration.mark`) und scrollt den aktiven Treffer zentriert in den Viewport (`scrollIntoView({ behavior: 'smooth', block: 'center' })`).
   - Die schwebende Leiste (`.in-note-search-jump-bar`) dockt direkt über `<MobileBottomNav />` bzw. `<MobileEditBar />` und bietet Suchbegriff, `X / Y`-Zähler sowie `44×44px`-Buttons für Vorheriger (`▲`), Nächster (`▼`, mit nahtlosem Wrap-Around via `wrapMatchIndex`) und Schließen (`✕`).
+
+---
+
+## 35. Eingebetteter Web-Browser in der Rechercheansicht (`ResearchPane`)
+
+Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `http://`- / `https://`-Links nahtlos in das rechte/untere Split-Fenster geroutet:
+
+- **Split-Only-Link-Routing (`src/utils/researchLinkUtils.ts`, `LivePreviewEditor.tsx`, `ResearchPane.tsx`, `App.tsx`):**
+  - Bei geschlossener Rechercheansicht öffnen externe Links weiterhin im neuen System-Browser-Tab (`target="_blank"`).
+  - Bei geöffneter Rechercheansicht öffnet ein normaler Linksklick in `LivePreviewEditor` (Live-Preview & Lesemodus) sowie in Markdown-Notizen von `ResearchPane` die Ziel-URL direkt im integrierten Web-Browser (`ResearchTarget.type = 'web'`) und legt sie in `researchHistory` ab, sodass der Topbar-Zurück-Button (`←`) nahtlos zur vorherigen Notiz oder Webseite zurückkehrt.
+  - **`Ctrl + Klick` / `Cmd + Klick` / Mittelklick (`button === 1`):** Umgeht den Split-Browser und öffnet die URL direkt in einem neuen externen Browser-Tab. Hover-Tooltips weisen bei aktivem Split-View auf diese Tastenkombination hin (`research.linkTooltipSplit`).
+- **Interaktive Adressleiste & Sandbox-`<iframe>` (`src/components/ResearchPane.tsx`, `src/styles.css`):**
+  - Über den `🌐`-Button im `ResearchPane`-Header oder beim Öffnen eines Links erscheint eine `40px`-Adressleiste (`.research-web-bar`) mit editierbarem URL-Eingabefeld (`normalizeWebUrl` ergänzt fehlendes `https://`), **Neu laden (`↻`)**, **URL kopieren** und **Im externen Browser öffnen (`↗`)**.
+  - Die Webseite läuft in einem Sandbox-`<iframe>` (`sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"`).
+- **`X-Frame-Options` / `CSP`-Erkennung & Fallback-Karte (`server/linkEmbedCheck.ts`, `server/index.ts`, `src/api.ts`):**
+  - `GET /api/link-embed-check?url=...` prüft (mit `2500ms`-Timeout und SSRF-Schutz gegen private/Loopback-Hosts) `X-Frame-Options` und `Content-Security-Policy` (`frame-ancestors`).
+  - Blockiert die Zielseite das Embedding (oder schlägt das Laden fehl), zeigt `ResearchPane` eine zentrierte Fallback-Karte (`.research-web-blocked-card`) mit Erklärung, URL-Vorschau und prominentem Button **„Im Browser öffnen ↗“**.

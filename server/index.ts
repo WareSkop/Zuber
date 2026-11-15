@@ -24,6 +24,7 @@ import { ensureTlsCredentials, getLocalIpAddresses } from './tls';
 import { VaultService } from './vaultService';
 import { GitService } from './gitService';
 import { serverLogger } from './logger';
+import { checkUrlEmbeddable } from './linkEmbedCheck';
 import type { LogLevel } from '../shared/types';
 import { getAttachmentKind } from '../shared/markdownUtils';
 
@@ -865,6 +866,17 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     } catch (err: unknown) {
       res.status(500).json({ error: (err as Error).message || 'Fehler beim Wiederherstellen der Version' });
     }
+  });
+
+  // --- External Link Embed Pre-Check ---
+  app.get('/api/link-embed-check', requireAuth, async (req, res) => {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) {
+      res.status(400).json({ embeddable: false, reason: 'invalid-url' });
+      return;
+    }
+    const result = await checkUrlEmbeddable(rawUrl);
+    res.json(result);
   });
 
   // --- Logs & Diagnostics Endpoints ---

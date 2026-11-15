@@ -592,7 +592,16 @@
     "openInMain": "Open in Main Editor (Alt+Click)",
     "toggleOrientation": "Switch Split Orientation (Left/Right ⇄ Top/Bottom)",
     "showGraph": "Show Graph in Research View",
-    "close": "Close Research View"
+    "close": "Close Research View",
+    "openWebUrl": "Open Web URL",
+    "urlPlaceholder": "Enter URL (e.g. https://example.com)...",
+    "openExternalBrowser": "Open in Browser ↗",
+    "embedBlockedTitle": "This website blocks embedded viewing",
+    "embedBlockedDesc": "For security reasons (X-Frame-Options / CSP), this site cannot be displayed inside Zuber.",
+    "linkTooltipSplit": "Open in Research View (Ctrl+Click for external browser)",
+    "reloadWeb": "Reload page",
+    "copyUrl": "Copy URL",
+    "copiedUrl": "URL copied!"
   },
   "board": {
     "selectColumn": "Select Column",

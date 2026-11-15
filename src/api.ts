@@ -836,4 +836,14 @@ export const api = {
       method: 'DELETE',
     });
   },
+
+  async checkLinkEmbed(url: string): Promise<{
+    embeddable: boolean;
+    reason?: string;
+    headerValue?: string;
+    status?: number;
+    uncertain?: boolean;
+  }> {
+    return apiFetch(`/api/link-embed-check?url=${encodeURIComponent(url)}`);
+  },
 };

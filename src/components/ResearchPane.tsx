@@ -11,6 +11,12 @@ import {
   FileText,
   Image as ImageIcon,
   Database,
+  Globe,
+  RotateCw,
+  Copy,
+  Check,
+  ExternalLink,
+  ShieldAlert,
 } from 'lucide-react';
 import { createRoot, type Root } from 'react-dom/client';
 import DOMPurify from 'dompurify';
@@ -23,6 +29,7 @@ import { renderReadingHtml, loadAndInitMermaid, escapeHtml } from '../utils/read
 import { BaseView } from './BaseView';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
+import { normalizeWebUrl, routeExternalLinkClick } from '../utils/researchLinkUtils';
 
 const GraphView = lazy(() =>
   import('./GraphView').then((m) => ({ default: m.GraphView }))
@@ -31,7 +38,7 @@ const CanvasEditor = lazy(() =>
   import('./canvas/CanvasEditor').then((m) => ({ default: m.CanvasEditor }))
 );
 
-export type ResearchContentType = 'note' | 'canvas' | 'image' | 'pdf' | 'graph' | 'base';
+export type ResearchContentType = 'note' | 'canvas' | 'image' | 'pdf' | 'graph' | 'base' | 'web';
 
 export function detectFileType(path: string): ResearchContentType {
   const lower = path.toLowerCase();
@@ -55,6 +62,7 @@ export interface ResearchPaneProps {
   onClose: () => void;
   onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void;
   onShowGraph: () => void;
+  onOpenWebUrl?: (url: string) => void;
   graphData: GraphData;
   allNotes: { path: string; name: string; basename: string }[];
   activeNotePath: string | null;
@@ -69,6 +77,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   onClose,
   onNavigate,
   onShowGraph,
+  onOpenWebUrl,
   graphData,
   allNotes,
   activeNotePath,
@@ -79,7 +88,43 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   const [noteContent, setNoteContent] = useState<string>('');
   const [canvasRawContent, setCanvasRawContent] = useState<string>('{}');
   const [imageZoom, setImageZoom] = useState<number>(1);
+  const [webInputValue, setWebInputValue] = useState<string>('');
+  const [iframeReloadKey, setIframeReloadKey] = useState<number>(0);
+  const [embedBlocked, setEmbedBlocked] = useState<boolean>(false);
+  const [urlCopied, setUrlCopied] = useState<boolean>(false);
   const readingContainerRef = useRef<HTMLDivElement>(null);
+  const webInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync address bar input and check X-Frame-Options / CSP when web target changes
+  useEffect(() => {
+    if (target?.type !== 'web') {
+      setEmbedBlocked(false);
+      return;
+    }
+    setWebInputValue(target.path || '');
+    setEmbedBlocked(false);
+    setUrlCopied(false);
+
+    if (!target.path) {
+      const timer = window.setTimeout(() => webInputRef.current?.focus(), 30);
+      return () => window.clearTimeout(timer);
+    }
+
+    let cancelled = false;
+    api
+      .checkLinkEmbed(target.path)
+      .then((res) => {
+        if (!cancelled && res && res.embeddable === false) {
+          setEmbedBlocked(true);
+        }
+      })
+      .catch(() => {
+        // Ignore network/offline pre-check errors; let iframe try loading
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [target?.type, target?.path]);
 
   // Load content when target changes
   useEffect(() => {
@@ -297,11 +342,29 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
     };
   }, [target?.type, target?.path, renderedHtml, allNotes, onNavigate]);
 
+  useEffect(() => {
+    if (target?.type !== 'note' || !readingContainerRef.current) return;
+    const links = readingContainerRef.current.querySelectorAll<HTMLAnchorElement>('a[href^="http://"], a[href^="https://"]');
+    const splitTooltip = t('research.linkTooltipSplit');
+    links.forEach((a) => {
+      a.title = splitTooltip;
+    });
+  }, [target?.type, renderedHtml, t]);
+
   // Click handler inside Reading Mode
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // If external link, let standard target="_blank" handle it
-    const extLink = (e.target as HTMLElement).closest('a[target="_blank"]');
-    if (extLink) return;
+    const extLink = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+    if (extLink && /^https?:/i.test(extLink.href)) {
+      routeExternalLinkClick({
+        url: extLink.href,
+        isResearchOpen: true,
+        event: e,
+        onOpenInResearch: onOpenWebUrl,
+        openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+      });
+      return;
+    }
+    if (extLink && extLink.getAttribute('target') === '_blank') return;
 
     // Codeblock view toggle (Diagram | Code / Preview | Code)
     const toggleBtn = (e.target as HTMLElement).closest('.codeblock-toggle-btn') as HTMLButtonElement | null;
@@ -373,9 +436,16 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   };
 
   const isGraph = !target || target.type === 'graph';
-  const fileName = target?.path ? target.path.split('/').pop() || target.path : '';
+  const isWeb = target?.type === 'web';
+  const fileName = isWeb
+    ? target?.path || t('research.openWebUrl')
+    : target?.path
+    ? target.path.split('/').pop() || target.path
+    : '';
   const typeBadge = isGraph
     ? 'GRAPH'
+    : isWeb
+    ? 'WEB'
     : target?.type === 'note'
     ? 'MD'
     : target?.type === 'canvas'
@@ -399,6 +469,11 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
               <>
                 <GitFork size={14} className="research-icon" />
                 <span>{t('graph.title', 'Graph-Ansicht')}</span>
+              </>
+            ) : isWeb ? (
+              <>
+                <Globe size={14} className="research-icon" />
+                <span>{fileName}</span>
               </>
             ) : target?.type === 'canvas' ? (
               <>
@@ -425,6 +500,20 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
         </div>
 
         <div className="research-header-controls">
+          {/* Open Web URL */}
+          {onOpenWebUrl && (
+            <button
+              type="button"
+              className={`research-header-btn open-web-btn ${isWeb ? 'active' : ''}`}
+              data-testid="research-open-web-btn"
+              onClick={() => onOpenWebUrl(isWeb ? target?.path || '' : '')}
+              title={t('research.openWebUrl')}
+              aria-label={t('research.openWebUrl')}
+            >
+              <Globe size={15} />
+            </button>
+          )}
+
           {/* Quick Graph Switch */}
           <button
             type="button"
@@ -452,7 +541,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
           <button
             type="button"
             className="research-header-btn open-in-main-btn"
-            disabled={isGraph || !target?.path}
+            disabled={isGraph || isWeb || !target?.path}
             onClick={() => {
               if (target?.path) {
                 onOpenInMain(target.path);
@@ -477,6 +566,79 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
           </button>
         </div>
       </header>
+
+      {/* Interactive Web Browser Address Bar */}
+      {isWeb && (
+        <form
+          className="research-web-bar"
+          data-testid="research-web-bar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const normalized = normalizeWebUrl(webInputValue);
+            if (normalized && onOpenWebUrl) {
+              setEmbedBlocked(false);
+              onOpenWebUrl(normalized);
+            }
+          }}
+        >
+          <input
+            ref={webInputRef}
+            type="text"
+            inputMode="url"
+            data-testid="research-web-url-input"
+            className="research-web-url-input"
+            placeholder={t('research.urlPlaceholder')}
+            value={webInputValue}
+            onChange={(e) => setWebInputValue(e.target.value)}
+          />
+          <button
+            type="button"
+            className="research-web-bar-btn"
+            data-testid="research-web-reload-btn"
+            disabled={!target?.path}
+            title={t('research.reloadWeb')}
+            aria-label={t('research.reloadWeb')}
+            onClick={() => {
+              setEmbedBlocked(false);
+              setIframeReloadKey((k) => k + 1);
+            }}
+          >
+            <RotateCw size={15} />
+          </button>
+          <button
+            type="button"
+            className="research-web-bar-btn"
+            data-testid="research-web-copy-btn"
+            disabled={!target?.path}
+            title={urlCopied ? t('research.copiedUrl') : t('research.copyUrl')}
+            aria-label={t('research.copyUrl')}
+            onClick={() => {
+              if (!target?.path) return;
+              navigator.clipboard?.writeText(target.path).then(() => {
+                setUrlCopied(true);
+                window.setTimeout(() => setUrlCopied(false), 1800);
+              }).catch(() => {});
+            }}
+          >
+            {urlCopied ? <Check size={15} /> : <Copy size={15} />}
+          </button>
+          <button
+            type="button"
+            className="research-web-bar-btn"
+            data-testid="research-web-external-btn"
+            disabled={!target?.path}
+            title={t('research.openExternalBrowser')}
+            aria-label={t('research.openExternalBrowser')}
+            onClick={() => {
+              if (target?.path) {
+                window.open(target.path, '_blank', 'noopener,noreferrer');
+              }
+            }}
+          >
+            <ExternalLink size={15} />
+          </button>
+        </form>
+      )}
 
       {/* Pane Content Area */}
       <div className="research-pane-content">
@@ -504,6 +666,39 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
               />
             </Suspense>
           </div>
+        ) : isWeb ? (
+          !target?.path ? (
+            <div className="empty-state">
+              <Globe size={36} />
+              <p>{t('research.urlPlaceholder')}</p>
+            </div>
+          ) : embedBlocked ? (
+            <div className="research-web-blocked-card" data-testid="research-web-blocked-card">
+              <ShieldAlert size={36} className="research-web-blocked-icon" />
+              <h3>{t('research.embedBlockedTitle')}</h3>
+              <p>{t('research.embedBlockedDesc')}</p>
+              <code className="research-web-blocked-url">{target.path}</code>
+              <button
+                type="button"
+                className="research-web-blocked-btn"
+                data-testid="research-web-blocked-open-btn"
+                onClick={() => window.open(target.path, '_blank', 'noopener,noreferrer')}
+              >
+                {t('research.openExternalBrowser')}
+              </button>
+            </div>
+          ) : (
+            <iframe
+              key={`${target.path}-${iframeReloadKey}`}
+              src={target.path}
+              title={target.path}
+              className="research-web-iframe"
+              data-testid="research-web-iframe"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+              referrerPolicy="no-referrer-when-downgrade"
+              onError={() => setEmbedBlocked(true)}
+            />
+          )
         ) : target?.type === 'note' ? (
           <div
             className="research-reading-scroller scroller"

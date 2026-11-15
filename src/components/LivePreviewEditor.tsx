@@ -41,6 +41,7 @@ import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
 import { renderReadingHtml } from '../utils/readingMode';
+import { routeExternalLinkClick } from '../utils/researchLinkUtils';
 import {
   parseMarkdownTable,
   serializeMarkdownTable,
@@ -275,6 +276,8 @@ export interface LivePreviewEditorProps {
   inNoteSearchQuery?: string;
   inNoteSearchIndex?: number;
   onInNoteMatchCountChange?: (count: number) => void;
+  isResearchOpen?: boolean;
+  onOpenExternalInResearch?: (url: string) => void;
 }
 
 interface InNoteSearchState {
@@ -1091,10 +1094,17 @@ class WikiLinkWidget extends WidgetType {
   }
 }
 
+interface ExternalLinkOptions {
+  isResearchOpen: boolean;
+  onOpenInResearch?: (url: string) => void;
+  splitTooltip: string;
+}
+
 class ExternalLinkWidget extends WidgetType {
   constructor(
     readonly href: string,
-    readonly display: string
+    readonly display: string,
+    readonly getOptions?: () => ExternalLinkOptions
   ) {
     super();
   }
@@ -1110,9 +1120,36 @@ class ExternalLinkWidget extends WidgetType {
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     a.textContent = this.display || this.href;
-    a.title = `${this.display ? `${this.display} — ` : ''}${this.href} ↗`;
+
+    const getDefaultTitle = () =>
+      `${this.display ? `${this.display} — ` : ''}${this.href} ↗`;
+
+    const syncTitle = () => {
+      const opts = this.getOptions?.();
+      if (opts?.isResearchOpen && /^https?:/i.test(this.href)) {
+        a.title = opts.splitTooltip;
+      } else {
+        a.title = getDefaultTitle();
+      }
+    };
+    syncTitle();
+
+    a.addEventListener('mouseenter', syncTitle);
     a.addEventListener('mousedown', (e) => {
       e.stopPropagation();
+    });
+    a.addEventListener('click', (e) => {
+      if (!/^https?:/i.test(this.href)) return;
+      const opts = this.getOptions?.();
+      if (!opts?.isResearchOpen) return;
+      e.stopPropagation();
+      routeExternalLinkClick({
+        url: this.href,
+        isResearchOpen: opts.isResearchOpen,
+        event: e,
+        onOpenInResearch: opts.onOpenInResearch,
+        openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+      });
     });
     return a;
   }
@@ -1827,7 +1864,8 @@ function buildLivePreviewDecorations(
   t?: (key: string) => string,
   getTableWidths?: () => TableWidthsMap,
   onUpdateTableWidths?: (headerSignature: string, widths: number[], currentBody?: string) => void,
-  onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void
+  onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void,
+  getExternalLinkOptions?: () => ExternalLinkOptions
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
@@ -2321,7 +2359,7 @@ function buildLivePreviewDecorations(
             from: fullStart,
             to: fullEnd,
             deco: Decoration.replace({
-              widget: new ExternalLinkWidget(href, label || href),
+              widget: new ExternalLinkWidget(href, label || href, getExternalLinkOptions),
             }),
           });
         } else {
@@ -2473,6 +2511,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     inNoteSearchQuery = '',
     inNoteSearchIndex = 0,
     onInNoteMatchCountChange,
+    isResearchOpen = false,
+    onOpenExternalInResearch,
   } = props;
 
   const { t } = useTranslation();
@@ -2541,6 +2581,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     tableWidths: props.tableWidths,
     onUpdateTableWidths: props.onUpdateTableWidths,
     onRenameTableWidthSignature: props.onRenameTableWidthSignature,
+    isResearchOpen,
+    onOpenExternalInResearch,
   });
   callbacksRef.current = {
     onChangeBody,
@@ -2559,6 +2601,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     tableWidths: props.tableWidths,
     onUpdateTableWidths: props.onUpdateTableWidths,
     onRenameTableWidthSignature: props.onRenameTableWidthSignature,
+    isResearchOpen,
+    onOpenExternalInResearch,
   };
 
   const applyFormat = (
@@ -3200,7 +3244,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               callbacksRef.current.t,
               () => callbacksRef.current.tableWidths || {},
               (sig, w, b) => callbacksRef.current.onUpdateTableWidths?.(sig, w, b),
-              (oldSig, newSig, b) => callbacksRef.current.onRenameTableWidthSignature?.(oldSig, newSig, b)
+              (oldSig, newSig, b) => callbacksRef.current.onRenameTableWidthSignature?.(oldSig, newSig, b),
+              () => ({
+                isResearchOpen: Boolean(callbacksRef.current.isResearchOpen),
+                onOpenInResearch: callbacksRef.current.onOpenExternalInResearch,
+                splitTooltip: callbacksRef.current.t('research.linkTooltipSplit'),
+              })
             );
           }
           update(update: ViewUpdate) {
@@ -3223,7 +3272,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
                 callbacksRef.current.t,
                 () => callbacksRef.current.tableWidths || {},
                 (sig, w, b) => callbacksRef.current.onUpdateTableWidths?.(sig, w, b),
-                (oldSig, newSig, b) => callbacksRef.current.onRenameTableWidthSignature?.(oldSig, newSig, b)
+                (oldSig, newSig, b) => callbacksRef.current.onRenameTableWidthSignature?.(oldSig, newSig, b),
+                () => ({
+                  isResearchOpen: Boolean(callbacksRef.current.isResearchOpen),
+                  onOpenInResearch: callbacksRef.current.onOpenExternalInResearch,
+                  splitTooltip: callbacksRef.current.t('research.linkTooltipSplit'),
+                })
               );
             }
           }
@@ -3779,9 +3833,37 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     };
   }, [mode, onNavigateWikiLink, renderedHtml, allNotes, notePath]);
 
+  useEffect(() => {
+    if (mode !== 'reading' || !readingContainerRef.current) return;
+    const links = readingContainerRef.current.querySelectorAll<HTMLAnchorElement>('a[href^="http://"], a[href^="https://"]');
+    const splitTooltip = t('research.linkTooltipSplit');
+    links.forEach((a) => {
+      if (isResearchOpen) {
+        if (!a.dataset.origTitle) {
+          a.dataset.origTitle = a.title || '';
+        }
+        a.title = splitTooltip;
+      } else if (a.dataset.origTitle !== undefined) {
+        a.title = a.dataset.origTitle;
+      }
+    });
+  }, [mode, isResearchOpen, renderedHtml, t]);
+
   const handleReadingClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const extLink = (e.target as HTMLElement).closest('a[target="_blank"]');
-    if (extLink) {
+    const extLink = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+    if (extLink && /^https?:/i.test(extLink.href)) {
+      if (isResearchOpen) {
+        routeExternalLinkClick({
+          url: extLink.href,
+          isResearchOpen: true,
+          event: e,
+          onOpenInResearch: onOpenExternalInResearch,
+          openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+        });
+      }
+      return;
+    }
+    if (extLink && extLink.getAttribute('target') === '_blank') {
       return;
     }
 

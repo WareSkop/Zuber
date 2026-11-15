@@ -232,11 +232,11 @@ export const App: React.FC = () => {
 
   const isResearchOpen = workspaceView === 'split';
   const rightSidebarTargetPath = useMemo(() => {
-    if (isResearchOpen && researchTarget?.path) {
+    if (isResearchOpen && researchTarget?.path && researchTarget.type !== 'web') {
       return researchTarget.path;
     }
     return activeNote?.path ?? null;
-  }, [isResearchOpen, researchTarget?.path, activeNote?.path]);
+  }, [isResearchOpen, researchTarget?.path, researchTarget?.type, activeNote?.path]);
 
   const rightSidebarTargetPathRef = useRef<string | null>(null);
   rightSidebarTargetPathRef.current = rightSidebarTargetPath;
@@ -3467,6 +3467,8 @@ export const App: React.FC = () => {
                   }}
                   onUploadAttachment={handleUploadImageFile}
                   onSendToTargetNote={handleOpenSendToTarget}
+                  isResearchOpen={isResearchOpen}
+                  onOpenExternalInResearch={(url) => setResearchTarget({ path: url, type: 'web' })}
                   onRequestEditMode={isMobile ? () => setEditorMode('live') : undefined}
                   onOpenNote={(targetPath) => {
                     handleNavigateWikiLink(targetPath);
@@ -3552,6 +3554,7 @@ export const App: React.FC = () => {
           handleNavigateWikiLink(target, ev);
         }}
         onShowGraph={() => setResearchTarget({ path: '', type: 'graph' })}
+        onOpenWebUrl={(url) => setResearchTarget({ path: url, type: 'web' })}
         graphData={graphData}
         allNotes={allNotesForEditor}
         activeNotePath={activeNote?.path ?? null}

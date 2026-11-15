@@ -592,7 +592,16 @@
     "openInMain": "Im Haupteditor öffnen (Alt+Klick)",
     "toggleOrientation": "Split-Ausrichtung wechseln (Links/Rechts ⇄ Oben/Unten)",
     "showGraph": "Graph in Rechercheansicht zeigen",
-    "close": "Rechercheansicht schließen"
+    "close": "Rechercheansicht schließen",
+    "openWebUrl": "Web-URL öffnen",
+    "urlPlaceholder": "URL eingeben (z. B. https://example.com)...",
+    "openExternalBrowser": "Im Browser öffnen ↗",
+    "embedBlockedTitle": "Diese Webseite blockiert die eingebettete Anzeige",
+    "embedBlockedDesc": "Aus Sicherheitsgründen (X-Frame-Options / CSP) kann diese Seite nicht in Zuber angezeigt werden.",
+    "linkTooltipSplit": "In Rechercheansicht öffnen (Strg+Klick für externen Browser)",
+    "reloadWeb": "Seite neu laden",
+    "copyUrl": "URL kopieren",
+    "copiedUrl": "URL kopiert!"
   },
   "board": {
     "selectColumn": "Spalte wählen",
