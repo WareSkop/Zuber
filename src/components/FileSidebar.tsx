@@ -1103,7 +1103,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           title={t('sidebar.files')}
           aria-label={t('sidebar.files')}
         >
-          <Folder size={15} />
+          <Folder size={isMobile ? 20 : 15} />
         </button>
         <button
           type="button"
@@ -1112,7 +1112,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           title={t('sidebar.search')}
           aria-label={t('sidebar.search')}
         >
-          <Search size={15} />
+          <Search size={isMobile ? 20 : 15} />
         </button>
         <button
           type="button"
@@ -1121,7 +1121,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           title={t('sidebar.tags')}
           aria-label={t('sidebar.tags')}
         >
-          <Hash size={15} />
+          <Hash size={isMobile ? 20 : 15} />
         </button>
         <button
           type="button"
@@ -1139,7 +1139,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           title={t('sidebar.favoritesTitle')}
           aria-label={t('sidebar.favorites')}
         >
-          <Star size={15} className={showFavoritesPanel ? 'starred-icon' : ''} fill={showFavoritesPanel ? 'currentColor' : 'none'} />
+          <Star size={isMobile ? 20 : 15} className={showFavoritesPanel ? 'starred-icon' : ''} fill={showFavoritesPanel ? 'currentColor' : 'none'} />
         </button>
         <button
           type="button"
@@ -1157,7 +1157,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           title={t('sidebar.recentNotesTitle')}
           aria-label={t('sidebar.recentNotes')}
         >
-          <Clock size={15} />
+          <Clock size={isMobile ? 20 : 15} />
         </button>
         {onClose && (
           <button
@@ -1167,7 +1167,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             title={t('sidebar.closeLeft')}
             aria-label={t('sidebar.closeLeft')}
           >
-            <X size={15} />
+            <X size={isMobile ? 20 : 15} />
           </button>
         )}
       </div>
@@ -1184,9 +1184,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   aria-expanded={isMobileNewMenuOpen}
                   onClick={() => setIsMobileNewMenuOpen(true)}
                 >
-                  <Plus size={16} />
+                  <Plus size={18} />
                   <span>{t('sidebar.newMenu')}</span>
-                  <ChevronDown size={14} />
+                  <ChevronDown size={16} />
                 </button>
               ) : (
                 <>
@@ -1222,7 +1222,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   aria-label={t('sidebar.openDailyNote')}
                   onClick={onOpenDailyNote}
                 >
-                  <Calendar size={15} />
+                  <Calendar size={isMobile ? 19 : 15} />
                 </button>
               )}
               <div className="sidebar-sort-container">
@@ -1234,7 +1234,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   aria-label={t('sidebar.sort')}
                   onClick={() => setIsSortMenuOpen((prev) => !prev)}
                 >
-                  <ArrowUpDown size={15} />
+                  <ArrowUpDown size={isMobile ? 19 : 15} />
                 </button>
                 {isSortMenuOpen && (
                   <div className="tree-sort-menu" ref={sortMenuRef}>
@@ -1313,7 +1313,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 aria-label={t('sidebar.refreshTitle')}
                 onClick={onRefresh}
               >
-                <RefreshCw size={15} />
+                <RefreshCw size={isMobile ? 19 : 15} />
               </button>
             </div>
           </div>

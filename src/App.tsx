@@ -3357,7 +3357,7 @@ export const App: React.FC = () => {
           <img
             src="/knowmesh_icon.png"
             alt="Zuber"
-            style={{ width: 22, height: 22, borderRadius: 5, display: 'block', objectFit: 'contain' }}
+            style={{ width: isMobile ? 28 : 22, height: isMobile ? 28 : 22, borderRadius: 6, display: 'block', objectFit: 'contain' }}
           />
         </button>
 
@@ -3367,7 +3367,7 @@ export const App: React.FC = () => {
           onClick={() => openCreateNoteDialog()}
           title={t('nav.newNote')}
         >
-          <FilePlus size={19} />
+          <FilePlus size={isMobile ? 22 : 19} />
         </button>
 
         <button
@@ -3379,7 +3379,7 @@ export const App: React.FC = () => {
           }}
           title={t('nav.editor')}
         >
-          <FileText size={19} />
+          <FileText size={isMobile ? 22 : 19} />
         </button>
 
         <button
@@ -3391,7 +3391,7 @@ export const App: React.FC = () => {
           }}
           title={t('nav.graph')}
         >
-          <GitFork size={19} />
+          <GitFork size={isMobile ? 22 : 19} />
         </button>
 
         <button
@@ -3400,7 +3400,7 @@ export const App: React.FC = () => {
           onClick={handleToggleSplit}
           title={t('research.title', 'Rechercheansicht')}
         >
-          <Columns size={19} />
+          <Columns size={isMobile ? 22 : 19} />
         </button>
       </div>
 
@@ -3415,7 +3415,7 @@ export const App: React.FC = () => {
               : 'Dark Theme'
           }
         >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          {theme === 'dark' ? <Sun size={isMobile ? 22 : 18} /> : <Moon size={isMobile ? 22 : 18} />}
         </button>
 
         <button
@@ -3427,7 +3427,7 @@ export const App: React.FC = () => {
           }}
           title={t('nav.rightSidebar')}
         >
-          <PanelRight size={19} />
+          <PanelRight size={isMobile ? 22 : 19} />
         </button>
 
         <button
@@ -3436,7 +3436,7 @@ export const App: React.FC = () => {
           onClick={handleLogout}
           title={t('nav.logout')}
         >
-          <LogOut size={18} />
+          <LogOut size={isMobile ? 22 : 18} />
         </button>
       </div>
     </nav>
