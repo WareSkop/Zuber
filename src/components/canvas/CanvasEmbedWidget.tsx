@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -172,10 +172,24 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
     };
   }, [resolvedFullPath, canvasPath]);
 
+  const fitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (fitTimerRef.current) {
+        clearTimeout(fitTimerRef.current);
+        fitTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const onInit = useCallback((instance: ReactFlowInstance) => {
-    // Nach kurzem Timeout zentrieren, wenn das DOM steht:
-    setTimeout(() => {
-      instance.fitView({ padding: 0.25, duration: 250 });
+    // Center after short delay once DOM layout settles
+    if (fitTimerRef.current) clearTimeout(fitTimerRef.current);
+    fitTimerRef.current = setTimeout(() => {
+      fitTimerRef.current = null;
+      if (typeof window !== 'undefined') {
+        instance.fitView({ padding: 0.25, duration: 250 });
+      }
     }, 60);
   }, []);
 
