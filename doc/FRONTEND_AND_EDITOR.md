@@ -872,11 +872,12 @@ Zuber integriert eine vollständige, Obsidian-ähnliche Versionshistorie für al
 ### 25.2 Automatisierte Ingest-Pipeline (`src/sync/shareTargetService.ts` & `src/App.tsx`)
 - Beim App-Start oder Fokus (bei aktiver `?incoming_share=1`-Navigation oder bestehenden Einträgen in `knowmesh_shared_incoming`) wird der Ingest-Handler ausgeführt:
   1. Stellt sicher, dass das Zielverzeichnis `Inbox/` existiert (`api.createFolder('Inbox')`).
-  2. **Fall A (Markdown/Text):** Liest den Dateiinhalt und speichert ihn direkt als Notiz in `Inbox/${sanitizedTitle}.md`.
-  3. **Fall B (PDF):** Legt die PDF-Datei in `attachments/` ab und erzeugt eine Begleitnotiz in `Inbox/` mit `# Titel\n\n![[attachments/datei.pdf]]`.
-  4. **Fall C (Bilder):** Speichert das Bild in `attachments/` und legt eine Notiz in `Inbox/` mit eingebetteter Vorschau an.
-  5. **Fall D (Reiner Text / URL):** Speichert die Notiz mit formatiertem Markdown-Hyperlink `[Link](url)` und Notiztext.
-  6. **Fokus & Bereinigung:** Die neu erstellte Notiz wird unmittelbar als aktiver Tab geöffnet (`openNoteByPath`), der Eintrag aus IndexedDB entfernt und die URL-Parameter via `window.history.replaceState({}, '', '/')` bereinigt.
+  2. **Einheitliches `YYYY-MM-DD`-Präfix:** Alle eingehenden Share-Notizen erhalten das lokale Datumspräfix `Inbox/YYYY-MM-DD <Bereinigter Titel>.md` (bei Kollisionen am selben Tag automatisch mit ` (2)`, ` (3)` usw. hochgezählt).
+  3. **Fall A (Markdown/Text):** Liest den Dateiinhalt und speichert ihn als Notiz in `Inbox/YYYY-MM-DD <Titel>.md`.
+  4. **Fall B (PDF):** Legt die PDF-Datei in `attachments/` ab und erzeugt eine Begleitnotiz in `Inbox/YYYY-MM-DD <Titel>.md` mit `# Titel\n\n![[attachments/datei.pdf]]`.
+  5. **Fall C (Bilder):** Speichert das Bild in `attachments/` und legt eine Notiz in `Inbox/YYYY-MM-DD <Titel>.md` mit eingebetteter Vorschau an.
+  6. **Fall D (Reiner Text / URL):** Speichert die Notiz als `Inbox/YYYY-MM-DD <Titel>.md` mit formatiertem Markdown-Hyperlink `[Link](url)` und Notiztext.
+  7. **Fokus & Bereinigung:** Die neu erstellte Notiz wird unmittelbar als aktiver Tab geöffnet (`openNoteByPath`), der Eintrag aus IndexedDB entfernt und die URL-Parameter via `window.history.replaceState({}, '', '/')` bereinigt.
 
 ### 25.3 Concurrency-Lock, Atomic Drain & 5-Sekunden-Duplikat-Schutz
 - **In-Memory-Lock (`isProcessingSharesRef` in `App.tsx` & `isProcessingSharesGlobal` in `shareTargetService.ts`):** Verhindert parallele Ausführungen während App-Start, React-Re-Renders oder Lebenszyklus-Ereignissen.
@@ -1134,6 +1135,7 @@ Zuber bietet neben der Einzelansicht eine asymmetrische, resizable **Recherche- 
   - Bei geöffneten `.base`-Boards, `.canvas`-Dateien oder innerhalb horizontaler Scroll-Container (`.base-board-view`, `.base-editor`, `.base-table-wrapper`, `.canvas-editor-wrapper`) öffnet ein Rechts-Wisch die linke Seitenleiste nur noch, wenn die Berührung in der oberen Kopfzeile (`.workspace-topbar`) begonnen hat.
 - **Kanban-Board & Dateibaum Touch-Upgrades (`< 768px`):**
   - Spalten-/Swimlane-Menüs (`⋮`), Sortier-Popover (`BaseBoardSortPopover`), Toolbar-Menüs (`BaseToolbar`), Filter-Builder (`BaseFilterPopover`), Spalten-Manager (`BaseColumnsModal`) und das Dateibaum-Kontextmenü (`FileSidebar`) rendern auf mobilen Viewports (`< 768px`) als `<BottomSheet>`, während Desktop-Ansichten (`>= 768px`) unverändert bleiben.
+  - In der mobilen Dateibaum-Toolbar (`FileSidebar.tsx`, `< 768px`) sind die Erstellungs-Buttons in einem prominenten **`+ Neu ▾`**-Button (`min-height: 42px`) mit `<BottomSheet>` (5 Touch-Zeilen à `48px`: Neue Notiz, Neu aus Vorlage…, Neues Canvas, Neue Base, Neuer Ordner) gebündelt; Tagesnotiz, Sortierung und Aktualisieren sind als `42×42px`-Buttons mit `gap: 8px` ausgeführt.
   - Auf Touch-Geräten/Mobile bieten Kanban-Karten einen `⋮`-Button (`min. 36×36px`), der ein „Karte verschieben“-`<BottomSheet>` für 1D-Spalten und 2D-Swimlanes öffnet.
 - **Sichere `.base`-Speicherung & `ErrorBoundary`-Wiederherstellung:**
   - `BaseEditor.tsx` und `BaseBoardView.tsx` entprellen `.base`-Schreibvorgänge auf `400ms` und serialisieren laufende `onChange`-Promises zur Vermeidung von WebSocket-Echo-Thrashing und React Error #310.

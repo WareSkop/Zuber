@@ -21,6 +21,7 @@ import {
   LayoutTemplate,
   MoreVertical,
   Pencil,
+  Plus,
   RefreshCw,
   Search,
   Star,
@@ -268,6 +269,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   // Clipboard & Context menu states
   const isMobile = useIsMobile();
+  const [isMobileNewMenuOpen, setIsMobileNewMenuOpen] = useState(false);
   const [clipboard, setClipboard] = useState<ClipboardItem | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1064,27 +1066,43 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
       {activeTab === 'files' && (
         <>
-          <div className="sidebar-action-bar">
+          <div className={`sidebar-action-bar${isMobile ? ' is-mobile' : ''}`}>
             <div className="sidebar-action-left">
-              <button
-                type="button"
-                className="sidebar-icon-btn icon-only"
-                title={t('sidebar.newNoteTitle')}
-                aria-label={t('sidebar.newNote')}
-                onClick={() => onCreateNote()}
-              >
-                <FilePlus size={16} />
-              </button>
-              {onOpenTemplateSelect && (
+              {isMobile ? (
                 <button
                   type="button"
-                  className="sidebar-icon-btn icon-only"
-                  title={t('sidebar.newFromTemplate')}
-                  aria-label={t('sidebar.newFromTemplate')}
-                  onClick={() => onOpenTemplateSelect()}
+                  className="sidebar-mobile-new-btn"
+                  aria-label={`+ ${t('sidebar.newMenu')}`}
+                  aria-expanded={isMobileNewMenuOpen}
+                  onClick={() => setIsMobileNewMenuOpen(true)}
                 >
-                  <LayoutTemplate size={15} />
+                  <Plus size={16} />
+                  <span>{t('sidebar.newMenu')}</span>
+                  <ChevronDown size={14} />
                 </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="sidebar-icon-btn icon-only"
+                    title={t('sidebar.newNoteTitle')}
+                    aria-label={t('sidebar.newNote')}
+                    onClick={() => onCreateNote()}
+                  >
+                    <FilePlus size={16} />
+                  </button>
+                  {onOpenTemplateSelect && (
+                    <button
+                      type="button"
+                      className="sidebar-icon-btn icon-only"
+                      title={t('sidebar.newFromTemplate')}
+                      aria-label={t('sidebar.newFromTemplate')}
+                      onClick={() => onOpenTemplateSelect()}
+                    >
+                      <LayoutTemplate size={15} />
+                    </button>
+                  )}
+                </>
               )}
             </div>
             <div className="sidebar-action-right">
@@ -1149,7 +1167,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   </div>
                 )}
               </div>
-              {onCreateCanvas && (
+              {!isMobile && onCreateCanvas && (
                 <button
                   type="button"
                   className="sidebar-icon-btn icon-only"
@@ -1159,7 +1177,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   <WorkflowCanvasIcon size={15} />
                 </button>
               )}
-              {onCreateBase && (
+              {!isMobile && onCreateBase && (
                 <button
                   type="button"
                   className="sidebar-icon-btn icon-only"
@@ -1170,24 +1188,97 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   <Database size={15} />
                 </button>
               )}
-              <button
-                type="button"
-                className="sidebar-icon-btn icon-only"
-                title={t('sidebar.newFolder')}
-                onClick={() => onCreateFolder()}
-              >
-                <FolderPlus size={16} />
-              </button>
+              {!isMobile && (
+                <button
+                  type="button"
+                  className="sidebar-icon-btn icon-only"
+                  title={t('sidebar.newFolder')}
+                  onClick={() => onCreateFolder()}
+                >
+                  <FolderPlus size={16} />
+                </button>
+              )}
               <button
                 type="button"
                 className="sidebar-icon-btn icon-only"
                 title={t('sidebar.refreshTitle')}
+                aria-label={t('sidebar.refreshTitle')}
                 onClick={onRefresh}
               >
                 <RefreshCw size={15} />
               </button>
             </div>
           </div>
+
+          <BottomSheet
+            isOpen={isMobile && isMobileNewMenuOpen}
+            onClose={() => setIsMobileNewMenuOpen(false)}
+            title={`+ ${t('sidebar.newMenu')}`}
+          >
+            <div className="bottom-sheet-action-list">
+              <button
+                type="button"
+                className="bottom-sheet-action-row"
+                onClick={() => {
+                  setIsMobileNewMenuOpen(false);
+                  onCreateNote();
+                }}
+              >
+                <FilePlus size={18} />
+                <span>{t('sidebar.newNote')}</span>
+              </button>
+              {onOpenTemplateSelect && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-row"
+                  onClick={() => {
+                    setIsMobileNewMenuOpen(false);
+                    onOpenTemplateSelect();
+                  }}
+                >
+                  <LayoutTemplate size={18} />
+                  <span>{t('sidebar.newFromTemplate')}</span>
+                </button>
+              )}
+              {onCreateCanvas && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-row"
+                  onClick={() => {
+                    setIsMobileNewMenuOpen(false);
+                    onCreateCanvas();
+                  }}
+                >
+                  <WorkflowCanvasIcon size={18} />
+                  <span>{t('canvas.newCanvas')}</span>
+                </button>
+              )}
+              {onCreateBase && (
+                <button
+                  type="button"
+                  className="bottom-sheet-action-row"
+                  onClick={() => {
+                    setIsMobileNewMenuOpen(false);
+                    onCreateBase();
+                  }}
+                >
+                  <Database size={18} />
+                  <span>{t('sidebar.newBase')}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="bottom-sheet-action-row"
+                onClick={() => {
+                  setIsMobileNewMenuOpen(false);
+                  onCreateFolder();
+                }}
+              >
+                <FolderPlus size={18} />
+                <span>{t('sidebar.newFolder')}</span>
+              </button>
+            </div>
+          </BottomSheet>
 
           {/* Latching Favorites Panel */}
           {showFavoritesPanel && (

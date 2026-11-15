@@ -219,21 +219,33 @@ export function sanitizeFileName(name: string): string {
     .trim() || 'unnamed';
 }
 
-export function getUniqueInboxPath(fileName: string, existingPaths: Set<string>): string {
+export function formatLocalDatePrefix(timestampMs?: number): string {
+  const d = timestampMs ? new Date(timestampMs) : new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function getUniqueInboxPath(
+  fileName: string,
+  existingPaths: Set<string>,
+  datePrefix?: string
+): string {
   let cleanName = sanitizeFileName(fileName);
   if (!cleanName.toLowerCase().endsWith('.md')) cleanName += '.md';
-  let target = `Inbox/${cleanName}`;
+  if (datePrefix && !/^\d{4}-\d{2}-\d{2}(?:\s|_|-)/.test(cleanName)) {
+    cleanName = `${datePrefix} ${cleanName}`;
+  }
+  const target = `Inbox/${cleanName}`;
   if (!existingPaths.has(target)) return target;
 
   const baseWithoutExt = cleanName.replace(/\.md$/i, '');
-  const timestamp = Date.now();
-  target = `Inbox/${baseWithoutExt}_${timestamp}.md`;
-  let counter = 1;
-  while (existingPaths.has(target)) {
-    target = `Inbox/${baseWithoutExt}_${timestamp}_${counter}.md`;
+  let counter = 2;
+  while (existingPaths.has(`Inbox/${baseWithoutExt} (${counter}).md`)) {
     counter++;
   }
-  return target;
+  return `Inbox/${baseWithoutExt} (${counter}).md`;
 }
 
 export async function readBlobAsText(blob: Blob | any): Promise<string> {
@@ -345,6 +357,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
       const url = (item.url || '').trim();
       const files = Array.isArray(item.files) ? item.files : [];
       const itemTime = item.timestamp || Date.now();
+      const datePrefix = formatLocalDatePrefix(itemTime);
 
       if (files.length > 0) {
         for (const file of files) {
@@ -362,7 +375,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
             const mdContent = await readBlobAsText(file.blob);
             const rawBaseName = file.name
               ? file.name.replace(/\.(md|markdown|txt)$/i, '')
-              : title || `Note_${itemTime}`;
+              : title || 'Shared Note';
             const sanitizedTitle = sanitizeFileName(rawBaseName);
 
             // 5-second recent duplicate check
@@ -373,7 +386,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
               continue;
             }
 
-            const targetPath = getUniqueInboxPath(`${sanitizedTitle}.md`, existingFilePaths);
+            const targetPath = getUniqueInboxPath(`${sanitizedTitle}.md`, existingFilePaths, datePrefix);
 
             await api.saveNote({
               path: targetPath,
@@ -387,7 +400,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
           // Case B: PDF File (.pdf, application/pdf)
           else if (lowerName.endsWith('.pdf') || mimeType === 'application/pdf') {
             const rawTitle = file.name ? file.name.replace(/\.pdf$/i, '').trim() : title || 'Shared PDF';
-            const safeNoteBase = sanitizeFileName(rawTitle || `PDF_${itemTime}`);
+            const safeNoteBase = sanitizeFileName(rawTitle || 'Shared PDF');
             const safePdfName = sanitizeFileName(file.name || `document_${itemTime}.pdf`);
             const textSuffix = text ? `\n\n${text}` : '';
             const noteBody = `# ${rawTitle}\n\n![[attachments/${safePdfName}]]${textSuffix}\n`;
@@ -402,7 +415,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
 
             await saveAttachmentFile(file, safePdfName);
 
-            const notePath = getUniqueInboxPath(`${itemTime}_${safeNoteBase}.md`, existingFilePaths);
+            const notePath = getUniqueInboxPath(`${safeNoteBase}.md`, existingFilePaths, datePrefix);
 
             await api.saveNote({
               path: notePath,
@@ -434,7 +447,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
 
             await saveAttachmentFile(file, safeImgName);
 
-            const notePath = getUniqueInboxPath(`${itemTime}_${safeNoteBase}.md`, existingFilePaths);
+            const notePath = getUniqueInboxPath(`${safeNoteBase}.md`, existingFilePaths, datePrefix);
 
             await api.saveNote({
               path: notePath,
@@ -462,7 +475,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
 
             await saveAttachmentFile(file, safeFileName);
 
-            const notePath = getUniqueInboxPath(`${itemTime}_${safeNoteBase}.md`, existingFilePaths);
+            const notePath = getUniqueInboxPath(`${safeNoteBase}.md`, existingFilePaths, datePrefix);
 
             await api.saveNote({
               path: notePath,
@@ -489,7 +502,7 @@ export async function processIncomingShares(options?: ProcessShareOptions): Prom
           continue;
         }
 
-        const notePath = getUniqueInboxPath(`${itemTime}_${safeNoteBase}.md`, existingFilePaths);
+        const notePath = getUniqueInboxPath(`${safeNoteBase}.md`, existingFilePaths, datePrefix);
 
         await api.saveNote({
           path: notePath,

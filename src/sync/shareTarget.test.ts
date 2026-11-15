@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   sanitizeFileName,
+  formatLocalDatePrefix,
   getUniqueInboxPath,
   readBlobAsText,
   cleanShareUrlQuery,
@@ -70,16 +71,19 @@ describe('Web Share Target - Filename & Path Utilities', () => {
     expect(sanitizeFileName('Normal Name.md')).toBe('Normal Name.md');
   });
 
-  it('4. generates unique Inbox note paths without collisions', () => {
-    const existing = new Set<string>(['Inbox/Test Note.md']);
+  it('4. generates unique Inbox note paths with YYYY-MM-DD prefix and (2), (3) increments on same-day collisions', () => {
+    const existing = new Set<string>([
+      'Inbox/2026-11-15 Test Note.md',
+      'Inbox/2026-11-15 Test Note (2).md',
+    ]);
 
-    // Unique name
-    const newPath = getUniqueInboxPath('Another Note', existing);
-    expect(newPath).toBe('Inbox/Another Note.md');
+    // Unique name with date prefix
+    const newPath = getUniqueInboxPath('Another Note', existing, '2026-11-15');
+    expect(newPath).toBe('Inbox/2026-11-15 Another Note.md');
 
-    // Colliding name
-    const collidingPath = getUniqueInboxPath('Test Note', existing);
-    expect(collidingPath).toMatch(/^Inbox\/Test Note_\d+\.md$/);
+    // Colliding name increments (2), (3)
+    const collidingPath = getUniqueInboxPath('Test Note', existing, '2026-11-15');
+    expect(collidingPath).toBe('Inbox/2026-11-15 Test Note (3).md');
   });
 
   it('5. reads Blob content as UTF-8 string', async () => {
@@ -175,14 +179,16 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     expect(sharesBefore.length).toBe(1);
 
     const openNote = vi.fn();
+    const expectedPrefix = formatLocalDatePrefix(payload.timestamp);
+    const expectedPath = `Inbox/${expectedPrefix} Project Discussion.md`;
     const createdPath = await processIncomingShares({ openNote });
 
-    expect(createdPath).toBe('Inbox/Project Discussion.md');
+    expect(createdPath).toBe(expectedPath);
     expect(createdFolders).toContain('Inbox');
     expect(savedNotes.length).toBe(1);
-    expect(savedNotes[0].path).toBe('Inbox/Project Discussion.md');
+    expect(savedNotes[0].path).toBe(expectedPath);
     expect(savedNotes[0].body).toContain('# Shared Meeting Notes');
-    expect(openNote).toHaveBeenCalledWith('Inbox/Project Discussion.md');
+    expect(openNote).toHaveBeenCalledWith(expectedPath);
 
     // Should be removed from IndexedDB after successful processing
     const sharesAfter = await getIncomingShares();
@@ -211,7 +217,7 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     const openNote = vi.fn();
     const createdPath = await processIncomingShares({ openNote });
 
-    expect(createdPath).toMatch(/^Inbox\/\d+_Whitepaper\.md$/);
+    expect(createdPath).toMatch(/^Inbox\/\d{4}-\d{2}-\d{2} Whitepaper\.md$/);
     expect(uploadedAttachments.length).toBe(1);
     expect(uploadedAttachments[0].name).toBe('Whitepaper.pdf');
 
@@ -245,7 +251,7 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     const openNote = vi.fn();
     const createdPath = await processIncomingShares({ openNote });
 
-    expect(createdPath).toMatch(/^Inbox\/\d+_Architektur Skizze\.md$/);
+    expect(createdPath).toMatch(/^Inbox\/\d{4}-\d{2}-\d{2} Architektur Skizze\.md$/);
     expect(uploadedAttachments.length).toBe(1);
     expect(uploadedAttachments[0].name).toBe('diagram.png');
 
@@ -272,7 +278,7 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     const openNote = vi.fn();
     const createdPath = await processIncomingShares({ openNote });
 
-    expect(createdPath).toMatch(/^Inbox\/\d+_Interessanter Artikel\.md$/);
+    expect(createdPath).toMatch(/^Inbox\/\d{4}-\d{2}-\d{2} Interessanter Artikel\.md$/);
     expect(uploadedAttachments.length).toBe(0);
 
     expect(savedNotes.length).toBe(1);
@@ -305,7 +311,8 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     const createdPath = await processIncomingShares({ openNote });
 
     expect(savedNotes.length).toBe(2);
-    expect(savedNotes.some((n) => n.path === 'Inbox/Guide.md')).toBe(true);
+    const expectedPrefix = formatLocalDatePrefix(payload.timestamp);
+    expect(savedNotes.some((n) => n.path === `Inbox/${expectedPrefix} Guide.md`)).toBe(true);
     expect(savedNotes.some((n) => n.body.includes('![[attachments/photo.jpg]]'))).toBe(true);
     expect(openNote).toHaveBeenCalled();
   });
@@ -329,11 +336,12 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     ]);
 
     // Exactly one call should process the share, the other should yield null
+    const expectedConcurrentPath = `Inbox/${formatLocalDatePrefix(1700000000000)} Concurrent Share.md`;
     expect(savedNotes.length).toBe(1);
-    expect(savedNotes[0].path).toBe('Inbox/1700000000000_Concurrent Share.md');
+    expect(savedNotes[0].path).toBe(expectedConcurrentPath);
     const resultPaths = [path1, path2].filter(Boolean);
     expect(resultPaths.length).toBe(1);
-    expect(resultPaths[0]).toBe('Inbox/1700000000000_Concurrent Share.md');
+    expect(resultPaths[0]).toBe(expectedConcurrentPath);
   });
 
   it('13. deduplicates identical share items queued in the same batch', async () => {
@@ -361,7 +369,7 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
 
     // Despite two items in the queue, only one unique note is created
     expect(savedNotes.length).toBe(1);
-    expect(createdPath).toBe('Inbox/1700000000001_Batch Duplicate.md');
+    expect(createdPath).toBe(`Inbox/${formatLocalDatePrefix(1700000000001)} Batch Duplicate.md`);
   });
 
   it('14. guards against duplicate note creation within 5 seconds for identical title and content', async () => {
@@ -377,7 +385,7 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     await saveIncomingShare(payload1);
     const firstPath = await processIncomingShares();
     expect(savedNotes.length).toBe(1);
-    expect(firstPath).toBe('Inbox/1700000000010_Rapid Fire Share.md');
+    expect(firstPath).toBe(`Inbox/${formatLocalDatePrefix(1700000000010)} Rapid Fire Share.md`);
 
     // A second identical share arrives 100ms later (simulating Android sending duplicate intent)
     const payload2: SharedIncomingPayload = {
@@ -397,12 +405,12 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
     expect(secondPath).toBe(firstPath);
   });
 
-  it('15. generates deterministic note filename based on item.timestamp rather than fluctuating Date.now()', async () => {
+  it('15. generates deterministic note filename based on YYYY-MM-DD local date prefix rather than Unix timestamp', async () => {
     const fixedTimestamp = 1699999999999;
     const payload: SharedIncomingPayload = {
       id: 111,
       title: 'Deterministic Note',
-      text: 'Check timestamp determinism',
+      text: 'Check date prefix determinism',
       url: '',
       files: [],
       timestamp: fixedTimestamp,
@@ -410,8 +418,9 @@ describe('Web Share Target - Ingest Handler (Cases A, B, C, D)', () => {
 
     await saveIncomingShare(payload);
     const createdPath = await processIncomingShares();
+    const expectedPath = `Inbox/${formatLocalDatePrefix(fixedTimestamp)} Deterministic Note.md`;
 
-    expect(createdPath).toBe(`Inbox/${fixedTimestamp}_Deterministic Note.md`);
-    expect(savedNotes[0].path).toBe(`Inbox/${fixedTimestamp}_Deterministic Note.md`);
+    expect(createdPath).toBe(expectedPath);
+    expect(savedNotes[0].path).toBe(expectedPath);
   });
 });
