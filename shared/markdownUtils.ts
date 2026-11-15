@@ -25,6 +25,9 @@ export function inferPropertyType(key: string, value: unknown): PropertyType {
       return 'date';
     }
   }
+  if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+    return 'object';
+  }
   if (lowerKey.includes('date') || lowerKey === 'created' || lowerKey === 'updated' || lowerKey === 'fällig' || lowerKey === 'datum') {
     return 'date';
   }
@@ -59,6 +62,12 @@ export function normalizePropertyValue(key: string, value: unknown, type: Proper
       return value.toISOString().slice(0, 10);
     }
     return value ? String(value) : '';
+  }
+  if (type === 'object') {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      return value;
+    }
+    return {};
   }
   return value === null || value === undefined ? '' : String(value);
 }

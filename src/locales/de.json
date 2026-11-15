@@ -621,5 +621,22 @@
     "insertCallout": "Callout einfügen",
     "addFavorite": "Zu Favoriten hinzufügen",
     "removeFavorite": "Aus Favoriten entfernen"
+  },
+  "table": {
+    "addRow": "+ Zeile",
+    "addColumn": "+ Spalte",
+    "insertRowAbove": "Zeile oberhalb einfügen",
+    "insertRowBelow": "Zeile unterhalb einfügen",
+    "deleteRow": "Zeile löschen",
+    "insertColLeft": "Spalte links einfügen",
+    "insertColRight": "Spalte rechts einfügen",
+    "deleteCol": "Spalte löschen",
+    "alignLeft": "Linksbündig",
+    "alignCenter": "Zentriert",
+    "alignRight": "Rechtsbündig",
+    "sortAsc": "Aufsteigend sortieren",
+    "sortDesc": "Absteigend sortieren",
+    "resizeColumn": "Ziehen zum Ändern der Spaltenbreite",
+    "cellActions": "Zellenaktionen"
   }
 }

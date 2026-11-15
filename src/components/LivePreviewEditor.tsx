@@ -41,6 +41,24 @@ import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
 import { renderReadingHtml } from '../utils/readingMode';
+import {
+  parseMarkdownTable,
+  serializeMarkdownTable,
+  insertTableRowAt,
+  deleteTableRowAt,
+  insertTableColumnAt,
+  deleteTableColumnAt,
+  setTableColumnAlignment,
+  sortMarkdownTable,
+  getTableHeaderSignature,
+  splitTableCells,
+  TABLE_SEPARATOR_REGEX,
+  MIN_TABLE_COL_WIDTH,
+  type TableAlignment,
+  type SortDirection,
+  type TableWidthsMap,
+  type ParsedMarkdownTable,
+} from '../../shared/markdownTableUtils';
 
 let mermaidModulePromise: Promise<typeof import('mermaid').default> | null = null;
 async function loadAndInitMermaid(isDark: boolean) {
@@ -78,6 +96,7 @@ if (typeof window !== 'undefined' && typeof DOMPurify?.addHook === 'function') {
 }
 
 export const setBlockModeEffect = StateEffect.define<{ pos: number; mode: 'preview' | 'code' }>();
+export const setTableWidthsEffect = StateEffect.define<TableWidthsMap>();
 
 export const blockModesField = StateField.define<Map<number, 'preview' | 'code'>>({
   create() {
@@ -250,27 +269,13 @@ export interface LivePreviewEditorProps {
   onSendToTargetNote?: () => void;
   onOpenNote?: (path: string) => void;
   onRequestEditMode?: () => void;
+  tableWidths?: TableWidthsMap;
+  onUpdateTableWidths?: (headerSignature: string, widths: number[], currentBody?: string) => void;
+  onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void;
 }
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
-const TABLE_SEPARATOR_REGEX = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
 const isTableRow = (text: string) => text.includes('|') && text.trim().length > 0;
-
-function splitTableCells(rowText: string): string[] {
-  let trimmed = rowText.trim();
-  if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
-  if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
-  return trimmed.split('|').map((c) => c.trim());
-}
-
-function parseAlignments(sepText: string): ('left' | 'center' | 'right')[] {
-  return splitTableCells(sepText).map((cell) => {
-    const c = cell.trim();
-    if (c.startsWith(':') && c.endsWith(':')) return 'center';
-    if (c.endsWith(':')) return 'right';
-    return 'left';
-  });
-}
 
 function formatCellInlineHtml(cell: string, notePath: string): string {
   const escaped = cell
@@ -279,6 +284,8 @@ function formatCellInlineHtml(cell: string, notePath: string): string {
     .replace(/>/g, '&gt;');
 
   const html = escaped
+    // Preserve explicit <br> line breaks in cells
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br />')
     // ![[image]]
     .replace(/!\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g, (_m, t, alt) => {
       const target = String(t).trim();
@@ -317,94 +324,693 @@ function formatCellInlineHtml(cell: string, notePath: string): string {
   });
 }
 
+const pendingTableFocusMap = new WeakMap<
+  EditorView,
+  { startPos: number; row: number; col: number }
+>();
+const tableSortStateMap = new WeakMap<
+  EditorView,
+  Map<string, { col: number; dir: SortDirection }>
+>();
+
+function closeActiveTableContextMenu() {
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('.cm-table-context-menu').forEach((el) => el.remove());
+}
+
+function openTableCellContextMenu(params: {
+  x: number;
+  y: number;
+  row: number;
+  col: number;
+  colCount: number;
+  currentAlignment: TableAlignment;
+  t: (key: string) => string;
+  onAction: (action: string) => void;
+}) {
+  closeActiveTableContextMenu();
+  const { x, y, row, colCount, currentAlignment, t, onAction } = params;
+
+  const menu = document.createElement('div');
+  menu.className = 'cm-table-context-menu';
+  menu.setAttribute('role', 'menu');
+
+  const addItem = (
+    label: string,
+    action: string,
+    opts?: { disabled?: boolean; danger?: boolean; active?: boolean }
+  ) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cm-table-context-menu-item';
+    if (opts?.danger) btn.classList.add('danger');
+    if (opts?.active) btn.classList.add('active');
+    if (opts?.disabled) btn.disabled = true;
+    btn.textContent = opts?.active ? `✓ ${label}` : label;
+    btn.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeActiveTableContextMenu();
+      onAction(action);
+    });
+    menu.appendChild(btn);
+  };
+
+  const addDivider = () => {
+    const hr = document.createElement('div');
+    hr.className = 'cm-table-context-menu-divider';
+    menu.appendChild(hr);
+  };
+
+  addItem(t('table.insertRowAbove'), 'insertRowAbove', { disabled: row < 0 });
+  addItem(t('table.insertRowBelow'), 'insertRowBelow');
+  addItem(t('table.deleteRow'), 'deleteRow', { disabled: row < 0, danger: true });
+  addDivider();
+  addItem(t('table.insertColLeft'), 'insertColLeft');
+  addItem(t('table.insertColRight'), 'insertColRight');
+  addItem(t('table.deleteCol'), 'deleteCol', { disabled: colCount <= 1, danger: true });
+  addDivider();
+  addItem(t('table.alignLeft'), 'alignLeft', { active: currentAlignment === 'left' });
+  addItem(t('table.alignCenter'), 'alignCenter', { active: currentAlignment === 'center' });
+  addItem(t('table.alignRight'), 'alignRight', { active: currentAlignment === 'right' });
+
+  document.body.appendChild(menu);
+
+  // Clamp to viewport
+  const rect = menu.getBoundingClientRect();
+  const clampedX = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+  const clampedY = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+  menu.style.left = `${clampedX}px`;
+  menu.style.top = `${clampedY}px`;
+
+  const onOutside = (ev: MouseEvent) => {
+    if (!menu.contains(ev.target as Node)) {
+      closeActiveTableContextMenu();
+      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener('keydown', onEsc, true);
+    }
+  };
+  const onEsc = (ev: KeyboardEvent) => {
+    if (ev.key === 'Escape') {
+      closeActiveTableContextMenu();
+      document.removeEventListener('mousedown', onOutside, true);
+      document.removeEventListener('keydown', onEsc, true);
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener('mousedown', onOutside, true);
+    document.addEventListener('keydown', onEsc, true);
+  }, 0);
+}
+
 class TableWidget extends WidgetType {
   constructor(
     readonly rawLines: string[],
-    readonly linePositions: number[],
+    readonly tableFrom: number,
+    readonly tableTo: number,
     readonly notePath: string,
-    readonly onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void
+    readonly onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void,
+    readonly t: (key: string) => string,
+    readonly colWidths?: number[],
+    readonly onUpdateTableWidths?: (headerSignature: string, widths: number[], currentBody?: string) => void,
+    readonly onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void
   ) {
     super();
   }
 
   eq(other: TableWidget) {
-    return (
-      other.notePath === this.notePath &&
-      other.rawLines.length === this.rawLines.length &&
-      other.rawLines.every((l, idx) => l === this.rawLines[idx]) &&
-      other.linePositions[0] === this.linePositions[0]
-    );
+    if (
+      other.notePath !== this.notePath ||
+      other.tableFrom !== this.tableFrom ||
+      other.rawLines.length !== this.rawLines.length ||
+      !other.rawLines.every((l, idx) => l === this.rawLines[idx])
+    ) {
+      return false;
+    }
+    const aW = this.colWidths || [];
+    const bW = other.colWidths || [];
+    if (aW.length !== bW.length) return false;
+    return aW.every((w, i) => w === bW[i]);
+  }
+
+  ignoreEvent() {
+    return true;
   }
 
   toDOM(view: EditorView) {
+    const parsed = parseMarkdownTable(this.rawLines);
+    const headerSignature = getTableHeaderSignature(parsed.headers);
+    const t = this.t;
+
     const wrapper = document.createElement('div');
     wrapper.className = 'cm-lp-table-widget';
+    wrapper.tabIndex = -1;
+
+    const frame = document.createElement('div');
+    frame.className = 'cm-table-interactive-frame';
+
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'cm-table-scroll-container';
 
     const table = document.createElement('table');
-    table.className = 'knowmesh-table obsidian-table';
+    table.className = 'knowmesh-table obsidian-table cm-interactive-table';
 
-    const headerCells = splitTableCells(this.rawLines[0] || '');
-    const alignments = parseAlignments(this.rawLines[1] || '');
-    const colCount = Math.max(headerCells.length, alignments.length);
+    let colgroup: HTMLTableColElement | null = null;
+    const applyColWidths = (widths: number[]) => {
+      if (!colgroup) {
+        colgroup = document.createElement('colgroup');
+        table.insertBefore(colgroup, table.firstChild);
+      }
+      colgroup.innerHTML = '';
+      table.style.tableLayout = 'fixed';
+      for (let c = 0; c < parsed.colCount; c++) {
+        const colEl = document.createElement('col');
+        const w = widths[c] ? Math.max(MIN_TABLE_COL_WIDTH, Math.round(widths[c])) : 140;
+        colEl.style.width = `${w}px`;
+        colgroup.appendChild(colEl);
+      }
+    };
 
-    const thead = document.createElement('thead');
-    const headTr = document.createElement('tr');
-    for (let c = 0; c < colCount; c++) {
-      const th = document.createElement('th');
-      th.style.textAlign = alignments[c] || 'left';
-      th.innerHTML = formatCellInlineHtml(headerCells[c] ?? '', this.notePath);
-      headTr.appendChild(th);
+    if (this.colWidths && this.colWidths.length > 0) {
+      applyColWidths(this.colWidths);
     }
-    headTr.addEventListener('mousedown', (e) => {
-      const linkEl = (e.target as HTMLElement).closest('[data-wikilink]');
-      if (linkEl) {
-        if (e.altKey) e.preventDefault();
-        e.preventDefault();
-        e.stopPropagation();
-        this.onNavigate(linkEl.getAttribute('data-wikilink') || '', e);
+
+    const dispatchTableUpdate = (
+      nextTable: ParsedMarkdownTable,
+      focusTarget?: { row: number; col: number },
+      oldSigForRename?: string
+    ) => {
+      const serialized = serializeMarkdownTable(nextTable);
+      if (focusTarget) {
+        pendingTableFocusMap.set(view, {
+          startPos: this.tableFrom,
+          row: focusTarget.row,
+          col: focusTarget.col,
+        });
+      }
+      const nextBody =
+        view.state.doc.sliceString(0, this.tableFrom) +
+        serialized +
+        view.state.doc.sliceString(this.tableTo);
+
+      view.dispatch({
+        changes: { from: this.tableFrom, to: this.tableTo, insert: serialized },
+      });
+
+      if (oldSigForRename && this.onRenameTableWidthSignature) {
+        const newSig = getTableHeaderSignature(nextTable.headers);
+        if (oldSigForRename !== newSig) {
+          this.onRenameTableWidthSignature(oldSigForRename, newSig, nextBody);
+        }
+      }
+    };
+
+    // Track cell content elements by [row][col] (row === -1 is header)
+    const cellElements = new Map<string, HTMLDivElement>();
+    let activeEditKey: string | null = null;
+
+    const getRawCellValue = (row: number, col: number): string =>
+      row === -1 ? (parsed.headers[col] ?? '') : (parsed.rows[row]?.[col] ?? '');
+
+    const activateCell = (row: number, col: number) => {
+      const clampedCol = Math.max(0, Math.min(parsed.colCount - 1, col));
+      const clampedRow = Math.max(-1, Math.min(parsed.rows.length - 1, row));
+      const key = `${clampedRow}:${clampedCol}`;
+      const cellEl = cellElements.get(key);
+      if (!cellEl) return;
+      if (activeEditKey === key && cellEl.isContentEditable) {
+        cellEl.focus();
         return;
       }
-      e.preventDefault();
-      view.dispatch({
-        selection: { anchor: this.linePositions[0] },
-        scrollIntoView: false,
-      });
-      view.focus();
-    });
-    thead.appendChild(headTr);
-    table.appendChild(thead);
 
-    const tbody = document.createElement('tbody');
-    for (let r = 2; r < this.rawLines.length; r++) {
-      const rowCells = splitTableCells(this.rawLines[r]);
-      const tr = document.createElement('tr');
-      for (let c = 0; c < colCount; c++) {
-        const td = document.createElement('td');
-        td.style.textAlign = alignments[c] || 'left';
-        td.innerHTML = formatCellInlineHtml(rowCells[c] ?? '', this.notePath);
-        tr.appendChild(td);
+      activeEditKey = key;
+      const tdOrTh = cellEl.closest('th, td');
+      tdOrTh?.classList.add('is-editing');
+
+      const rawVal = getRawCellValue(clampedRow, clampedCol);
+      cellEl.contentEditable = 'true';
+      cellEl.textContent = rawVal.replace(/<br\s*\/?>/gi, '\n');
+      cellEl.focus();
+
+      // Place caret at end of text
+      try {
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(cellEl);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } catch {
+        // Ignore selection errors in headless test environments
       }
-      const targetPos = this.linePositions[r] ?? this.linePositions[0];
-      tr.addEventListener('mousedown', (e) => {
+    };
+
+    const readEditableCellText = (cellEl: HTMLDivElement): string => {
+      const raw = typeof cellEl.innerText === 'string' ? cellEl.innerText : (cellEl.textContent || '');
+      return raw
+        .replace(/\r\n/g, '\n')
+        .replace(/\n$/, '')
+        .replace(/\n/g, '<br>')
+        .trim();
+    };
+
+    const commitCell = (
+      row: number,
+      col: number,
+      cellEl: HTMLDivElement,
+      moveNext?: { row: number; col: number; appendRow?: boolean }
+    ) => {
+      const key = `${row}:${col}`;
+      if (activeEditKey !== key) return;
+      activeEditKey = null;
+
+      const tdOrTh = cellEl.closest('th, td');
+      tdOrTh?.classList.remove('is-editing');
+      cellEl.contentEditable = 'false';
+
+      const newVal = readEditableCellText(cellEl);
+      const oldVal = getRawCellValue(row, col).trim();
+      const changed = newVal !== oldVal;
+
+      cellEl.innerHTML = formatCellInlineHtml(newVal, this.notePath);
+
+      if (changed || moveNext?.appendRow) {
+        const nextHeaders = [...parsed.headers];
+        const nextRows = parsed.rows.map((r) => [...r]);
+        const oldSig = row === -1 ? headerSignature : undefined;
+
+        if (row === -1) {
+          nextHeaders[col] = newVal;
+        } else if (nextRows[row]) {
+          nextRows[row][col] = newVal;
+        }
+
+        let nextTable: ParsedMarkdownTable = {
+          ...parsed,
+          headers: nextHeaders,
+          rows: nextRows,
+        };
+        if (moveNext?.appendRow) {
+          nextTable = insertTableRowAt(nextTable, nextTable.rows.length);
+        }
+
+        dispatchTableUpdate(
+          nextTable,
+          moveNext ? { row: moveNext.row, col: moveNext.col } : undefined,
+          oldSig
+        );
+      } else if (moveNext) {
+        activateCell(moveNext.row, moveNext.col);
+      }
+    };
+
+    const handleCellAction = (action: string, row: number, col: number) => {
+      let nextTable = parsed;
+      let focusTarget: { row: number; col: number } | undefined;
+      let oldSigForRename: string | undefined;
+
+      switch (action) {
+        case 'insertRowAbove':
+          if (row >= 0) {
+            nextTable = insertTableRowAt(parsed, row);
+            focusTarget = { row, col };
+          }
+          break;
+        case 'insertRowBelow': {
+          const insertIdx = row < 0 ? 0 : row + 1;
+          nextTable = insertTableRowAt(parsed, insertIdx);
+          focusTarget = { row: insertIdx, col };
+          break;
+        }
+        case 'deleteRow':
+          if (row >= 0) {
+            nextTable = deleteTableRowAt(parsed, row);
+          }
+          break;
+        case 'insertColLeft':
+          oldSigForRename = headerSignature;
+          nextTable = insertTableColumnAt(parsed, col, '');
+          focusTarget = { row: -1, col };
+          break;
+        case 'insertColRight':
+          oldSigForRename = headerSignature;
+          nextTable = insertTableColumnAt(parsed, col + 1, '');
+          focusTarget = { row: -1, col: col + 1 };
+          break;
+        case 'deleteCol':
+          if (parsed.colCount > 1) {
+            oldSigForRename = headerSignature;
+            nextTable = deleteTableColumnAt(parsed, col);
+          }
+          break;
+        case 'alignLeft':
+          nextTable = setTableColumnAlignment(parsed, col, 'left');
+          break;
+        case 'alignCenter':
+          nextTable = setTableColumnAlignment(parsed, col, 'center');
+          break;
+        case 'alignRight':
+          nextTable = setTableColumnAlignment(parsed, col, 'right');
+          break;
+      }
+
+      if (nextTable !== parsed) {
+        dispatchTableUpdate(nextTable, focusTarget, oldSigForRename);
+      }
+    };
+
+    const attachCellEvents = (
+      cellEl: HTMLDivElement,
+      containerEl: HTMLTableCellElement,
+      row: number,
+      col: number
+    ) => {
+      cellElements.set(`${row}:${col}`, cellEl);
+
+      containerEl.addEventListener('mousedown', (e) => {
+        if ((e.target as HTMLElement).closest('.col-resize-handle, .cm-table-sort-btn, .cm-table-cell-menu-btn')) {
+          return;
+        }
         const linkEl = (e.target as HTMLElement).closest('[data-wikilink]');
-        if (linkEl) {
+        if (linkEl && activeEditKey !== `${row}:${col}`) {
           if (e.altKey) e.preventDefault();
           e.preventDefault();
           e.stopPropagation();
           this.onNavigate(linkEl.getAttribute('data-wikilink') || '', e);
           return;
         }
-        e.preventDefault();
-        view.dispatch({
-          selection: { anchor: targetPos },
-          scrollIntoView: false,
-        });
-        view.focus();
+        if (e.button === 2) return; // right-click handled by contextmenu
+        e.stopPropagation();
+        if (activeEditKey !== `${row}:${col}`) {
+          e.preventDefault();
+          activateCell(row, col);
+        }
       });
+
+      containerEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openTableCellContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          row,
+          col,
+          colCount: parsed.colCount,
+          currentAlignment: parsed.alignments[col] || 'left',
+          t,
+          onAction: (action) => handleCellAction(action, row, col),
+        });
+      });
+
+      cellEl.addEventListener('blur', () => {
+        commitCell(row, col, cellEl);
+      });
+
+      cellEl.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          if (row === -1) {
+            if (parsed.rows.length > 0) {
+              commitCell(row, col, cellEl, { row: 0, col });
+            } else {
+              commitCell(row, col, cellEl, { row: 0, col, appendRow: true });
+            }
+          } else if (row === parsed.rows.length - 1) {
+            commitCell(row, col, cellEl, { row: row + 1, col, appendRow: true });
+          } else {
+            commitCell(row, col, cellEl, { row: row + 1, col });
+          }
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            if (col > 0) {
+              commitCell(row, col, cellEl, { row, col: col - 1 });
+            } else if (row > 0) {
+              commitCell(row, col, cellEl, { row: row - 1, col: parsed.colCount - 1 });
+            } else if (row === 0) {
+              commitCell(row, col, cellEl, { row: -1, col: parsed.colCount - 1 });
+            }
+          } else {
+            if (col < parsed.colCount - 1) {
+              commitCell(row, col, cellEl, { row, col: col + 1 });
+            } else if (row === -1) {
+              if (parsed.rows.length > 0) {
+                commitCell(row, col, cellEl, { row: 0, col: 0 });
+              } else {
+                commitCell(row, col, cellEl, { row: 0, col: 0, appendRow: true });
+              }
+            } else if (row < parsed.rows.length - 1) {
+              commitCell(row, col, cellEl, { row: row + 1, col: 0 });
+            } else {
+              commitCell(row, col, cellEl, { row: row + 1, col: 0, appendRow: true });
+            }
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          commitCell(row, col, cellEl);
+          wrapper.focus({ preventScroll: true });
+        }
+      });
+    };
+
+    // Sort state lookup for this view + table
+    let viewSortMap = tableSortStateMap.get(view);
+    if (!viewSortMap) {
+      viewSortMap = new Map();
+      tableSortStateMap.set(view, viewSortMap);
+    }
+    const currentSort = viewSortMap.get(headerSignature);
+
+    // Header Row
+    const thead = document.createElement('thead');
+    const headTr = document.createElement('tr');
+    const thElements: HTMLTableCellElement[] = [];
+
+    for (let c = 0; c < parsed.colCount; c++) {
+      const th = document.createElement('th');
+      th.style.textAlign = parsed.alignments[c] || 'left';
+      th.dataset.row = '-1';
+      th.dataset.col = String(c);
+
+      const inner = document.createElement('div');
+      inner.className = 'cm-table-th-inner';
+
+      const cellContent = document.createElement('div');
+      cellContent.className = 'cm-table-cell-content';
+      cellContent.innerHTML = formatCellInlineHtml(parsed.headers[c] ?? '', this.notePath);
+
+      // Sort trigger button
+      const sortBtn = document.createElement('button');
+      sortBtn.type = 'button';
+      sortBtn.className = 'cm-table-sort-btn';
+      const isSortedCol = currentSort?.col === c;
+      if (isSortedCol) {
+        sortBtn.classList.add('is-active');
+        sortBtn.textContent = currentSort.dir === 'asc' ? '↑' : '↓';
+        sortBtn.title = currentSort.dir === 'asc' ? t('table.sortDesc') : t('table.sortAsc');
+      } else {
+        sortBtn.textContent = '⇅';
+        sortBtn.title = t('table.sortAsc');
+      }
+      sortBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      sortBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const nextDir: SortDirection =
+          currentSort && currentSort.col === c && currentSort.dir === 'asc' ? 'desc' : 'asc';
+        viewSortMap!.set(headerSignature, { col: c, dir: nextDir });
+        const sortedTable = sortMarkdownTable(parsed, c, nextDir);
+        dispatchTableUpdate(sortedTable);
+      });
+
+      // Cell menu trigger (⋮)
+      const menuBtn = document.createElement('button');
+      menuBtn.type = 'button';
+      menuBtn.className = 'cm-table-cell-menu-btn';
+      menuBtn.textContent = '⋮';
+      menuBtn.title = t('table.cellActions');
+      menuBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      menuBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = menuBtn.getBoundingClientRect();
+        openTableCellContextMenu({
+          x: rect.left,
+          y: rect.bottom + 4,
+          row: -1,
+          col: c,
+          colCount: parsed.colCount,
+          currentAlignment: parsed.alignments[c] || 'left',
+          t,
+          onAction: (action) => handleCellAction(action, -1, c),
+        });
+      });
+
+      inner.appendChild(cellContent);
+      inner.appendChild(sortBtn);
+      inner.appendChild(menuBtn);
+      th.appendChild(inner);
+
+      // Column Resize Handle
+      const resizeHandle = document.createElement('div');
+      resizeHandle.className = 'col-resize-handle';
+      resizeHandle.title = t('table.resizeColumn');
+      resizeHandle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const measuredWidths = thElements.map((el, idx) => {
+          const existing = this.colWidths?.[idx];
+          const rectW = el.getBoundingClientRect().width;
+          return Math.max(MIN_TABLE_COL_WIDTH, Math.round(rectW || existing || 140));
+        });
+        const startColWidth = measuredWidths[c];
+        applyColWidths(measuredWidths);
+        resizeHandle.classList.add('resizing');
+
+        const onMouseMove = (moveEv: MouseEvent) => {
+          const deltaX = moveEv.clientX - startX;
+          measuredWidths[c] = Math.max(MIN_TABLE_COL_WIDTH, Math.round(startColWidth + deltaX));
+          applyColWidths(measuredWidths);
+        };
+
+        const onMouseUp = () => {
+          resizeHandle.classList.remove('resizing');
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+          if (this.onUpdateTableWidths) {
+            this.onUpdateTableWidths(headerSignature, [...measuredWidths], view.state.doc.toString());
+          }
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+      th.appendChild(resizeHandle);
+
+      attachCellEvents(cellContent, th, -1, c);
+      thElements.push(th);
+      headTr.appendChild(th);
+    }
+    thead.appendChild(headTr);
+    table.appendChild(thead);
+
+    // Body Rows
+    const tbody = document.createElement('tbody');
+    for (let r = 0; r < parsed.rows.length; r++) {
+      const rowCells = parsed.rows[r];
+      const tr = document.createElement('tr');
+      for (let c = 0; c < parsed.colCount; c++) {
+        const td = document.createElement('td');
+        td.style.textAlign = parsed.alignments[c] || 'left';
+        td.dataset.row = String(r);
+        td.dataset.col = String(c);
+
+        const inner = document.createElement('div');
+        inner.className = 'cm-table-td-inner';
+
+        const cellContent = document.createElement('div');
+        cellContent.className = 'cm-table-cell-content';
+        cellContent.innerHTML = formatCellInlineHtml(rowCells[c] ?? '', this.notePath);
+
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'cm-table-cell-menu-btn';
+        menuBtn.textContent = '⋮';
+        menuBtn.title = t('table.cellActions');
+        menuBtn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        menuBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const rect = menuBtn.getBoundingClientRect();
+          openTableCellContextMenu({
+            x: rect.left,
+            y: rect.bottom + 4,
+            row: r,
+            col: c,
+            colCount: parsed.colCount,
+            currentAlignment: parsed.alignments[c] || 'left',
+            t,
+            onAction: (action) => handleCellAction(action, r, c),
+          });
+        });
+
+        inner.appendChild(cellContent);
+        inner.appendChild(menuBtn);
+        td.appendChild(inner);
+
+        attachCellEvents(cellContent, td, r, c);
+        tr.appendChild(td);
+      }
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
-    wrapper.appendChild(table);
+    scrollContainer.appendChild(table);
+    frame.appendChild(scrollContainer);
+
+    // Hover Quick-Add Column Bar (right edge)
+    const addColBar = document.createElement('button');
+    addColBar.type = 'button';
+    addColBar.className = 'cm-table-add-col-bar';
+    addColBar.title = t('table.addColumn');
+    addColBar.innerHTML = `<span>${t('table.addColumn')}</span>`;
+    addColBar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    addColBar.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextTable = insertTableColumnAt(parsed, parsed.colCount, '');
+      dispatchTableUpdate(nextTable, { row: -1, col: parsed.colCount }, headerSignature);
+    });
+    frame.appendChild(addColBar);
+
+    wrapper.appendChild(frame);
+
+    // Hover Quick-Add Row Bar (bottom edge)
+    const addRowBar = document.createElement('button');
+    addRowBar.type = 'button';
+    addRowBar.className = 'cm-table-add-row-bar';
+    addRowBar.title = t('table.addRow');
+    addRowBar.textContent = t('table.addRow');
+    addRowBar.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    addRowBar.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextTable = insertTableRowAt(parsed, parsed.rows.length);
+      dispatchTableUpdate(nextTable, { row: parsed.rows.length, col: 0 });
+    });
+    wrapper.appendChild(addRowBar);
+
+    // Restore pending cell focus after CodeMirror re-renders the widget
+    const pendingFocus = pendingTableFocusMap.get(view);
+    if (pendingFocus && pendingFocus.startPos === this.tableFrom) {
+      pendingTableFocusMap.delete(view);
+      requestAnimationFrame(() => {
+        activateCell(pendingFocus.row, pendingFocus.col);
+      });
+    }
+
     return wrapper;
   }
 }
@@ -1170,7 +1776,10 @@ function buildLivePreviewDecorations(
   onUpdateTag: (newTag: string, from: number, to: number) => void,
   onToggleMode: (pos: number, mode: 'preview' | 'code') => void,
   allNotes?: { path: string; name: string; basename: string }[],
-  t?: (key: string) => string
+  t?: (key: string) => string,
+  getTableWidths?: () => TableWidthsMap,
+  onUpdateTableWidths?: (headerSignature: string, widths: number[], currentBody?: string) => void,
+  onRenameTableWidthSignature?: (oldSignature: string, newSignature: string, currentBody?: string) => void
 ): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
@@ -1458,65 +2067,56 @@ function buildLivePreviewDecorations(
         tableEndLine++;
       }
 
-      let cursorInTable = false;
+      const rawLines: string[] = [];
       for (let tl = lineNum; tl <= tableEndLine; tl++) {
-        if (activeLines.has(tl)) {
-          cursorInTable = true;
-          break;
+        rawLines.push(doc.line(tl).text);
+      }
+      const tableFrom = line.from;
+      const tableTo = doc.line(tableEndLine).to;
+      const headerSig = getTableHeaderSignature(splitTableCells(rawLines[0] || ''));
+      const widthsMap = getTableWidths ? getTableWidths() : {};
+      const colWidths = widthsMap[headerSig];
+      const translate = t || ((k: string) => k);
+
+      // Always keep TableWidget active in Live-Preview (no fallback to raw pipes on click/focus)
+      builder.add(
+        line.from,
+        line.from,
+        Decoration.line({ class: 'cm-lp-table-host-line' })
+      );
+      builder.add(
+        line.from,
+        line.to,
+        Decoration.replace({
+          widget: new TableWidget(
+            rawLines,
+            tableFrom,
+            tableTo,
+            notePath,
+            onNavigate,
+            translate,
+            colWidths,
+            onUpdateTableWidths,
+            onRenameTableWidthSignature
+          ),
+        })
+      );
+
+      // Subsequent lines of the table are visually collapsed
+      for (let tl = lineNum + 1; tl <= tableEndLine; tl++) {
+        const subLine = doc.line(tl);
+        builder.add(
+          subLine.from,
+          subLine.from,
+          Decoration.line({ class: 'cm-lp-table-collapsed-line' })
+        );
+        if (subLine.to > subLine.from) {
+          builder.add(subLine.from, subLine.to, Decoration.replace({}));
         }
       }
 
-      if (!cursorInTable) {
-        const rawLines: string[] = [];
-        const linePositions: number[] = [];
-        for (let tl = lineNum; tl <= tableEndLine; tl++) {
-          const tLine = doc.line(tl);
-          rawLines.push(tLine.text);
-          linePositions.push(tLine.from);
-        }
-
-        // First line hosts the rendered HTML table widget
-        builder.add(
-          line.from,
-          line.from,
-          Decoration.line({ class: 'cm-lp-table-host-line' })
-        );
-        builder.add(
-          line.from,
-          line.to,
-          Decoration.replace({
-            widget: new TableWidget(rawLines, linePositions, notePath, onNavigate),
-          })
-        );
-
-        // Subsequent lines of the table are visually collapsed while cursor is outside
-        for (let tl = lineNum + 1; tl <= tableEndLine; tl++) {
-          const subLine = doc.line(tl);
-          builder.add(
-            subLine.from,
-            subLine.from,
-            Decoration.line({ class: 'cm-lp-table-collapsed-line' })
-          );
-          if (subLine.to > subLine.from) {
-            builder.add(subLine.from, subLine.to, Decoration.replace({}));
-          }
-        }
-
-        lineNum = tableEndLine;
-        continue;
-      } else {
-        // Cursor is inside the table: style all table lines in monospace so pipes align
-        for (let tl = lineNum; tl <= tableEndLine; tl++) {
-          const subLine = doc.line(tl);
-          builder.add(
-            subLine.from,
-            subLine.from,
-            Decoration.line({ class: 'cm-lp-table-source-line' })
-          );
-        }
-        lineNum = tableEndLine;
-        continue;
-      }
+      lineNum = tableEndLine;
+      continue;
     }
 
     // Callout detection: > [!tip] Title or > content
@@ -1886,6 +2486,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     allNotes,
     allTags,
     t,
+    tableWidths: props.tableWidths,
+    onUpdateTableWidths: props.onUpdateTableWidths,
+    onRenameTableWidthSignature: props.onRenameTableWidthSignature,
   });
   callbacksRef.current = {
     onChangeBody,
@@ -1901,6 +2504,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     allNotes,
     allTags,
     t,
+    tableWidths: props.tableWidths,
+    onUpdateTableWidths: props.onUpdateTableWidths,
+    onRenameTableWidthSignature: props.onRenameTableWidthSignature,
   };
 
   const applyFormat = (
@@ -2539,7 +3145,10 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               onUpdateTag,
               onToggleMode,
               callbacksRef.current.allNotes,
-              callbacksRef.current.t
+              callbacksRef.current.t,
+              () => callbacksRef.current.tableWidths || {},
+              (sig, w, b) => callbacksRef.current.onUpdateTableWidths?.(sig, w, b),
+              (oldSig, newSig, b) => callbacksRef.current.onRenameTableWidthSignature?.(oldSig, newSig, b)
             );
           }
           update(update: ViewUpdate) {
@@ -2547,7 +3156,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               update.docChanged ||
               update.selectionSet ||
               update.viewportChanged ||
-              update.transactions.some((tr) => tr.effects.some((e) => e.is(setBlockModeEffect)))
+              update.transactions.some((tr) =>
+                tr.effects.some((e) => e.is(setBlockModeEffect) || e.is(setTableWidthsEffect))
+              )
             ) {
               this.decorations = buildLivePreviewDecorations(
                 update.view,
@@ -2557,7 +3168,10 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
                 onUpdateTag,
                 onToggleMode,
                 callbacksRef.current.allNotes,
-                callbacksRef.current.t
+                callbacksRef.current.t,
+                () => callbacksRef.current.tableWidths || {},
+                (sig, w, b) => callbacksRef.current.onUpdateTableWidths?.(sig, w, b),
+                (oldSig, newSig, b) => callbacksRef.current.onRenameTableWidthSignature?.(oldSig, newSig, b)
               );
             }
           }
@@ -2935,6 +3549,15 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       });
     }
   }, [activeDocText]);
+
+  // Refresh table decorations when _tableWidths changes in YAML frontmatter
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || mode !== 'live') return;
+    view.dispatch({
+      effects: setTableWidthsEffect.of(props.tableWidths || {}),
+    });
+  }, [props.tableWidths, mode]);
 
   // Scroll to heading line when requested from Outline
   useEffect(() => {

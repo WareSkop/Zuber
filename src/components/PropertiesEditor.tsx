@@ -154,6 +154,10 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
     }
   };
 
+  const visibleEntries = properties
+    .map((prop, index) => ({ prop, index }))
+    .filter(({ prop }) => !prop.key.startsWith('_'));
+
   return (
     <div className="properties-panel">
       <div className="properties-header">
@@ -166,7 +170,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
           {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
           <SlidersHorizontal size={14} />
           <span>{t('properties.title')}</span>
-          <span className="properties-count-badge">{properties.length}</span>
+          <span className="properties-count-badge">{visibleEntries.length}</span>
         </button>
 
         <button
@@ -182,7 +186,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
 
       {!collapsed && (
         <div className="properties-list">
-          {properties.length === 0 ? (
+          {visibleEntries.length === 0 ? (
             <div className="properties-empty">
               <span>{t('properties.empty')}</span>
               <button type="button" className="btn-link" onClick={addProperty}>
@@ -190,7 +194,7 @@ export const PropertiesEditor: React.FC<PropertiesEditorProps> = ({
               </button>
             </div>
           ) : (
-            properties.map((prop, index) => {
+            visibleEntries.map(({ prop, index }) => {
               const isTagProp =
                 prop.key.toLowerCase() === 'tags' || prop.key.toLowerCase() === 'tag';
               const listValues = Array.isArray(prop.value)

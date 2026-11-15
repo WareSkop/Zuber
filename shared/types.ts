@@ -1,4 +1,4 @@
-export type PropertyType = 'text' | 'list' | 'number' | 'checkbox' | 'date';
+export type PropertyType = 'text' | 'list' | 'number' | 'checkbox' | 'date' | 'object';
 export type AttachmentKind = 'markdown' | 'canvas' | 'base' | 'image' | 'pdf' | 'audio' | 'video' | 'other';
 
 export interface FrontmatterProperty {

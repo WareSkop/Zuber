@@ -65,6 +65,12 @@ import {
   serializeMarkdownWithFrontmatter,
 } from '../shared/markdownUtils';
 import {
+  getTableWidthsFromProperties,
+  pruneOrphanedTableWidths,
+  renameTableWidthSignature,
+  setTableWidthsInProperties,
+} from '../shared/markdownTableUtils';
+import {
   api,
   rawApi,
   getStoredToken,
@@ -2097,15 +2103,20 @@ export const App: React.FC = () => {
 
   const handlePropertiesChange = (updatedProps: FrontmatterProperty[]) => {
     if (!activeNote) return;
-    const newRaw = serializeMarkdownWithFrontmatter(updatedProps, activeNote.body);
-    setActiveNote({
-      ...activeNote,
-      properties: updatedProps,
-      rawContent: newRaw,
-    });
-    scheduleSave(activeNote.path, {
-      properties: updatedProps,
-      body: activeNote.body,
+    const targetPath = activeNote.path;
+    setActiveNote((prev) => {
+      if (!prev || prev.path !== targetPath) return prev;
+      const cleanedProps = pruneOrphanedTableWidths(updatedProps, prev.body);
+      const newRaw = serializeMarkdownWithFrontmatter(cleanedProps, prev.body);
+      scheduleSave(targetPath, {
+        properties: cleanedProps,
+        body: prev.body,
+      });
+      return {
+        ...prev,
+        properties: cleanedProps,
+        rawContent: newRaw,
+      };
     });
   };
 
@@ -2116,13 +2127,78 @@ export const App: React.FC = () => {
     } else if (newBody.trim().length > 0) {
       explicitUserClearRef.current = false;
     }
-    setActiveNote({
-      ...activeNote,
-      body: newBody,
+    const targetPath = activeNote.path;
+    setActiveNote((prev) => {
+      if (!prev || prev.path !== targetPath) return prev;
+      const cleanedProps = pruneOrphanedTableWidths(prev.properties, newBody);
+      scheduleSave(targetPath, {
+        properties: cleanedProps,
+        body: newBody,
+      });
+      return {
+        ...prev,
+        body: newBody,
+        properties: cleanedProps,
+      };
     });
-    scheduleSave(activeNote.path, {
-      properties: activeNote.properties,
-      body: newBody,
+  };
+
+  const handleUpdateTableWidths = (
+    headerSignature: string,
+    widths: number[],
+    currentBody?: string
+  ) => {
+    if (!activeNote) return;
+    const targetPath = activeNote.path;
+    setActiveNote((prev) => {
+      if (!prev || prev.path !== targetPath) return prev;
+      const effectiveBody = currentBody ?? prev.body;
+      const nextProps = setTableWidthsInProperties(
+        prev.properties,
+        headerSignature,
+        widths,
+        effectiveBody
+      );
+      const newRaw = serializeMarkdownWithFrontmatter(nextProps, effectiveBody);
+      scheduleSave(targetPath, {
+        properties: nextProps,
+        body: effectiveBody,
+      });
+      return {
+        ...prev,
+        properties: nextProps,
+        rawContent: newRaw,
+      };
+    });
+  };
+
+  const handleRenameTableWidthSignature = (
+    oldSignature: string,
+    newSignature: string,
+    currentBody?: string
+  ) => {
+    if (!activeNote) return;
+    const targetPath = activeNote.path;
+    setActiveNote((prev) => {
+      if (!prev || prev.path !== targetPath) return prev;
+      const effectiveBody = currentBody ?? prev.body;
+      const nextProps = renameTableWidthSignature(
+        prev.properties,
+        oldSignature,
+        newSignature,
+        effectiveBody
+      );
+      if (nextProps === prev.properties) return prev;
+      const newRaw = serializeMarkdownWithFrontmatter(nextProps, effectiveBody);
+      scheduleSave(targetPath, {
+        properties: nextProps,
+        body: effectiveBody,
+      });
+      return {
+        ...prev,
+        properties: nextProps,
+        rawContent: newRaw,
+      };
     });
   };
 
@@ -3366,6 +3442,9 @@ export const App: React.FC = () => {
                   allNotes={allNotesForEditor}
                   allTags={allTagNames}
                   scrollToLine={scrollToLine}
+                  tableWidths={getTableWidthsFromProperties(activeNote.properties)}
+                  onUpdateTableWidths={handleUpdateTableWidths}
+                  onRenameTableWidthSignature={handleRenameTableWidthSignature}
                   onChangeBody={handleBodyChange}
                   onChangeRaw={handleRawChange}
                   onNavigateWikiLink={handleNavigateWikiLink}
