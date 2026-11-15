@@ -550,8 +550,20 @@ export const rawApi = {
 
   async getFolderLockMetadata(folderPath: string): Promise<FolderLockMetadata> {
     const clean = folderPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-    const bytes = await rawApi.downloadRawFile(`${clean}/${LOCK_FILENAME}`);
-    return JSON.parse(new TextDecoder().decode(bytes)) as FolderLockMetadata;
+    return apiFetch<FolderLockMetadata>(
+      `/api/vault/folder-lock?folder=${encodeURIComponent(clean)}`
+    );
+  },
+
+  saveFolderLockMetadata(
+    folderPath: string,
+    metadata: FolderLockMetadata
+  ): Promise<{ ok: boolean; path: string }> {
+    const clean = folderPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    return apiFetch<{ ok: boolean; path: string }>('/api/vault/folder-lock', {
+      method: 'POST',
+      body: JSON.stringify({ folder: clean, metadata }),
+    });
   },
 
   createFolder(path: string): Promise<{ ok: boolean; path: string }> {
@@ -801,28 +813,58 @@ export const api = {
     return `${baseUrl}/api/vault/attachment?${params.toString()}`;
   },
 
-  async uploadAttachment(file: File, targetFolder = 'attachments'): Promise<UploadResponse> {
-    const unlocked = unlockedFoldersStore.findUnlockedFolderForPath(targetFolder);
+  async uploadAttachment(
+    file: File,
+    targetFolder = 'attachments',
+    activeNotePath?: string
+  ): Promise<UploadResponse> {
+    let effectiveFolder = targetFolder;
+    if (effectiveFolder === 'attachments' && activeNotePath) {
+      const activeUnlocked = unlockedFoldersStore.findUnlockedFolderForPath(activeNotePath);
+      if (activeUnlocked) {
+        effectiveFolder = `${activeUnlocked.folderPath}/attachments`;
+      }
+    }
+
+    const unlocked = unlockedFoldersStore.findUnlockedFolderForPath(effectiveFolder);
     if (unlocked) {
       const plainBytes = new Uint8Array(await file.arrayBuffer());
       const encrypted = await encryptBytes(plainBytes, unlocked.key);
-      const safeName = file.name.replace(/[\\/\0]/g, '_');
-      const zencName = toZencPath(safeName);
-      const res = await rawApi.uploadRawFile(targetFolder, zencName, encrypted);
-      const logicalRel = stripZencExt(res.path || `${targetFolder}/${zencName}`);
+      const rawName = (file.name || 'image.png').replace(/[\\/\0]/g, '_');
+      const dotIdx = rawName.lastIndexOf('.');
+      const rawExt = dotIdx >= 0 ? rawName.slice(dotIdx) : '';
+      let ext = rawExt;
+      if (!ext && file.type) {
+        if (file.type === 'image/png') ext = '.png';
+        else if (file.type === 'image/jpeg' || file.type === 'image/jpg') ext = '.jpg';
+        else if (file.type === 'image/gif') ext = '.gif';
+        else if (file.type === 'image/webp') ext = '.webp';
+        else if (file.type === 'image/svg+xml') ext = '.svg';
+        else if (file.type === 'application/pdf') ext = '.pdf';
+        else ext = '.png';
+      }
+      let base = (dotIdx >= 0 ? rawName.slice(0, dotIdx) : rawName).replace(/[^\w.-]/g, '_');
+      if (!base || base === 'blob') base = 'pasted-image';
+      const uniqueLogicalName = `${base}-${Date.now()}${ext || '.png'}`;
+      const zencName = toZencPath(uniqueLogicalName);
+      const res = await rawApi.uploadRawFile(effectiveFolder, zencName, encrypted);
       return {
         ...res,
-        wikiEmbed: `![[${logicalRel}]]`,
+        name: uniqueLogicalName,
+        wikiEmbed: `![[${uniqueLogicalName}]]`,
       };
     }
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('folder', targetFolder);
-    const res = await apiFetch<UploadResponse>(`/api/vault/upload?folder=${encodeURIComponent(targetFolder)}`, {
-      method: 'POST',
-      body: formData,
-    });
+    formData.append('folder', effectiveFolder);
+    const res = await apiFetch<UploadResponse>(
+      `/api/vault/upload?folder=${encodeURIComponent(effectiveFolder)}`,
+      {
+        method: 'POST',
+        body: formData,
+      }
+    );
     return {
       ...res,
       wikiEmbed: res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`),
@@ -839,6 +881,13 @@ export const api = {
 
   getFolderLockMetadata(folderPath: string): Promise<FolderLockMetadata> {
     return rawApi.getFolderLockMetadata(folderPath);
+  },
+
+  saveFolderLockMetadata(
+    folderPath: string,
+    metadata: FolderLockMetadata
+  ): Promise<{ ok: boolean; path: string }> {
+    return rawApi.saveFolderLockMetadata(folderPath, metadata);
   },
 
   getGitStatus(): Promise<GitStatusInfo> {

@@ -18,7 +18,7 @@ import {
   type ProcessShareOptions,
 } from './shareTargetService';
 import { clientLogger } from '../utils/logger';
-import { isZencPath } from '../crypto/folderCrypto';
+import { isZencPath, type FolderLockMetadata } from '../crypto/folderCrypto';
 import { unlockedFoldersStore } from '../crypto/unlockedFoldersStore';
 import type {
   BacklinkItem,
@@ -599,6 +599,40 @@ class SyncEngine {
       files: reconciled.files,
       vaultPath: 'Knowmesh Vault (Offline)',
     };
+  }
+
+  public async getFolderLockMetadata(folderPath: string): Promise<FolderLockMetadata> {
+    const clean = folderPath.replace(/^\/+|\/+$/g, '');
+    const cacheKey = `folder_lock:${clean}`;
+    if (navigator.onLine && this.syncState !== 'offline') {
+      try {
+        const metadata = await rawApi.getFolderLockMetadata(clean);
+        await this.localDb.setMeta(cacheKey, metadata);
+        return metadata;
+      } catch (err) {
+        const cached = await this.localDb.getMeta<FolderLockMetadata>(cacheKey);
+        if (cached) {
+          return cached;
+        }
+        throw err;
+      }
+    }
+
+    const cached = await this.localDb.getMeta<FolderLockMetadata>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    throw new Error('Folder lock metadata not available offline');
+  }
+
+  public async saveFolderLockMetadata(
+    folderPath: string,
+    metadata: FolderLockMetadata,
+  ): Promise<{ ok: boolean; path: string }> {
+    const clean = folderPath.replace(/^\/+|\/+$/g, '');
+    const cacheKey = `folder_lock:${clean}`;
+    await this.localDb.setMeta(cacheKey, metadata);
+    return rawApi.saveFolderLockMetadata(clean, metadata);
   }
 
   public async getNote(path: string): Promise<NoteData> {

@@ -467,6 +467,67 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
   app.get('/api/vault/resolve', requireAuth, handleResolveWiki);
   app.get('/api/vault/resolve-wiki', requireAuth, handleResolveWiki);
 
+  // Read folder encryption metadata (.zuber-lock.json) directly as raw UTF-8 JSON
+  app.get('/api/vault/folder-lock', requireAuth, (req, res) => {
+    try {
+      const rawFolder = String(req.query.folder || '')
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+      if (!rawFolder || hasTraversalSegments(rawFolder)) {
+        res.status(400).json({ error: 'Ungültiger Ordnerpfad.' });
+        return;
+      }
+      const absLockPath = vaultService.resolveSafePath(`${rawFolder}/.zuber-lock.json`);
+      if (!fs.existsSync(absLockPath)) {
+        res.status(404).json({ error: 'Ordner-Sperrmetadaten nicht gefunden.' });
+        return;
+      }
+      const rawJson = fs.readFileSync(absLockPath, 'utf-8');
+      const parsed = JSON.parse(rawJson);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(parsed);
+    } catch (err: unknown) {
+      res.status(400).json({ error: (err as Error).message || 'Fehler beim Lesen der Sperrdatei.' });
+    }
+  });
+
+  // Write folder encryption metadata (.zuber-lock.json) directly as raw UTF-8 JSON
+  app.post('/api/vault/folder-lock', requireAuth, (req, res) => {
+    try {
+      const rawFolder = String(req.body?.folder || '')
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+      const metadata = req.body?.metadata;
+      if (!rawFolder || hasTraversalSegments(rawFolder)) {
+        res.status(400).json({ error: 'Ungültiger Ordnerpfad.' });
+        return;
+      }
+      if (
+        !metadata ||
+        typeof metadata !== 'object' ||
+        metadata.version !== 1 ||
+        metadata.kdf !== 'PBKDF2-SHA256' ||
+        typeof metadata.salt !== 'string' ||
+        typeof metadata.iv !== 'string' ||
+        typeof metadata.verifier !== 'string'
+      ) {
+        res.status(400).json({ error: 'Ungültige Sperrmetadaten.' });
+        return;
+      }
+      const absFolder = vaultService.resolveSafePath(rawFolder);
+      fs.mkdirSync(absFolder, { recursive: true });
+      const lockRelPath = `${rawFolder}/.zuber-lock.json`;
+      const absLockPath = vaultService.resolveSafePath(lockRelPath);
+      fs.writeFileSync(absLockPath, JSON.stringify(metadata, null, 2), 'utf-8');
+      vaultService.indexFile(lockRelPath);
+      res.json({ ok: true, path: lockRelPath });
+    } catch (err: unknown) {
+      res.status(400).json({ error: (err as Error).message || 'Fehler beim Schreiben der Sperrdatei.' });
+    }
+  });
+
   // Serve embedded images/attachments from vault
   app.get('/api/vault/attachment', requireAuth, (req, res) => {
     try {

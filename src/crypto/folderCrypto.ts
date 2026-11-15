@@ -49,6 +49,9 @@ export function stripZencExt(filePath: string): string {
   return isZencPath(filePath) ? filePath.slice(0, -ZENC_EXT.length) : filePath;
 }
 
+export const stripZencExtension = stripZencExt;
+export const getEffectivePath = stripZencExt;
+
 export function toZencPath(filePath: string): string {
   return isZencPath(filePath) ? filePath : `${filePath}${ZENC_EXT}`;
 }
@@ -113,9 +116,10 @@ export async function deriveFolderKey(
 ): Promise<CryptoKey> {
   const subtle = getSubtle();
   const enc = new TextEncoder();
+  const normalizedPassword = password.normalize('NFC');
   const baseKey = await subtle.importKey(
     'raw',
-    enc.encode(password),
+    enc.encode(normalizedPassword),
     'PBKDF2',
     false,
     ['deriveKey']

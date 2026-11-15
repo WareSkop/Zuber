@@ -369,6 +369,48 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
 
   useEffect(() => {
     if (target?.type !== 'note' || !readingContainerRef.current) return;
+    const container = readingContainerRef.current;
+    let cancelled = false;
+    const revokedUrls: string[] = [];
+
+    const mediaEls = container.querySelectorAll<HTMLImageElement | HTMLIFrameElement>(
+      'img[src*="/api/vault/attachment"], iframe[src*="/api/vault/attachment"]'
+    );
+    mediaEls.forEach((el) => {
+      try {
+        const parsed = new URL(el.src, window.location.origin);
+        const targetParam = parsed.searchParams.get('target');
+        if (!targetParam) return;
+        resolveDecryptedAttachmentUrl(targetParam, target.path)
+          .then((res) => {
+            if (!res) return;
+            if (cancelled) {
+              if (res.isObjectUrl) URL.revokeObjectURL(res.url);
+              return;
+            }
+            if (res.isObjectUrl) revokedUrls.push(res.url);
+            if (el.tagName === 'IFRAME') {
+              el.src = `${res.url}#toolbar=1&view=FitH`;
+              const openBtn = el.closest('.cm-lp-pdf-embed')?.querySelector('a.cm-lp-pdf-open-btn') as HTMLAnchorElement | null;
+              if (openBtn) openBtn.href = res.url;
+            } else {
+              el.src = res.url;
+            }
+          })
+          .catch(() => {});
+      } catch {}
+    });
+
+    return () => {
+      cancelled = true;
+      for (const u of revokedUrls) {
+        URL.revokeObjectURL(u);
+      }
+    };
+  }, [target?.type, target?.path, renderedHtml]);
+
+  useEffect(() => {
+    if (target?.type !== 'note' || !readingContainerRef.current) return;
     const links = readingContainerRef.current.querySelectorAll<HTMLAnchorElement>('a[href^="http://"], a[href^="https://"]');
     const splitTooltip = t('research.linkTooltipSplit');
     links.forEach((a) => {

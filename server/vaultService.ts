@@ -409,7 +409,14 @@ export class VaultService {
     if (this.watcher) return;
 
     this.watcher = chokidar.watch(this.vaultDir, {
-      ignored: [/(^|[/\\])\../, /(^|[/\\])\.git([/\\]|$)/], // ignore hidden dot files/folders (.git, .obsidian, etc.)
+      ignored: [
+        (filePath: string) => {
+          const normalized = filePath.replace(/\\/g, '/');
+          if (normalized.endsWith('/.zuber-lock.json')) return false;
+          return /(^|\/)\./.test(normalized);
+        },
+        /(^|[/\\])\.git([/\\]|$)/,
+      ], // ignore hidden dot files/folders (.git, .obsidian, etc.) except .zuber-lock.json
       persistent: true,
       ignoreInitial: true,
       awaitWriteFinish: {

@@ -43,6 +43,7 @@ import { BaseView } from './BaseView';
 import { renderReadingHtml } from '../utils/readingMode';
 import { routeExternalLinkClick } from '../utils/researchLinkUtils';
 import { resolveDecryptedAttachmentUrl } from '../crypto/encryptedAttachmentUrl';
+import { stripZencExt } from '../crypto/folderCrypto';
 import {
   parseMarkdownTable,
   serializeMarkdownTable,
@@ -1277,21 +1278,28 @@ class EmbedWidget extends WidgetType {
 
   toDOM() {
     const cleanTarget = this.target.split('#')[0].trim();
-    let isCanvas = cleanTarget.toLowerCase().endsWith('.canvas');
+    const logicalTarget = stripZencExt(cleanTarget);
+    let isCanvas = logicalTarget.toLowerCase().endsWith('.canvas');
     let effectiveCanvasPath = cleanTarget;
 
     if (!isCanvas && this.allNotes) {
-      const lower = cleanTarget.toLowerCase();
-      const canvasMatch = this.allNotes.find(
-        (n) =>
-          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-          n.path.toLowerCase().endsWith('.canvas')
-      );
-      const mdMatch = this.allNotes.find(
-        (n) =>
-          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-          n.path.toLowerCase().endsWith('.md')
-      );
+      const lower = logicalTarget.toLowerCase();
+      const canvasMatch = this.allNotes.find((n) => {
+        const p = stripZencExt(n.path).toLowerCase();
+        const name = stripZencExt(n.name).toLowerCase();
+        return (
+          (n.basename.toLowerCase() === lower || name === lower || p === lower) &&
+          p.endsWith('.canvas')
+        );
+      });
+      const mdMatch = this.allNotes.find((n) => {
+        const p = stripZencExt(n.path).toLowerCase();
+        const name = stripZencExt(n.name).toLowerCase();
+        return (
+          (n.basename.toLowerCase() === lower || name === lower || p === lower) &&
+          p.endsWith('.md')
+        );
+      });
       if (canvasMatch && !mdMatch) {
         isCanvas = true;
         effectiveCanvasPath = canvasMatch.path;
@@ -1316,21 +1324,27 @@ class EmbedWidget extends WidgetType {
       return container;
     }
 
-    let isBase = cleanTarget.toLowerCase().endsWith('.base');
+    let isBase = logicalTarget.toLowerCase().endsWith('.base');
     let effectiveBasePath = cleanTarget;
 
     if (!isBase && this.allNotes) {
-      const lower = cleanTarget.toLowerCase();
-      const baseMatch = this.allNotes.find(
-        (n) =>
-          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-          n.path.toLowerCase().endsWith('.base')
-      );
-      const mdMatch = this.allNotes.find(
-        (n) =>
-          (n.basename.toLowerCase() === lower || n.name.toLowerCase() === lower || n.path.toLowerCase() === lower) &&
-          n.path.toLowerCase().endsWith('.md')
-      );
+      const lower = logicalTarget.toLowerCase();
+      const baseMatch = this.allNotes.find((n) => {
+        const p = stripZencExt(n.path).toLowerCase();
+        const name = stripZencExt(n.name).toLowerCase();
+        return (
+          (n.basename.toLowerCase() === lower || name === lower || p === lower) &&
+          p.endsWith('.base')
+        );
+      });
+      const mdMatch = this.allNotes.find((n) => {
+        const p = stripZencExt(n.path).toLowerCase();
+        const name = stripZencExt(n.name).toLowerCase();
+        return (
+          (n.basename.toLowerCase() === lower || name === lower || p === lower) &&
+          p.endsWith('.md')
+        );
+      });
       if (baseMatch && !mdMatch) {
         isBase = true;
         effectiveBasePath = baseMatch.path;
@@ -1356,8 +1370,8 @@ class EmbedWidget extends WidgetType {
       return container;
     }
 
-    const isImage = IMAGE_EXT_REGEX.test(cleanTarget);
-    const isPdf = cleanTarget.toLowerCase().endsWith('.pdf');
+    const isImage = IMAGE_EXT_REGEX.test(logicalTarget);
+    const isPdf = logicalTarget.toLowerCase().endsWith('.pdf');
 
     if (isPdf) {
       const container = document.createElement('div');
@@ -1366,7 +1380,7 @@ class EmbedWidget extends WidgetType {
         ? cleanTarget
         : api.getAttachmentUrl(cleanTarget, this.notePath);
       const iframeSrc = `${fileUrl}#toolbar=1&view=FitH`;
-      const fileName = cleanTarget.split('/').pop() || cleanTarget;
+      const fileName = logicalTarget.split('/').pop() || logicalTarget;
       const height = this.width ? `${this.width}px` : '550px';
 
       container.innerHTML = `
@@ -1384,6 +1398,8 @@ class EmbedWidget extends WidgetType {
             if (frame && container.isConnected) {
               if (res.isObjectUrl) container.dataset.decryptedBlobUrl = res.url;
               frame.src = `${res.url}#toolbar=1&view=FitH`;
+              const openBtn = container.querySelector('a.cm-lp-pdf-open-btn') as HTMLAnchorElement | null;
+              if (openBtn) openBtn.href = res.url;
             } else if (res.isObjectUrl) {
               URL.revokeObjectURL(res.url);
             }
@@ -3382,7 +3398,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           for (const file of imageFiles) {
             const uploadPromise = callbacksRef.current.onUploadAttachment
               ? callbacksRef.current.onUploadAttachment(file)
-              : api.uploadAttachment(file).then((res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`));
+              : api
+                  .uploadAttachment(file, 'attachments', callbacksRef.current.notePath)
+                  .then((res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`));
 
             uploadPromise
               .then((embedTag) => {
@@ -3575,9 +3593,9 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
               try {
                 const embedTag = callbacksRef.current.onUploadAttachment
                   ? await callbacksRef.current.onUploadAttachment(file)
-                  : await api.uploadAttachment(file).then(
-                      (res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`)
-                    );
+                  : await api
+                      .uploadAttachment(file, 'attachments', callbacksRef.current.notePath)
+                      .then((res) => res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`));
                 insertChunks.push(embedTag);
               } catch (err) {
                 console.error('Fehler beim Upload des Anhangs:', err);
@@ -4137,7 +4155,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       if (callbacksRef.current.onUploadAttachment) {
         embedTag = await callbacksRef.current.onUploadAttachment(file);
       } else {
-        const res = await api.uploadAttachment(file);
+        const res = await api.uploadAttachment(file, 'attachments', callbacksRef.current.notePath);
         embedTag = res.wikiEmbed || (res.path ? `![[${res.path}]]` : `![[${res.name}]]`);
       }
 

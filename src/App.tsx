@@ -112,7 +112,8 @@ import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { MobileSearchModal } from './components/MobileSearchModal';
 import { FolderEncryptModal } from './components/FolderEncryptModal';
 import { FolderUnlockCard } from './components/FolderUnlockCard';
-import { LOCK_FILENAME, stripZencExt } from './crypto/folderCrypto';
+import { LOCK_FILENAME, isZencPath, stripZencExt } from './crypto/folderCrypto';
+import { resolveDecryptedAttachmentUrl } from './crypto/encryptedAttachmentUrl';
 import {
   FolderLockedError,
   findEncryptedFolderForPath,
@@ -612,11 +613,17 @@ export const App: React.FC = () => {
   const collectExistingPaths = useCallback((): Set<string> => {
     const existing = new Set<string>();
     for (const f of allFiles) {
-      if (f?.path) existing.add(f.path.toLowerCase());
+      if (f?.path) {
+        existing.add(f.path.toLowerCase());
+        existing.add(stripZencExt(f.path).toLowerCase());
+      }
     }
     const walk = (nodes: FileTreeNode[]) => {
       for (const n of nodes) {
-        if (n.path) existing.add(n.path.toLowerCase());
+        if (n.path) {
+          existing.add(n.path.toLowerCase());
+          existing.add(stripZencExt(n.path).toLowerCase());
+        }
         if (n.children) walk(n.children);
       }
     };
@@ -643,18 +650,30 @@ export const App: React.FC = () => {
     [collectExistingPaths]
   );
 
+  const guardUnlockedTargetFolder = useCallback((parentFolder?: string): boolean => {
+    if (!parentFolder) return true;
+    const encFolder = findEncryptedFolderForPath(parentFolder, encryptedFoldersRef.current);
+    if (encFolder && !unlockedFoldersStore.isFolderUnlocked(encFolder)) {
+      setLockedFolderTarget({ folderPath: encFolder });
+      return false;
+    }
+    return true;
+  }, []);
+
   const openCreateNoteDialog = useCallback(
     (parentFolder?: string, initialProperties?: FrontmatterProperty[]) => {
+      if (!guardUnlockedTargetFolder(parentFolder)) return;
       const baseName = language === 'de' ? 'Neue Notiz' : 'New Note';
       const defaultName = getUniqueDefaultName(baseName, 'file', parentFolder);
       setDialog({ type: 'create-note', parentFolder, initialValue: defaultName, initialProperties });
       setDialogInput(defaultName);
     },
-    [language, getUniqueDefaultName]
+    [language, getUniqueDefaultName, guardUnlockedTargetFolder]
   );
 
   const openCreateCanvasDialog = useCallback(
     (parentFolder?: string) => {
+      if (!guardUnlockedTargetFolder(parentFolder)) return;
       const baseName = language === 'de' ? 'Neues Canvas' : 'New Canvas';
       const defaultName = getUniqueDefaultName(baseName, 'canvas', parentFolder);
       setDialog({
@@ -666,24 +685,29 @@ export const App: React.FC = () => {
       });
       setDialogInput(defaultName);
     },
-    [language, getUniqueDefaultName, t]
+    [language, getUniqueDefaultName, t, guardUnlockedTargetFolder]
   );
 
-  const openCreateBaseDialog = useCallback((parentFolder?: string) => {
-    setNewBaseInitialFolder(parentFolder);
-    setIsNewBaseModalOpen(true);
-  }, []);
+  const openCreateBaseDialog = useCallback(
+    (parentFolder?: string) => {
+      if (!guardUnlockedTargetFolder(parentFolder)) return;
+      setNewBaseInitialFolder(parentFolder);
+      setIsNewBaseModalOpen(true);
+    },
+    [guardUnlockedTargetFolder]
+  );
 
   const [sidebarTargetFolder, setSidebarTargetFolder] = useState<string>('');
 
   const openCreateFolderDialog = useCallback(
     (parentFolder?: string) => {
+      if (!guardUnlockedTargetFolder(parentFolder)) return;
       const baseName = language === 'de' ? 'Neuer Ordner' : 'New Folder';
       const defaultName = getUniqueDefaultName(baseName, 'folder', parentFolder);
       setDialog({ type: 'create-folder', parentFolder, initialValue: defaultName });
       setDialogInput(defaultName);
     },
-    [language, getUniqueDefaultName]
+    [language, getUniqueDefaultName, guardUnlockedTargetFolder]
   );
 
   const openCreateNoteDialogRef = useRef(openCreateNoteDialog);
@@ -958,11 +982,12 @@ export const App: React.FC = () => {
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
         setLockedFolderTarget(null);
         setActiveNote(note);
+        const logicalRel = stripZencExt(relPath);
         if (
           isMobile &&
           getMobileReadingDefault() &&
-          !relPath.endsWith('.base') &&
-          !relPath.endsWith('.canvas')
+          !logicalRel.endsWith('.base') &&
+          !logicalRel.endsWith('.canvas')
         ) {
           setEditorMode('reading');
         }
@@ -1388,7 +1413,7 @@ export const App: React.FC = () => {
         const fileName = cleanTitle.toLowerCase().endsWith('.md') ? cleanTitle : `${cleanTitle}.md`;
         const targetPath = parent ? `${parent}/${fileName}` : fileName;
 
-        await syncEngine.saveNote({
+        const savedNote = await syncEngine.saveNote({
           path: targetPath,
           body: newBody,
           properties: newProperties,
@@ -1396,7 +1421,7 @@ export const App: React.FC = () => {
         });
 
         await loadVaultIndex();
-        await openNoteByPath(targetPath);
+        await openNoteByPath(savedNote?.path || targetPath);
         showToast(t('templates.noteCreatedToast') || `Notiz "${cleanTitle}" aus Vorlage erstellt.`);
       } catch (err) {
         console.error('Failed to create note from template:', err);
@@ -1600,6 +1625,12 @@ export const App: React.FC = () => {
             if (encFolder && !unlockedFoldersStore.isFolderUnlocked(encFolder)) {
               setActiveNote(null);
               setLockedFolderTarget({ folderPath: encFolder, pendingFilePath: path });
+            } else if (encFolder || isZencPath(path)) {
+              void resolveDecryptedAttachmentUrl(path).then((resolved) => {
+                if (resolved?.url) {
+                  window.open(resolved.url, '_blank');
+                }
+              });
             } else {
               window.open(api.getAttachmentUrl(path), '_blank');
             }
@@ -2697,7 +2728,10 @@ export const App: React.FC = () => {
     }
     isUploadingAttachmentRef.current = true;
     try {
-      const uploaded = await api.uploadAttachment(file);
+      const activeP = activePathRef.current || activeNote?.path;
+      const unlockedFolder = activeP ? unlockedFoldersStore.findUnlockedFolderForPath(activeP) : undefined;
+      const targetUploadFolder = unlockedFolder ? `${unlockedFolder.folderPath}/attachments` : 'attachments';
+      const uploaded = await api.uploadAttachment(file, targetUploadFolder, activeP || undefined);
       const now = Date.now();
       recentSelfWritesRef.current.set(uploaded.path, now);
       if (activeNoteRef.current) {
@@ -3782,7 +3816,12 @@ export const App: React.FC = () => {
               </span>
             ) : activeNote ? (
               <>
-                <span className="breadcrumb-path">{activeNote.path}</span>
+                <span className="breadcrumb-path">
+                  {stripZencExt(activeNote.path)}
+                  {isZencPath(activeNote.path) && (
+                    <Lock size={12} style={{ marginLeft: 6, verticalAlign: '-1px', opacity: 0.7 }} />
+                  )}
+                </span>
                 <span className={`save-indicator ${saveState}`}>
                   {saveState === 'saved' && (
                     <>

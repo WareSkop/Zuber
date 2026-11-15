@@ -3,6 +3,7 @@ import { Fingerprint, Lock, LockOpen, ShieldCheck, X } from 'lucide-react';
 import type { FileTreeNode } from '../../shared/types';
 import { useTranslation } from '../i18n';
 import { api } from '../api';
+import { syncEngine } from '../sync/syncEngine';
 import {
   LOCK_FILENAME,
   createFolderLockMetadata,
@@ -97,8 +98,7 @@ export const FolderEncryptModal: React.FC<FolderEncryptModalProps> = ({
       setProgress({ done: 0, total: files.length });
 
       const { metadata, key } = await createFolderLockMetadata(password);
-      const lockBytes = new TextEncoder().encode(JSON.stringify(metadata, null, 2));
-      await api.uploadRawFile(folderPath, LOCK_FILENAME, lockBytes);
+      await syncEngine.saveFolderLockMetadata(folderPath, metadata);
 
       for (let i = 0; i < files.length; i++) {
         const f = files[i];

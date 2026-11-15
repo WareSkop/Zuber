@@ -36,7 +36,7 @@ import {
   X,
 } from 'lucide-react';
 import type { FileTreeNode } from '../../shared/types';
-import { LOCK_FILENAME, getLogicalExtension, stripZencExt } from '../crypto/folderCrypto';
+import { LOCK_FILENAME, getLogicalExtension, isZencPath, stripZencExt } from '../crypto/folderCrypto';
 import { unlockedFoldersStore } from '../crypto/unlockedFoldersStore';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
@@ -664,15 +664,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     setSelectedPaths(new Set([node.path]));
     lastClickedPathRef.current = node.path;
 
+    const logicalPath = stripZencExt(node.path);
+    const logicalExt = getLogicalExtension(node.path) || node.extension;
     const isDoc =
-      node.extension === 'md' ||
-      node.extension === 'canvas' ||
-      node.path.endsWith('.canvas') ||
-      node.extension === 'base' ||
-      node.path.endsWith('.base');
-    const isMediaOrPdf = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf)$/i.test(node.path);
+      logicalExt === 'md' ||
+      logicalExt === 'canvas' ||
+      logicalPath.endsWith('.canvas') ||
+      logicalExt === 'base' ||
+      logicalPath.endsWith('.base');
+    const isMediaOrPdf = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif|pdf)$/i.test(logicalPath);
 
-    if (isDoc || (isResearchOpen && isMediaOrPdf)) {
+    if (isDoc || isZencPath(node.path) || (isResearchOpen && isMediaOrPdf)) {
       if (e.altKey) {
         onSelectNote(node.path, { altKey: true });
       } else {
@@ -684,11 +686,13 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   };
 
   const handleCopy = (node: FileTreeNode) => {
+    const logicalName = stripZencExt(node.name);
+    const logicalExt = getLogicalExtension(node.name);
     const displayName =
       node.type === 'file' &&
-      (node.extension === 'md' || node.extension === 'canvas' || node.extension === 'base')
-        ? node.name.replace(/\.(md|canvas|base)$/i, '')
-        : node.name;
+      (logicalExt === 'md' || logicalExt === 'canvas' || logicalExt === 'base')
+        ? logicalName.replace(/\.(md|canvas|base)$/i, '')
+        : logicalName;
     setClipboard({
       path: node.path,
       name: displayName,
@@ -1076,7 +1080,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         )}
         {isCanvas && <span className="file-ext-badge canvas-badge">CANVAS</span>}
         {isBase && <span className="file-ext-badge base-badge">BASE</span>}
-        {!isMd && !isCanvas && !isBase && <span className="file-ext-badge">{node.extension}</span>}
+        {!isMd && !isCanvas && !isBase && <span className="file-ext-badge">{getLogicalExtension(node.path) || node.extension}</span>}
         <button
           type="button"
           className="tree-item-more-btn"
@@ -1871,23 +1875,29 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       <Download size={15} />
                       <span>{t('sidebar.downloadFile')}</span>
                     </button>
-                    {(contextMenu.node.extension === 'md' ||
-                      contextMenu.node.extension === 'canvas' ||
-                      contextMenu.node.path.endsWith('.md') ||
-                      contextMenu.node.path.endsWith('.canvas')) && (
-                      <button
-                        type="button"
-                        className="tree-context-item"
-                        onClick={() => {
-                          const p = contextMenu.node!.path;
-                          onOpenVersionHistory?.(p);
-                          setContextMenu(null);
-                        }}
-                      >
-                        <History size={15} />
-                        <span>{t('sidebar.versionHistory')}</span>
-                      </button>
-                    )}
+                    {(() => {
+                      const ctxLogical = stripZencExt(contextMenu.node.path);
+                      const ctxExt = getLogicalExtension(contextMenu.node.path) || contextMenu.node.extension;
+                      return (
+                        (ctxExt === 'md' ||
+                          ctxExt === 'canvas' ||
+                          ctxLogical.endsWith('.md') ||
+                          ctxLogical.endsWith('.canvas')) && (
+                          <button
+                            type="button"
+                            className="tree-context-item"
+                            onClick={() => {
+                              const p = contextMenu.node!.path;
+                              onOpenVersionHistory?.(p);
+                              setContextMenu(null);
+                            }}
+                          >
+                            <History size={15} />
+                            <span>{t('sidebar.versionHistory')}</span>
+                          </button>
+                        )
+                      );
+                    })()}
                     {onCreateBase && (
                       <button
                         type="button"

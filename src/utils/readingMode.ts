@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { api } from '../api';
+import { stripZencExt } from '../crypto/folderCrypto';
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i;
 
@@ -57,15 +58,16 @@ export function renderReadingHtml(
     (_match, targetRaw, viewOrHeadingRaw, altOrHeightRaw) => {
       const target = String(targetRaw).trim();
       const alt = altOrHeightRaw ? String(altOrHeightRaw).trim() : target;
-      let isCanvas = target.toLowerCase().endsWith('.canvas');
+      const logicalTarget = stripZencExt(target);
+      let isCanvas = logicalTarget.toLowerCase().endsWith('.canvas');
       let canvasPath = target;
       if (!isCanvas && allNotes) {
-        const lower = target.toLowerCase();
+        const lower = logicalTarget.toLowerCase();
         const lowerWithExt = lower.endsWith('.canvas') ? lower : `${lower}.canvas`;
         const lowerWithoutExt = lower.replace(/\.canvas$/i, '');
         const canvasMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.canvas$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -79,8 +81,8 @@ export function renderReadingHtml(
           );
         });
         const mdMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -103,15 +105,15 @@ export function renderReadingHtml(
         const safeHeight = heightVal ? escapeHtml(heightVal) : '';
         return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
       }
-      let isBase = target.toLowerCase().endsWith('.base');
+      let isBase = logicalTarget.toLowerCase().endsWith('.base');
       let basePath = target;
       if (!isBase && allNotes) {
-        const lower = target.toLowerCase();
+        const lower = logicalTarget.toLowerCase();
         const lowerWithExt = lower.endsWith('.base') ? lower : `${lower}.base`;
         const lowerWithoutExt = lower.replace(/\.base$/i, '');
         const baseMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.base$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -125,8 +127,8 @@ export function renderReadingHtml(
           );
         });
         const mdMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -151,16 +153,16 @@ export function renderReadingHtml(
         const safeHeight = heightVal ? escapeHtml(heightVal) : '';
         return `<div class="embedded-base-container base-embed-widget cm-lp-base-embed reading-base-embed" data-base-path="${safeBasePath}" data-view="${safeView}" data-height="${safeHeight}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
       }
-      if (target.toLowerCase().endsWith('.pdf')) {
+      if (logicalTarget.toLowerCase().endsWith('.pdf')) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
-        const fileName = target.split('/').pop() || target;
+        const fileName = logicalTarget.split('/').pop() || logicalTarget;
         let height = '550px';
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
         return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
       }
-      if (IMAGE_EXT_REGEX.test(target)) {
+      if (IMAGE_EXT_REGEX.test(logicalTarget)) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
         const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
         return `<span class="reading-image-embed"><img src="${url}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${styleAttr} /></span>`;
@@ -174,16 +176,17 @@ export function renderReadingHtml(
     /!\[([^\]\n]*)\]\(([^)\n]+)\)/g,
     (_match, altRaw, hrefRaw) => {
       const target = String(hrefRaw).trim();
+      const logicalTarget = stripZencExt(target);
       const alt = String(altRaw || target).trim();
-      let isCanvas = target.toLowerCase().endsWith('.canvas');
+      let isCanvas = logicalTarget.toLowerCase().endsWith('.canvas');
       let canvasPath = target;
       if (!isCanvas && allNotes) {
-        const lower = target.toLowerCase();
+        const lower = logicalTarget.toLowerCase();
         const lowerWithExt = lower.endsWith('.canvas') ? lower : `${lower}.canvas`;
         const lowerWithoutExt = lower.replace(/\.canvas$/i, '');
         const canvasMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.canvas$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -197,8 +200,8 @@ export function renderReadingHtml(
           );
         });
         const mdMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -221,15 +224,15 @@ export function renderReadingHtml(
         const safeHeight = heightVal ? escapeHtml(heightVal) : '';
         return `<div class="embedded-canvas-container canvas-embed-widget cm-lp-canvas-embed reading-canvas-embed" data-canvas-path="${safeCanvasPath}" data-height="${safeHeight}" data-wikilink="${safeCanvasPath}"><div class="reading-canvas-mount"></div></div>`;
       }
-      let isBase = target.toLowerCase().endsWith('.base');
+      let isBase = logicalTarget.toLowerCase().endsWith('.base');
       let basePath = target;
       if (!isBase && allNotes) {
-        const lower = target.toLowerCase();
+        const lower = logicalTarget.toLowerCase();
         const lowerWithExt = lower.endsWith('.base') ? lower : `${lower}.base`;
         const lowerWithoutExt = lower.replace(/\.base$/i, '');
         const baseMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.base$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -243,8 +246,8 @@ export function renderReadingHtml(
           );
         });
         const mdMatch = allNotes.find((n) => {
-          const p = (n.path || '').toLowerCase();
-          const name = (n.name || '').toLowerCase();
+          const p = stripZencExt(n.path || '').toLowerCase();
+          const name = stripZencExt(n.name || '').toLowerCase();
           const base = (n.basename || name.replace(/\.md$/i, '')).toLowerCase();
           return (
             (p === lower ||
@@ -265,10 +268,10 @@ export function renderReadingHtml(
         const safeBasePath = escapeHtml(basePath);
         return `<div class="cm-lp-base-embed embedded-base-container base-embed-widget reading-base-embed" data-base-path="${safeBasePath}" data-wikilink="${safeBasePath}"><div class="reading-base-mount"></div></div>`;
       }
-      if (target.toLowerCase().endsWith('.pdf')) {
+      if (logicalTarget.toLowerCase().endsWith('.pdf')) {
         const rawUrl = /^(https?:|data:)/i.test(target) ? target : api.getAttachmentUrl(target, notePath);
         const url = escapeHtml(rawUrl);
-        const fileName = target.split('/').pop() || target;
+        const fileName = logicalTarget.split('/').pop() || logicalTarget;
         let height = '550px';
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;

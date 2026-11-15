@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Fingerprint, Lock, LockOpen } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import { api } from '../api';
+import { syncEngine } from '../sync/syncEngine';
 import { verifyFolderPassword } from '../crypto/folderCrypto';
 import { unlockedFoldersStore } from '../crypto/unlockedFoldersStore';
 import {
@@ -48,8 +48,15 @@ export const FolderUnlockCard: React.FC<FolderUnlockCardProps> = ({
     if (!password) return;
     setBusy(true);
     setError(null);
+    let metadata;
     try {
-      const metadata = await api.getFolderLockMetadata(folderPath);
+      metadata = await syncEngine.getFolderLockMetadata(folderPath);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('encryption.lockFileLoadError', 'Could not load folder lock metadata'));
+      setBusy(false);
+      return;
+    }
+    try {
       const key = await verifyFolderPassword(password, metadata);
       unlockedFoldersStore.unlockFolder(folderPath, key);
       if (enrollBiometricOnUnlock && biometricSupported && !biometricEnrolled) {
