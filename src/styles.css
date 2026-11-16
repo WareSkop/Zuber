@@ -13298,16 +13298,57 @@ p:has(.embedded-canvas-container) {
 /* =========================================================
    Send Email Modal
    ========================================================= */
+.send-email-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1250;
+}
+
 .send-email-modal {
-  max-width: 480px;
-  width: 92vw;
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  background: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #111827);
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 12px;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
+  padding: 24px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.send-email-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color, #d1d5db);
+  padding-bottom: 12px;
+}
+
+.send-email-modal-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
 }
 
 .send-email-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 8px;
+  gap: 14px;
 }
 
 .settings-field {
@@ -13324,13 +13365,20 @@ p:has(.embedded-canvas-container) {
 
 .settings-field input,
 .settings-field textarea {
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #d1d5db);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 13.5px;
   font-family: inherit;
+  box-sizing: border-box;
+}
+
+.settings-field input:focus,
+.settings-field textarea:focus {
+  outline: none;
+  border-color: var(--accent-color, #d4af37);
 }
 
 .email-format-pills {
@@ -13341,12 +13389,12 @@ p:has(.embedded-canvas-container) {
 
 .email-format-pill {
   flex: 1;
-  min-height: 36px;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
@@ -13355,11 +13403,30 @@ p:has(.embedded-canvas-container) {
   cursor: pointer;
 }
 
+.email-format-pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .email-format-pill.active {
   border-color: var(--accent-color, #d4af37);
   background: rgba(212, 175, 55, 0.14);
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.send-email-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.send-email-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .settings-feedback.error {

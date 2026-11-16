@@ -272,13 +272,17 @@ export function toNormalizedServerTime(clientTimestamp: number): number {
   return clientTimestamp + serverClockOffset;
 }
 
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit & { timeoutMs?: number } = {}
+): Promise<T> {
+  const { timeoutMs: customTimeoutMs, ...fetchOptions } = options;
   const token = getStoredToken();
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(fetchOptions.headers || {});
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
+  if (!(fetchOptions.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -289,14 +293,14 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
   // Default timeout of 6s for normal requests; 120s for file uploads, archive imports, and remote Git sync
   const isLongRunning =
-    options.body instanceof FormData ||
+    fetchOptions.body instanceof FormData ||
     path.includes('/api/vault/upload') ||
     path.includes('/api/vault/import') ||
     path.includes('/api/vault/git/');
-  const defaultTimeoutMs = isLongRunning ? 120000 : 6000;
+  const defaultTimeoutMs = customTimeoutMs ?? (isLongRunning ? 120000 : 6000);
 
   let timeoutId: any;
-  let signal = options.signal;
+  let signal = fetchOptions.signal;
   if (!signal) {
     const controller = new AbortController();
     timeoutId = setTimeout(() => controller.abort(), defaultTimeoutMs);
@@ -305,7 +309,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
   try {
     const res = await fetch(fullUrl, {
-      ...options,
+      ...fetchOptions,
       headers,
       credentials: 'include',
       signal,
@@ -335,6 +339,22 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     }
 
     return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(
+        path.includes('/api/email/')
+          ? 'Request timed out while waiting for mail server response.'
+          : 'Request timed out while waiting for server response.'
+      );
+    }
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(
+        path.includes('/api/email/')
+          ? 'Request timed out while waiting for mail server response.'
+          : 'Request timed out while waiting for server response.'
+      );
+    }
+    throw err;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
@@ -1158,6 +1178,7 @@ export const api = {
     return apiFetch('/api/email/test-smtp', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     });
   },
 
@@ -1167,12 +1188,14 @@ export const api = {
     return apiFetch('/api/email/test-imap', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     });
   },
 
   async pollImapNow(): Promise<{ ok: boolean; imported: number; status: EmailConfig }> {
     return apiFetch('/api/email/poll-now', {
       method: 'POST',
+      timeoutMs: 60000,
     });
   },
 
@@ -1187,6 +1210,7 @@ export const api = {
     return apiFetch('/api/email/send-note', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: 60000,
     });
   },
 };

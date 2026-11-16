@@ -1,9 +1,14 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderReadingHtml } from './utils/readingMode';
-import { sanitizePdfText, waitForEmbedsToRender } from './utils/pdfExport';
+import {
+  prepareSvgsForHtml2Canvas,
+  sanitizePdfText,
+  waitForEmbedsToRender,
+} from './utils/pdfExport';
+import { api } from './api';
 
 describe('PDF Export & Reading Mode Embeds', () => {
   it('waitForEmbedsToRender resolves promptly when no embeds exist', async () => {
@@ -64,5 +69,82 @@ describe('PDF Export & Reading Mode Embeds', () => {
 
     expect(sanitized).not.toContain('📄');
     expect(sanitized).toBe('Eingebettete Notiz: Überprüfung für Größe & Spaß ->');
+  });
+
+  it('prepareSvgsForHtml2Canvas sets explicit width/height on dimensionless SVGs, inlines edge strokes, and bakes arrowheads', () => {
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const container = document.createElement('div');
+    const rf = document.createElement('div');
+    rf.className = 'react-flow';
+    Object.defineProperty(rf, 'getBoundingClientRect', {
+      value: () => ({ width: 640, height: 360, top: 0, left: 0, right: 640, bottom: 360 }),
+    });
+
+    const edgesSvg = document.createElementNS(SVG_NS, 'svg');
+    edgesSvg.setAttribute('class', 'react-flow__edges');
+
+    const edgeGroup = document.createElementNS(SVG_NS, 'g');
+    edgeGroup.setAttribute('class', 'react-flow__edge');
+
+    const edgePath = document.createElementNS(SVG_NS, 'path');
+    edgePath.setAttribute('class', 'react-flow__edge-path');
+    edgePath.setAttribute('d', 'M 10 10 L 110 10');
+    edgePath.setAttribute('stroke', 'var(--text-muted)');
+    edgePath.setAttribute('marker-end', 'url(#arrow)');
+
+    // Mock SVGPathElement geometry APIs in JSDOM
+    (edgePath as any).getTotalLength = () => 100;
+    (edgePath as any).getPointAtLength = (d: number) => ({ x: 10 + d, y: 10 });
+
+    edgeGroup.appendChild(edgePath);
+    edgesSvg.appendChild(edgeGroup);
+    rf.appendChild(edgesSvg);
+    container.appendChild(rf);
+    document.body.appendChild(container);
+
+    try {
+      prepareSvgsForHtml2Canvas(container);
+
+      expect(Number(edgesSvg.getAttribute('width'))).toBe(640);
+      expect(Number(edgesSvg.getAttribute('height'))).toBe(360);
+      expect(edgesSvg.style.overflow).toBe('visible');
+
+      expect(edgePath.getAttribute('stroke')).toBe('#64748b');
+      expect(edgePath.getAttribute('stroke-width')).toBe('2');
+      expect(edgePath.getAttribute('fill')).toBe('none');
+      expect(edgePath.style.fill).toBe('none');
+
+      const arrowhead = edgeGroup.querySelector('polygon.pdf-baked-arrowhead');
+      expect(arrowhead).not.toBeNull();
+      expect(arrowhead?.getAttribute('fill')).toBe('#64748b');
+      expect(arrowhead?.getAttribute('points')).toContain('110.00,10.00');
+    } finally {
+      container.remove();
+    }
+  });
+
+  it('api.sendNoteByEmail configures a timeout of at least 60000ms', async () => {
+    const originalFetch = globalThis.fetch;
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => ({ ok: true }),
+    }) as any;
+
+    try {
+      await api.sendNoteByEmail({
+        notePath: 'Test.md',
+        to: 'user@example.com',
+        format: 'pdf',
+        pdfBase64: 'dGVzdA==',
+      });
+
+      const timeoutDelays = setTimeoutSpy.mock.calls.map((c) => Number(c[1] ?? 0));
+      expect(timeoutDelays.some((ms) => ms >= 60000)).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+      setTimeoutSpy.mockRestore();
+    }
   });
 });

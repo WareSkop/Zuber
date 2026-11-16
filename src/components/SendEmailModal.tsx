@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
-import { FileCode2, FileText, Mail, X } from 'lucide-react';
+import { FileCode2, FileText, Loader2, Mail, X } from 'lucide-react';
 import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { stripZencExt } from '../crypto/folderCrypto';
@@ -236,15 +237,26 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
     }
   };
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-dialog send-email-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+  const modalContent = (
+    <div
+      className="send-email-overlay"
+      onClick={() => {
+        if (!busy) onClose();
+      }}
+    >
+      <div className="send-email-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="send-email-modal-header">
+          <h3 className="send-email-modal-title">
             <Mail size={18} />
             <span>{t('email.modalTitle')}</span>
           </h3>
-          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            disabled={busy}
+            aria-label="Close"
+          >
             <X size={18} />
           </button>
         </div>
@@ -258,6 +270,7 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
               value={to}
               onChange={(e) => setTo(e.target.value)}
               placeholder={t('email.toPlaceholder')}
+              disabled={busy}
               autoFocus
             />
           </div>
@@ -269,6 +282,7 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
+              disabled={busy}
             />
           </div>
 
@@ -279,6 +293,7 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
                 type="button"
                 className={`email-format-pill ${format === 'md' ? 'active' : ''}`}
                 onClick={() => setFormat('md')}
+                disabled={busy}
               >
                 <FileCode2 size={14} />
                 <span>{t('email.formatMd')}</span>
@@ -287,6 +302,7 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
                 type="button"
                 className={`email-format-pill ${format === 'pdf' ? 'active' : ''}`}
                 onClick={() => setFormat('pdf')}
+                disabled={busy}
               >
                 <FileText size={14} />
                 <span>{t('email.formatPdf')}</span>
@@ -302,21 +318,27 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder={t('email.messagePlaceholder')}
+              disabled={busy}
             />
           </div>
 
           {error && <div className="settings-feedback error">{error}</div>}
 
-          <div className="modal-actions">
+          <div className="modal-actions send-email-modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose} disabled={busy}>
               {t('common.cancel')}
             </button>
-            <button type="submit" className="btn-primary" disabled={busy}>
-              {busy ? t('email.sendingBtn') : t('email.sendBtn')}
+            <button type="submit" className="btn-primary send-email-submit-btn" disabled={busy}>
+              {busy && <Loader2 size={15} className="spin" />}
+              <span>{busy ? t('email.sendingBtn') : t('email.sendBtn')}</span>
             </button>
           </div>
         </form>
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' && document.body
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 };
