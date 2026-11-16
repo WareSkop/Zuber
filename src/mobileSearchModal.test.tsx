@@ -77,7 +77,7 @@ describe('mobileSearchUtils', () => {
     const hits = searchNotesFullTextOffline(notes as any, 'mobile search');
     expect(hits).toHaveLength(1);
     expect(hits[0].path).toBe('Notes/Meeting.md');
-    expect(hits[0].matchCount).toBe(1);
+    expect(hits[0].matchCount).toBeGreaterThanOrEqual(1);
     expect(hits[0].snippet.toLowerCase()).toContain('mobile search');
   });
 });

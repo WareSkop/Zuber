@@ -533,7 +533,8 @@ export function createApp(vaultService: VaultService, gitService?: GitService, e
     try {
       const q = String(req.query.q || '');
       const tag = req.query.tag ? String(req.query.tag) : undefined;
-      const results = vaultService.searchVault(q, tag);
+      const sort = req.query.sort === 'newest' ? 'newest' : 'relevance';
+      const results = vaultService.searchVault(q, tag, sort);
       res.json({ results });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });

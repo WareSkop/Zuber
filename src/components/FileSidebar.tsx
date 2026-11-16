@@ -182,6 +182,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     'Tägliche Notizen': true,
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchSort, setSearchSort] = useState<'relevance' | 'newest'>('relevance');
   const [searchResults, setSearchResults] = useState<
     {
       path: string;
@@ -542,7 +543,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await api.search(searchQuery, selectedTagFilter || undefined);
+        const res = await api.search(searchQuery, selectedTagFilter || undefined, searchSort);
         setSearchResults(res.results);
       } catch {
         setSearchResults([]);
@@ -552,7 +553,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }, 180);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, selectedTagFilter, activeTab]);
+  }, [searchQuery, selectedTagFilter, activeTab, searchSort]);
 
   const toggleFolder = (folderPath: string) => {
     setExpandedFolders((prev) => ({
@@ -1615,6 +1616,25 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 <X size={14} />
               </button>
             )}
+          </div>
+
+          <div className="search-sort-bar" style={{ padding: '4px 10px 6px' }}>
+            <div className="search-sort-toggle" role="group" aria-label="Sort">
+              <button
+                type="button"
+                className={`search-sort-btn ${searchSort === 'relevance' ? 'active' : ''}`}
+                onClick={() => setSearchSort('relevance')}
+              >
+                {t('search.sortRelevance')}
+              </button>
+              <button
+                type="button"
+                className={`search-sort-btn ${searchSort === 'newest' ? 'active' : ''}`}
+                onClick={() => setSearchSort('newest')}
+              >
+                {t('search.sortNewest')}
+              </button>
+            </div>
           </div>
 
           {selectedTagFilter && (

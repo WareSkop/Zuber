@@ -669,7 +669,11 @@
     "placeholderInNote": "In aktueller Notiz suchen...",
     "placeholderFiles": "Dateien nach Name oder Ordner suchen...",
     "placeholderFullText": "Volltext offline in allen Notizen durchsuchen...",
-    "placeholderSettings": "Einstellungen & Befehle suchen..."
+    "placeholderSettings": "Einstellungen & Befehle suchen...",
+    "sortRelevance": "Relevanz",
+    "sortNewest": "Neueste zuerst",
+    "syntaxHelpTitle": "Suchsyntax",
+    "syntaxHelpBody": "wort = ganzes Wort · wort* = Wildcard · +a +b = beide · -wort = ausschließen · \"genaue Phrase\""
   },
   "encryption": {
     "encryptFolder": "Ordner verschlüsseln…",

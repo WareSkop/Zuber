@@ -45,6 +45,7 @@ import { routeExternalLinkClick } from '../utils/researchLinkUtils';
 import { resolveDecryptedAttachmentUrl } from '../crypto/encryptedAttachmentUrl';
 import { stripZencExt } from '../crypto/folderCrypto';
 import { computeBodyCursorAfterHeading } from '../utils/editorCursorUtils';
+import { findRegexMatchesInText, parseSearchQuery } from '../../shared/searchEngine';
 import {
   parseMarkdownTable,
   serializeMarkdownTable,
@@ -305,26 +306,20 @@ const inNoteSearchField = StateField.define<InNoteSearchState>({
   provide: (f) =>
     EditorView.decorations.compute([f], (state) => {
       const { query, activeIndex } = state.field(f);
-      const trimmed = query.trim();
-      if (!trimmed) return Decoration.none;
-      const lowerDoc = state.doc.toString().toLowerCase();
-      const lowerQuery = trimmed.toLowerCase();
+      const parsed = parseSearchQuery(query);
+      if (!parsed.hasTerms || parsed.required.length === 0) return Decoration.none;
+      const spans = findRegexMatchesInText(state.doc.toString(), parsed);
       const builder = new RangeSetBuilder<Decoration>();
-      let pos = 0;
-      let matchIdx = 0;
-      while (pos <= lowerDoc.length - lowerQuery.length) {
-        const found = lowerDoc.indexOf(lowerQuery, pos);
-        if (found === -1) break;
+      for (let matchIdx = 0; matchIdx < spans.length; matchIdx++) {
+        const span = spans[matchIdx];
         const isActive = matchIdx === activeIndex;
         builder.add(
-          found,
-          found + lowerQuery.length,
+          span.from,
+          span.to,
           Decoration.mark({
             class: isActive ? 'in-note-search-match is-active' : 'in-note-search-match',
           })
         );
-        matchIdx++;
-        pos = found + Math.max(1, lowerQuery.length);
       }
       return builder.finish();
     }),
@@ -4417,17 +4412,17 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         parent.normalize();
       }
 
-      if (!trimmed) {
+      const parsed = parseSearchQuery(trimmed);
+      if (!parsed.hasTerms || parsed.required.length === 0) {
         onInNoteMatchCountChangeRef.current?.(0);
         return;
       }
 
-      const lowerQuery = trimmed.toLowerCase();
       const textNodes: Text[] = [];
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
       let currentNode = walker.nextNode();
       while (currentNode) {
-        if (currentNode.nodeValue && currentNode.nodeValue.toLowerCase().includes(lowerQuery)) {
+        if (currentNode.nodeValue && findRegexMatchesInText(currentNode.nodeValue, parsed).length > 0) {
           textNodes.push(currentNode as Text);
         }
         currentNode = walker.nextNode();
@@ -4436,21 +4431,20 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       const createdMarks: HTMLElement[] = [];
       for (const textNode of textNodes) {
         const text = textNode.nodeValue || '';
-        const lowerText = text.toLowerCase();
+        const spans = findRegexMatchesInText(text, parsed);
+        if (spans.length === 0) continue;
         const frag = document.createDocumentFragment();
         let cursor = 0;
-        while (cursor <= lowerText.length - lowerQuery.length) {
-          const found = lowerText.indexOf(lowerQuery, cursor);
-          if (found === -1) break;
-          if (found > cursor) {
-            frag.appendChild(document.createTextNode(text.slice(cursor, found)));
+        for (const span of spans) {
+          if (span.from > cursor) {
+            frag.appendChild(document.createTextNode(text.slice(cursor, span.from)));
           }
           const mark = document.createElement('mark');
           mark.className = 'in-note-search-match';
-          mark.textContent = text.slice(found, found + lowerQuery.length);
+          mark.textContent = text.slice(span.from, span.to);
           frag.appendChild(mark);
           createdMarks.push(mark);
-          cursor = found + Math.max(1, lowerQuery.length);
+          cursor = span.to;
         }
         if (cursor < text.length) {
           frag.appendChild(document.createTextNode(text.slice(cursor)));
@@ -4472,22 +4466,15 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
 
     const view = viewRef.current;
     if (!view) return;
-    if (!trimmed) {
+    const parsed = parseSearchQuery(trimmed);
+    if (!trimmed || !parsed.hasTerms || parsed.required.length === 0) {
       onInNoteMatchCountChangeRef.current?.(0);
       view.dispatch({ effects: setInNoteSearchEffect.of({ query: '', activeIndex: 0 }) });
       return;
     }
 
-    const lowerDoc = view.state.doc.toString().toLowerCase();
-    const lowerQuery = trimmed.toLowerCase();
-    const positions: number[] = [];
-    let pos = 0;
-    while (pos <= lowerDoc.length - lowerQuery.length) {
-      const found = lowerDoc.indexOf(lowerQuery, pos);
-      if (found === -1) break;
-      positions.push(found);
-      pos = found + Math.max(1, lowerQuery.length);
-    }
+    const spans = findRegexMatchesInText(view.state.doc.toString(), parsed);
+    const positions = spans.map((s) => s.from);
 
     onInNoteMatchCountChangeRef.current?.(positions.length);
     const safeIdx = positions.length > 0

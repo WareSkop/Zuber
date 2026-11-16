@@ -669,7 +669,11 @@
     "placeholderInNote": "Search in current note...",
     "placeholderFiles": "Search files by name or folder...",
     "placeholderFullText": "Search full text across all offline notes...",
-    "placeholderSettings": "Search settings & commands..."
+    "placeholderSettings": "Search settings & commands...",
+    "sortRelevance": "Relevance",
+    "sortNewest": "Newest first",
+    "syntaxHelpTitle": "Search Syntax",
+    "syntaxHelpBody": "word = whole word · word* = wildcard · +a +b = both · -word = exclude · \"exact phrase\""
   },
   "encryption": {
     "encryptFolder": "Encrypt Folder…",

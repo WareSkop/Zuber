@@ -14,6 +14,12 @@ import type {
   SyncManifestEntry,
 } from '../shared/types';
 import {
+  extractMatchSnippet,
+  parseSearchQuery,
+  scoreSearchMatch,
+  type SearchSortMode,
+} from '../shared/searchEngine';
+import {
   extractHeadings,
   extractLinksAndEmbeds,
   extractTags,
@@ -1319,56 +1325,100 @@ export class VaultService {
     return { linked, unlinked };
   }
 
-  public searchVault(query: string, tagFilter?: string): {
+  public searchVault(
+    query: string,
+    tagFilter?: string,
+    sort: SearchSortMode = 'relevance'
+  ): {
     path: string;
     name: string;
     matches: { line: number; text: string }[];
     tags: string[];
+    score: number;
+    mtime: number;
   }[] {
-    const q = query.trim().toLowerCase();
+    const parsedQuery = parseSearchQuery(query);
     const cleanTag = tagFilter?.replace(/^#+/, '').toLowerCase();
+    const nowMs = Date.now();
     const results: {
       path: string;
       name: string;
       matches: { line: number; text: string }[];
       tags: string[];
+      score: number;
+      mtime: number;
     }[] = [];
 
     for (const note of this.notes.values()) {
+      if (note.path.toLowerCase().endsWith('.zenc') || note.path.endsWith('.zuber-lock.json')) continue;
       if (cleanTag && !note.tags.some((t) => t.toLowerCase() === cleanTag)) continue;
 
-      if (!q) {
+      const fileEntry = this.files.get(note.path);
+      const mtime = fileEntry?.mtimeMs ?? note.updatedAt ?? 0;
+
+      if (!parsedQuery.hasTerms) {
         results.push({
           path: note.path,
           name: note.name,
           matches: [{ line: 1, text: note.body.slice(0, 140).replace(/\n+/g, ' ').trim() }],
           tags: note.tags,
+          score: 0,
+          mtime,
         });
-      } else {
-        const matches: { line: number; text: string }[] = [];
-        if (note.name.toLowerCase().includes(q)) {
-          matches.push({ line: 0, text: `Titel: ${note.name}` });
-        }
-        for (const prop of note.properties) {
-          if (prop.key.toLowerCase().includes(q) || String(prop.value).toLowerCase().includes(q)) {
-            matches.push({ line: 0, text: `Eigenschaft [${prop.key}]: ${String(prop.value)}` });
-          }
-        }
-        if (note.body.toLowerCase().includes(q)) {
-          const lines = note.body.split(/\r?\n/);
-          for (let i = 0; i < lines.length && matches.length < 4; i++) {
-            if (lines[i].toLowerCase().includes(q)) {
-              matches.push({ line: i + 1, text: lines[i].trim().slice(0, 160) });
-            }
-          }
-        }
-        if (matches.length > 0) {
-          results.push({ path: note.path, name: note.name, matches, tags: note.tags });
-        }
+        continue;
       }
-      if (results.length >= 200) break;
+
+      const aliasProp = note.properties.find((p) => p.key.toLowerCase() === 'aliases' || p.key.toLowerCase() === 'alias');
+      const aliases = Array.isArray(aliasProp?.value)
+        ? aliasProp!.value.map(String)
+        : typeof aliasProp?.value === 'string'
+          ? [aliasProp.value]
+          : [];
+      const frontmatterText = note.properties
+        .filter((p) => !p.key.startsWith('_'))
+        .map((p) => `${p.key}: ${Array.isArray(p.value) ? p.value.join(', ') : String(p.value ?? '')}`)
+        .join('\n');
+
+      const score = scoreSearchMatch(
+        {
+          path: note.path,
+          name: note.name,
+          body: note.body,
+          tags: note.tags,
+          aliases,
+          frontmatterText,
+          mtime,
+        },
+        parsedQuery,
+        nowMs
+      );
+
+      if (score === null) continue;
+
+      const snippetInfo = extractMatchSnippet(note.body, parsedQuery, 140);
+      const matches: { line: number; text: string }[] = [];
+      if (snippetInfo.snippet) {
+        matches.push({ line: snippetInfo.line, text: snippetInfo.snippet });
+      } else {
+        matches.push({ line: 0, text: note.name });
+      }
+
+      results.push({
+        path: note.path,
+        name: note.name,
+        matches,
+        tags: note.tags,
+        score,
+        mtime,
+      });
     }
 
-    return results;
+    if (sort === 'newest') {
+      results.sort((a, b) => b.mtime - a.mtime || b.score - a.score || a.name.localeCompare(b.name));
+    } else {
+      results.sort((a, b) => b.score - a.score || b.mtime - a.mtime || a.name.localeCompare(b.name));
+    }
+
+    return results.slice(0, 200);
   }
 }

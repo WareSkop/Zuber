@@ -1511,6 +1511,32 @@ Weitere Punkte folgen.`,
         try { fs.unlinkSync(outsideFile); } catch {}
       }
     });
+
+    it('searches vault in memory with whole-word default, wildcards, boolean operators, and relevance ranking', () => {
+      const searchTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zuber-search-unit-'));
+      try {
+        fs.writeFileSync(path.join(searchTmp, 'Zuber.md'), '# Zuber\nHauptnotiz\n', 'utf-8');
+        fs.writeFileSync(path.join(searchTmp, 'Entwicklung.md'), '# Entwicklung\nArbeit am Zuber Projekt.\n', 'utf-8');
+        fs.writeFileSync(path.join(searchTmp, 'Rezept.md'), '# Rezept\nZubereitung einer Suppe.\n', 'utf-8');
+        fs.writeFileSync(path.join(searchTmp, 'Archiv.md'), '# Archiv\nAlter Zuber im Archiv.\n', 'utf-8');
+
+        const searchSvc = new VaultService(searchTmp);
+
+        // Whole-word default: 'zuber' matches Zuber, Entwicklung, Archiv, NOT Rezept (Zubereitung)
+        const wholeWord = searchSvc.searchVault('zuber');
+        expect(wholeWord.map((r) => r.path)).toEqual(['Zuber.md', 'Archiv.md', 'Entwicklung.md']);
+
+        // Wildcard: 'zuber*' matches Rezept too
+        const wildcard = searchSvc.searchVault('zuber*');
+        expect(wildcard.some((r) => r.path === 'Rezept.md')).toBe(true);
+
+        // Boolean + and -: '+zuber -archiv' excludes Archiv.md
+        const boolRes = searchSvc.searchVault('+zuber -archiv');
+        expect(boolRes.map((r) => r.path)).toEqual(['Zuber.md', 'Entwicklung.md']);
+      } finally {
+        fs.rmSync(searchTmp, { recursive: true, force: true });
+      }
+    });
   });
 });
 

@@ -1,4 +1,14 @@
-export type SearchScope = 'in-note' | 'files' | 'fulltext' | 'settings';
+import {
+  extractMatchSnippet,
+  findRegexMatchesInText,
+  parseSearchQuery,
+  scoreSearchMatch,
+  type SearchScope,
+  type SearchSortMode,
+  type SnippetRange,
+} from '../../shared/searchEngine';
+
+export type { SearchScope, SearchSortMode, SnippetRange };
 
 export interface InNoteMatch {
   index: number;
@@ -15,6 +25,7 @@ export interface FileSearchHit {
   name: string;
   folder: string;
   extension: string;
+  score?: number;
 }
 
 export interface FullTextNoteHit {
@@ -25,21 +36,22 @@ export interface FullTextNoteHit {
   snippet: string;
   matchStartInSnippet: number;
   matchEndInSnippet: number;
+  ranges: SnippetRange[];
+  score: number;
+  mtime: number;
 }
 
 /**
- * Finds all case-insensitive occurrences of `query` in `text`, returning
- * exact character offsets and 1-based line metadata for previews and jumping.
+ * Finds all matches of `query` in `text` using the unified SearchEngine
+ * (whole-word default, * wildcards, +/- boolean operators, and "phrases").
  */
 export function findInNoteMatches(text: string, query: string): InNoteMatch[] {
-  const q = query.trim();
-  if (!q || !text) return [];
+  const parsed = parseSearchQuery(query);
+  if (!parsed.hasTerms || parsed.required.length === 0 || !text) return [];
 
-  const lowerText = text.toLowerCase();
-  const lowerQuery = q.toLowerCase();
-  const qLen = lowerQuery.length;
+  const spans = findRegexMatchesInText(text, parsed);
+  if (spans.length === 0) return [];
 
-  // Precompute line start offsets for O(log L) or single-pass line lookup
   const lineStarts: number[] = [0];
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '\n') {
@@ -48,35 +60,28 @@ export function findInNoteMatches(text: string, query: string): InNoteMatch[] {
   }
 
   const matches: InNoteMatch[] = [];
-  let pos = 0;
   let lineIdx = 0;
 
-  while (pos <= lowerText.length - qLen) {
-    const found = lowerText.indexOf(lowerQuery, pos);
-    if (found === -1) break;
-
-    while (lineIdx + 1 < lineStarts.length && lineStarts[lineIdx + 1] <= found) {
+  for (const span of spans) {
+    while (lineIdx + 1 < lineStarts.length && lineStarts[lineIdx + 1] <= span.from) {
       lineIdx++;
     }
-
     const lineStart = lineStarts[lineIdx];
     const nextLineStart =
       lineIdx + 1 < lineStarts.length ? lineStarts[lineIdx + 1] - 1 : text.length;
     const lineText = text.slice(lineStart, nextLineStart).replace(/\r$/, '');
-    const matchStartInLine = found - lineStart;
-    const matchEndInLine = Math.min(lineText.length, matchStartInLine + qLen);
+    const matchStartInLine = span.from - lineStart;
+    const matchEndInLine = Math.min(lineText.length, span.to - lineStart);
 
     matches.push({
       index: matches.length,
-      from: found,
-      to: found + qLen,
+      from: span.from,
+      to: span.to,
       line: lineIdx + 1,
       lineText,
       matchStartInLine,
       matchEndInLine,
     });
-
-    pos = found + qLen;
   }
 
   return matches;
@@ -95,15 +100,17 @@ export function wrapMatchIndex(
 }
 
 /**
- * Searches vault files (.md, .canvas, .base, etc.) by filename and folder path.
+ * Searches vault files (.md, .canvas, .base, etc.) by filename and folder path
+ * with whole-word default, wildcards, boolean operators, and relevance ranking.
  */
 export function searchVaultFiles(
-  files: Array<{ path: string; name?: string; folder?: string; extension?: string }>,
+  files: Array<{ path: string; name?: string; folder?: string; extension?: string; mtime?: number }>,
   query: string,
   limit = 60
 ): FileSearchHit[] {
-  const q = query.trim().toLowerCase();
-  const results: FileSearchHit[] = [];
+  const parsed = parseSearchQuery(query);
+  const scored: Array<FileSearchHit & { _score: number }> = [];
+  const nowMs = Date.now();
 
   for (const f of files) {
     const fileName = f.name || f.path.split('/').pop() || f.path;
@@ -118,61 +125,102 @@ export function searchVaultFiles(
       f.extension ||
       (fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : 'md');
 
-    if (!q || f.path.toLowerCase().includes(q) || fileName.toLowerCase().includes(q)) {
-      results.push({
+    if (!parsed.hasTerms) {
+      scored.push({
         path: f.path,
         name: fileName,
         folder,
         extension: ext,
+        _score: f.mtime ?? 0,
       });
-      if (results.length >= limit) break;
+      continue;
+    }
+
+    const score = scoreSearchMatch(
+      { path: f.path, name: fileName, mtime: f.mtime },
+      parsed,
+      nowMs
+    );
+    if (score !== null) {
+      scored.push({
+        path: f.path,
+        name: fileName,
+        folder,
+        extension: ext,
+        score,
+        _score: score,
+      });
     }
   }
 
-  return results;
+  if (parsed.hasTerms) {
+    scored.sort((a, b) => b._score - a._score || a.name.localeCompare(b.name));
+  }
+
+  return scored.slice(0, limit).map(({ _score: _, ...hit }) => hit);
 }
 
 /**
- * Performs offline full-text search across an array of cached notes (e.g. from IndexedDB).
+ * Performs offline full-text search across cached notes (e.g. from IndexedDB)
+ * using the unified SearchEngine with relevance scoring or newest-first sorting.
  */
 export function searchNotesFullTextOffline(
-  notes: Array<{ path: string; name?: string; body: string }>,
+  notes: Array<{
+    path: string;
+    name?: string;
+    body: string;
+    tags?: string[];
+    properties?: Array<{ key: string; value: unknown }>;
+    updatedAt?: number;
+    mtime?: number;
+  }>,
   query: string,
-  limit = 50
+  limit = 50,
+  sort: SearchSortMode = 'relevance'
 ): FullTextNoteHit[] {
-  const q = query.trim();
-  if (!q) return [];
+  const parsed = parseSearchQuery(query);
+  if (!parsed.hasTerms) return [];
 
-  const lowerQuery = q.toLowerCase();
-  const qLen = lowerQuery.length;
+  const nowMs = Date.now();
   const hits: FullTextNoteHit[] = [];
 
   for (const note of notes) {
     if (note.path.toLowerCase().endsWith('.zenc') || note.path.endsWith('.zuber-lock.json')) continue;
     const body = note.body || '';
-    const lowerBody = body.toLowerCase();
-    const firstIdx = lowerBody.indexOf(lowerQuery);
-    if (firstIdx === -1) continue;
+    const mtime = note.mtime ?? note.updatedAt ?? 0;
 
-    let count = 1;
-    let searchPos = firstIdx + qLen;
-    while (searchPos <= lowerBody.length - qLen) {
-      const nextIdx = lowerBody.indexOf(lowerQuery, searchPos);
-      if (nextIdx === -1) break;
-      count++;
-      searchPos = nextIdx + qLen;
-    }
+    const aliasProp = note.properties?.find(
+      (p) => p.key.toLowerCase() === 'aliases' || p.key.toLowerCase() === 'alias'
+    );
+    const aliases = Array.isArray(aliasProp?.value)
+      ? aliasProp!.value.map(String)
+      : typeof aliasProp?.value === 'string'
+        ? [aliasProp.value]
+        : [];
+    const frontmatterText = (note.properties || [])
+      .filter((p) => !p.key.startsWith('_'))
+      .map((p) => `${p.key}: ${Array.isArray(p.value) ? p.value.join(', ') : String(p.value ?? '')}`)
+      .join('\n');
 
-    // Build a clean snippet around the first match
-    const snippetRadius = 48;
-    const rawStart = Math.max(0, firstIdx - snippetRadius);
-    const rawEnd = Math.min(body.length, firstIdx + qLen + snippetRadius);
-    const prefixEllipsis = rawStart > 0 ? '…' : '';
-    const suffixEllipsis = rawEnd < body.length ? '…' : '';
-    const rawSlice = body.slice(rawStart, rawEnd).replace(/[\r\n]+/g, ' ');
-    const snippet = `${prefixEllipsis}${rawSlice}${suffixEllipsis}`;
-    const matchStartInSnippet = prefixEllipsis.length + (firstIdx - rawStart);
-    const matchEndInSnippet = matchStartInSnippet + qLen;
+    const score = scoreSearchMatch(
+      {
+        path: note.path,
+        name: note.name,
+        body,
+        tags: note.tags,
+        aliases,
+        frontmatterText,
+        mtime,
+      },
+      parsed,
+      nowMs
+    );
+
+    if (score === null) continue;
+
+    const matchSpans = findRegexMatchesInText(`${note.name || ''}\n${body}`, parsed);
+    const snippetRes = extractMatchSnippet(body, parsed, 120);
+    const firstRange = snippetRes.ranges[0];
 
     const fileName = (note.name || note.path.split('/').pop() || note.path).replace(/\.md$/i, '');
     const folder = note.path.includes('/')
@@ -183,13 +231,20 @@ export function searchNotesFullTextOffline(
       path: note.path,
       name: fileName,
       folder,
-      matchCount: count,
-      snippet,
-      matchStartInSnippet,
-      matchEndInSnippet,
+      matchCount: Math.max(1, matchSpans.length),
+      snippet: snippetRes.snippet,
+      matchStartInSnippet: firstRange ? firstRange.start : 0,
+      matchEndInSnippet: firstRange ? firstRange.end : 0,
+      ranges: snippetRes.ranges,
+      score,
+      mtime,
     });
   }
 
-  hits.sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name));
+  if (sort === 'newest') {
+    hits.sort((a, b) => b.mtime - a.mtime || b.score - a.score || a.name.localeCompare(b.name));
+  } else {
+    hits.sort((a, b) => b.score - a.score || b.mtime - a.mtime || a.name.localeCompare(b.name));
+  }
   return hits.slice(0, limit);
 }

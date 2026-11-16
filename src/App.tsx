@@ -375,6 +375,9 @@ export const App: React.FC = () => {
   const [conflicts, setConflicts] = useState<ConflictItem[]>([]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [unifiedSearchScope, setUnifiedSearchScope] = useState<'in-note' | 'files' | 'fulltext' | 'settings' | undefined>(undefined);
+  const [desktopInNoteJumpOpen, setDesktopInNoteJumpOpen] = useState(false);
+  const desktopInNoteInputRef = useRef<HTMLInputElement | null>(null);
   const [inNoteSearchQuery, setInNoteSearchQuery] = useState('');
   const [inNoteSearchIndex, setInNoteSearchIndex] = useState(0);
   const [inNoteMatchCount, setInNoteMatchCount] = useState(0);
@@ -761,11 +764,38 @@ export const App: React.FC = () => {
         });
       }
 
-      // Command Palette (Ctrl+P / Cmd+P)
+      // Unified 4-in-1 Search Modal (Ctrl+P / Cmd+P)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
+        setUnifiedSearchScope(activePathRef.current ? 'in-note' : 'files');
+        setMobileSearchOpen((prev) => !prev);
         return;
+      }
+
+      // Quick File Search (Ctrl+O / Cmd+O)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        setUnifiedSearchScope('files');
+        setMobileSearchOpen(true);
+        return;
+      }
+
+      // Desktop In-Note Find Bar (Ctrl+F / Cmd+F)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        const target = e.target as HTMLElement | null;
+        const inOtherInput =
+          target &&
+          (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') &&
+          target !== desktopInNoteInputRef.current;
+        if (!inOtherInput && activePathRef.current && !stripZencExt(activePathRef.current).endsWith('.canvas') && !stripZencExt(activePathRef.current).endsWith('.base')) {
+          e.preventDefault();
+          setDesktopInNoteJumpOpen(true);
+          requestAnimationFrame(() => {
+            desktopInNoteInputRef.current?.focus();
+            desktopInNoteInputRef.current?.select();
+          });
+          return;
+        }
       }
 
       // Quick Save (Ctrl+S / Cmd+S)
@@ -3681,6 +3711,72 @@ export const App: React.FC = () => {
             />
           )}
 
+          {/* Desktop Floating In-Note Match Jump Bar */}
+          {!isMobile && activeNote && (desktopInNoteJumpOpen || Boolean(inNoteSearchQuery.trim())) && (
+            <div className="desktop-in-note-jump-bar" data-testid="desktop-in-note-jump-bar">
+              <input
+                ref={desktopInNoteInputRef}
+                type="search"
+                className="desktop-in-note-jump-input"
+                data-testid="desktop-in-note-jump-input"
+                placeholder={t('search.placeholderInNote')}
+                value={inNoteSearchQuery}
+                onChange={(e) => {
+                  setInNoteSearchQuery(e.target.value);
+                  setInNoteSearchIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setDesktopInNoteJumpOpen(false);
+                    setInNoteSearchQuery('');
+                    setInNoteSearchIndex(0);
+                    setInNoteMatchCount(0);
+                  } else if (e.key === 'Enter' || e.key === 'F3') {
+                    e.preventDefault();
+                    if (inNoteMatchCount > 0) {
+                      setInNoteSearchIndex((prev) => wrapMatchIndex(prev, e.shiftKey ? -1 : 1, inNoteMatchCount));
+                    }
+                  }
+                }}
+              />
+              <span className="in-note-search-jump-counter" data-testid="desktop-in-note-jump-counter">
+                {inNoteMatchCount > 0 ? `${(inNoteSearchIndex % inNoteMatchCount) + 1} / ${inNoteMatchCount}` : '0 / 0'}
+              </span>
+              <button
+                type="button"
+                className="in-note-search-jump-btn"
+                aria-label={t('search.prevMatch')}
+                disabled={inNoteMatchCount === 0}
+                onClick={() => setInNoteSearchIndex((prev) => wrapMatchIndex(prev, -1, inNoteMatchCount))}
+              >
+                <ChevronUp size={16} />
+              </button>
+              <button
+                type="button"
+                className="in-note-search-jump-btn"
+                aria-label={t('search.nextMatch')}
+                disabled={inNoteMatchCount === 0}
+                onClick={() => setInNoteSearchIndex((prev) => wrapMatchIndex(prev, 1, inNoteMatchCount))}
+              >
+                <ChevronDown size={16} />
+              </button>
+              <button
+                type="button"
+                className="in-note-search-jump-btn"
+                aria-label={t('common.close')}
+                onClick={() => {
+                  setDesktopInNoteJumpOpen(false);
+                  setInNoteSearchQuery('');
+                  setInNoteSearchIndex(0);
+                  setInNoteMatchCount(0);
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
           <div className="editor-pane scroller">
             {activeNote ? (
               <div className="note-document-container">
@@ -3708,7 +3804,7 @@ export const App: React.FC = () => {
                   allNotes={allNotesForEditor}
                   allTags={allTagNames}
                   scrollToLine={scrollToLine}
-                  inNoteSearchQuery={isMobile ? inNoteSearchQuery : ''}
+                  inNoteSearchQuery={inNoteSearchQuery}
                   inNoteSearchIndex={inNoteSearchIndex}
                   onInNoteMatchCountChange={setInNoteMatchCount}
                   tableWidths={getTableWidthsFromProperties(activeNote.properties)}
@@ -4638,34 +4734,38 @@ export const App: React.FC = () => {
         commands={commands}
       />
 
-      {/* Mobile 4-in-1 Search Modal */}
-      {isMobile && (
-        <MobileSearchModal
-          isOpen={mobileSearchOpen}
-          onClose={() => setMobileSearchOpen(false)}
-          activeNote={activeNote ? { path: activeNote.path, body: activeNote.body, rawContent: activeNote.rawContent } : null}
-          allFiles={allNotesForEditor}
-          commands={commands}
-          onOpenFile={(targetPath) => {
-            openNote(targetPath);
-            setLeftSidebarOpen(false);
-          }}
-          onJumpToInNoteMatch={(query, matchIndex) => {
-            setInNoteSearchQuery(query);
-            setInNoteSearchIndex(matchIndex);
-          }}
-          onJumpToNoteWithSearch={(targetPath, query, matchIndex) => {
-            setInNoteSearchQuery(query);
-            setInNoteSearchIndex(matchIndex);
-            openNote(targetPath);
-            setLeftSidebarOpen(false);
-          }}
-          onOpenSettingsTab={(tab) => {
-            setSettingsInitialTab(tab);
-            setSettingsOpen(true);
-          }}
-        />
-      )}
+      {/* Unified 4-in-1 Search Modal (Desktop Ctrl+P / Ctrl+O & Mobile Search) */}
+      <MobileSearchModal
+        isOpen={mobileSearchOpen}
+        initialScope={unifiedSearchScope}
+        onClose={() => {
+          setMobileSearchOpen(false);
+          setUnifiedSearchScope(undefined);
+        }}
+        activeNote={activeNote ? { path: activeNote.path, body: activeNote.body, rawContent: activeNote.rawContent } : null}
+        allFiles={allNotesForEditor}
+        commands={commands}
+        onOpenFile={(targetPath) => {
+          openNote(targetPath);
+          setLeftSidebarOpen(false);
+        }}
+        onJumpToInNoteMatch={(query, matchIndex) => {
+          setInNoteSearchQuery(query);
+          setInNoteSearchIndex(matchIndex);
+          if (!isMobile) setDesktopInNoteJumpOpen(true);
+        }}
+        onJumpToNoteWithSearch={(targetPath, query, matchIndex) => {
+          setInNoteSearchQuery(query);
+          setInNoteSearchIndex(matchIndex);
+          if (!isMobile) setDesktopInNoteJumpOpen(true);
+          openNote(targetPath);
+          setLeftSidebarOpen(false);
+        }}
+        onOpenSettingsTab={(tab) => {
+          setSettingsInitialTab(tab);
+          setSettingsOpen(true);
+        }}
+      />
 
       {/* Zero-Knowledge Folder Encryption / Decryption Modal */}
       {folderEncryptModal && (

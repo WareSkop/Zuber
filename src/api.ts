@@ -783,18 +783,22 @@ export const api = {
 
   search(
     q: string,
-    tag?: string
+    tag?: string,
+    sort: 'relevance' | 'newest' = 'relevance'
   ): Promise<{
     results: {
       path: string;
       name: string;
       matches: { line: number; text: string }[];
       tags: string[];
+      score?: number;
+      mtime?: number;
     }[];
   }> {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (tag) params.set('tag', tag);
+    if (sort) params.set('sort', sort);
     return apiFetch(`/api/vault/search?${params.toString()}`);
   },
 

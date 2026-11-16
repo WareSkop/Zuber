@@ -316,3 +316,15 @@ Zuber behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als e
 - **IMAP-Posteingangs-Watcher (`server/emailService.ts`, `imapflow`, `mailparser`, `turndown`):**
   - Hintergrund-Polling (Standard `60s`, Minimum `30s`, deaktiviert bei `FORCE_OFFLINE=true`) sucht ungelesene Nachrichten (`\Seen` nicht gesetzt) im konfigurierten Ordner (Standard `Zuber-Inbox`), markiert diese sofort als `\Seen`, verhindert Duplikate über `config/imap-processed.json` (`Message-ID`s) und verschiebt sie optional in `processedFolder`.
   - `convertEmailHtmlToMarkdown()` bereinigt `<style>`, `<script>` und 1×1-Tracking-Pixel per `turndown`; sichere Anhänge bis `maxAttachmentMb` landen kollisionssicher in `vault/attachments/`, Notizen unter `Inbox/YYYY-MM-DD <Subject>.md` (`(2)` bei Kollisionen am selben Tag) inklusive sofortigem `VaultService.indexFile()` und `vault:changed`-Broadcast.
+
+---
+
+## 14. Einheitliche Suche (`shared/searchEngine.ts`)
+
+- **Reine Suchlogik (`shared/searchEngine.ts`):**
+  - `parseSearchQuery()` zerlegt Suchanfragen in positive und negierte (`-term`) Klauseln mit Unterstützung für Ganzwort-Standard (`\b...\b`), Wildcards (`*` → `[^\s]*`), explizite Pflichtterme (`+term`) sowie exakte Phrasen in Anführungszeichen (`"..."`).
+  - `scoreSearchMatch()` bewertet Treffer über Titel (exakt `+120`, Ganzwort `+70`, Wildcard `+35`), Tags/Aliases (`+45`), Body (Ganzwort `+20` + `+3` je weiterem Treffer bis `+30`, Wildcard `+5`) und Aktualität (`+0..10`).
+  - `findRegexMatchesInText()` und `extractMatchSnippet()` liefern konsistente Treffer-Spannen und Textausschnitte.
+- **In-Memory-Indizes auf Server & Client:**
+  - `VaultService.searchVault(query, tagFilter?, sort?)` (`server/vaultService.ts`) und `GET /api/vault/search?q=...&tag=...&sort=relevance|newest` (`server/index.ts`) werten ausschließlich die im RAM gehaltene `this.notes`-Map ohne synchrone Festplatten-Scans aus.
+  - Auf Client-Seite nutzen `searchNotesFullTextOffline()`, `searchVaultFiles()` und `findInNoteMatches()` (`src/utils/mobileSearchUtils.ts`) dieselbe `shared/searchEngine.ts`-Logik auf der geladenen IndexedDB-/In-Memory-Liste.
