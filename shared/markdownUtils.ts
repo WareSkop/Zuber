@@ -150,7 +150,7 @@ export function parseMarkdownWithFrontmatter(rawContent: string): {
   }
 
   const yamlText = match[1];
-  const body = rawContent.slice(match[0].length);
+  const body = rawContent.slice(match[0].length).replace(/^\r?\n/, '');
   let parsed: Record<string, unknown> = {};
 
   try {

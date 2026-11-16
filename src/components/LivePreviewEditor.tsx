@@ -44,6 +44,7 @@ import { renderReadingHtml } from '../utils/readingMode';
 import { routeExternalLinkClick } from '../utils/researchLinkUtils';
 import { resolveDecryptedAttachmentUrl } from '../crypto/encryptedAttachmentUrl';
 import { stripZencExt } from '../crypto/folderCrypto';
+import { computeBodyCursorAfterHeading } from '../utils/editorCursorUtils';
 import {
   parseMarkdownTable,
   serializeMarkdownTable,
@@ -253,6 +254,8 @@ export interface LivePreviewEditorRef {
   hasSelection: () => boolean;
   replaceSelection: (newText: string) => void;
   focus: () => void;
+  focusAtEnd: () => void;
+  focusBelowHeading: () => void;
   blur: () => void;
 }
 
@@ -2610,6 +2613,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeClickPosRef = useRef<number | null>(null);
   const pendingEditTapRef = useRef<{ x: number; y: number; textSnippet: string } | null>(null);
+  const pendingFocusActionRef = useRef<'end' | 'smart' | null>(null);
   const lastTapRef = useRef<{ time: number; x: number; y: number } | null>(null);
 
   useLayoutEffect(() => {
@@ -3190,6 +3194,25 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
+  const applySmartCursorBelowHeading = (view: EditorView) => {
+    const docText = view.state.doc.toString();
+    const result = computeBodyCursorAfterHeading(docText);
+    if (result.insertText !== undefined && result.insertFrom !== undefined) {
+      view.dispatch({
+        changes: { from: result.insertFrom, to: result.insertFrom, insert: result.insertText },
+        selection: { anchor: result.pos },
+        effects: EditorView.scrollIntoView(result.pos, { y: 'center' }),
+      });
+    } else {
+      const safePos = Math.max(0, Math.min(result.pos, view.state.doc.length));
+      view.dispatch({
+        selection: { anchor: safePos },
+        effects: EditorView.scrollIntoView(safePos, { y: 'center' }),
+      });
+    }
+    view.focus();
+  };
+
   useImperativeHandle(ref, () => ({
     applyFormat,
     insertTable,
@@ -3214,6 +3237,27 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     hasSelection,
     replaceSelection,
     focus: () => viewRef.current?.focus(),
+    focusAtEnd: () => {
+      const view = viewRef.current;
+      if (view) {
+        const pos = view.state.doc.length;
+        view.dispatch({
+          selection: { anchor: pos },
+          effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+        });
+        view.focus();
+      } else {
+        pendingFocusActionRef.current = 'end';
+      }
+    },
+    focusBelowHeading: () => {
+      const view = viewRef.current;
+      if (view) {
+        applySmartCursorBelowHeading(view);
+      } else {
+        pendingFocusActionRef.current = 'smart';
+      }
+    },
     blur: () => viewRef.current?.contentDOM.blur(),
   }));
 
@@ -3715,6 +3759,22 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
           effects: EditorView.scrollIntoView(safePos, { y: 'center' }),
         });
         view.focus();
+      });
+    } else if (pendingFocusActionRef.current) {
+      const action = pendingFocusActionRef.current;
+      pendingFocusActionRef.current = null;
+      requestAnimationFrame(() => {
+        if (viewRef.current !== view) return;
+        if (action === 'end') {
+          const pos = view.state.doc.length;
+          view.dispatch({
+            selection: { anchor: pos },
+            effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+          });
+          view.focus();
+        } else {
+          applySmartCursorBelowHeading(view);
+        }
       });
     }
 

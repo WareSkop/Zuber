@@ -7,5 +7,8 @@
 
 ### Changed
 - **Harmonisierte Codeblock-Schriftgröße (`src/styles.css`):** Fenced-Codeblöcke im Live-Preview und Reading-Mode skalieren nun proportional zu `--km-font-size-editor` mit `calc(var(--km-font-size-editor, 16px) * 0.875)` (`14px` bei `16px` Editor-Schrift) und `line-height: 1.5`.
+- **Mobiles Neue-Notiz-Verhalten & Smart-Cursor unter `# Überschrift` (`shared/markdownUtils.ts`, `src/utils/editorCursorUtils.ts`, `src/components/LivePreviewEditor.tsx`, `src/App.tsx`, `src/printExportAndBatch.test.ts`):**
+  - `parseMarkdownWithFrontmatter()` entfernt die einzelne Frontmatter-Trenn-Leerzeile, sodass neue Notizen direkt auf Zeile 1 mit `# <Titel>\n\n` ohne vorangestellte Leerzeile beginnen.
+  - Neu erstellte Notizen öffnen auf Mobilgeräten direkt im Bearbeitungsmodus (`'live'`) mit fokussiertem Cursor im Body unterhalb der Überschrift (`focusAtEnd()`); der **Bearbeiten**-Button in `<MobileBottomNav />` nutzt `focusBelowHeading()` (`computeBodyCursorAfterHeading()`), um den Cursor unterhalb einer H1-Überschrift zu platzieren.
 
 ### Fixed

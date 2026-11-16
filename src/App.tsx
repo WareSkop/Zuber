@@ -959,7 +959,7 @@ export const App: React.FC = () => {
   );
 
   const openNoteByPath = useCallback(
-    async (relPath: string) => {
+    async (relPath: string, options?: { forceEditMode?: boolean }) => {
       const encFolder = findEncryptedFolderForPath(relPath, encryptedFoldersRef.current);
       if (encFolder && !unlockedFoldersStore.isFolderUnlocked(encFolder)) {
         setActiveNote(null);
@@ -984,7 +984,10 @@ export const App: React.FC = () => {
         setLockedFolderTarget(null);
         setActiveNote(note);
         const logicalRel = stripZencExt(relPath);
-        if (
+        if (options?.forceEditMode) {
+          setEditorMode('live');
+          requestAnimationFrame(() => editorRef.current?.focusBelowHeading());
+        } else if (
           isMobile &&
           getMobileReadingDefault() &&
           !logicalRel.endsWith('.base') &&
@@ -1422,7 +1425,7 @@ export const App: React.FC = () => {
         });
 
         await loadVaultIndex();
-        await openNoteByPath(savedNote?.path || targetPath);
+        await openNoteByPath(savedNote?.path || targetPath, isMobile ? { forceEditMode: true } : undefined);
         showToast(t('templates.noteCreatedToast') || `Notiz "${cleanTitle}" aus Vorlage erstellt.`);
       } catch (err) {
         console.error('Failed to create note from template:', err);
@@ -1522,7 +1525,11 @@ export const App: React.FC = () => {
     if (found) {
       await openNoteByPath(found.path);
       if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
-      if (isMobile) setLeftSidebarOpen(false);
+      if (isMobile) {
+        setLeftSidebarOpen(false);
+        setEditorMode('live');
+        requestAnimationFrame(() => editorRef.current?.focusAtEnd());
+      }
       return;
     }
 
@@ -1578,7 +1585,11 @@ export const App: React.FC = () => {
       recordLastActiveNote(created.path);
       recordRecentNote(created.path);
       if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
-      if (isMobile) setLeftSidebarOpen(false);
+      if (isMobile) {
+        setLeftSidebarOpen(false);
+        setEditorMode('live');
+        requestAnimationFrame(() => editorRef.current?.focusAtEnd());
+      }
     } catch (err) {
       console.error('Failed to create daily note:', err);
       showToast(`Fehler beim Erstellen der Tagesnotiz: ${String(err)}`);
@@ -2601,7 +2612,11 @@ export const App: React.FC = () => {
         recordLastActiveNote(created.path);
         recordRecentNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
-        if (isMobile) setLeftSidebarOpen(false);
+        if (isMobile) {
+          setLeftSidebarOpen(false);
+          setEditorMode('live');
+          requestAnimationFrame(() => editorRef.current?.focusAtEnd());
+        }
       } else if (currentDialog.type === 'create-canvas') {
         if (!val) return;
         await flushPendingSave();
@@ -2624,7 +2639,11 @@ export const App: React.FC = () => {
         recordLastActiveNote(created.path);
         recordRecentNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
-        if (isMobile) setLeftSidebarOpen(false);
+        if (isMobile) {
+          setLeftSidebarOpen(false);
+          setEditorMode('live');
+          requestAnimationFrame(() => editorRef.current?.focusAtEnd());
+        }
       } else if (currentDialog.type === 'create-base') {
         if (!val) return;
         await flushPendingSave();
@@ -2647,7 +2666,11 @@ export const App: React.FC = () => {
         recordLastActiveNote(created.path);
         recordRecentNote(created.path);
         if (workspaceView === 'graph') setWorkspaceView('editor');
-        if (isMobile) setLeftSidebarOpen(false);
+        if (isMobile) {
+          setLeftSidebarOpen(false);
+          setEditorMode('live');
+          requestAnimationFrame(() => editorRef.current?.focusAtEnd());
+        }
       } else if (currentDialog.type === 'create-folder') {
         if (!val) return;
         const cleanFolder = getUniqueDefaultName(val, 'folder', currentDialog.parentFolder);
@@ -2775,7 +2798,11 @@ export const App: React.FC = () => {
       recordLastActiveNote(created.path);
       recordRecentNote(created.path);
       if (workspaceViewRef.current === 'graph') setWorkspaceView('editor');
-      if (isMobile) setLeftSidebarOpen(false);
+      if (isMobile) {
+        setLeftSidebarOpen(false);
+        setEditorMode('live');
+        requestAnimationFrame(() => editorRef.current?.focusAtEnd());
+      }
     },
     [flushPendingSave, getUniqueDefaultName, loadVaultIndex, isMobile]
   );
@@ -4163,7 +4190,7 @@ export const App: React.FC = () => {
               onOpenSearch={() => setMobileSearchOpen(true)}
               onStartEdit={() => {
                 setEditorMode('live');
-                requestAnimationFrame(() => editorRef.current?.focus());
+                requestAnimationFrame(() => editorRef.current?.focusBelowHeading());
               }}
               onQuickNote={() => openCreateNoteDialog(sidebarTargetFolder || undefined)}
               onSwitchMode={(mode) => {
