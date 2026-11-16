@@ -21,6 +21,7 @@ import {
   Hash,
   Image as ImageIcon,
   LayoutTemplate,
+  Mail,
   MoreVertical,
   Pencil,
   Plus,
@@ -116,6 +117,7 @@ interface FileSidebarProps {
   onLockFolder?: (folderPath: string) => void;
   onTargetFolderChange?: (folder: string) => void;
   onExportPdf?: (path: string) => void;
+  onSendEmail?: (path: string) => void;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -149,6 +151,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onLockFolder,
   onTargetFolderChange,
   onExportPdf,
+  onSendEmail,
 }) => {
   const { t } = useTranslation();
   const [, setLockTick] = useState(0);
@@ -1905,6 +1908,20 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                             >
                               <FileDown size={15} />
                               <span>{t('sidebar.exportPdf')}</span>
+                            </button>
+                          )}
+                          {onSendEmail && (ctxExt === 'md' || ctxLogical.endsWith('.md')) && (
+                            <button
+                              type="button"
+                              className="tree-context-item"
+                              onClick={() => {
+                                const p = contextMenu.node!.path;
+                                setContextMenu(null);
+                                onSendEmail(p);
+                              }}
+                            >
+                              <Mail size={15} />
+                              <span>{t('sidebar.sendEmail')}</span>
                             </button>
                           )}
                           {(ctxExt === 'md' ||

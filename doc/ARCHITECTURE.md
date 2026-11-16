@@ -303,3 +303,16 @@ Zuber behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als e
   - Optionale WebAuthn-Plattform-Registrierung (`authenticatorAttachment: "platform"`, `userVerification: "required"`) mit Schlüsselablage in `zuber_biometric_keys` (IndexedDB).
 - **Server-Integration (`server/index.ts`, `server/vaultService.ts`):**
   - `/api/vault/upload?exactName=1` erhält exakte Dateinamen für `.zenc` und `.zuber-lock.json`; `VaultService` indiziert beide für Dateibaum, `/api/vault/sync-manifest` und Git-Backups ohne serverseitige Entschlüsselung.
+
+---
+
+## 13. E-Mail-Integration (SMTP-Export & IMAP Mail-to-Inbox Watcher)
+
+- **Konfiguration & Passwort-Schutz (`server/configService.ts`):**
+  - `server-config.json` speichert `email.smtp` (`host`, `port`, `secure`, `username`, `password`, `fromAddress`, `fromName`, `defaultRecipient`) und `email.imap` (`host`, `port`, `secure`, `username`, `password`, `mailboxFolder`, `processedFolder`, `pollIntervalSeconds`, `maxAttachmentMb`, `lastPollTime`, `lastPollError`).
+  - `getMaskedEmailConfig()` entfernt Klartext-Passwörter in sämtlichen API-Antworten (`GET /api/config`, `GET /api/email/status`) und liefert ausschließlich `hasPassword: boolean`. Leere Passwortfelder beim Speichern erhalten bereits hinterlegte Passwörter.
+- **SMTP-Versand (`server/emailService.ts`, `nodemailer`):**
+  - `sendNote()` versendet Markdown-Notizen wahlweise als `.md` (inklusive automatischer Auflösung und Mitlieferung lokal eingebetteter `![[attachments/...]]`-Dateien) oder als clientseitig gerenderten `.pdf`-Anhang (`<NoteName>.pdf`).
+- **IMAP-Posteingangs-Watcher (`server/emailService.ts`, `imapflow`, `mailparser`, `turndown`):**
+  - Hintergrund-Polling (Standard `60s`, Minimum `30s`, deaktiviert bei `FORCE_OFFLINE=true`) sucht ungelesene Nachrichten (`\Seen` nicht gesetzt) im konfigurierten Ordner (Standard `Zuber-Inbox`), markiert diese sofort als `\Seen`, verhindert Duplikate über `config/imap-processed.json` (`Message-ID`s) und verschiebt sie optional in `processedFolder`.
+  - `convertEmailHtmlToMarkdown()` bereinigt `<style>`, `<script>` und 1×1-Tracking-Pixel per `turndown`; sichere Anhänge bis `maxAttachmentMb` landen kollisionssicher in `vault/attachments/`, Notizen unter `Inbox/YYYY-MM-DD <Subject>.md` (`(2)` bei Kollisionen am selben Tag) inklusive sofortigem `VaultService.indexFile()` und `vault:changed`-Broadcast.

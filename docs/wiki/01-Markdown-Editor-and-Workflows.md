@@ -132,3 +132,11 @@ Press **`Alt+Z`** to hide all sidebars, topbars, and surrounding chrome so you c
 
 - **Export any Markdown note as PDF:** Click the **Export as PDF** icon in the editor toolbar/topbar, or right-click any `.md` note in the File Tree and choose **Export as PDF…**. Zuber switches cleanly to a light, ink-friendly print stylesheet (hiding sidebars, toolbars, and YAML frontmatter), converts embedded PDFs into attachment callout cards, and honors manual page breaks via `<!-- pagebreak -->`.
 - **Download multiple selected items as `.zip`:** Select multiple files or folders using `Ctrl+Click` / `Shift+Click` in the File Tree, right-click, and click **Download Selection (.zip) (N)**.
+
+---
+
+## 8. Email Integration (SMTP Export & IMAP Mail-to-Inbox)
+
+Configure your mail account under **Settings → Email (SMTP & IMAP)**:
+- **Send notes via SMTP:** Once enabled, click the **Mail** icon in the editor toolbar (or right-click any `.md` note → **Send via Email…**) to send a note as Markdown (with local attachments) or as a clean PDF document.
+- **IMAP Mail-to-Inbox Watcher:** Monitor a dedicated IMAP folder (default `Zuber-Inbox`). Unread emails are converted to clean Markdown notes under `Inbox/YYYY-MM-DD <Subject>.md` with safe attachments stored in `attachments/`.

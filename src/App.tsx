@@ -113,6 +113,7 @@ import { CommandPalette, type CommandItem } from './components/CommandPalette';
 import { MobileSearchModal } from './components/MobileSearchModal';
 import { FolderEncryptModal } from './components/FolderEncryptModal';
 import { FolderUnlockCard } from './components/FolderUnlockCard';
+import { SendEmailModal } from './components/SendEmailModal';
 import { LOCK_FILENAME, isZencPath, stripZencExt } from './crypto/folderCrypto';
 import { resolveDecryptedAttachmentUrl } from './crypto/encryptedAttachmentUrl';
 import {
@@ -297,6 +298,10 @@ export const App: React.FC = () => {
 
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
+
+  const [smtpEnabled, setSmtpEnabled] = useState(false);
+  const [smtpDefaultRecipient, setSmtpDefaultRecipient] = useState('');
+  const [sendEmailTarget, setSendEmailTarget] = useState<{ path: string; body: string } | null>(null);
 
   const leftSidebarWidthRef = useRef(leftSidebarWidth);
   leftSidebarWidthRef.current = leftSidebarWidth;
@@ -1770,10 +1775,21 @@ export const App: React.FC = () => {
       onOpenDailyNote: handleOpenDailyNote,
       onTargetFolderChange: setSidebarTargetFolder,
       onExportPdf: (p: string) => void exportNoteAsPdf(p),
+      onSendEmail: smtpEnabled
+        ? (p: string) => {
+            if (activeNote && activeNote.path === p) {
+              setSendEmailTarget({ path: p, body: activeNote.body });
+            } else {
+              void syncEngine.getNote(p).then((n) => setSendEmailTarget({ path: n.path, body: n.body }));
+            }
+          }
+        : undefined,
     }),
     [
       openNoteByPath,
       exportNoteAsPdf,
+      smtpEnabled,
+      activeNote,
       openCreateNoteDialog,
       openCreateCanvasDialog,
       openCreateBaseDialog,
@@ -2007,6 +2023,18 @@ export const App: React.FC = () => {
     } catch (err) {
       clientLogger.warn('sync', `Failed to reconcile active note on focus:`, err);
     }
+  }, [authenticated]);
+
+  // Hydrate email configuration status (without secrets) when authenticated
+  useEffect(() => {
+    if (!authenticated) return;
+    api
+      .getEmailStatus()
+      .then((cfg) => {
+        setSmtpEnabled(Boolean(cfg.smtp?.enabled));
+        setSmtpDefaultRecipient(cfg.smtp?.defaultRecipient || '');
+      })
+      .catch(() => {});
   }, [authenticated]);
 
   // WebSocket live file-watcher connection
@@ -3645,6 +3673,11 @@ export const App: React.FC = () => {
               onUploadImage={handleUploadImageFile}
               onSendToTarget={handleOpenSendToTarget}
               onExportPdf={() => void exportNoteAsPdf()}
+              onSendEmail={
+                smtpEnabled && activeNote
+                  ? () => setSendEmailTarget({ path: activeNote.path, body: activeNote.body })
+                  : undefined
+              }
             />
           )}
 
@@ -4525,8 +4558,26 @@ export const App: React.FC = () => {
             onInstallApp={handleInstallApp}
             isInstalledApp={isInstalledApp}
             onFontSettingsChange={setFontSettings}
+            onEmailConfigChange={(cfg) => {
+              setSmtpEnabled(Boolean(cfg.smtp?.enabled));
+              setSmtpDefaultRecipient(cfg.smtp?.defaultRecipient || '');
+            }}
           />
         </Suspense>
+      )}
+
+      {sendEmailTarget && (
+        <SendEmailModal
+          notePath={sendEmailTarget.path}
+          noteBody={sendEmailTarget.body}
+          defaultRecipient={smtpDefaultRecipient}
+          attachmentLabel={t('sidebar.pdfAttachmentLabel')}
+          onClose={() => setSendEmailTarget(null)}
+          onSent={() => {
+            setSendEmailTarget(null);
+            showToast(t('email.sentToast'));
+          }}
+        />
       )}
 
       {/* Interactive Conflict Resolution Modal */}

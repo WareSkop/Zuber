@@ -282,6 +282,41 @@ export interface BaseDefinition {
   views?: BaseViewConfig[];
 }
 
+export interface SmtpConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password?: string;
+  hasPassword?: boolean;
+  fromAddress: string;
+  fromName?: string;
+  defaultRecipient?: string;
+}
+
+export interface ImapConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password?: string;
+  hasPassword?: boolean;
+  mailboxFolder: string;
+  processedFolder?: string;
+  pollIntervalSeconds: number;
+  maxAttachmentMb: number;
+  lastPollTime?: number | null;
+  lastPollError?: string | null;
+}
+
+export interface EmailConfig {
+  smtp: SmtpConfig;
+  imap: ImapConfig;
+}
+
+
 
 
 

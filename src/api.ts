@@ -1,6 +1,7 @@
 import type {
   AttachmentKind,
   BacklinkItem,
+  EmailConfig,
   FileTreeNode,
   FrontmatterProperty,
   GitConfig,
@@ -10,9 +11,11 @@ import type {
   GitFileHistoryResponse,
   GitFileVersionResponse,
   GraphData,
+  ImapConfig,
   NoteData,
   NoteSummary,
   SecuritySettingsResponse,
+  SmtpConfig,
   SyncManifestEntry,
   UpdateSecurityRequest,
   UploadResponse,
@@ -1128,5 +1131,58 @@ export const api = {
     uncertain?: boolean;
   }> {
     return apiFetch(`/api/link-embed-check?url=${encodeURIComponent(url)}`);
+  },
+
+  async getEmailStatus(): Promise<EmailConfig> {
+    return apiFetch<EmailConfig>('/api/email/status');
+  },
+
+  async saveEmailConfig(config: {
+    smtp?: Partial<SmtpConfig>;
+    imap?: Partial<ImapConfig>;
+  }): Promise<EmailConfig> {
+    return apiFetch<EmailConfig>('/api/email/config', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
+
+  async testSmtp(payload: {
+    to?: string;
+    smtp?: Partial<SmtpConfig>;
+  }): Promise<{ ok: boolean; message?: string; error?: string }> {
+    return apiFetch('/api/email/test-smtp', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async testImap(payload: {
+    imap?: Partial<ImapConfig>;
+  }): Promise<{ ok: boolean; messageCount?: number; availableFolders?: string[]; error?: string }> {
+    return apiFetch('/api/email/test-imap', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async pollImapNow(): Promise<{ ok: boolean; imported: number; status: EmailConfig }> {
+    return apiFetch('/api/email/poll-now', {
+      method: 'POST',
+    });
+  },
+
+  async sendNoteByEmail(payload: {
+    notePath: string;
+    to: string;
+    subject?: string;
+    message?: string;
+    format: 'md' | 'pdf';
+    pdfBase64?: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    return apiFetch('/api/email/send-note', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 };

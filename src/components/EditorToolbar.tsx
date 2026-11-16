@@ -35,6 +35,7 @@ import {
   Flame,
   Target,
   FileDown,
+  Mail,
 } from 'lucide-react';
 import type { LivePreviewEditorRef } from './LivePreviewEditor';
 import { useTranslation } from '../i18n';
@@ -45,6 +46,7 @@ interface EditorToolbarProps {
   visible?: boolean;
   onSendToTarget?: () => void;
   onExportPdf?: () => void;
+  onSendEmail?: () => void;
   hasSelection?: boolean;
 }
 
@@ -56,6 +58,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   visible = true,
   onSendToTarget,
   onExportPdf,
+  onSendEmail,
   hasSelection,
 }) => {
   const { t } = useTranslation();
@@ -467,19 +470,33 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           </button>
         </div>
 
-        {onExportPdf && (
+        {(onExportPdf || onSendEmail) && (
           <>
             <div className="toolbar-separator" />
-            <button
-              type="button"
-              className="toolbar-btn"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onExportPdf}
-              title={t('editor.exportPdf')}
-              aria-label={t('editor.exportPdf')}
-            >
-              <FileDown size={16} />
-            </button>
+            {onExportPdf && (
+              <button
+                type="button"
+                className="toolbar-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={onExportPdf}
+                title={t('editor.exportPdf')}
+                aria-label={t('editor.exportPdf')}
+              >
+                <FileDown size={16} />
+              </button>
+            )}
+            {onSendEmail && (
+              <button
+                type="button"
+                className="toolbar-btn"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={onSendEmail}
+                title={t('editor.sendEmail')}
+                aria-label={t('editor.sendEmail')}
+              >
+                <Mail size={16} />
+              </button>
+            )}
           </>
         )}
       </div>

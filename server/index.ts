@@ -23,6 +23,7 @@ import { rateLimiter } from './rateLimiter';
 import { ensureTlsCredentials, getLocalIpAddresses } from './tls';
 import { VaultService } from './vaultService';
 import { GitService } from './gitService';
+import { EmailService } from './emailService';
 import { serverLogger } from './logger';
 import { checkUrlEmbeddable } from './linkEmbedCheck';
 import type { LogLevel } from '../shared/types';
@@ -45,8 +46,9 @@ function hasTraversalSegments(inputPath: string): boolean {
   return segments.some((segment) => segment === '..');
 }
 
-export function createApp(vaultService: VaultService, gitService?: GitService) {
+export function createApp(vaultService: VaultService, gitService?: GitService, emailService?: EmailService) {
   const actualGitService = gitService || new GitService(vaultService.getVaultDir(), configService);
+  const actualEmailService = emailService || new EmailService(vaultService, configService);
   const app = express();
 
   if (TRUST_PROXY) {
@@ -179,6 +181,102 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
       authEnabled: configService.isAuthRequired(),
       forceAuth: configService.isForceAuthActive(),
     });
+  });
+
+  app.get('/api/config', requireAuth, (_req, res) => {
+    res.json({
+      authEnabled: configService.isAuthRequired(),
+      forceAuth: configService.isForceAuthActive(),
+      git: configService.getMaskedGitConfig(),
+      email: configService.getMaskedEmailConfig(),
+      logLevel: configService.getLogLevel(),
+    });
+  });
+
+  // --- Email (SMTP & IMAP) Endpoints ---
+  app.get('/api/email/status', requireAuth, (_req, res) => {
+    res.json(configService.getMaskedEmailConfig());
+  });
+
+  app.post('/api/email/config', requireAuth, (req, res) => {
+    try {
+      const updated = configService.updateEmailConfig(req.body || {});
+      actualEmailService.startPolling();
+      res.json(updated);
+    } catch (err: unknown) {
+      res.status(400).json({ error: (err as Error).message || 'Failed to save email settings' });
+    }
+  });
+
+  app.post('/api/email/test-smtp', requireAuth, async (req, res) => {
+    try {
+      const { to, smtp } = (req.body || {}) as { to?: string; smtp?: Record<string, unknown> };
+      const result = await actualEmailService.testSmtp({ to, smtp: smtp as any });
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ ok: false, error: (err as Error).message || 'SMTP test failed' });
+    }
+  });
+
+  app.post('/api/email/test-imap', requireAuth, async (req, res) => {
+    try {
+      const { imap } = (req.body || {}) as { imap?: Record<string, unknown> };
+      const result = await actualEmailService.testImap(imap as any);
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ ok: false, error: (err as Error).message || 'IMAP test failed' });
+    }
+  });
+
+  app.post('/api/email/poll-now', requireAuth, async (_req, res) => {
+    try {
+      const result = await actualEmailService.pollImapOnce();
+      res.json({ ok: true, ...result, status: configService.getMaskedEmailConfig() });
+    } catch (err: unknown) {
+      res.status(500).json({
+        ok: false,
+        error: (err as Error).message || 'IMAP poll failed',
+        status: configService.getMaskedEmailConfig(),
+      });
+    }
+  });
+
+  const emailPdfUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
+  });
+
+  app.post('/api/email/send-note', requireAuth, emailPdfUpload.single('pdf'), async (req, res) => {
+    try {
+      const body = req.body || {};
+      const notePath = String(body.notePath || '').trim();
+      const to = String(body.to || '').trim();
+      const subject = body.subject ? String(body.subject) : undefined;
+      const message = body.message ? String(body.message) : undefined;
+      const format = body.format === 'pdf' ? 'pdf' : 'md';
+
+      if (!notePath || hasTraversalSegments(notePath)) {
+        res.status(400).json({ error: 'Invalid notePath' });
+        return;
+      }
+
+      let pdfBase64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : undefined;
+      if (!pdfBase64 && req.file?.buffer) {
+        pdfBase64 = req.file.buffer.toString('base64');
+      }
+
+      const result = await actualEmailService.sendNote({
+        notePath,
+        to,
+        subject,
+        message,
+        format,
+        pdfBase64,
+      });
+      res.json(result);
+    } catch (err: unknown) {
+      res.status(500).json({ ok: false, error: (err as Error).message || 'Failed to send email' });
+    }
   });
 
   app.post('/api/settings/security', requireAuth, (req, res) => {
@@ -1076,13 +1174,17 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
 if (process.env.NODE_ENV !== 'test') {
   const vaultService = new VaultService(VAULT_PATH);
   const gitService = new GitService(vaultService.getVaultDir(), configService);
+  const emailService = new EmailService(vaultService, configService);
 
   // Initialize repository if enabled in config
   gitService.initIfNeeded().catch((err) => {
     console.warn('[Zuber Git] Auto-init error:', err);
   });
 
-  const app = createApp(vaultService, gitService);
+  // Start IMAP Mail-to-Inbox watcher if enabled
+  emailService.startPolling();
+
+  const app = createApp(vaultService, gitService, emailService);
 
   let server: http.Server | https.Server;
   let protocolLabel = 'http';

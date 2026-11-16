@@ -396,6 +396,18 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | `POST` | `/api/logs/level` | Ändert das Server-Log-Level dynamisch (`debug`, `info`, `warn`, `error`). | Body: `{ level: LogLevel }` | `{ ok: true, level: LogLevel }` (oder `400`) |
 | `DELETE` | `/api/logs` | Leert den Server-Ring-Buffer und leert die Datei `zuber.log`. | — | `{ ok: true }` |
 
+### 2.7 E-Mail-Integration (`SMTP` & `IMAP`) & Server-Config
+
+| Methode | Pfad | Beschreibung | Parameter / Body | Response (`200 OK`) |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/config` | Liefert die maskierte Server-Konfiguration (`authEnabled`, `forceAuth`, maskierte `git`- und `email`-Konfiguration ohne Secrets, `logLevel`). | — | JSON-Config-Objekt |
+| `GET` | `/api/email/status` | Liefert `EmailConfig` (`smtp` & `imap`) mit `password: ""` und `hasPassword: boolean`. | — | `EmailConfig` |
+| `POST` | `/api/email/config` | Speichert `smtp`- / `imap`-Einstellungen in `server-config.json` (leere Passwörter behalten gespeicherten Wert) und startet IMAP-Polling neu. | Body: `{ smtp?: Partial<SmtpConfig>, imap?: Partial<ImapConfig> }` | Maskierte `EmailConfig` |
+| `POST` | `/api/email/test-smtp` | Verifiziert die SMTP-Verbindung und versendet eine Test-E-Mail (optional mit ungespeicherten Formularwerten). | Body: `{ to?: string, smtp?: Partial<SmtpConfig> }` | `{ ok: true, message: string }` |
+| `POST` | `/api/email/test-imap` | Testet die IMAP-Anmeldung, prüft die Existenz von `mailboxFolder` und listet verfügbare Ordner bei Fehlen auf. | Body: `{ imap?: Partial<ImapConfig> }` | `{ ok: boolean, messageCount?: number, availableFolders?: string[] }` |
+| `POST` | `/api/email/poll-now` | Führt sofort einen manuellen IMAP-Abruf für `mailboxFolder` aus. | — | `{ ok: true, imported: number, status: EmailConfig }` |
+| `POST` | `/api/email/send-note` | Sendet eine Notiz per SMTP als `.md` (inkl. lokaler Embeds) oder clientseitig generiertes `.pdf`. | JSON oder `multipart/form-data`: `{ notePath, to, subject?, message?, format: 'md' \| 'pdf', pdfBase64? }` | `{ ok: true }` |
+
 ---
 
 ## 3. WebSocket-Protokoll (`/ws`)

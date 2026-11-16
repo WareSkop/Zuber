@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import type { GitConfig, GitRemoteConfig, LogLevel } from '../shared/types';
+import type {
+  EmailConfig,
+  GitConfig,
+  GitRemoteConfig,
+  ImapConfig,
+  LogLevel,
+  SmtpConfig,
+} from '../shared/types';
 
 export interface ServerConfig {
   authEnabled: boolean;
@@ -11,10 +18,39 @@ export interface ServerConfig {
   sessionSecret?: string;
   updatedAt: number;
   git?: GitConfig;
+  email?: EmailConfig;
   logLevel?: LogLevel;
 }
 
 const DEFAULT_CONFIG_FILE = path.resolve(process.cwd(), 'server-config.json');
+
+export const DEFAULT_EMAIL_CONFIG: EmailConfig = {
+  smtp: {
+    enabled: false,
+    host: '',
+    port: 587,
+    secure: false,
+    username: '',
+    password: '',
+    fromAddress: '',
+    fromName: 'Zuber',
+    defaultRecipient: '',
+  },
+  imap: {
+    enabled: false,
+    host: '',
+    port: 993,
+    secure: true,
+    username: '',
+    password: '',
+    mailboxFolder: 'Zuber-Inbox',
+    processedFolder: '',
+    pollIntervalSeconds: 60,
+    maxAttachmentMb: 15,
+    lastPollTime: null,
+    lastPollError: null,
+  },
+};
 
 export const DEFAULT_GIT_CONFIG: GitConfig = {
   enabled: false,
@@ -73,6 +109,17 @@ export class ConfigService {
               },
             };
           }
+          if (!parsed.email) {
+            parsed.email = {
+              smtp: { ...DEFAULT_EMAIL_CONFIG.smtp },
+              imap: { ...DEFAULT_EMAIL_CONFIG.imap },
+            };
+          } else {
+            parsed.email = {
+              smtp: { ...DEFAULT_EMAIL_CONFIG.smtp, ...(parsed.email.smtp || {}) },
+              imap: { ...DEFAULT_EMAIL_CONFIG.imap, ...(parsed.email.imap || {}) },
+            };
+          }
           if (!parsed.logLevel) {
             parsed.logLevel = 'info';
           }
@@ -107,6 +154,10 @@ export class ConfigService {
       sessionSecret,
       updatedAt: Date.now(),
       git: { ...DEFAULT_GIT_CONFIG, remote: { ...DEFAULT_GIT_CONFIG.remote } },
+      email: {
+        smtp: { ...DEFAULT_EMAIL_CONFIG.smtp },
+        imap: { ...DEFAULT_EMAIL_CONFIG.imap },
+      },
       logLevel: 'info',
     };
 
@@ -252,6 +303,127 @@ export class ConfigService {
     current.remote.lastPushTime = lastPushTime;
     current.remote.lastPushError = lastPushError;
     this.config.git = current;
+    this.config.updatedAt = Date.now();
+    this.saveConfig();
+  }
+
+  public getEmailConfig(): EmailConfig {
+    if (!this.config.email) {
+      this.config.email = {
+        smtp: { ...DEFAULT_EMAIL_CONFIG.smtp },
+        imap: { ...DEFAULT_EMAIL_CONFIG.imap },
+      };
+    }
+    return {
+      smtp: { ...DEFAULT_EMAIL_CONFIG.smtp, ...this.config.email.smtp },
+      imap: { ...DEFAULT_EMAIL_CONFIG.imap, ...this.config.email.imap },
+    };
+  }
+
+  public getMaskedEmailConfig(): EmailConfig {
+    const email = this.getEmailConfig();
+    const hasSmtpPassword = Boolean(email.smtp.password && email.smtp.password.trim().length > 0);
+    const hasImapPassword = Boolean(email.imap.password && email.imap.password.trim().length > 0);
+    return {
+      smtp: {
+        ...email.smtp,
+        password: '',
+        hasPassword: hasSmtpPassword,
+      },
+      imap: {
+        ...email.imap,
+        password: '',
+        hasPassword: hasImapPassword,
+      },
+    };
+  }
+
+  public updateEmailConfig(newConfig: {
+    smtp?: Partial<SmtpConfig>;
+    imap?: Partial<ImapConfig>;
+  }): EmailConfig {
+    const current = this.getEmailConfig();
+    const smtpIn = newConfig.smtp || {};
+    const imapIn = newConfig.imap || {};
+
+    // Preserve stored password when empty string / omitted
+    const smtpPassword =
+      typeof smtpIn.password === 'string' && smtpIn.password.trim().length > 0
+        ? smtpIn.password
+        : current.smtp.password || '';
+    const imapPassword =
+      typeof imapIn.password === 'string' && imapIn.password.trim().length > 0
+        ? imapIn.password
+        : current.imap.password || '';
+
+    const pollInterval =
+      typeof imapIn.pollIntervalSeconds === 'number' && Number.isFinite(imapIn.pollIntervalSeconds)
+        ? Math.max(30, Math.round(imapIn.pollIntervalSeconds))
+        : Math.max(30, current.imap.pollIntervalSeconds || 60);
+
+    const maxAttachMb =
+      typeof imapIn.maxAttachmentMb === 'number' && Number.isFinite(imapIn.maxAttachmentMb)
+        ? Math.max(1, Math.min(100, Math.round(imapIn.maxAttachmentMb)))
+        : current.imap.maxAttachmentMb || 15;
+
+    const updated: EmailConfig = {
+      smtp: {
+        enabled: typeof smtpIn.enabled === 'boolean' ? smtpIn.enabled : current.smtp.enabled,
+        host: typeof smtpIn.host === 'string' ? smtpIn.host.trim() : current.smtp.host,
+        port:
+          typeof smtpIn.port === 'number' && Number.isFinite(smtpIn.port) && smtpIn.port > 0
+            ? Math.round(smtpIn.port)
+            : current.smtp.port,
+        secure: typeof smtpIn.secure === 'boolean' ? smtpIn.secure : current.smtp.secure,
+        username: typeof smtpIn.username === 'string' ? smtpIn.username.trim() : current.smtp.username,
+        password: smtpPassword,
+        fromAddress:
+          typeof smtpIn.fromAddress === 'string' ? smtpIn.fromAddress.trim() : current.smtp.fromAddress,
+        fromName:
+          typeof smtpIn.fromName === 'string' && smtpIn.fromName.trim()
+            ? smtpIn.fromName.trim()
+            : current.smtp.fromName || 'Zuber',
+        defaultRecipient:
+          typeof smtpIn.defaultRecipient === 'string'
+            ? smtpIn.defaultRecipient.trim()
+            : current.smtp.defaultRecipient || '',
+      },
+      imap: {
+        enabled: typeof imapIn.enabled === 'boolean' ? imapIn.enabled : current.imap.enabled,
+        host: typeof imapIn.host === 'string' ? imapIn.host.trim() : current.imap.host,
+        port:
+          typeof imapIn.port === 'number' && Number.isFinite(imapIn.port) && imapIn.port > 0
+            ? Math.round(imapIn.port)
+            : current.imap.port,
+        secure: typeof imapIn.secure === 'boolean' ? imapIn.secure : current.imap.secure,
+        username: typeof imapIn.username === 'string' ? imapIn.username.trim() : current.imap.username,
+        password: imapPassword,
+        mailboxFolder:
+          typeof imapIn.mailboxFolder === 'string' && imapIn.mailboxFolder.trim()
+            ? imapIn.mailboxFolder.trim()
+            : current.imap.mailboxFolder || 'Zuber-Inbox',
+        processedFolder:
+          typeof imapIn.processedFolder === 'string'
+            ? imapIn.processedFolder.trim()
+            : current.imap.processedFolder || '',
+        pollIntervalSeconds: pollInterval,
+        maxAttachmentMb: maxAttachMb,
+        lastPollTime: current.imap.lastPollTime ?? null,
+        lastPollError: current.imap.lastPollError ?? null,
+      },
+    };
+
+    this.config.email = updated;
+    this.config.updatedAt = Date.now();
+    this.saveConfig();
+    return this.getMaskedEmailConfig();
+  }
+
+  public updateImapPollStatus(lastPollTime: number | null, lastPollError: string | null): void {
+    const current = this.getEmailConfig();
+    current.imap.lastPollTime = lastPollTime;
+    current.imap.lastPollError = lastPollError;
+    this.config.email = current;
     this.config.updatedAt = Date.now();
     this.saveConfig();
   }

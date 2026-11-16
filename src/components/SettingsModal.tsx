@@ -24,6 +24,7 @@ import {
   Type,
   ScrollText,
   Copy,
+  Mail,
 } from 'lucide-react';
 import { version as appVersion } from '../../package.json';
 import {
@@ -37,6 +38,7 @@ import { syncEngine, type SyncState } from '../sync/syncEngine';
 import { clientLogger } from '../utils/logger';
 import { getAutoLockMinutes, setAutoLockMinutes } from '../crypto/unlockedFoldersStore';
 import type {
+  EmailConfig,
   FileTreeNode,
   VaultProfile,
   GitConfig,
@@ -65,7 +67,7 @@ import {
   type FontSettings,
 } from '../fontSettings';
 
-export type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git' | 'logs';
+export type SettingsTab = 'appearance' | 'editor' | 'security' | 'servers' | 'sync' | 'git' | 'email' | 'logs';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -76,6 +78,7 @@ interface SettingsModalProps {
   onInstallApp?: () => void;
   isInstalledApp?: boolean;
   onFontSettingsChange?: (settings: FontSettings) => void;
+  onEmailConfigChange?: (config: EmailConfig) => void;
   initialTab?: SettingsTab;
 }
 
@@ -88,10 +91,123 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onInstallApp,
   isInstalledApp = false,
   onFontSettingsChange,
+  onEmailConfigChange,
   initialTab,
 }) => {
   const { t, language, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'appearance');
+
+  // Email (SMTP & IMAP) state
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>({
+    smtp: {
+      enabled: false,
+      host: '',
+      port: 587,
+      secure: false,
+      username: '',
+      password: '',
+      hasPassword: false,
+      fromAddress: '',
+      fromName: 'Zuber',
+      defaultRecipient: '',
+    },
+    imap: {
+      enabled: false,
+      host: '',
+      port: 993,
+      secure: true,
+      username: '',
+      password: '',
+      hasPassword: false,
+      mailboxFolder: 'Zuber-Inbox',
+      processedFolder: '',
+      pollIntervalSeconds: 60,
+      maxAttachmentMb: 15,
+      lastPollTime: null,
+      lastPollError: null,
+    },
+  });
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [showImapPassword, setShowImapPassword] = useState(false);
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailStatusMsg, setEmailStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [testingSmtp, setTestingSmtp] = useState(false);
+  const [testingImap, setTestingImap] = useState(false);
+  const [fetchingImap, setFetchingImap] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'email') return;
+    api
+      .getEmailStatus()
+      .then((cfg) => setEmailConfig(cfg))
+      .catch(() => {});
+  }, [isOpen, activeTab]);
+
+  const handleSaveEmailConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailSaving(true);
+    setEmailStatusMsg(null);
+    try {
+      const updated = await api.saveEmailConfig(emailConfig);
+      setEmailConfig(updated);
+      onEmailConfigChange?.(updated);
+      setEmailStatusMsg({ type: 'ok', text: t('email.savedToast') });
+    } catch (err) {
+      setEmailStatusMsg({ type: 'err', text: err instanceof Error ? err.message : 'Error saving email config' });
+    } finally {
+      setEmailSaving(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setTestingSmtp(true);
+    setEmailStatusMsg(null);
+    try {
+      const res = await api.testSmtp({
+        to: emailConfig.smtp.defaultRecipient || emailConfig.smtp.fromAddress,
+        smtp: emailConfig.smtp,
+      });
+      setEmailStatusMsg({ type: 'ok', text: res.message || 'SMTP OK' });
+    } catch (err) {
+      setEmailStatusMsg({ type: 'err', text: err instanceof Error ? err.message : 'SMTP test failed' });
+    } finally {
+      setTestingSmtp(false);
+    }
+  };
+
+  const handleTestImap = async () => {
+    setTestingImap(true);
+    setEmailStatusMsg(null);
+    try {
+      const res = await api.testImap({ imap: emailConfig.imap });
+      if (res.ok) {
+        setEmailStatusMsg({
+          type: 'ok',
+          text: `IMAP OK — "${emailConfig.imap.mailboxFolder}" (${res.messageCount ?? 0} messages)`,
+        });
+      } else {
+        setEmailStatusMsg({ type: 'err', text: res.error || 'IMAP test failed' });
+      }
+    } catch (err) {
+      setEmailStatusMsg({ type: 'err', text: err instanceof Error ? err.message : 'IMAP test failed' });
+    } finally {
+      setTestingImap(false);
+    }
+  };
+
+  const handleFetchImapNow = async () => {
+    setFetchingImap(true);
+    setEmailStatusMsg(null);
+    try {
+      const res = await api.pollImapNow();
+      if (res.status) setEmailConfig(res.status);
+      setEmailStatusMsg({ type: 'ok', text: `Fetched ${res.imported} new email(s) into Inbox/.` });
+    } catch (err) {
+      setEmailStatusMsg({ type: 'err', text: err instanceof Error ? err.message : 'IMAP fetch failed' });
+    } finally {
+      setFetchingImap(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -728,6 +844,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </button>
             <button
               type="button"
+              className={`settings-nav-item ${activeTab === 'email' ? 'active' : ''}`}
+              onClick={() => setActiveTab('email')}
+            >
+              <Mail size={16} />
+              <span>{t('email.tabLabel')}</span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item ${activeTab === 'logs' ? 'active' : ''}`}
               onClick={() => setActiveTab('logs')}
             >
@@ -752,6 +876,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {activeTab === 'servers' && t('settings.serversTitle')}
               {activeTab === 'sync' && t('settings.syncTitle')}
               {activeTab === 'git' && t('settings.gitTitle')}
+              {activeTab === 'email' && t('email.tabTitle')}
             </h3>
             <button
               type="button"
@@ -1871,6 +1996,347 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {gitSaving ? t('common.loading') : t('settings.gitSaveConfig')}
                   </button>
                 </div>
+              </form>
+            </div>
+          )}
+
+          {/* Email (SMTP & IMAP) Tab */}
+          {activeTab === 'email' && (
+            <div className="settings-section">
+              <p className="settings-desc">{t('email.tabDesc')}</p>
+
+              <form onSubmit={handleSaveEmailConfig} className="settings-form">
+                {/* Card 1: Outbound Email (SMTP) */}
+                <div className="settings-card" style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+                  <h4 style={{ margin: '0 0 4px 0' }}>{t('email.smtpTitle')}</h4>
+                  <p className="settings-desc" style={{ marginBottom: '12px' }}>{t('email.smtpDesc')}</p>
+
+                  <label className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={emailConfig.smtp.enabled}
+                      onChange={(e) =>
+                        setEmailConfig({ ...emailConfig, smtp: { ...emailConfig.smtp, enabled: e.target.checked } })
+                      }
+                    />
+                    <span>{t('email.smtpEnabled')}</span>
+                  </label>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 2, minWidth: '180px' }}>
+                      <label>{t('email.host')}</label>
+                      <input
+                        type="text"
+                        value={emailConfig.smtp.host}
+                        onChange={(e) =>
+                          setEmailConfig({ ...emailConfig, smtp: { ...emailConfig.smtp, host: e.target.value } })
+                        }
+                        placeholder="smtp.example.com"
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '90px' }}>
+                      <label>{t('email.port')}</label>
+                      <input
+                        type="number"
+                        value={emailConfig.smtp.port}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            smtp: { ...emailConfig.smtp, port: Number(e.target.value) || 587 },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <label className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0 12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={emailConfig.smtp.secure}
+                      onChange={(e) =>
+                        setEmailConfig({ ...emailConfig, smtp: { ...emailConfig.smtp, secure: e.target.checked } })
+                      }
+                    />
+                    <span>{t('email.smtpSecure')}</span>
+                  </label>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.username')}</label>
+                      <input
+                        type="text"
+                        value={emailConfig.smtp.username}
+                        onChange={(e) =>
+                          setEmailConfig({ ...emailConfig, smtp: { ...emailConfig.smtp, username: e.target.value } })
+                        }
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.password')}</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          type={showSmtpPassword ? 'text' : 'password'}
+                          value={emailConfig.smtp.password || ''}
+                          onChange={(e) =>
+                            setEmailConfig({ ...emailConfig, smtp: { ...emailConfig.smtp, password: e.target.value } })
+                          }
+                          placeholder={
+                            emailConfig.smtp.hasPassword ? t('email.passwordStored') : t('email.passwordPlaceholder')
+                          }
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                          aria-label="Toggle SMTP password visibility"
+                          style={{ padding: '6px 10px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                          {showSmtpPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.fromAddress')}</label>
+                      <input
+                        type="email"
+                        value={emailConfig.smtp.fromAddress}
+                        onChange={(e) =>
+                          setEmailConfig({ ...emailConfig, smtp: { ...emailConfig.smtp, fromAddress: e.target.value } })
+                        }
+                        placeholder="notes@example.com"
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.defaultRecipient')}</label>
+                      <input
+                        type="email"
+                        value={emailConfig.smtp.defaultRecipient || ''}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            smtp: { ...emailConfig.smtp, defaultRecipient: e.target.value },
+                          })
+                        }
+                        placeholder="me@example.com"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '10px' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleTestSmtp}
+                      disabled={testingSmtp}
+                    >
+                      {testingSmtp ? t('email.testingSmtp') : t('email.testSmtp')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card 2: Inbound Mail-to-Inbox (IMAP) */}
+                <div className="settings-card" style={{ padding: '16px', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+                  <h4 style={{ margin: '0 0 4px 0' }}>{t('email.imapTitle')}</h4>
+                  <p className="settings-desc" style={{ marginBottom: '12px' }}>{t('email.imapDesc')}</p>
+
+                  <label className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={emailConfig.imap.enabled}
+                      onChange={(e) =>
+                        setEmailConfig({ ...emailConfig, imap: { ...emailConfig.imap, enabled: e.target.checked } })
+                      }
+                    />
+                    <span>{t('email.imapEnabled')}</span>
+                  </label>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 2, minWidth: '180px' }}>
+                      <label>{t('email.host')}</label>
+                      <input
+                        type="text"
+                        value={emailConfig.imap.host}
+                        onChange={(e) =>
+                          setEmailConfig({ ...emailConfig, imap: { ...emailConfig.imap, host: e.target.value } })
+                        }
+                        placeholder="imap.example.com"
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '90px' }}>
+                      <label>{t('email.port')}</label>
+                      <input
+                        type="number"
+                        value={emailConfig.imap.port}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            imap: { ...emailConfig.imap, port: Number(e.target.value) || 993 },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <label className="settings-checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0 12px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={emailConfig.imap.secure}
+                      onChange={(e) =>
+                        setEmailConfig({ ...emailConfig, imap: { ...emailConfig.imap, secure: e.target.checked } })
+                      }
+                    />
+                    <span>{t('email.imapSecure')}</span>
+                  </label>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.username')}</label>
+                      <input
+                        type="text"
+                        value={emailConfig.imap.username}
+                        onChange={(e) =>
+                          setEmailConfig({ ...emailConfig, imap: { ...emailConfig.imap, username: e.target.value } })
+                        }
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.password')}</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input
+                          type={showImapPassword ? 'text' : 'password'}
+                          value={emailConfig.imap.password || ''}
+                          onChange={(e) =>
+                            setEmailConfig({ ...emailConfig, imap: { ...emailConfig.imap, password: e.target.value } })
+                          }
+                          placeholder={
+                            emailConfig.imap.hasPassword ? t('email.passwordStored') : t('email.passwordPlaceholder')
+                          }
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          onClick={() => setShowImapPassword(!showImapPassword)}
+                          aria-label="Toggle IMAP password visibility"
+                          style={{ padding: '6px 10px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer' }}
+                        >
+                          {showImapPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.mailboxFolder')}</label>
+                      <input
+                        type="text"
+                        value={emailConfig.imap.mailboxFolder}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            imap: { ...emailConfig.imap, mailboxFolder: e.target.value },
+                          })
+                        }
+                        placeholder="Zuber-Inbox"
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '160px' }}>
+                      <label>{t('email.processedFolder')}</label>
+                      <input
+                        type="text"
+                        value={emailConfig.imap.processedFolder || ''}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            imap: { ...emailConfig.imap, processedFolder: e.target.value },
+                          })
+                        }
+                        placeholder={t('email.processedFolderPlaceholder')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group-row" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: '140px' }}>
+                      <label>{t('email.pollInterval')}</label>
+                      <input
+                        type="number"
+                        min={30}
+                        value={emailConfig.imap.pollIntervalSeconds}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            imap: { ...emailConfig.imap, pollIntervalSeconds: Math.max(30, Number(e.target.value) || 60) },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: '140px' }}>
+                      <label>{t('email.maxAttachmentMb')}</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={emailConfig.imap.maxAttachmentMb}
+                        onChange={(e) =>
+                          setEmailConfig({
+                            ...emailConfig,
+                            imap: { ...emailConfig.imap, maxAttachmentMb: Math.max(1, Number(e.target.value) || 15) },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleTestImap}
+                      disabled={testingImap}
+                    >
+                      {testingImap ? t('email.testingImap') : t('email.testImap')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleFetchImapNow}
+                      disabled={fetchingImap}
+                    >
+                      {fetchingImap ? t('email.fetchingNow') : t('email.fetchNow')}
+                    </button>
+                  </div>
+
+                  <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                    <div>
+                      {t('email.lastPoll')}:{' '}
+                      {emailConfig.imap.lastPollTime
+                        ? new Date(emailConfig.imap.lastPollTime).toLocaleString()
+                        : t('email.neverPolled')}
+                    </div>
+                    {emailConfig.imap.lastPollError && (
+                      <div style={{ color: '#ef4444', marginTop: '4px' }}>
+                        {t('email.lastError')}: {emailConfig.imap.lastPollError}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {emailStatusMsg && (
+                  <div className={`form-status-banner ${emailStatusMsg.type}`} style={{ marginBottom: '12px' }}>
+                    {emailStatusMsg.type === 'ok' ? <Check size={16} /> : <AlertCircle size={16} />}
+                    <span>{emailStatusMsg.text}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="btn-primary" disabled={emailSaving}>
+                  {emailSaving ? t('common.loading') : t('email.saveBtn')}
+                </button>
               </form>
             </div>
           )}
