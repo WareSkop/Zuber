@@ -136,6 +136,7 @@ import {
   clearLastActiveNote,
   resolveStartupNotePath,
   getDailyNoteConfig,
+  findDailyNoteFile,
   getMobileReadingDefault,
 } from './startupConfig';
 import {
@@ -1536,27 +1537,12 @@ export const App: React.FC = () => {
     const todayPrefix = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
     const config = getDailyNoteConfig();
-    const folder = (config.dailyFolder || '').trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
+    const folder = (config.dailyFolder || '').trim().replace(/^[/\\]+|[/\\]+$/g, '');
 
     const mdFiles = allFilesRef.current.filter((f) => f.extension === 'md');
 
-    // Search 1: In the configured dailyFolder
-    let found = mdFiles.find((f) => {
-      const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '';
-      if (folder) {
-        if (dir.toLowerCase() !== folder.toLowerCase()) return false;
-      }
-      const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
-      return fname.slice(0, 10) === todayPrefix;
-    });
-
-    // Search 2: Fallback across the whole vault if not found in folder
-    if (!found && folder) {
-      found = mdFiles.find((f) => {
-        const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
-        return fname.slice(0, 10) === todayPrefix;
-      });
-    }
+    // Strict folder-scoped search (excludes Inbox/ unless Inbox is explicitly configured)
+    const found = findDailyNoteFile(mdFiles, folder, todayPrefix);
 
     if (found) {
       await openNoteByPath(found.path);

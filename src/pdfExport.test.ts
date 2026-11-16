@@ -4,8 +4,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderReadingHtml } from './utils/readingMode';
 import {
+  applyReactFlowEdgeOverlaysInClone,
   prepareSvgsForHtml2Canvas,
   sanitizePdfText,
+  snapshotReactFlowEdges,
   waitForEmbedsToRender,
 } from './utils/pdfExport';
 import { api } from './api';
@@ -118,6 +120,111 @@ describe('PDF Export & Reading Mode Embeds', () => {
       expect(arrowhead).not.toBeNull();
       expect(arrowhead?.getAttribute('fill')).toBe('#64748b');
       expect(arrowhead?.getAttribute('points')).toContain('110.00,10.00');
+    } finally {
+      container.remove();
+    }
+  });
+
+  it('snapshotReactFlowEdges + applyReactFlowEdgeOverlaysInClone injects top-level svg.pdf-canvas-edges-overlay with matrix transform, strokes, arrowheads, and edge labels', () => {
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const container = document.createElement('div');
+    const rf = document.createElement('div');
+    rf.className = 'react-flow';
+    Object.defineProperty(rf, 'getBoundingClientRect', {
+      value: () => ({ width: 720, height: 380, top: 0, left: 0, right: 720, bottom: 380 }),
+    });
+
+    const viewport = document.createElement('div');
+    viewport.className = 'react-flow__viewport';
+    viewport.style.transform = 'translate(120px, 45px) scale(0.85)';
+
+    const edgesSvg = document.createElementNS(SVG_NS, 'svg');
+    edgesSvg.setAttribute('class', 'react-flow__edges');
+
+    const edgeGroup = document.createElementNS(SVG_NS, 'g');
+    edgeGroup.setAttribute('class', 'react-flow__edge');
+
+    const edgePath = document.createElementNS(SVG_NS, 'path');
+    edgePath.setAttribute('class', 'react-flow__edge-path');
+    edgePath.setAttribute('d', 'M -50 20 C 20 20, 40 120, 150 120');
+    edgePath.setAttribute('stroke', 'var(--border-strong, #888)');
+    edgePath.setAttribute('marker-end', 'url(#arrow)');
+    (edgePath as any).getTotalLength = () => 200;
+    (edgePath as any).getPointAtLength = (d: number) => ({ x: -50 + d, y: d === 200 ? 120 : 20 });
+
+    const labelWrapper = document.createElementNS(SVG_NS, 'g');
+    labelWrapper.setAttribute('class', 'react-flow__edge-textwrapper');
+    labelWrapper.setAttribute('transform', 'translate(40 60)');
+    const labelBg = document.createElementNS(SVG_NS, 'rect');
+    labelBg.setAttribute('class', 'react-flow__edge-textbg');
+    labelBg.setAttribute('x', '-4');
+    labelBg.setAttribute('y', '-2');
+    labelBg.setAttribute('width', '22');
+    labelBg.setAttribute('height', '16');
+    const labelText = document.createElementNS(SVG_NS, 'text');
+    labelText.setAttribute('class', 'react-flow__edge-text');
+    labelText.textContent = 'Ja';
+    labelWrapper.appendChild(labelBg);
+    labelWrapper.appendChild(labelText);
+
+    edgeGroup.appendChild(edgePath);
+    edgeGroup.appendChild(labelWrapper);
+    edgesSvg.appendChild(edgeGroup);
+
+    const groupNode = document.createElement('div');
+    groupNode.className = 'react-flow__node react-flow__node-group';
+    const shapeNode = document.createElement('div');
+    shapeNode.className = 'react-flow__node react-flow__node-shape';
+
+    viewport.appendChild(edgesSvg);
+    viewport.appendChild(groupNode);
+    viewport.appendChild(shapeNode);
+    rf.appendChild(viewport);
+    container.appendChild(rf);
+    document.body.appendChild(container);
+
+    try {
+      const snapshots = snapshotReactFlowEdges(container);
+      expect(snapshots).toHaveLength(1);
+      expect(rf.getAttribute('data-pdf-rf-idx')).toBe('0');
+
+      const clonedContainer = container.cloneNode(true) as HTMLElement;
+      applyReactFlowEdgeOverlaysInClone(clonedContainer, snapshots);
+
+      const clonedRf = clonedContainer.querySelector('.react-flow[data-pdf-rf-idx="0"]') as HTMLElement;
+      expect(clonedRf).not.toBeNull();
+
+      const hiddenEdges = clonedRf.querySelector('.react-flow__edges') as HTMLElement;
+      expect(hiddenEdges.style.display).toBe('none');
+
+      const overlay = clonedRf.querySelector(':scope > svg.pdf-canvas-edges-overlay') as SVGSVGElement;
+      expect(overlay).not.toBeNull();
+      expect(overlay.getAttribute('width')).toBe('720');
+      expect(overlay.getAttribute('height')).toBe('380');
+      expect(overlay.getAttribute('viewBox')).toBe('0 0 720 380');
+      expect(overlay.style.zIndex).toBe('2');
+
+      const matrixGroup = overlay.querySelector('g[transform]');
+      expect(matrixGroup).not.toBeNull();
+      expect(matrixGroup?.getAttribute('transform')).toMatch(/^matrix\(/);
+
+      const compositedPath = matrixGroup?.querySelector('path');
+      expect(compositedPath).not.toBeNull();
+      expect(compositedPath?.getAttribute('d')).toBe('M -50 20 C 20 20, 40 120, 150 120');
+      expect(compositedPath?.getAttribute('stroke')).toBe('#64748b');
+      expect(compositedPath?.getAttribute('fill')).toBe('none');
+
+      const arrowhead = matrixGroup?.querySelector('polygon.pdf-baked-arrowhead');
+      expect(arrowhead).not.toBeNull();
+      expect(arrowhead?.getAttribute('fill')).toBe('#64748b');
+      expect(arrowhead?.getAttribute('points')).toContain('150.00,120.00');
+
+      const compositedLabel = matrixGroup?.querySelector('.react-flow__edge-textwrapper');
+      expect(compositedLabel).not.toBeNull();
+      expect(compositedLabel?.querySelector('.react-flow__edge-text')?.textContent).toBe('Ja');
+
+      expect((clonedRf.querySelector('.react-flow__node-group') as HTMLElement).style.zIndex).toBe('1');
+      expect((clonedRf.querySelector('.react-flow__node-shape') as HTMLElement).style.zIndex).toBe('4');
     } finally {
       container.remove();
     }

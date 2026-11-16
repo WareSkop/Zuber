@@ -118,6 +118,36 @@ export function clearLastActiveNote(): void {
   } catch {}
 }
 
+export function findDailyNoteFile<
+  T extends { path: string; extension?: string; basename?: string }
+>(files: T[], dailyFolder: string, datePrefix: string): T | undefined {
+  const targetDailyFolder = (dailyFolder || '')
+    .trim()
+    .replace(/^[/\\]+|[/\\]+$/g, '');
+  const targetLower = targetDailyFolder.toLowerCase();
+
+  return files.find((f) => {
+    if (f.extension !== undefined && f.extension !== 'md') return false;
+    const rawDir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '';
+    const noteFolder = rawDir.replace(/^[/\\]+|[/\\]+$/g, '');
+    const noteFolderLower = noteFolder.toLowerCase();
+
+    if (noteFolderLower !== targetLower) return false;
+
+    // Extra safeguard: never match Inbox items unless Inbox was explicitly configured as dailyFolder
+    if (
+      targetLower !== 'inbox' &&
+      (noteFolderLower === 'inbox' || noteFolderLower.startsWith('inbox/'))
+    ) {
+      return false;
+    }
+
+    const fname =
+      f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
+    return fname.slice(0, 10) === datePrefix;
+  });
+}
+
 export async function resolveStartupNotePath(
   files: { path: string; extension: string; basename?: string }[]
 ): Promise<string | null> {
@@ -132,31 +162,17 @@ export async function resolveStartupNotePath(
     if (target) return target.path;
   }
 
-  // 2. Daily note behavior (with 10-char prefix search & template support)
+  // 2. Daily note behavior (strict folder-scoped 10-char prefix search & template support)
   if (config.behavior === 'daily') {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
     const dailyConfig = getDailyNoteConfig();
-    const folder = (dailyConfig.dailyFolder || config.dailyFolder || '').trim().replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
+    const folder = (dailyConfig.dailyFolder || config.dailyFolder || '')
+      .trim()
+      .replace(/^[/\\]+|[/\\]+$/g, '');
 
-    // Search 1: In the configured dailyFolder
-    let existing = mdFiles.find((f) => {
-      const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '';
-      if (folder) {
-        if (dir.toLowerCase() !== folder.toLowerCase()) return false;
-      }
-      const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
-      return fname.slice(0, 10) === dateStr;
-    });
-
-    // Search 2: Fallback in entire vault if not found in folder
-    if (!existing && folder) {
-      existing = mdFiles.find((f) => {
-        const fname = f.basename || (f.path.includes('/') ? f.path.slice(f.path.lastIndexOf('/') + 1) : f.path);
-        return fname.slice(0, 10) === dateStr;
-      });
-    }
+    const existing = findDailyNoteFile(mdFiles, folder, dateStr);
 
     if (existing) {
       return existing.path;

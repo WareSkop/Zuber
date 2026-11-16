@@ -233,7 +233,48 @@ describe('Phase 4: Tree Sorting & Daily Note System', () => {
       expect(resolved).toBe(`Dailies/${todayPrefix} Standup & Meeting.md`);
     });
 
-    it('finds existing daily note across vault fallback if not in dailyFolder', async () => {
+    it('strictly scopes daily note lookup to root when dailyFolder is empty and ignores Inbox/', async () => {
+      localStorage.setItem(
+        STARTUP_CONFIG_KEY,
+        JSON.stringify({ behavior: 'daily', dailyFolder: '' })
+      );
+      localStorage.setItem(
+        DAILY_NOTE_CONFIG_KEY,
+        JSON.stringify({ dailyFolder: '', templatePath: '' })
+      );
+
+      // Only Inbox/ note exists -> must NOT match Inbox/, should create root daily note
+      vi.spyOn(syncEngine, 'saveNote').mockImplementation(async (payload) => ({
+        path: payload.path,
+        name: payload.path.split('/').pop() || payload.path,
+        rawContent: '',
+        body: payload.body || '',
+        frontmatter: {},
+        properties: payload.properties || [],
+        links: [],
+        embeds: [],
+        tags: [],
+        headings: [],
+        updatedAt: Date.now(),
+      }));
+
+      const onlyInbox = [
+        { path: `Inbox/${todayPrefix} Email.md`, extension: 'md', basename: `${todayPrefix} Email` },
+        { path: 'Notes/Random.md', extension: 'md', basename: 'Random' },
+      ];
+      const createdRoot = await resolveStartupNotePath(onlyInbox);
+      expect(createdRoot).toBe(`${todayPrefix}.md`);
+
+      // When both Inbox/ and root daily note exist, root daily note is matched
+      const withRoot = [
+        { path: `Inbox/${todayPrefix} Email.md`, extension: 'md', basename: `${todayPrefix} Email` },
+        { path: `${todayPrefix} Notes.md`, extension: 'md', basename: `${todayPrefix} Notes` },
+      ];
+      const resolvedRoot = await resolveStartupNotePath(withRoot);
+      expect(resolvedRoot).toBe(`${todayPrefix} Notes.md`);
+    });
+
+    it('strictly scopes daily note lookup to configured dailyFolder and ignores other folders', async () => {
       localStorage.setItem(
         STARTUP_CONFIG_KEY,
         JSON.stringify({ behavior: 'daily', dailyFolder: 'Dailies' })
@@ -243,17 +284,36 @@ describe('Phase 4: Tree Sorting & Daily Note System', () => {
         JSON.stringify({ dailyFolder: 'Dailies', templatePath: '' })
       );
 
+      vi.spyOn(syncEngine, 'saveNote').mockImplementation(async (payload) => ({
+        path: payload.path,
+        name: payload.path.split('/').pop() || payload.path,
+        rawContent: '',
+        body: payload.body || '',
+        frontmatter: {},
+        properties: payload.properties || [],
+        links: [],
+        embeds: [],
+        tags: [],
+        headings: [],
+        updatedAt: Date.now(),
+      }));
+
       const files = [
         {
           path: `${todayPrefix}.md`, // In root, not Dailies
           extension: 'md',
           basename: todayPrefix,
         },
+        {
+          path: `Inbox/${todayPrefix} Testmail.md`,
+          extension: 'md',
+          basename: `${todayPrefix} Testmail`,
+        },
         { path: 'Notes/Random.md', extension: 'md', basename: 'Random' },
       ];
 
       const resolved = await resolveStartupNotePath(files);
-      expect(resolved).toBe(`${todayPrefix}.md`);
+      expect(resolved).toBe(`Dailies/${todayPrefix}.md`);
     });
 
     it('creates new daily note with template placeholders {{date}} and {{time}} replaced', async () => {
