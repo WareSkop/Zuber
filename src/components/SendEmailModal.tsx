@@ -5,23 +5,42 @@ import { api } from '../api';
 import { useTranslation } from '../i18n';
 import { stripZencExt } from '../crypto/folderCrypto';
 import { renderReadingHtml } from '../utils/readingMode';
+import { mountReadingCanvasAndBaseEmbeds } from '../utils/readingEmbeds';
+import {
+  captureElementToPng,
+  sanitizePdfText,
+  waitForEmbedsToRender,
+} from '../utils/pdfExport';
+
+export type EmailPdfNoteItem = {
+  path: string;
+  name: string;
+  basename: string;
+} & Record<string, any>;
 
 export interface SendEmailModalProps {
   notePath: string;
   noteBody: string;
+  allNotes?: EmailPdfNoteItem[];
   defaultRecipient?: string;
   attachmentLabel?: string;
   onClose: () => void;
   onSent: (recipient: string) => void;
 }
 
-function generateClientPdfBase64(title: string, body: string, notePath: string, attachmentLabel: string): string {
-  const html = renderReadingHtml(body, notePath, [], {
+async function generateClientPdfBase64(
+  title: string,
+  body: string,
+  notePath: string,
+  allNotes: EmailPdfNoteItem[],
+  attachmentLabel: string
+): Promise<string> {
+  const html = renderReadingHtml(body, notePath, allNotes, {
     attachmentLabel,
     pageBreakLabel: 'Page Break',
   });
 
-  // Convert rendered Reading Mode HTML into clean structured lines (YAML already excluded)
+  // Convert rendered Reading Mode HTML into structured PDF + captured visual embeds
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -41,72 +60,117 @@ function generateClientPdfBase64(title: string, body: string, notePath: string, 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(18);
     doc.setTextColor(17, 24, 39);
-    const titleLines = doc.splitTextToSize(title, maxWidth);
+    const titleLines = doc.splitTextToSize(sanitizePdfText(title), maxWidth);
     doc.text(titleLines, margin, y);
     y += titleLines.length * 7.5 + 4;
   }
 
-  // Parse blocks from rendered HTML using DOMParser when available
-  const parser = typeof DOMParser !== 'undefined' ? new DOMParser() : null;
-  if (parser) {
-    const parsedDoc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
-    const root = parsedDoc.body.firstElementChild;
-    const nodes = root ? Array.from(root.children) : [];
+  if (typeof document !== 'undefined' && document.body) {
+    const exportContainer = document.createElement('div');
+    exportContainer.className = 'reading-view-container markdown-rendered pdf-export-capture';
+    exportContainer.style.position = 'fixed';
+    exportContainer.style.left = '-99999px';
+    exportContainer.style.top = '0';
+    exportContainer.style.width = '794px';
+    exportContainer.style.background = '#ffffff';
+    exportContainer.style.color = '#111827';
+    exportContainer.style.padding = '24px';
+    exportContainer.style.pointerEvents = 'none';
+    exportContainer.style.zIndex = '-1';
+    exportContainer.innerHTML = html;
+    document.body.appendChild(exportContainer);
 
-    for (const el of nodes) {
-      const tag = el.tagName.toLowerCase();
-      if (el.classList.contains('print-page-break')) {
-        doc.addPage();
-        y = margin;
-        continue;
+    const unmountEmbeds = mountReadingCanvasAndBaseEmbeds(exportContainer, {
+      allNotes,
+      notePath,
+    });
+
+    try {
+      await waitForEmbedsToRender(exportContainer);
+
+      const nodes = Array.from(exportContainer.children) as HTMLElement[];
+      for (const el of nodes) {
+        const tag = el.tagName.toLowerCase();
+        if (el.classList.contains('print-page-break')) {
+          doc.addPage();
+          y = margin;
+          continue;
+        }
+
+        if (
+          el.classList.contains('embedded-canvas-container') ||
+          el.classList.contains('embedded-base-container')
+        ) {
+          const captured = await captureElementToPng(el);
+          if (captured && captured.width > 0 && captured.height > 0) {
+            const maxImgHeight = pageHeight - margin * 2;
+            let imgW = maxWidth;
+            let imgH = (captured.height / captured.width) * imgW;
+            if (imgH > maxImgHeight) {
+              const ratio = maxImgHeight / imgH;
+              imgH = maxImgHeight;
+              imgW *= ratio;
+            }
+            ensureSpace(imgH + 4);
+            doc.addImage(captured.dataUrl, 'PNG', margin, y, imgW, imgH);
+            y += imgH + 5;
+            continue;
+          }
+        }
+
+        if (el.classList.contains('reading-pdf-embed')) {
+          const calloutText = sanitizePdfText(
+            el.querySelector('.print-pdf-attachment-callout')?.textContent ||
+              `${attachmentLabel}: PDF`
+          );
+          ensureSpace(12);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10.5);
+          doc.setTextColor(15, 23, 42);
+          doc.text(`[PDF] ${calloutText}`, margin + 2, y);
+          y += 8;
+          continue;
+        }
+
+        const rawText = sanitizePdfText((el.textContent || '').replace(/\s+\n/g, '\n'));
+        if (!rawText) continue;
+
+        if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+          const size = tag === 'h1' ? 17 : tag === 'h2' ? 14 : 12;
+          const lineH = size * 0.42;
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(size);
+          doc.setTextColor(17, 24, 39);
+          const wrapped = doc.splitTextToSize(rawText, maxWidth);
+          ensureSpace(wrapped.length * lineH + 4);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * lineH + 3.5;
+        } else if (tag === 'pre' || el.classList.contains('codeblock-container')) {
+          doc.setFont('courier', 'normal');
+          doc.setFontSize(9.5);
+          doc.setTextColor(31, 41, 55);
+          const wrapped = doc.splitTextToSize(rawText, maxWidth - 4);
+          ensureSpace(wrapped.length * 4.5 + 4);
+          doc.text(wrapped, margin + 2, y);
+          y += wrapped.length * 4.5 + 3;
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(11);
+          doc.setTextColor(17, 24, 39);
+          const wrapped = doc.splitTextToSize(rawText, maxWidth);
+          ensureSpace(wrapped.length * 5.2 + 3);
+          doc.text(wrapped, margin, y);
+          y += wrapped.length * 5.2 + 2.5;
+        }
       }
-
-      if (el.classList.contains('reading-pdf-embed')) {
-        const calloutText = el.querySelector('.print-pdf-attachment-callout')?.textContent?.trim() || `${attachmentLabel}: PDF`;
-        ensureSpace(12);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10.5);
-        doc.setTextColor(15, 23, 42);
-        doc.text(`[PDF] ${calloutText}`, margin + 2, y);
-        y += 8;
-        continue;
-      }
-
-      const rawText = (el.textContent || '').replace(/\s+\n/g, '\n').trim();
-      if (!rawText) continue;
-
-      if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
-        const size = tag === 'h1' ? 17 : tag === 'h2' ? 14 : 12;
-        const lineH = size * 0.42;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(size);
-        doc.setTextColor(17, 24, 39);
-        const wrapped = doc.splitTextToSize(rawText, maxWidth);
-        ensureSpace(wrapped.length * lineH + 4);
-        doc.text(wrapped, margin, y);
-        y += wrapped.length * lineH + 3.5;
-      } else if (tag === 'pre' || el.classList.contains('codeblock-container')) {
-        doc.setFont('courier', 'normal');
-        doc.setFontSize(9.5);
-        doc.setTextColor(31, 41, 55);
-        const wrapped = doc.splitTextToSize(rawText, maxWidth - 4);
-        ensureSpace(wrapped.length * 4.5 + 4);
-        doc.text(wrapped, margin + 2, y);
-        y += wrapped.length * 4.5 + 3;
-      } else {
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(11);
-        doc.setTextColor(17, 24, 39);
-        const wrapped = doc.splitTextToSize(rawText, maxWidth);
-        ensureSpace(wrapped.length * 5.2 + 3);
-        doc.text(wrapped, margin, y);
-        y += wrapped.length * 5.2 + 2.5;
-      }
+    } finally {
+      unmountEmbeds();
+      exportContainer.remove();
     }
   } else {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
-    const wrapped = doc.splitTextToSize(body, maxWidth);
+    const wrapped = doc.splitTextToSize(sanitizePdfText(body), maxWidth);
     doc.text(wrapped, margin, y);
   }
 
@@ -118,6 +182,7 @@ function generateClientPdfBase64(title: string, body: string, notePath: string, 
 export const SendEmailModal: React.FC<SendEmailModalProps> = ({
   notePath,
   noteBody,
+  allNotes = [],
   defaultRecipient = '',
   attachmentLabel = 'Attachment',
   onClose,
@@ -146,7 +211,13 @@ export const SendEmailModal: React.FC<SendEmailModalProps> = ({
     try {
       let pdfBase64: string | undefined;
       if (format === 'pdf') {
-        pdfBase64 = generateClientPdfBase64(cleanTitle, noteBody, notePath, attachmentLabel);
+        pdfBase64 = await generateClientPdfBase64(
+          cleanTitle,
+          noteBody,
+          notePath,
+          allNotes,
+          attachmentLabel
+        );
       }
 
       await api.sendNoteByEmail({

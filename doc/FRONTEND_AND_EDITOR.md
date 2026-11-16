@@ -1254,10 +1254,10 @@ Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `htt
 
 ## 38. Client-seitiger PDF-Export (`@media print`), Codeblock-Schriftgröße & Batch-ZIP-Download
 
-- **Client-seitiger Notiz-PDF-Export (`exportNoteAsPdf` in `App.tsx`, `EditorToolbar.tsx`, `FileSidebar.tsx`, `src/utils/readingMode.ts`, `src/styles.css`):**
+- **Client-seitiger Notiz-PDF-Export (`exportNoteAsPdf` in `App.tsx`, `EditorToolbar.tsx`, `FileSidebar.tsx`, `src/utils/readingMode.ts`, `src/utils/pdfExport.ts`, `src/styles.css`):**
   - Auslösbar über den `FileDown`-Button in `EditorToolbar` bzw. in der Topbar sowie über **„Als PDF exportieren…“** im Datei-Kontextmenü (`FileSidebar`).
-  - Schaltet vorübergehend in den Reading-Mode (`mode === 'reading'`), setzt `document.title` auf den bereinigten Notiznamen (ohne `.md` / `.zenc`), wartet auf das Rendering eingebetteter Widgets, ruft `window.print()` auf und stellt Modus sowie Titel über `afterprint` wieder her.
-  - `@media print` blendet App-Chrome, Seitenleisten, Toolbars, `.properties-panel` (YAML-Frontmatter) sowie PDF-`<iframe>`-Viewer aus und ersetzt `![[dokument.pdf]]` durch eine saubere Anhang-Karte (`.print-pdf-attachment-callout`).
+  - Schaltet vorübergehend in den Reading-Mode (`mode === 'reading'`), setzt `document.title` auf den bereinigten Notiznamen (ohne `.md` / `.zenc`), wartet über `waitForEmbedsToRender()` bis asynchrone `.embedded-canvas-container` und `.embedded-base-container` geladen sowie gerendert sind, ruft `window.print()` auf und stellt Modus sowie Titel über `afterprint` wieder her.
+  - `@media print` blendet App-Chrome, Seitenleisten, Toolbars, `.properties-panel` (YAML-Frontmatter), interaktive Embed-Buttons (`.canvas-embed-open-btn`, `.base-embed-open-btn`, `.react-flow__controls`, `.react-flow__attribution`) sowie PDF-`<iframe>`-Viewer aus und ersetzt `![[dokument.pdf]]` durch eine saubere Anhang-Karte (`.print-pdf-attachment-callout`) mit Inline-SVG-Icon statt Raw-Emoji.
   - Manuelle Seitenumbrüche via `<!-- pagebreak -->`, `<div class="page-break"></div>` oder `<hr class="page-break">` werden in `preprocessPrintPageBreaks()` außerhalb von Codeblöcken in `<div class="print-page-break">` umgewandelt (Seitenumbruch im Druck, dezente gestrichelte Linie am Bildschirm).
 - **Harmonisierte Codeblock-Schriftgröße (`src/styles.css`):**
   - Fenced-Codeblöcke im Live-Preview (`.cm-lp-codeblock-content-line`, `.cm-lp-codeblock-line`) und im Lesemodus (`.codeblock-container pre code`, `.reading-view-container pre code`, `.reading-view-content pre code`, `.markdown-rendered pre code`) skalieren proportional mit `calc(var(--km-font-size-editor, 16px) * 0.875)` bei `line-height: 1.5`.

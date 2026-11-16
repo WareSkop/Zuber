@@ -123,6 +123,7 @@ import {
 } from './crypto/unlockedFoldersStore';
 import type { SettingsTab } from './components/SettingsModal';
 import { wrapMatchIndex } from './utils/mobileSearchUtils';
+import { waitForEmbedsToRender } from './utils/pdfExport';
 import { EditorToolbar } from './components/EditorToolbar';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { MobileEditBar } from './components/MobileEditBar';
@@ -1673,6 +1674,17 @@ export const App: React.FC = () => {
 
       window.addEventListener('afterprint', restore, { once: true });
 
+      const waitForReadingContainer = async (): Promise<HTMLElement> => {
+        const deadline = Date.now() + 1000;
+        while (Date.now() < deadline) {
+          const el = document.querySelector<HTMLElement>('.reading-view-container');
+          if (el) return el;
+          await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        }
+        return document.body;
+      };
+
+      const readingContainer = await waitForReadingContainer();
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -1680,6 +1692,7 @@ export const App: React.FC = () => {
           });
         });
       });
+      await waitForEmbedsToRender(readingContainer);
 
       try {
         window.print();
@@ -4666,6 +4679,7 @@ export const App: React.FC = () => {
         <SendEmailModal
           notePath={sendEmailTarget.path}
           noteBody={sendEmailTarget.body}
+          allNotes={allNotesForEditor}
           defaultRecipient={smtpDefaultRecipient}
           attachmentLabel={t('sidebar.pdfAttachmentLabel')}
           onClose={() => setSendEmailTarget(null)}

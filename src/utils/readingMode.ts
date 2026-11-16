@@ -4,6 +4,8 @@ import { api } from '../api';
 import { stripZencExt } from '../crypto/folderCrypto';
 
 const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i;
+const INLINE_FILE_SVG =
+  '<svg class="embed-inline-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
 
 export function escapeHtml(str: string): string {
   return str
@@ -197,14 +199,14 @@ export function renderReadingHtml(
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
-        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>📄</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
+        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">${INLINE_FILE_SVG}${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>${INLINE_FILE_SVG}</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
       }
       if (IMAGE_EXT_REGEX.test(logicalTarget)) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
         const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
         return `<span class="reading-image-embed"><img src="${url}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${styleAttr} /></span>`;
       }
-      return `<div class="reading-note-embed" data-wikilink="${escapeHtml(target)}">📄 Eingebettete Notiz: <strong>${escapeHtml(alt)}</strong></div>`;
+      return `<div class="reading-note-embed" data-wikilink="${escapeHtml(target)}"><span class="embedded-note-header">${INLINE_FILE_SVG}<span>Eingebettete Notiz: <strong>${escapeHtml(alt)}</strong></span></span></div>`;
     }
   );
 
@@ -313,7 +315,7 @@ export function renderReadingHtml(
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
-        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>📄</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
+        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">${INLINE_FILE_SVG}${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>${INLINE_FILE_SVG}</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
       }
       const rawUrl = /^(https?:|data:)/i.test(target)
         ? target

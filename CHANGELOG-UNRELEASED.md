@@ -20,3 +20,7 @@
   - Neu erstellte Notizen öffnen auf Mobilgeräten direkt im Bearbeitungsmodus (`'live'`) mit fokussiertem Cursor im Body unterhalb der Überschrift (`focusAtEnd()`); der **Bearbeiten**-Button in `<MobileBottomNav />` nutzt `focusBelowHeading()` (`computeBodyCursorAfterHeading()`), um den Cursor unterhalb einer H1-Überschrift zu platzieren.
 
 ### Fixed
+- **PDF-Export & E-Mail-PDF-Generierung für eingebettete Canvases & Emojis (`src/utils/pdfExport.ts`, `src/utils/readingEmbeds.tsx`, `src/utils/readingMode.ts`, `src/components/SendEmailModal.tsx`, `src/App.tsx`, `src/styles.css`, `src/pdfExport.test.ts`):**
+  - `waitForEmbedsToRender()` wartet vor `window.print()` und vor der E-Mail-PDF-Erfassung, bis asynchrone `.embedded-canvas-container` und `.embedded-base-container` geladen und React Flow (`fitView` / SVG-Kanten) vollständig gezeichnet sind.
+  - `SendEmailModal` mountet die Reading-View inklusive `CanvasEmbedWidget`/`BaseEmbedWidget` (`allNotes`), erfasst eingebettete Canvases/Bases via `html2canvas` (`captureElementToPng`) als PNG im `jsPDF`-Dokument und bereinigt nicht-WinAnsi-Emojis (`sanitizePdfText`), während deutsche Umlaute (`ä, ö, ü, ß`) erhalten bleiben.
+  - `readingMode.ts` nutzt nun ein Inline-SVG-Icon (`.embed-inline-icon`) statt des Raw-Emojis `📄` in `.embedded-note-header` und `.print-pdf-attachment-callout`, wodurch `Ø=ÜÄ`-Mojibake-Artefakte in `jsPDF` eliminiert werden; `@media print` und `.pdf-export-capture` blenden `.canvas-embed-open-btn`, `.react-flow__controls` und `.react-flow__attribution` aus.

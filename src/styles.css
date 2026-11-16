@@ -13249,6 +13249,50 @@ p:has(.embedded-canvas-container) {
   .print-page-break::after {
     display: none !important;
   }
+
+  .canvas-embed-open-btn,
+  .base-embed-open-btn,
+  .react-flow__controls,
+  .react-flow__attribution {
+    display: none !important;
+  }
+
+  .canvas-embed-header,
+  .base-embed-header {
+    border-bottom: none !important;
+    padding-bottom: 2px !important;
+  }
+}
+
+.embed-inline-icon {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.embedded-note-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdf-export-capture .canvas-embed-open-btn,
+.pdf-export-capture .base-embed-open-btn,
+.pdf-export-capture .react-flow__controls,
+.pdf-export-capture .react-flow__attribution {
+  display: none !important;
+}
+
+.pdf-export-capture .canvas-embed-header,
+.pdf-export-capture .base-embed-header {
+  border-bottom: none !important;
+  padding-bottom: 2px !important;
+}
+
+.pdf-export-capture .embedded-canvas-container {
+  height: 380px !important;
+  background: #ffffff !important;
 }
 
 /* =========================================================
