@@ -13028,3 +13028,225 @@ p:has(.embedded-canvas-container) {
   justify-content: center;
   gap: 8px;
 }
+
+/* =========================================================
+   Code Block Font Size Alignment (0.875em of editor font)
+   ========================================================= */
+.cm-lp-codeblock-content-line,
+.cm-lp-codeblock-line,
+.codeblock-container pre code,
+.reading-view-container pre code,
+.reading-view-content pre code,
+.markdown-rendered pre code {
+  font-size: calc(var(--km-font-size-editor, 16px) * 0.875) !important;
+  line-height: 1.5 !important;
+}
+
+/* =========================================================
+   Print / PDF Export Helper Elements (Screen View)
+   ========================================================= */
+.print-pdf-attachment-callout {
+  display: none;
+}
+
+.print-page-break {
+  position: relative;
+  height: 20px;
+  margin: 18px 0;
+  border-top: 1px dashed var(--border-color, rgba(128, 128, 128, 0.45));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.print-page-break::after {
+  content: attr(data-label);
+  position: relative;
+  top: -10px;
+  padding: 1px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8e8e93);
+  background: var(--bg-primary, #ffffff);
+  border-radius: 999px;
+}
+
+/* =========================================================
+   @media print — Clean Light Print Theme & Chrome Removal
+   ========================================================= */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  html,
+  body,
+  #root,
+  .knowmesh-app-shell,
+  .obsidian-app-shell,
+  .workspace-main,
+  .workspace-body,
+  .editor-pane-container,
+  .editor-pane,
+  .note-document-container,
+  .reading-view-container {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    position: static !important;
+    display: block !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide application chrome, sidebars, toolbars, properties & resize handles */
+  .knowmesh-ribbon,
+  .obsidian-ribbon,
+  .sidebar,
+  .left-sidebar,
+  .left-drawer-panel,
+  .right-sidebar,
+  .right-drawer-panel,
+  .workspace-topbar,
+  .top-bar,
+  .editor-toolbar,
+  .mobile-bottom-nav,
+  .mobile-edit-bar,
+  .mobile-search-jump-bar,
+  .sidebar-resizer-left,
+  .sidebar-resizer-right,
+  .split-resizer,
+  .research-pane,
+  .properties-panel,
+  .properties-editor,
+  .cm-lp-codeblock-copy-btn,
+  .codeblock-copy-btn,
+  .codeblock-toggle-group,
+  .cm-lp-pdf-header,
+  .cm-lp-pdf-frame,
+  .pdf-embed-iframe,
+  .cm-lp-pdf-open-btn,
+  .floating-toast {
+    display: none !important;
+  }
+
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .reading-view-container {
+    font-size: 11pt !important;
+    line-height: 1.55 !important;
+    color: #111827 !important;
+  }
+
+  .reading-view-container h1,
+  .reading-view-container h2,
+  .reading-view-container h3,
+  .reading-view-container h4 {
+    color: #111827 !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .reading-view-container a {
+    color: #1d4ed8 !important;
+    text-decoration: underline !important;
+  }
+
+  .reading-view-container pre,
+  .reading-view-container code,
+  .codeblock-container,
+  .codeblock-container pre {
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .reading-callout,
+  .reading-mermaid-preview,
+  .reading-mermaid-svg,
+  .reading-base-embed,
+  .reading-canvas-embed,
+  .reading-image-embed,
+  .reading-view-container img,
+  .reading-view-container tr,
+  blockquote {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .reading-callout {
+    background: #f9fafb !important;
+    border: 1px solid #d1d5db !important;
+    color: #111827 !important;
+  }
+
+  .reading-view-container table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  .reading-view-container th,
+  .reading-view-container td {
+    border: 1px solid #d1d5db !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+  }
+
+  .reading-view-container th {
+    background: #f3f4f6 !important;
+  }
+
+  /* Replace embedded PDF iframe with clean attachment callout card */
+  .cm-lp-pdf-embed,
+  .reading-pdf-embed {
+    border: none !important;
+    background: transparent !important;
+    margin: 10px 0 !important;
+    padding: 0 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-pdf-attachment-callout {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #3b82f6;
+    border-radius: 6px;
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    font-size: 10.5pt;
+  }
+
+  /* Manual page break */
+  .print-page-break {
+    page-break-before: always;
+    break-before: page;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    visibility: hidden;
+  }
+
+  .print-page-break::after {
+    display: none !important;
+  }
+}

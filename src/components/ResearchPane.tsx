@@ -221,8 +221,11 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   // Render HTML for markdown notes
   const renderedHtml = useMemo(() => {
     if (target?.type !== 'note') return '';
-    return renderReadingHtml(noteContent, target.path, allNotes);
-  }, [target?.type, target?.path, noteContent, allNotes]);
+    return renderReadingHtml(noteContent, target.path, allNotes, {
+      attachmentLabel: t('sidebar.pdfAttachmentLabel'),
+      pageBreakLabel: t('editor.pageBreakLabel'),
+    });
+  }, [target?.type, target?.path, noteContent, allNotes, t]);
 
   const readingHtmlObj = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
 

@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   Copy,
   Database,
+  FileDown,
   FilePlus,
   FileText,
   Folder,
@@ -114,6 +115,7 @@ interface FileSidebarProps {
   onUnlockFolder?: (folderPath: string) => void;
   onLockFolder?: (folderPath: string) => void;
   onTargetFolderChange?: (folder: string) => void;
+  onExportPdf?: (path: string) => void;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -146,6 +148,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onUnlockFolder,
   onLockFolder,
   onTargetFolderChange,
+  onExportPdf,
 }) => {
   const { t } = useTranslation();
   const [, setLockTick] = useState(0);
@@ -391,6 +394,16 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     } catch (err: unknown) {
       console.error('[Zuber] Download error:', err);
       alert((err as Error).message || 'Fehler beim Download.');
+    }
+  };
+
+  const handleDownloadBatch = async (paths: string[]) => {
+    setContextMenu(null);
+    try {
+      await api.downloadBatch(paths);
+    } catch (err: unknown) {
+      console.error('[Zuber] Batch download error:', err);
+      alert((err as Error).message || 'Fehler beim Batch-Download.');
     }
   };
 
@@ -1879,23 +1892,39 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                       const ctxLogical = stripZencExt(contextMenu.node.path);
                       const ctxExt = getLogicalExtension(contextMenu.node.path) || contextMenu.node.extension;
                       return (
-                        (ctxExt === 'md' ||
-                          ctxExt === 'canvas' ||
-                          ctxLogical.endsWith('.md') ||
-                          ctxLogical.endsWith('.canvas')) && (
-                          <button
-                            type="button"
-                            className="tree-context-item"
-                            onClick={() => {
-                              const p = contextMenu.node!.path;
-                              onOpenVersionHistory?.(p);
-                              setContextMenu(null);
-                            }}
-                          >
-                            <History size={15} />
-                            <span>{t('sidebar.versionHistory')}</span>
-                          </button>
-                        )
+                        <>
+                          {onExportPdf && (ctxExt === 'md' || ctxLogical.endsWith('.md')) && (
+                            <button
+                              type="button"
+                              className="tree-context-item"
+                              onClick={() => {
+                                const p = contextMenu.node!.path;
+                                setContextMenu(null);
+                                onExportPdf(p);
+                              }}
+                            >
+                              <FileDown size={15} />
+                              <span>{t('sidebar.exportPdf')}</span>
+                            </button>
+                          )}
+                          {(ctxExt === 'md' ||
+                            ctxExt === 'canvas' ||
+                            ctxLogical.endsWith('.md') ||
+                            ctxLogical.endsWith('.canvas')) && (
+                            <button
+                              type="button"
+                              className="tree-context-item"
+                              onClick={() => {
+                                const p = contextMenu.node!.path;
+                                onOpenVersionHistory?.(p);
+                                setContextMenu(null);
+                              }}
+                            >
+                              <History size={15} />
+                              <span>{t('sidebar.versionHistory')}</span>
+                            </button>
+                          )}
+                        </>
                       );
                     })()}
                     {onCreateBase && (
@@ -2047,6 +2076,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                 {/* If multiple items are selected and clicked node is among them */}
                 {selectedPaths.has(contextMenu.node.path) && selectedPaths.size > 1 ? (
                   <>
+                    <button
+                      type="button"
+                      className="tree-context-item"
+                      onClick={() => handleDownloadBatch(Array.from(selectedPaths))}
+                    >
+                      <Download size={15} />
+                      <span>{t('sidebar.downloadSelection', { count: selectedPaths.size })}</span>
+                    </button>
                     <button
                       type="button"
                       className="tree-context-item"

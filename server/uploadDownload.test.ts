@@ -282,4 +282,45 @@ describe('Knowmesh - Upload & Download Endpoints (Multi-file, Directory structur
     expect(resTarget.headers.get('content-type')).toContain('application/pdf');
     expect(resTarget.headers.get('content-disposition')).toBe('inline; filename="sample-manual.pdf"');
   });
+
+  it('8. packages multiple selected files and folders into a single .zip via POST /api/vault/download-batch and rejects traversal', async () => {
+    const batchDir = path.join(testVaultDir, 'BatchFolder');
+    fs.mkdirSync(path.join(batchDir, '.hidden'), { recursive: true });
+    fs.writeFileSync(path.join(batchDir, 'alpha.md'), '# Alpha Note\n', 'utf-8');
+    fs.writeFileSync(path.join(batchDir, '.hidden', 'secret.txt'), 'ignore-me', 'utf-8');
+    fs.writeFileSync(path.join(testVaultDir, 'standalone.md'), '# Standalone\n', 'utf-8');
+
+    const res = await fetch(`${baseUrl}/api/vault/download-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paths: ['BatchFolder', 'standalone.md', 'attachments/sample-manual.pdf'],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/zip');
+    expect(res.headers.get('content-disposition')).toContain('zuber-selection.zip');
+
+    const buf = Buffer.from(await res.arrayBuffer());
+    // Verify PK zip magic bytes 0x50 0x4b 0x03 0x04
+    expect(buf[0]).toBe(0x50);
+    expect(buf[1]).toBe(0x4b);
+    expect(buf[2]).toBe(0x03);
+    expect(buf[3]).toBe(0x04);
+
+    const zipStr = buf.toString('latin1');
+    expect(zipStr).toContain('BatchFolder/alpha.md');
+    expect(zipStr).toContain('standalone.md');
+    expect(zipStr).toContain('attachments/sample-manual.pdf');
+    expect(zipStr).not.toContain('.hidden/secret.txt');
+
+    // Reject path traversal
+    const badRes = await fetch(`${baseUrl}/api/vault/download-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: ['standalone.md', '../../etc/passwd'] }),
+    });
+    expect(badRes.status).toBe(400);
+  });
 });

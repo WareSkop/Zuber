@@ -1249,3 +1249,17 @@ Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `htt
 - **Deterministische Zielordner-Auflösung (`src/utils/fileTreeUtils.ts`, `FileSidebar.tsx`, `App.tsx`):**
   - `resolveTargetFolder(selectedPaths, tree)` bestimmt bei **Neue Notiz**, **Neu aus Vorlage…**, **Neues Canvas**, **Neue Base** und **Neuer Ordner** den Zielordner: ausgewählter Ordner → exakt dieser Ordner; ausgewählte Datei → deren Elternordner; leere Auswahl → Vault-Root (`""`).
   - Beim Erstellen werden der Zielordner und seine Vorfahren automatisch in `expandedFolders` aufgeklappt; im mobilen `+ Neu ▾`-Menü wird bei ausgewähltem Unterordner ein Hinweis (`sidebar.createIn`) angezeigt.
+
+---
+
+## 38. Client-seitiger PDF-Export (`@media print`), Codeblock-Schriftgröße & Batch-ZIP-Download
+
+- **Client-seitiger Notiz-PDF-Export (`exportNoteAsPdf` in `App.tsx`, `EditorToolbar.tsx`, `FileSidebar.tsx`, `src/utils/readingMode.ts`, `src/styles.css`):**
+  - Auslösbar über den `FileDown`-Button in `EditorToolbar` bzw. in der Topbar sowie über **„Als PDF exportieren…“** im Datei-Kontextmenü (`FileSidebar`).
+  - Schaltet vorübergehend in den Reading-Mode (`mode === 'reading'`), setzt `document.title` auf den bereinigten Notiznamen (ohne `.md` / `.zenc`), wartet auf das Rendering eingebetteter Widgets, ruft `window.print()` auf und stellt Modus sowie Titel über `afterprint` wieder her.
+  - `@media print` blendet App-Chrome, Seitenleisten, Toolbars, `.properties-panel` (YAML-Frontmatter) sowie PDF-`<iframe>`-Viewer aus und ersetzt `![[dokument.pdf]]` durch eine saubere Anhang-Karte (`.print-pdf-attachment-callout`).
+  - Manuelle Seitenumbrüche via `<!-- pagebreak -->`, `<div class="page-break"></div>` oder `<hr class="page-break">` werden in `preprocessPrintPageBreaks()` außerhalb von Codeblöcken in `<div class="print-page-break">` umgewandelt (Seitenumbruch im Druck, dezente gestrichelte Linie am Bildschirm).
+- **Harmonisierte Codeblock-Schriftgröße (`src/styles.css`):**
+  - Fenced-Codeblöcke im Live-Preview (`.cm-lp-codeblock-content-line`, `.cm-lp-codeblock-line`) und im Lesemodus (`.codeblock-container pre code`, `.reading-view-container pre code`, `.reading-view-content pre code`, `.markdown-rendered pre code`) skalieren proportional mit `calc(var(--km-font-size-editor, 16px) * 0.875)` bei `line-height: 1.5`.
+- **Multi-Select Batch-`.zip`-Download (`FileSidebar.tsx`, `src/api.ts`, `POST /api/vault/download-batch`):**
+  - Sind im Dateibaum mehrere Einträge markiert (`selectedPaths.size > 1`), zeigt das Kontextmenü **„Auswahl herunterladen (.zip) ({{count}})“** und lädt alle ausgewählten Dateien/Ordner über `api.downloadBatch()` als `zuber-export-YYYY-MM-DD.zip` herunter.

@@ -95,8 +95,11 @@
     "uploadFiles": "Dateien hochladen…",
     "uploadFolder": "Ordner hochladen…",
     "downloadFile": "Datei herunterladen",
+    "downloadSelection": "Auswahl herunterladen (.zip) ({{count}})",
     "downloadFolder": "Ordner herunterladen (.zip)",
     "downloadVault": "Gesamten Vault herunterladen (.zip)",
+    "exportPdf": "Als PDF exportieren…",
+    "pdfAttachmentLabel": "Anhang",
     "uploadSuccess": "{{count}} Datei(en) erfolgreich hochgeladen",
     "uploading": "Lade hoch...",
     "versionHistory": "Versionsverlauf",
@@ -155,7 +158,9 @@
     "newCanvas": "Neues Canvas",
     "insertNewCanvas": "Neues Canvas",
     "canvasNamePrompt": "Name des neuen Canvas:",
-    "insertPicture": "Bild einfügen"
+    "insertPicture": "Bild einfügen",
+    "exportPdf": "Als PDF exportieren",
+    "pageBreakLabel": "Seitenumbruch"
   },
   "toolbar": {
     "sendToTargetNote": "An Ziel-Notiz senden…",

@@ -95,8 +95,11 @@
     "uploadFiles": "Upload files…",
     "uploadFolder": "Upload folder…",
     "downloadFile": "Download file",
+    "downloadSelection": "Download Selection (.zip) ({{count}})",
     "downloadFolder": "Download folder (.zip)",
     "downloadVault": "Download entire vault (.zip)",
+    "exportPdf": "Export as PDF…",
+    "pdfAttachmentLabel": "Attachment",
     "uploadSuccess": "Successfully uploaded {{count}} file(s)",
     "uploading": "Uploading...",
     "versionHistory": "Version History",
@@ -155,7 +158,9 @@
     "newCanvas": "New Canvas",
     "insertNewCanvas": "New Canvas",
     "canvasNamePrompt": "Name of the new canvas:",
-    "insertPicture": "Insert Picture"
+    "insertPicture": "Insert Picture",
+    "exportPdf": "Export as PDF",
+    "pageBreakLabel": "Page Break"
   },
   "toolbar": {
     "sendToTargetNote": "Send to Target Note…",

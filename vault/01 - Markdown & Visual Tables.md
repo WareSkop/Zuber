@@ -41,3 +41,7 @@ Click any cell in the table below — the table **stays visually rendered** inst
   - [ ] Switch to **Source Code Mode** to inspect the clean generated Markdown
 
 ![[zuber-architecture.svg]]
+
+## Print & PDF Export
+
+You can export any note cleanly to PDF via the **Export as PDF** toolbar button or the file tree context menu. Use `<!-- pagebreak -->` whenever you want to force a clean page break in printed output.

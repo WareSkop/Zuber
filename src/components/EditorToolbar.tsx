@@ -34,6 +34,7 @@ import {
   AlertTriangle,
   Flame,
   Target,
+  FileDown,
 } from 'lucide-react';
 import type { LivePreviewEditorRef } from './LivePreviewEditor';
 import { useTranslation } from '../i18n';
@@ -43,6 +44,7 @@ interface EditorToolbarProps {
   onUploadImage: (file: File) => Promise<string | void>;
   visible?: boolean;
   onSendToTarget?: () => void;
+  onExportPdf?: () => void;
   hasSelection?: boolean;
 }
 
@@ -53,6 +55,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onUploadImage,
   visible = true,
   onSendToTarget,
+  onExportPdf,
   hasSelection,
 }) => {
   const { t } = useTranslation();
@@ -463,6 +466,22 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             <ChevronDown size={11} className="toolbar-chevron" />
           </button>
         </div>
+
+        {onExportPdf && (
+          <>
+            <div className="toolbar-separator" />
+            <button
+              type="button"
+              className="toolbar-btn"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onExportPdf}
+              title={t('editor.exportPdf')}
+              aria-label={t('editor.exportPdf')}
+            >
+              <FileDown size={16} />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Render Popover via React Portal to prevent CSS overflow clipping */}

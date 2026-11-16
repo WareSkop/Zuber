@@ -3766,8 +3766,11 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
   // Render HTML for Reading Mode ('reading')
   const renderedHtml = useMemo(() => {
     if (mode !== 'reading') return '';
-    return renderReadingHtml(body, notePath, allNotes);
-  }, [body, mode, notePath, allNotes]);
+    return renderReadingHtml(body, notePath, allNotes, {
+      attachmentLabel: t('sidebar.pdfAttachmentLabel'),
+      pageBreakLabel: t('editor.pageBreakLabel'),
+    });
+  }, [body, mode, notePath, allNotes, t]);
 
   const readingHtmlObj = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
 

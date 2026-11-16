@@ -795,6 +795,97 @@ export function createApp(vaultService: VaultService, gitService?: GitService) {
     }
   });
 
+  // Multi-select batch ZIP download
+  app.post('/api/vault/download-batch', requireAuth, async (req, res) => {
+    try {
+      const rawPaths = req.body?.paths;
+      if (!Array.isArray(rawPaths) || rawPaths.length === 0) {
+        res.status(400).json({ error: 'Keine Pfade für den Batch-Download angegeben.' });
+        return;
+      }
+
+      const normalized = Array.from(
+        new Set(rawPaths.map((p) => String(p ?? '').trim().replace(/\\/g, '/')))
+      ).filter(Boolean);
+
+      if (normalized.length === 0) {
+        res.status(400).json({ error: 'Keine gültigen Pfade angegeben.' });
+        return;
+      }
+
+      const resolvedEntries: Array<{ relPath: string; absPath: string; isDir: boolean }> = [];
+      for (const relPath of normalized) {
+        if (hasTraversalSegments(relPath) || path.isAbsolute(relPath) || relPath.startsWith('/')) {
+          res.status(400).json({ error: 'Ungültiger Pfad (Path Traversal nicht erlaubt).' });
+          return;
+        }
+        const absPath = vaultService.resolveSafePath(relPath);
+        if (!fs.existsSync(absPath)) {
+          res.status(404).json({ error: `Pfad nicht gefunden: ${relPath}` });
+          return;
+        }
+        const stat = await fs.promises.stat(absPath);
+        resolvedEntries.push({ relPath, absPath, isDir: stat.isDirectory() });
+      }
+
+      // Deduplicate children if a parent directory is also selected
+      const selectedDirs = resolvedEntries
+        .filter((e) => e.isDir)
+        .map((e) => `${e.relPath.replace(/\/+$/, '')}/`);
+      const filteredEntries = resolvedEntries.filter((entry) => {
+        return !selectedDirs.some(
+          (dirPrefix) => entry.relPath !== dirPrefix.slice(0, -1) && entry.relPath.startsWith(dirPrefix)
+        );
+      });
+
+      const zipFilename = 'zuber-selection.zip';
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${zipFilename}"; filename*=UTF-8''${zipFilename}`
+      );
+
+      const zip = new ZipArchive({ zlib: { level: 6 } });
+      zip.on('error', (err: any) => {
+        console.error('[Download Batch ZIP] Archiver error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Fehler beim Erstellen der ZIP-Datei.' });
+        }
+      });
+
+      zip.pipe(res);
+
+      for (const entry of filteredEntries) {
+        if (entry.isDir) {
+          zip.directory(entry.absPath, entry.relPath, (data) => {
+            const entryName = (data.name || '').replace(/\\/g, '/');
+            if (
+              entryName.startsWith('.') ||
+              entryName.includes('/.') ||
+              entryName.startsWith('node_modules/') ||
+              entryName.includes('/node_modules/')
+            ) {
+              return false;
+            }
+            return data;
+          });
+        } else {
+          const base = path.basename(entry.relPath);
+          if (!base.startsWith('.') && !entry.relPath.includes('/.')) {
+            zip.file(entry.absPath, { name: entry.relPath });
+          }
+        }
+      }
+
+      await zip.finalize();
+    } catch (err: unknown) {
+      console.error('[Download Batch] Error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: (err as Error).message || 'Fehler beim Batch-Download.' });
+      }
+    }
+  });
+
   // --- Git & Remote Backup Endpoints ---
   app.get('/api/vault/git/status', requireAuth, async (_req, res) => {
     try {

@@ -1065,6 +1065,44 @@ export const api = {
     }
   },
 
+  async downloadBatch(paths: string[]): Promise<void> {
+    if (!paths || paths.length === 0) return;
+    const token = getStoredToken();
+    const baseUrl = getBaseUrl();
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+    });
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+
+    const res = await fetch(`${baseUrl}/api/vault/download-batch`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ paths }),
+    });
+
+    if (!res.ok) {
+      let errMsg = `HTTP ${res.status}`;
+      try {
+        const data = await res.json();
+        if (data.error) errMsg = data.error;
+      } catch {}
+      throw new Error(errMsg);
+    }
+
+    const blob = await res.blob();
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `zuber-export-${dateStr}.zip`;
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  },
+
   async getLogs(): Promise<LogsResponse> {
     return apiFetch<LogsResponse>('/api/logs');
   },

@@ -30,12 +30,49 @@ export async function loadAndInitMermaid(isDark: boolean) {
   return mermaid;
 }
 
+export interface ReadingRenderOptions {
+  attachmentLabel?: string;
+  pageBreakLabel?: string;
+}
+
+export function preprocessPrintPageBreaks(markdown: string, pageBreakLabel = 'Page Break'): string {
+  const lines = (markdown || '').split('\n');
+  let inFence = false;
+  let fenceChar = '';
+  const breakHtml = `<div class="print-page-break" data-label="${escapeHtml(pageBreakLabel)}" aria-hidden="true"></div>`;
+
+  return lines
+    .map((line) => {
+      const fenceMatch = line.match(/^\s*(`{3,}|~{3,})/);
+      if (fenceMatch) {
+        const marker = fenceMatch[1][0];
+        if (!inFence) {
+          inFence = true;
+          fenceChar = marker;
+        } else if (marker === fenceChar) {
+          inFence = false;
+          fenceChar = '';
+        }
+        return line;
+      }
+      if (inFence) return line;
+      return line
+        .replace(/<!--\s*pagebreak\s*-->/gi, breakHtml)
+        .replace(/<div\s+class=["']page-break["']\s*>\s*<\/div>/gi, breakHtml)
+        .replace(/<hr\s+class=["']page-break["']\s*\/?>/gi, breakHtml);
+    })
+    .join('\n');
+}
+
 export function renderReadingHtml(
   body: string,
   notePath: string,
-  allNotes: { path: string; name: string; basename: string }[] = []
+  allNotes: { path: string; name: string; basename: string }[] = [],
+  options?: ReadingRenderOptions
 ): string {
-  let processed = body || '';
+  const attachmentLabel = options?.attachmentLabel || 'Attachment';
+  const pageBreakLabel = options?.pageBreakLabel || 'Page Break';
+  let processed = preprocessPrintPageBreaks(body || '', pageBreakLabel);
 
   // 1. Transform Callouts: > [!type] Title \n > content
   processed = processed.replace(
@@ -160,7 +197,7 @@ export function renderReadingHtml(
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
-        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
+        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>📄</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
       }
       if (IMAGE_EXT_REGEX.test(logicalTarget)) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
@@ -276,7 +313,7 @@ export function renderReadingHtml(
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
-        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe></div>`;
+        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">📄 ${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>📄</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
       }
       const rawUrl = /^(https?:|data:)/i.test(target)
         ? target
@@ -351,6 +388,8 @@ export function renderReadingHtml(
       'data-code',
       'data-action',
       'data-rendered',
+      'data-label',
+      'aria-hidden',
       'srcdoc',
       'sandbox',
       'style',

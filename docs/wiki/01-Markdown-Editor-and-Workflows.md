@@ -125,3 +125,10 @@ Press **`Alt+D`** or click the Calendar icon in the File Sidebar to open today's
 ## 6. Distraction-Free Zen Mode (`Alt+Z`)
 
 Press **`Alt+Z`** to hide all sidebars, topbars, and surrounding chrome so you can focus exclusively on your writing. Press `Alt+Z` or `Esc` to return to the full workspace.
+
+---
+
+## 7. Client-Side PDF Export & Batch `.zip` Downloads
+
+- **Export any Markdown note as PDF:** Click the **Export as PDF** icon in the editor toolbar/topbar, or right-click any `.md` note in the File Tree and choose **Export as PDF…**. Zuber switches cleanly to a light, ink-friendly print stylesheet (hiding sidebars, toolbars, and YAML frontmatter), converts embedded PDFs into attachment callout cards, and honors manual page breaks via `<!-- pagebreak -->`.
+- **Download multiple selected items as `.zip`:** Select multiple files or folders using `Ctrl+Click` / `Shift+Click` in the File Tree, right-click, and click **Download Selection (.zip) (N)**.

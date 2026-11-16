@@ -6,6 +6,7 @@ import {
   Code2,
   Columns,
   Eye,
+  FileDown,
   FilePlus,
   FileText,
   GitFork,
@@ -1586,6 +1587,63 @@ export const App: React.FC = () => {
 
   handleOpenDailyNoteRef.current = handleOpenDailyNote;
 
+  const editorModeRef = useRef(editorMode);
+  editorModeRef.current = editorMode;
+
+  const exportNoteAsPdf = useCallback(
+    async (targetPath?: string) => {
+      const resolvedTarget = targetPath || activePathRef.current;
+      if (!resolvedTarget) return;
+
+      const logicalPath = stripZencExt(resolvedTarget);
+      if (logicalPath.endsWith('.canvas') || logicalPath.endsWith('.base')) return;
+
+      if (targetPath && targetPath !== activePathRef.current) {
+        await openNoteByPath(targetPath);
+      }
+      if (workspaceViewRef.current === 'graph') {
+        setWorkspaceView('editor');
+      }
+
+      const prevMode = editorModeRef.current;
+      const prevTitle = document.title;
+      const cleanName = (logicalPath.split('/').pop() || 'Note').replace(/\.md$/i, '');
+      document.title = cleanName;
+
+      if (prevMode !== 'reading') {
+        setEditorMode('reading');
+      }
+
+      let restored = false;
+      const restore = () => {
+        if (restored) return;
+        restored = true;
+        window.removeEventListener('afterprint', restore);
+        document.title = prevTitle;
+        if (prevMode !== 'reading') {
+          setEditorMode(prevMode);
+        }
+      };
+
+      window.addEventListener('afterprint', restore, { once: true });
+
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 60);
+          });
+        });
+      });
+
+      try {
+        window.print();
+      } catch {
+        restore();
+      }
+    },
+    [openNoteByPath]
+  );
+
   const handleActiveNoteDeleted = useCallback(() => {
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current);
@@ -1700,9 +1758,11 @@ export const App: React.FC = () => {
       onOpenTemplateSelect: handleOpenTemplateModal,
       onOpenDailyNote: handleOpenDailyNote,
       onTargetFolderChange: setSidebarTargetFolder,
+      onExportPdf: (p: string) => void exportNoteAsPdf(p),
     }),
     [
       openNoteByPath,
+      exportNoteAsPdf,
       openCreateNoteDialog,
       openCreateCanvasDialog,
       openCreateBaseDialog,
@@ -3557,6 +3617,7 @@ export const App: React.FC = () => {
               editorRef={editorRef}
               onUploadImage={handleUploadImageFile}
               onSendToTarget={handleOpenSendToTarget}
+              onExportPdf={() => void exportNoteAsPdf()}
             />
           )}
 
@@ -3892,6 +3953,18 @@ export const App: React.FC = () => {
                   </button>
                 </div>
               )
+            )}
+
+            {workspaceView !== 'graph' && activeNote && !isCanvasNote && !isBaseNote && (
+              <button
+                type="button"
+                className="topbar-action-btn icon-only"
+                onClick={() => void exportNoteAsPdf()}
+                title={t('editor.exportPdf')}
+                aria-label={t('editor.exportPdf')}
+              >
+                <FileDown size={15} />
+              </button>
             )}
 
             <button
