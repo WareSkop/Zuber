@@ -533,6 +533,7 @@ export const rawApi = {
     return apiFetch('/api/vault/note', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: 20000,
     });
   },
 

@@ -2315,6 +2315,7 @@ export const App: React.FC = () => {
           }
         } catch (err) {
           console.error('Speicherfehler:', err);
+          setSaveState('dirty');
         } finally {
           isSavingFileRef.current.delete(path);
           inFlightSavePromiseRef.current.delete(path);

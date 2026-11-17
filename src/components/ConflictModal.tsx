@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   AlertTriangle,
   Copy,
@@ -25,34 +25,11 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
   const [applyToAll, setApplyToAll] = useState(false);
   const [resolving, setResolving] = useState(false);
 
-  if (conflicts.length === 0) return null;
+  const currentConflict = conflicts[0] ?? null;
+  const remainingCount = Math.max(0, conflicts.length - 1);
 
-  const currentConflict = conflicts[0];
-  const remainingCount = conflicts.length - 1;
-
-  // Auto-resolve any fast-forward compatible conflicts seamlessly without interrupting the user
-  useEffect(() => {
-    if (conflicts.length > 0) {
-      const current = conflicts[0];
-      const ff = isFastForwardCompatible(current.localBody, current.serverNote.body);
-      if (ff.compatible) {
-        handleResolve(ff.winner === 'local' ? 'keep_local' : 'keep_server');
-      }
-    }
-  }, [conflicts]);
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString(language === 'de' ? 'de-DE' : 'en-US', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
-
-  const handleResolve = async (strategy: ConflictResolution) => {
+  const handleResolve = useCallback(async (strategy: ConflictResolution) => {
+    if (!currentConflict) return;
     setResolving(true);
     try {
       if (applyToAll) {
@@ -63,6 +40,30 @@ export const ConflictModal: React.FC<ConflictModalProps> = ({ conflicts, onClose
     } finally {
       setResolving(false);
     }
+  }, [applyToAll, currentConflict]);
+
+  // Auto-resolve any fast-forward compatible conflicts seamlessly without interrupting the user
+  useEffect(() => {
+    if (conflicts.length > 0) {
+      const current = conflicts[0];
+      const ff = isFastForwardCompatible(current.localBody, current.serverNote.body);
+      if (ff.compatible) {
+        handleResolve(ff.winner === 'local' ? 'keep_local' : 'keep_server');
+      }
+    }
+  }, [conflicts, handleResolve]);
+
+  if (!currentConflict) return null;
+
+  const formatDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString(language === 'de' ? 'de-DE' : 'en-US', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
   };
 
   return (
