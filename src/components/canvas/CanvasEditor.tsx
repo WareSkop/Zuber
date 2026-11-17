@@ -233,6 +233,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   const latestNodesRef = useRef<Node[]>([]);
   const latestEdgesRef = useRef<Edge[]>([]);
   const hasPendingSaveRef = useRef<boolean>(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    latestNodesRef.current = nodes;
+    latestEdgesRef.current = edges;
+  }, [nodes, edges]);
 
   // Immediate save flush for note exit / unmount
   const flushSave = useCallback(() => {
@@ -259,22 +266,25 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       );
       if (jsonStr !== lastEmittedJsonRef.current) {
         lastEmittedJsonRef.current = jsonStr;
-        clientLogger.debug('canvas', `flushSave emitting update for "${filePath}"`, {
+        clientLogger.debug('canvas', `flushSave emitting update for "${lastLoadedPathRef.current || filePath}"`, {
           nodes: latestNodesRef.current.length,
           edges: latestEdgesRef.current.length,
           bytes: jsonStr.length,
         });
-        onChange(jsonStr);
+        onChangeRef.current(jsonStr);
       }
     }
-  }, [filePath, getViewport, onChange, readOnly]);
+  }, [filePath, getViewport, readOnly]);
 
-  // Flush pending changes on unmount (e.g. switching notes or closing tab)
+  const flushSaveRef = useRef(flushSave);
+  flushSaveRef.current = flushSave;
+
+  // Flush pending changes strictly on actual component unmount (never on parent re-renders)
   useEffect(() => {
     return () => {
-      flushSave();
+      flushSaveRef.current();
     };
-  }, [flushSave]);
+  }, []);
 
   // Initial document parsing and external update synchronization
   useEffect(() => {
@@ -388,33 +398,48 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           edges: currentEdges.length,
           bytes: jsonStr.length,
         });
-        onChange(jsonStr);
+        onChangeRef.current(jsonStr);
       }, 600);
     },
-    [filePath, onChange, readOnly, getViewport]
+    [filePath, readOnly, getViewport]
   );
 
-  // Notify changes on nodes or edges update
+  const shouldPersistCanvasChanges = useCallback(
+    (changes: Array<{ type?: string; dragging?: boolean }>) =>
+      Array.isArray(changes) &&
+      changes.some((c) => {
+        if (c.type === 'select' || c.type === 'dimensions') return false;
+        if (c.type === 'position' && c.dragging === true) return false;
+        return true;
+      }),
+    []
+  );
+
+  // Notify changes on nodes or edges update (only for persisted data changes, ignoring selection/dimension/mid-drag frames)
   const handleNodesChange = useCallback(
     (changes: any) => {
       onNodesChange(changes);
-      setNodes((currentNodes) => {
-        triggerAutoSave(currentNodes, edges);
-        return currentNodes;
-      });
+      if (shouldPersistCanvasChanges(changes)) {
+        setNodes((currentNodes) => {
+          triggerAutoSave(currentNodes, latestEdgesRef.current);
+          return currentNodes;
+        });
+      }
     },
-    [onNodesChange, setNodes, triggerAutoSave, edges]
+    [onNodesChange, setNodes, shouldPersistCanvasChanges, triggerAutoSave]
   );
 
   const handleEdgesChange = useCallback(
     (changes: any) => {
       onEdgesChange(changes);
-      setEdges((currentEdges) => {
-        triggerAutoSave(nodes, currentEdges);
-        return currentEdges;
-      });
+      if (shouldPersistCanvasChanges(changes)) {
+        setEdges((currentEdges) => {
+          triggerAutoSave(latestNodesRef.current, currentEdges);
+          return currentEdges;
+        });
+      }
     },
-    [onEdgesChange, setEdges, triggerAutoSave, nodes]
+    [onEdgesChange, setEdges, shouldPersistCanvasChanges, triggerAutoSave]
   );
 
   // Group dragging: moving a group node moves all enclosed child nodes

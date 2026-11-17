@@ -324,6 +324,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const res = await api.getLogs();
       setServerLogs(res.entries);
       setLogLevelState(res.level);
+      if (res.level !== clientLogger.getLevel()) {
+        clientLogger.setLevel(res.level);
+      }
     } catch (err) {
       console.warn('Failed to load server logs:', err);
     } finally {

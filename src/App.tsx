@@ -594,6 +594,7 @@ export const App: React.FC = () => {
   const inFlightSavePromiseRef = useRef<Map<string, Promise<void>>>(new Map());
   const lastLocalSaveTimeRef = useRef<number>(0);
   const recentSelfWritesRef = useRef<Map<string, number>>(new Map());
+  const lastKnownServerMtimeRef = useRef<Map<string, number>>(new Map());
   const isUploadingAttachmentRef = useRef<boolean>(false);
   const explicitUserClearRef = useRef<boolean>(false);
   const activeNoteRef = useRef<NoteData | null>(null);
@@ -1018,6 +1019,9 @@ export const App: React.FC = () => {
       try {
         const note = await syncEngine.getNote(relPath);
         if (requestId !== openRequestRef.current) return; // a newer note was requested meanwhile
+        if (typeof note.updatedAt === 'number') {
+          lastKnownServerMtimeRef.current.set(note.path, note.updatedAt);
+        }
         setLockedFolderTarget(null);
         setActiveNote(note);
         const logicalRel = stripZencExt(relPath);
@@ -2030,6 +2034,9 @@ export const App: React.FC = () => {
           latest.updatedAt > (activeNoteRef.current?.updatedAt || 0)
         ) {
           clientLogger.info('sync', `Reconciling clean note "${currentPath}" on focus/visibility.`);
+          if (typeof latest.updatedAt === 'number') {
+            lastKnownServerMtimeRef.current.set(currentPath, latest.updatedAt);
+          }
           setActiveNote(latest);
         }
       } else {
@@ -2049,6 +2056,9 @@ export const App: React.FC = () => {
                     `Fast-forwarding dirty note "${currentPath}" base mtime to server mtime.`
                   );
                   activeNoteRef.current.updatedAt = serverNote.updatedAt;
+                  if (typeof serverNote.updatedAt === 'number') {
+                    lastKnownServerMtimeRef.current.set(currentPath, serverNote.updatedAt);
+                  }
                 }
               } catch {}
             }
@@ -2252,8 +2262,13 @@ export const App: React.FC = () => {
             const now = Date.now();
             lastLocalSaveTimeRef.current = now;
             recentSelfWritesRef.current.set(path, now);
-            const currentBaseMtime =
+            const activeMtime =
               activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : undefined;
+            const trackedMtime = lastKnownServerMtimeRef.current.get(path);
+            const currentBaseMtime =
+              activeMtime !== undefined || trackedMtime !== undefined
+                ? Math.max(activeMtime ?? 0, trackedMtime ?? 0)
+                : undefined;
 
             clientLogger.debug('sync', `Saving "${path}"`, {
               baseMtime: currentBaseMtime,
@@ -2270,6 +2285,10 @@ export const App: React.FC = () => {
             const finishTime = Date.now();
             lastLocalSaveTimeRef.current = finishTime;
             recentSelfWritesRef.current.set(saved.path, finishTime);
+            if (typeof saved.updatedAt === 'number') {
+              const prevKnown = lastKnownServerMtimeRef.current.get(saved.path) ?? 0;
+              lastKnownServerMtimeRef.current.set(saved.path, Math.max(prevKnown, saved.updatedAt));
+            }
             clientLogger.debug('sync', `Saved "${saved.path}" in ${finishTime - now}ms`, {
               updatedAt: saved.updatedAt,
             });
@@ -2479,24 +2498,70 @@ export const App: React.FC = () => {
   };
 
   const handleRawChange = (newRaw: string) => {
-    if (!activeNote) return;
+    const targetPath = activePathRef.current;
+    if (!targetPath) return;
     const parsed = parseMarkdownWithFrontmatter(newRaw);
-    if (parsed.body.trim() === '' && activeNote.body.trim().length > 0) {
-      explicitUserClearRef.current = true;
-    } else if (parsed.body.trim().length > 0) {
-      explicitUserClearRef.current = false;
-    }
-    setActiveNote({
-      ...activeNote,
-      rawContent: newRaw,
-      body: parsed.body,
-      properties: parsed.properties,
-      frontmatter: parsed.frontmatter,
+    setActiveNote((prev) => {
+      if (!prev || prev.path !== targetPath) return prev;
+      if (parsed.body.trim() === '' && prev.body.trim().length > 0) {
+        explicitUserClearRef.current = true;
+      } else if (parsed.body.trim().length > 0) {
+        explicitUserClearRef.current = false;
+      }
+      return {
+        ...prev,
+        rawContent: newRaw,
+        body: parsed.body,
+        properties: parsed.properties,
+        frontmatter: parsed.frontmatter,
+      };
     });
-    scheduleSave(activeNote.path, {
+    scheduleSave(targetPath, {
       rawContent: newRaw,
     });
   };
+
+  const handleCanvasChange = useCallback(
+    (newJson: string) => {
+      const targetPath = activePathRef.current;
+      if (!targetPath) return;
+      setActiveNote((prev) =>
+        prev && prev.path === targetPath
+          ? {
+              ...prev,
+              rawContent: newJson,
+              body: newJson,
+            }
+          : prev
+      );
+      scheduleSave(targetPath, {
+        rawContent: newJson,
+        body: newJson,
+      });
+    },
+    [scheduleSave]
+  );
+
+  const handleBaseChange = useCallback(
+    (newYaml: string) => {
+      const targetPath = activePathRef.current;
+      if (!targetPath) return;
+      setActiveNote((prev) =>
+        prev && prev.path === targetPath
+          ? {
+              ...prev,
+              rawContent: newYaml,
+              body: newYaml,
+            }
+          : prev
+      );
+      scheduleSave(targetPath, {
+        rawContent: newYaml,
+        body: newYaml,
+      });
+    },
+    [scheduleSave]
+  );
 
   const resolveLocally = (target: string, fromPath?: string | null): string | null => {
     let decoded = target;
@@ -2960,6 +3025,9 @@ export const App: React.FC = () => {
       const finishTime = Date.now();
       lastLocalSaveTimeRef.current = finishTime;
       recentSelfWritesRef.current.set(saved.path, finishTime);
+      if (typeof saved.updatedAt === 'number') {
+        lastKnownServerMtimeRef.current.set(saved.path, saved.updatedAt);
+      }
 
       if (activeNoteRef.current && activeNoteRef.current.path === saved.path) {
         activeNoteRef.current = {
@@ -3028,6 +3096,9 @@ export const App: React.FC = () => {
         console.warn('Failed to update localDb with restored note:', e);
       }
       if (activePathRef.current === restoredNote.path) {
+        if (typeof restoredNote.updatedAt === 'number') {
+          lastKnownServerMtimeRef.current.set(restoredNote.path, restoredNote.updatedAt);
+        }
         setActiveNote(restoredNote);
         setSaveState('saved');
       }
@@ -3659,18 +3730,7 @@ export const App: React.FC = () => {
             <CanvasEditor
               filePath={activeNote.path}
               rawContent={activeNote.rawContent || activeNote.body || '{}'}
-              onChange={(newJson) => {
-                if (!activeNote) return;
-                setActiveNote({
-                  ...activeNote,
-                  rawContent: newJson,
-                  body: newJson,
-                });
-                scheduleSave(activeNote.path, {
-                  rawContent: newJson,
-                  body: newJson,
-                });
-              }}
+              onChange={handleCanvasChange}
               onOpenNote={(targetPath) => {
                 handleNavigateWikiLink(targetPath);
                 if (isMobile) setLeftSidebarOpen(false);
@@ -3689,18 +3749,7 @@ export const App: React.FC = () => {
             <BaseEditor
               filePath={activeNote.path}
               rawContent={activeNote.rawContent || activeNote.body || ''}
-              onChange={(newYaml) => {
-                if (!activeNote) return;
-                setActiveNote({
-                  ...activeNote,
-                  rawContent: newYaml,
-                  body: newYaml,
-                });
-                scheduleSave(activeNote.path, {
-                  rawContent: newYaml,
-                  body: newYaml,
-                });
-              }}
+              onChange={handleBaseChange}
               onSelectNote={(targetPath) => {
                 handleNavigateWikiLink(targetPath);
                 if (isMobile) setLeftSidebarOpen(false);
