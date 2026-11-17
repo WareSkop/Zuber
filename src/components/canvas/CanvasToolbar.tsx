@@ -24,7 +24,7 @@ import {
   Upload,
 } from 'lucide-react';
 import type { CanvasShape } from '../../../shared/canvasTypes';
-import { isImageFilePath } from './nodes/canvasShapeGeometry';
+import { isImageFilePath, renderShapeMiniIcon } from './nodes/canvasShapeGeometry';
 import { stripZencExt } from '../../crypto/folderCrypto';
 import { useTranslation } from '../../i18n';
 
@@ -178,9 +178,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             setOpenDropdown(null);
           }}
           title={t('canvas.addTextTooltip')}
+          aria-label={t('canvas.addTextTooltip')}
         >
           <Plus size={15} />
-          <span>{t('canvas.addText')}</span>
+          <span className="canvas-toolbar-label">{t('canvas.addText')}</span>
         </button>
 
         {/* Embed note/file picker */}
@@ -190,9 +191,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             className={`canvas-toolbar-btn ${openDropdown === 'file' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'file' ? null : 'file'))}
             title={t('canvas.addFileTooltip')}
+            aria-label={t('canvas.addFileTooltip')}
           >
             <FileText size={15} />
-            <span>{t('canvas.addFile')}</span>
+            <span className="canvas-toolbar-label">{t('canvas.addFile')}</span>
             <ChevronDown size={12} />
           </button>
 
@@ -239,9 +241,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             className={`canvas-toolbar-btn ${openDropdown === 'image' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'image' ? null : 'image'))}
             title={t('canvas.addImageTooltip')}
+            aria-label={t('canvas.addImageTooltip')}
           >
             <ImageIcon size={15} />
-            <span>{t('canvas.addImage')}</span>
+            <span className="canvas-toolbar-label">{t('canvas.addImage')}</span>
             <ChevronDown size={12} />
           </button>
           <input
@@ -319,9 +322,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             setOpenDropdown(null);
           }}
           title={t('canvas.addGroupTooltip')}
+          aria-label={t('canvas.addGroupTooltip')}
         >
           <FolderPlus size={15} />
-          <span>{t('canvas.addGroup')}</span>
+          <span className="canvas-toolbar-label">{t('canvas.addGroup')}</span>
         </button>
 
         {/* Workflow Shapes Dropdown */}
@@ -331,9 +335,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             className={`canvas-toolbar-btn ${openDropdown === 'workflow' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'workflow' ? null : 'workflow'))}
             title={t('canvas.workflowTooltip')}
+            aria-label={t('canvas.workflowTooltip')}
           >
             <GitBranch size={15} />
-            <span>{t('canvas.workflow')}</span>
+            <span className="canvas-toolbar-label">{t('canvas.workflow')}</span>
             <ChevronDown size={12} />
           </button>
 
@@ -358,7 +363,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <div className="palette-icon-rounded" /> <span>{t('canvas.shapeStartEnd')}</span>
+                {renderShapeMiniIcon('rounded', 15)} <span>{t('canvas.shapeStartEnd')}</span>
               </button>
               <button
                 type="button"
@@ -388,7 +393,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <div className="palette-icon-parallel" /> <span>{t('canvas.shapeIo')}</span>
+                {renderShapeMiniIcon('parallelogram', 15)} <span>{t('canvas.shapeIo')}</span>
               </button>
               <button
                 type="button"
@@ -398,7 +403,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <div className="palette-icon-hexagon" /> <span>{t('canvas.shapeConditionFilter')}</span>
+                {renderShapeMiniIcon('hexagon', 15)} <span>{t('canvas.shapeConditionFilter')}</span>
               </button>
               <button
                 type="button"
@@ -421,9 +426,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             className={`canvas-toolbar-btn ${openDropdown === 'network' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'network' ? null : 'network'))}
             title={t('canvas.networkTooltip')}
+            aria-label={t('canvas.networkTooltip')}
           >
             <Network size={15} />
-            <span>{t('canvas.network')}</span>
+            <span className="canvas-toolbar-label">{t('canvas.network')}</span>
             <ChevronDown size={12} />
           </button>
 
@@ -625,7 +631,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               aria-label={t('canvas.presentation.toolbarTitle')}
             >
               <Presentation size={15} />
-              <span>{t('canvas.presentation.toolbarButton')}</span>
+              <span className="canvas-toolbar-label">{t('canvas.presentation.toolbarButton')}</span>
               {presentationSlideCount > 0 && (
                 <span className="canvas-presentation-count-badge">{presentationSlideCount}</span>
               )}

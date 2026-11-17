@@ -271,9 +271,9 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     const shapesGrid = container.querySelector('.inspector-dropdown-menu.shapes-grid');
     expect(shapesGrid).not.toBeNull();
 
-    // Click "Decision (Diamond)" shape in popover
+    // Click "Decision (Diamond)" shape in popover (icon-only tile with title tooltip)
     const diamondBtn = Array.from(shapesGrid?.querySelectorAll('.inspector-grid-item') || []).find((b) =>
-      b.textContent?.includes('Diamond')
+      (b.getAttribute('title') || b.getAttribute('aria-label') || '').includes('Diamond')
     ) as HTMLButtonElement;
     expect(diamondBtn).toBeDefined();
 
@@ -446,7 +446,7 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     // Verify popover CSS classes
     expect(css).toContain('.canvas-shape-picker-popover');
     expect(css).toContain('.canvas-inspector-popover');
-    expect(css).toMatch(/grid-template-columns:\s*repeat\(3,\s*minmax\(110px,\s*1fr\)\)/);
+    expect(css).toMatch(/grid-template-columns:\s*repeat\(4,\s*42px\)/);
 
     // Mount CanvasShapeNode
     const nodeContainer = document.createElement('div');

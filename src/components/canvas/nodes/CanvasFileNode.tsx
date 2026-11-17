@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useId, useMemo, Suspense } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import {
   FileText,
@@ -15,14 +16,19 @@ import { resolveCanvasColor, type CanvasShape } from '../../../../shared/canvasT
 import { stripZencExt } from '../../../crypto/folderCrypto';
 import { resolveDecryptedAttachmentUrl } from '../../../crypto/encryptedAttachmentUrl';
 import { renderReadingHtml } from '../../../utils/readingMode';
-import { useCanvasContext, isCanvasAncestorCycle } from '../CanvasContext';
+import { CanvasContext, useCanvasContext, isCanvasAncestorCycle } from '../CanvasContext';
 import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
 import {
   isImageFilePath,
+  getShapeCssClipPath,
   renderShapeClipGeometry,
   renderShapeBorderSvg,
 } from './canvasShapeGeometry';
 import { useTranslation } from '../../../i18n';
+
+const LazyCanvasEmbedWidget = React.lazy(() =>
+  import('../CanvasEmbedWidget').then((m) => ({ default: m.CanvasEmbedWidget }))
+);
 
 function getLinkBadgeLabel(linkUrl: string): string {
   const trimmed = linkUrl.trim();
@@ -126,45 +132,87 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   }, [noteContent, isMarkdown, isCircularSelf, filePath, allNotes, t]);
 
   // Post-process rendered Markdown inside the node:
-  // 1) Replace nested .canvas / .base embed containers with safe clickable placeholders (no infinite recursion!)
-  // 2) Decrypt `.zenc` attachment <img> elements
+  // 1) Mount non-circular .canvas embeds via LazyCanvasEmbedWidget (with ancestorPaths + depth guard);
+  //    render cycle/base embeds as safe clickable cards.
+  // 2) Decrypt `.zenc` attachment <img> elements.
   useEffect(() => {
     const container = markdownContainerRef.current;
     if (!container || !renderedMarkdown) return;
 
     const revokedUrls: string[] = [];
+    const mountedRoots: Root[] = [];
     let cancelled = false;
+    const nextAncestors = ancestorPaths.includes(filePath)
+      ? ancestorPaths
+      : [...ancestorPaths, filePath];
+    const maxEmbedDepthReached = nextAncestors.length >= 4;
 
     const canvasEmbeds = container.querySelectorAll<HTMLElement>(
       '.embedded-canvas-container, .reading-canvas-embed'
     );
     canvasEmbeds.forEach((el) => {
       const targetPath = el.dataset.canvasPath || el.dataset.wikilink || '';
+      const embedHeight = el.dataset.height || 260;
       const displayName = stripZencExt(targetPath).split('/').pop() || targetPath;
-      const isCycle = isCanvasAncestorCycle(targetPath, ancestorPaths);
-      el.classList.add('canvas-file-safe-embed-card', 'nodrag');
+      const isCycle = isCanvasAncestorCycle(targetPath, nextAncestors);
+
+      if (isCycle || maxEmbedDepthReached || !targetPath) {
+        el.classList.add('canvas-file-safe-embed-card', 'nodrag');
+        el.innerHTML = '';
+
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = `canvas-file-safe-embed-btn ${isCycle ? 'is-cycle' : ''}`;
+        row.title = isCycle
+          ? t('canvas.circularEmbedNotice', { target: displayName })
+          : t('canvas.openNoteTooltip', { target: targetPath });
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'canvas-file-safe-embed-title';
+        titleSpan.textContent = isCycle
+          ? t('canvas.circularEmbedNotice', { target: displayName })
+          : `Canvas: ${displayName}`;
+        row.appendChild(titleSpan);
+
+        row.onclick = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (targetPath) onOpenNote(targetPath);
+        };
+        el.appendChild(row);
+        return;
+      }
+
+      el.classList.add('canvas-file-live-canvas-embed', 'nodrag', 'nowheel');
       el.innerHTML = '';
+      const mount = document.createElement('div');
+      mount.className = 'reading-canvas-mount';
+      el.appendChild(mount);
 
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = `canvas-file-safe-embed-btn ${isCycle ? 'is-cycle' : ''}`;
-      row.title = isCycle
-        ? t('canvas.circularEmbedNotice', { target: displayName })
-        : t('canvas.openNoteTooltip', { target: targetPath });
-
-      const titleSpan = document.createElement('span');
-      titleSpan.className = 'canvas-file-safe-embed-title';
-      titleSpan.textContent = isCycle
-        ? t('canvas.circularEmbedNotice', { target: displayName })
-        : `Canvas: ${displayName}`;
-      row.appendChild(titleSpan);
-
-      row.onclick = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        if (targetPath) onOpenNote(targetPath);
-      };
-      el.appendChild(row);
+      const embedRoot = createRoot(mount);
+      mountedRoots.push(embedRoot);
+      embedRoot.render(
+        <CanvasContext.Provider
+          value={{
+            onOpenNote,
+            onSelectTag,
+            allNotes,
+            readOnly: true,
+            currentCanvasPath: targetPath,
+            ancestorPaths: nextAncestors,
+          }}
+        >
+          <Suspense fallback={<div className="canvas-file-loading">{t('canvas.loadingPreview')}</div>}>
+            <LazyCanvasEmbedWidget
+              canvasPath={targetPath}
+              onOpenNote={onOpenNote}
+              allNotes={allNotes}
+              currentNotePath={filePath}
+              height={embedHeight}
+            />
+          </Suspense>
+        </CanvasContext.Provider>
+      );
     });
 
     const baseEmbeds = container.querySelectorAll<HTMLElement>(
@@ -223,8 +271,19 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       for (const u of revokedUrls) {
         URL.revokeObjectURL(u);
       }
+      if (mountedRoots.length > 0) {
+        queueMicrotask(() => {
+          for (const r of mountedRoots) {
+            try {
+              r.unmount();
+            } catch {
+              // ignore already unmounted
+            }
+          }
+        });
+      }
     };
-  }, [renderedMarkdown, filePath, ancestorPaths, onOpenNote, t]);
+  }, [renderedMarkdown, filePath, ancestorPaths, allNotes, onOpenNote, onSelectTag, t]);
 
   const handleMarkdownClick = (e: React.MouseEvent) => {
     const tagEl = (e.target as HTMLElement).closest('[data-tag]') as HTMLElement | null;
@@ -290,6 +349,8 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const strokeColor = customColor || (selected ? 'var(--accent-color, #7852ee)' : 'var(--border-color, #444)');
   const strokeWidth = selected ? '2.5' : '2';
   const resolvedImageSrc = decryptedImageUrl || api.getAttachmentUrl(filePath);
+  const cssClip = isCustomImageShape ? getShapeCssClipPath(shape) : null;
+  const clipPathValue = cssClip || `url(#${clipId})`;
   const isExternalLink = /^https?:\/\//i.test(linkUrl);
   const linkBadgeLabel = linkUrl ? getLinkBadgeLabel(linkUrl) : '';
 
@@ -351,18 +412,20 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           onClick={(e) => handleImageInteraction(e, false)}
           onDoubleClick={(e) => handleImageInteraction(e, true)}
         >
-          <svg
-            width="0"
-            height="0"
-            style={{ position: 'absolute', pointerEvents: 'none' }}
-            aria-hidden="true"
-          >
-            <defs>
-              <clipPath id={clipId} clipPathUnits="objectBoundingBox">
-                <g transform="scale(0.01, 0.01)">{renderShapeClipGeometry(shape)}</g>
-              </clipPath>
-            </defs>
-          </svg>
+          {!cssClip && (
+            <svg
+              width="1"
+              height="1"
+              style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+              aria-hidden="true"
+            >
+              <defs>
+                <clipPath id={clipId} clipPathUnits="objectBoundingBox">
+                  {renderShapeClipGeometry(shape)}
+                </clipPath>
+              </defs>
+            </svg>
+          )}
 
           <img
             src={resolvedImageSrc}
@@ -370,8 +433,8 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             loading="lazy"
             className="canvas-file-shaped-img"
             style={{
-              clipPath: `url(#${clipId})`,
-              WebkitClipPath: `url(#${clipId})`,
+              clipPath: clipPathValue,
+              WebkitClipPath: clipPathValue,
             }}
           />
 

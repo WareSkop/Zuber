@@ -11,13 +11,6 @@ import {
   GitCommit,
   CornerDownRight,
   Square,
-  Circle,
-  Diamond,
-  Database,
-  Server,
-  Network,
-  Cloud,
-  Monitor,
   Eye,
   EyeOff,
   Check,
@@ -25,7 +18,7 @@ import {
 } from 'lucide-react';
 import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
 import { OBSIDIAN_CANVAS_COLORS } from '../../../shared/canvasTypes';
-import { isImageFilePath } from './nodes/canvasShapeGeometry';
+import { isImageFilePath, renderShapeMiniIcon } from './nodes/canvasShapeGeometry';
 import { useTranslation } from '../../i18n';
 
 interface CanvasInspectorProps {
@@ -169,17 +162,17 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   ];
 
   const shapesList: { shape: CanvasShape; label: string; icon: React.ReactNode }[] = [
-    { shape: 'rectangle', label: t('canvas.shapeProcess'), icon: <Square size={14} /> },
-    { shape: 'rounded', label: t('canvas.shapeStartEnd'), icon: <div className="palette-icon-rounded mini" /> },
-    { shape: 'circle', label: t('canvas.shapeTerminal'), icon: <Circle size={14} /> },
-    { shape: 'diamond', label: t('canvas.shapeDecision'), icon: <Diamond size={14} /> },
-    { shape: 'parallelogram', label: t('canvas.shapeIo'), icon: <div className="palette-icon-parallel mini" /> },
-    { shape: 'hexagon', label: t('canvas.shapeConditionFilter'), icon: <div className="palette-icon-hexagon mini" /> },
-    { shape: 'cylinder', label: t('canvas.shapeDatabase'), icon: <Database size={14} /> },
-    { shape: 'cloud', label: t('canvas.shapeCloud'), icon: <Cloud size={14} /> },
-    { shape: 'server', label: t('canvas.shapeServer'), icon: <Server size={14} /> },
-    { shape: 'router', label: t('canvas.shapeRouter'), icon: <Network size={14} /> },
-    { shape: 'workstation', label: t('canvas.shapeWorkstation'), icon: <Monitor size={14} /> },
+    { shape: 'rectangle', label: t('canvas.shapeProcess'), icon: renderShapeMiniIcon('rectangle', 20) },
+    { shape: 'rounded', label: t('canvas.shapeStartEnd'), icon: renderShapeMiniIcon('rounded', 20) },
+    { shape: 'circle', label: t('canvas.shapeTerminal'), icon: renderShapeMiniIcon('circle', 20) },
+    { shape: 'diamond', label: t('canvas.shapeDecision'), icon: renderShapeMiniIcon('diamond', 20) },
+    { shape: 'parallelogram', label: t('canvas.shapeIo'), icon: renderShapeMiniIcon('parallelogram', 20) },
+    { shape: 'hexagon', label: t('canvas.shapeConditionFilter'), icon: renderShapeMiniIcon('hexagon', 20) },
+    { shape: 'cylinder', label: t('canvas.shapeDatabase'), icon: renderShapeMiniIcon('cylinder', 20) },
+    { shape: 'cloud', label: t('canvas.shapeCloud'), icon: renderShapeMiniIcon('cloud', 20) },
+    { shape: 'server', label: t('canvas.shapeServer'), icon: renderShapeMiniIcon('server', 20) },
+    { shape: 'router', label: t('canvas.shapeRouter'), icon: renderShapeMiniIcon('router', 20) },
+    { shape: 'workstation', label: t('canvas.shapeWorkstation'), icon: renderShapeMiniIcon('workstation', 20) },
   ];
 
   return (
@@ -212,9 +205,9 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                         setActivePopover(null);
                       }}
                       title={s.label}
+                      aria-label={s.label}
                     >
                       {s.icon}
-                      <span>{s.label}</span>
                     </button>
                   ))}
                 </div>

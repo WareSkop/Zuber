@@ -7550,30 +7550,30 @@ input:checked + .slider:before {
   z-index: 50;
 }
 
-/* Shapes Grid Dropdown */
+/* Shapes Grid Dropdown (icon-only tiles with hover tooltips) */
 .inspector-dropdown-menu.shapes-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  grid-template-columns: repeat(4, 42px);
   gap: 6px;
-  width: 380px;
-  max-width: min(420px, calc(100vw - 32px)) !important;
+  width: auto;
+  padding: 8px;
+  max-width: calc(100vw - 24px) !important;
   box-sizing: border-box !important;
 }
 
 .inspector-grid-item {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  padding: 6px 10px;
+  justify-content: center;
+  width: 42px;
+  height: 38px;
+  padding: 0;
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 11.5px;
   cursor: pointer;
   transition: all 0.12s ease;
-  white-space: nowrap;
   box-sizing: border-box;
 }
 
@@ -7946,13 +7946,24 @@ input:checked + .slider:before {
 .canvas-handle,
 .canvas-node-handle,
 .react-flow__handle {
-  width: 10px !important;
-  height: 10px !important;
+  width: 14px !important;
+  height: 14px !important;
   background: var(--accent-color, #d4af37) !important;
   border: 2px solid var(--bg-primary, #0d1117) !important;
   border-radius: 50% !important;
-  transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease-in-out !important;
+  touch-action: none !important;
+  transition: box-shadow 0.15s ease, background 0.15s ease, opacity 0.15s ease-in-out !important;
   z-index: 30 !important;
+}
+
+.canvas-handle::after,
+.canvas-node-handle::after,
+.react-flow__handle::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: transparent;
 }
 
 /* Desktop / Mouse Mode (@media (hover: hover) and (pointer: fine)) */
@@ -7979,9 +7990,8 @@ input:checked + .slider:before {
   .canvas-handle:hover,
   .canvas-node-handle:hover,
   .react-flow__handle:hover {
-    transform: scale(1.4) !important;
     background: var(--accent-color, #d4af37) !important;
-    box-shadow: 0 0 6px var(--accent-color, #d4af37) !important;
+    box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.35), 0 0 8px var(--accent-color, #d4af37) !important;
   }
 }
 
@@ -7994,19 +8004,24 @@ input:checked + .slider:before {
     pointer-events: none !important;
   }
 
+  .canvas-handle::after,
+  .canvas-node-handle::after,
+  .react-flow__handle::after {
+    inset: -12px;
+  }
+
   .react-flow__node.selected .react-flow__handle,
   .react-flow__node.selected .canvas-node-handle,
   .canvas-custom-node.selected .canvas-handle,
   .canvas-custom-node.selected .canvas-node-handle {
     opacity: 1 !important;
     pointer-events: auto !important;
-    width: 18px !important;
-    height: 18px !important;
+    width: 22px !important;
+    height: 22px !important;
     border-radius: 50% !important;
-    border: 2px solid var(--bg-primary, #0d1117) !important;
+    border: 2.5px solid var(--bg-primary, #0d1117) !important;
     background: var(--accent-color, #d4af37) !important;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.4) !important;
-    margin: -9px !important;
+    box-shadow: 0 0 8px rgba(0, 0, 0, 0.45) !important;
   }
 }
 
@@ -8667,6 +8682,19 @@ input:checked + .slider:before {
   color: var(--accent-color);
 }
 
+/* Canvas Mobile & Compact Adjustments (hide toolbar button text labels <= 900px) */
+@media (max-width: 900px) {
+  .canvas-toolbar-label {
+    display: none !important;
+  }
+
+  .canvas-toolbar-btn,
+  .canvas-tb-btn {
+    padding: 0 7px;
+    gap: 3px;
+  }
+}
+
 /* Canvas Mobile & Responsive Adjustments (< 768px) */
 @media (max-width: 768px) {
   .canvas-toolbar {
@@ -8680,10 +8708,10 @@ input:checked + .slider:before {
 
   .canvas-toolbar-btn,
   .canvas-tb-btn {
-    padding: 0 8px;
+    padding: 0 7px;
     height: 30px;
     font-size: 12px;
-    gap: 4px;
+    gap: 3px;
   }
 
   .canvas-toolbar-btn.icon-only,

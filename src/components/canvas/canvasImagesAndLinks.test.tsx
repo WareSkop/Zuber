@@ -4,6 +4,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import type { NoteData } from '../../../shared/types';
 import { api } from '../../api';
@@ -262,7 +264,10 @@ describe('Canvas Images, Embed Rendering, Shapes, Links & Cycle Guard', () => {
     });
 
     expect(container.querySelector('.canvas-file-node.is-shaped-image.shape-circle')).not.toBeNull();
-    expect(container.querySelector('clipPath ellipse')).not.toBeNull();
+    const circleImg = container.querySelector('.canvas-file-shaped-img') as HTMLImageElement | null;
+    expect(circleImg).not.toBeNull();
+    expect(circleImg?.style.clipPath).toContain('ellipse(48% 48% at 50% 50%)');
+    expect(container.querySelector('clipPath g')).toBeNull();
     expect(container.querySelector('.canvas-file-header')).toBeNull();
 
     const imgWrapper = container.querySelector('.canvas-file-shaped-image-wrapper') as HTMLElement;
@@ -271,7 +276,33 @@ describe('Canvas Images, Embed Rendering, Shapes, Links & Cycle Guard', () => {
     });
     expect(onOpenNote).toHaveBeenCalledWith('Projects/Plan.md');
 
-    // B: External URL link badge click
+    // B: Cloud shape uses direct <path> inside <clipPath> (no <g> wrapper)
+    act(() => {
+      root.render(
+        <ReactFlowProvider>
+          <CanvasContext.Provider
+            value={{
+              onOpenNote,
+              allNotes: [],
+              readOnly: false,
+            }}
+          >
+            <CanvasFileNode
+              {...makeNodeProps('img-cloud', 'canvasFile', {
+                rawType: 'file',
+                file: 'attachments/sky.png',
+                shape: 'cloud',
+              })}
+            />
+          </CanvasContext.Provider>
+        </ReactFlowProvider>
+      );
+    });
+
+    expect(container.querySelector('clipPath path')).not.toBeNull();
+    expect(container.querySelector('clipPath g')).toBeNull();
+
+    // C: External URL link badge click on diamond shaped image
     act(() => {
       root.render(
         <ReactFlowProvider>
@@ -383,6 +414,18 @@ describe('Canvas Images, Embed Rendering, Shapes, Links & Cycle Guard', () => {
     ) as HTMLButtonElement;
     expect(shapeBtn).toBeDefined();
 
+    // Open Shape popover: verify 11 icon-only tiles with title tooltips & no visible text labels
+    act(() => {
+      shapeBtn.click();
+    });
+    const gridItems = Array.from(container.querySelectorAll('.shapes-grid .inspector-grid-item'));
+    expect(gridItems.length).toBe(11);
+    for (const item of gridItems) {
+      expect(item.querySelector('svg')).not.toBeNull();
+      expect((item.textContent || '').trim()).toBe('');
+      expect((item.getAttribute('title') || '').length).toBeGreaterThan(0);
+    }
+
     const linkBtn = Array.from(container.querySelectorAll('.inspector-tool-btn')).find((b) =>
       b.textContent?.includes('Link')
     ) as HTMLButtonElement;
@@ -399,5 +442,82 @@ describe('Canvas Images, Embed Rendering, Shapes, Links & Cycle Guard', () => {
       festItem.click();
     });
     expect(onUpdateNodeData).toHaveBeenCalledWith('node-img-1', { linkUrl: 'Fest.md' });
+  });
+
+  it('8. mounts non-circular embedded canvas inside CanvasFileNode while blocking circular ones', async () => {
+    vi.spyOn(api, 'getNote').mockImplementation(async (targetPath: string) => {
+      if (targetPath === 'Fest.md') {
+        return makeNote('Fest.md', '# Fest\n\n![[Testcanvas.canvas]]\n\n![[Testcanvas2.canvas]]');
+      }
+      return makeNote(targetPath, JSON.stringify({ nodes: [], edges: [] }));
+    });
+
+    await act(async () => {
+      root.render(
+        <ReactFlowProvider>
+          <CanvasContext.Provider
+            value={{
+              onOpenNote: vi.fn(),
+              allNotes: [
+                { path: 'Testcanvas.canvas', name: 'Testcanvas.canvas', basename: 'Testcanvas' },
+                { path: 'Testcanvas2.canvas', name: 'Testcanvas2.canvas', basename: 'Testcanvas2' },
+              ],
+              currentCanvasPath: 'Testcanvas2.canvas',
+              ancestorPaths: ['Testcanvas2.canvas'],
+            }}
+          >
+            <CanvasFileNode
+              {...makeNodeProps('node-fest-mixed', 'canvasFile', { rawType: 'file', file: 'Fest.md' })}
+            />
+          </CanvasContext.Provider>
+        </ReactFlowProvider>
+      );
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 40));
+    });
+
+    const cycleBtn = container.querySelector('.canvas-file-safe-embed-btn.is-cycle');
+    expect(cycleBtn).not.toBeNull();
+    expect(cycleBtn?.textContent).toContain('Testcanvas2.canvas');
+
+    const liveEmbed = container.querySelector('.canvas-file-live-canvas-embed');
+    expect(liveEmbed).not.toBeNull();
+    expect(liveEmbed?.getAttribute('data-canvas-path')).toBe('Testcanvas.canvas');
+    expect(liveEmbed?.querySelector('.reading-canvas-mount')).not.toBeNull();
+  });
+
+  it('9. verifies responsive toolbar label hiding and enlarged handle hit targets in styles.css', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onAddTextNode={vi.fn()}
+          onAddFileNode={vi.fn()}
+          onAddGroupNode={vi.fn()}
+          onFitView={vi.fn()}
+          gridMode="dots"
+          canUndo={false}
+          canRedo={false}
+          onUndo={vi.fn()}
+          onRedo={vi.fn()}
+          allNotes={[]}
+          onTogglePresentationPanel={vi.fn()}
+          presentationSlideCount={2}
+        />
+      );
+    });
+
+    const labels = container.querySelectorAll('.canvas-toolbar-label');
+    expect(labels.length).toBeGreaterThanOrEqual(6);
+
+    const cssPath = path.resolve(__dirname, '../../styles.css');
+    const css = fs.readFileSync(cssPath, 'utf-8');
+    expect(css).toContain('.canvas-toolbar-label');
+    expect(css).toMatch(/@media\s*\(max-width:\s*900px\)[\s\S]*?\.canvas-toolbar-label\s*\{\s*display:\s*none\s*!important/);
+    expect(css).toContain('width: 14px !important');
+    expect(css).toContain('width: 22px !important');
+    expect(css).toContain('touch-action: none !important');
+    expect(css).toContain('.react-flow__handle::after');
   });
 });
