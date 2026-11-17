@@ -35,6 +35,8 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 ### 1. Markdown Editor & Writing Experience
 - **Live-Preview Mode (CodeMirror 6):** Obsidian-like rich editing that visually renders headings, bold/italic formatting, highlights, task checkboxes, tables, callouts, and internal links while the cursor is outside the element.
 - **Reading & Source Modes:** Instant switching between fully rendered HTML reading view and raw Markdown source view.
+- **Visual In-Place Markdown Tables:** Interactive `TableWidget` editing right inside Live-Preview with `Tab`/`Enter` cell navigation, column-width drag-resizing (`_tableWidths`), and physical sorting.
+- **PDF Export & Email Integration (SMTP / IMAP):** Client-side note printing/PDF export (`Export as PDF…` with `<!-- pagebreak -->` support and canvas/base capture), outbound email export as `.md` or `.pdf`, and an optional IMAP Mail-to-Inbox watcher (`Inbox/YYYY-MM-DD <Subject>.md`).
 - **Visual Properties Editor:** Interactive form above the note body to manage frontmatter properties (`text`, `number`, `checkbox`, `date`, `list`, `tags`) without exposing raw YAML syntax.
 - **Mobile Touch Toolbar:** Sticky, touch-friendly formatting bar with quick actions for headings (`H1`–`H6`), formatting, lists, tables, callouts, and photo/camera uploads.
 - **Smart URL Pasting & Links:** Pasting an HTTP/HTTPS link automatically formats it into a Markdown link (or wraps the selected word), alongside a dedicated external link insertion tool.
@@ -42,8 +44,14 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 
 ### 2. Graphical Canvas & Workflow Editor (`.canvas`)
 - **Obsidian JSON Canvas 1.0 Compatible:** Native visual canvas editor powered by `@xyflow/react` that reads and writes standard `.canvas` files.
-- **Extended Workflow & Network Shapes:** Includes 11 shape primitives for workflow modeling and network diagrams (`rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`) with graceful degradation in standard Obsidian.
-- **Vault Integration:** Embed Markdown notes with live preview cards, navigate wiki-links (`[[Note]]`) directly from canvas nodes, and embed canvases inside regular Markdown notes via `![[Diagram.canvas]]`.
+- **Extended Workflow & Network Shapes:** Includes 11 shape primitives for workflow modeling and network diagrams (`rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`) with graceful degradation in standard Obsidian, plus a compact 4-column icon shape picker with hover tooltips.
+- **Images, Custom Shapes & Clickable Links:** Insert images via the toolbar **Image** picker (upload from device or pick existing vault images), **Drag & Drop** from the File Tree or desktop, or **Paste (`Ctrl+V`)**. Any image node can be masked into any of the 11 shapes, attached with clickable links (`link`) to vault notes or external web URLs, and connected via enlarged desktop/touch edge handles.
+- **Canvas Presentation Mode:** Turn any canvas into a resolution-independent presentation with world-space slides, smooth camera zoom arcs, per-slide element visibility/ghosting (`hiddenNodeIds`), progressive reveals, and a distraction-free fullscreen player HUD.
+- **Vault Integration & Cycle Guard:** Embed Markdown notes (`CanvasFileNode`) with full image, callout, `.zenc`, and nested non-circular `.canvas` rendering while automatically preventing infinite circular canvas recursion.
+
+### 3. Bases (`.base`), Kanban Boards & Zero-Knowledge Folder Encryption
+- **Obsidian Bases & 1D/2D Kanban Boards:** Structured YAML `.base` views (`Table`, `Cards`, and `Board`) with visual filter chips, formulas, collapsible 2D swimlanes, and single-column mobile Kanban with `<BottomSheet>` controls.
+- **Zero-Knowledge Folder Encryption (`.zenc`):** Optional client-side `PBKDF2` + `AES-256-GCM` per-folder encryption with auto-lock, IndexedDB purge on lock, transparent unlocked editing/attachment decryption, and optional WebAuthn biometric unlock.
 
 ### 3. In-Container Git Versioning & Remote Backup
 - **Server-Side Git Engine:** Git runs directly inside the Docker container on the vault directory (`/data/vault`) without requiring Git installed on the host.
@@ -67,8 +75,9 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 - **Mobile Drawer & Touch Gestures:** Full-screen mobile sidebars (100vw) that open and dismiss via smooth horizontal swipe gestures.
 - **Configurable Font Sizes:** Independent font size sliders for UI elements vs. editor content across desktop and mobile devices.
 - **Configurable Startup Note:** Choose between resuming the last active note, opening a daily note (`YYYY-MM-DD.md`), or launching a specific predefined note.
-- **Integrated Server & Client Log Viewer:** Dedicated "Logs & Diagnostics" settings tab with selectable log levels (`DEBUG`, `INFO`, `WARN`, `ERROR`), live log streaming, and a one-click "Copy Logs to Clipboard" button.
-- **Themes & Localization:** 5 built-in color themes (Zuber Dark-Gold, Dark Cold, Dark Warm, Light Cold, Light Warm) and full bilingual support (English default, German).
+- **Unified 4-Mode Search & In-Note Jump Bar:** Shared whole-word-by-default search engine with `*` wildcards, `+`/`-` boolean operators, `"..."` exact phrases, relevance ranking, and a floating desktop `Ctrl+F` In-Note Jump Bar.
+- **Integrated Diagnostics, Debug Mode & Log Export:** Dedicated "Logs & Diagnostics" settings tab with selectable log levels (`DEBUG`, `INFO`, `WARN`, `ERROR`), persistent crash-resilient client/server logs, environment metadata, and `.txt` report export / Web Share / "Copy for Antigravity".
+- **Themes & Localization:** 5 built-in color themes (Zuber Dark-Gold, Dark Cold, Dark Warm, Light Cold, Light Warm) and full English & German UI localization (100% key parity).
 
 ---
 
@@ -79,8 +88,8 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 Zuber is distributed via the **GitHub Container Registry (`ghcr.io`)** and pre-configured for containerized deployment behind reverse proxies such as **Nginx Proxy Manager (NPM)**, Traefik, or Caddy.
 
 #### Container Image Tags
-- `ghcr.io/wareskop/zuber:latest`: Official stable production release (built exclusively on release tags, e.g. `v0.3.0`).
-- `ghcr.io/wareskop/zuber:<version>` (e.g. `:0.3.0`): Pinned semantic version for reproducible production deployments.
+- `ghcr.io/wareskop/zuber:latest`: Official stable production release (built exclusively on release tags, e.g. `v0.3.1`).
+- `ghcr.io/wareskop/zuber:<version>` (e.g. `:0.3.1`): Pinned semantic version for reproducible production deployments.
 - `ghcr.io/wareskop/zuber:dev`: Bleeding-edge development build (automatically built on branch pushes to test unreleased changes).
 
 1. Create a `docker-compose.yml` file:

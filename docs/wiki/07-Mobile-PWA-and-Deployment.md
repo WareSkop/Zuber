@@ -100,7 +100,18 @@ Create a **Proxy Host** in NPM:
 
 ---
 
-## 6. Optional Linux `.AppImage` Desktop Build
+## 7. Diagnostics, Debug Mode & Log Export
+
+When troubleshooting network sync or mobile behavior, open **Settings → Logs & Diagnostics**:
+- **Switchable Log Levels:** Toggle between `DEBUG (Detailed)`, `INFO (Standard)`, `WARN (Warnings)`, and `ERROR (Errors only)` for both client and server ring-buffer loggers.
+- **Crash-Resilient Client Logs:** Important client warnings/errors are persisted locally in `localStorage` across page reloads and WebAPK restarts.
+- **One-Click Export:** Filter by `All`, `Client`, or `Server`, then **Export Report (.txt)**, **Share** (native mobile share sheet), or **Copy for Antigravity**—automatically bundling Zuber version, theme, online state, viewport dimensions, connection info, Service Worker status, and active bundle hashes alongside the chronological logs.
+
+![Settings Logs and Diagnostics with Debug Mode and Export Controls](images/27-diagnostics-debug-logs.png)
+
+---
+
+## 8. Optional Linux `.AppImage` Desktop Build
 
 If you prefer a standalone local Linux desktop wrapper alongside your web/PWA access, Zuber supports building a `.AppImage` package from the repository:
 

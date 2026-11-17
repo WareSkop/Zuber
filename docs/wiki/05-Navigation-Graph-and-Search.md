@@ -41,12 +41,19 @@ Next to the **Files**, **Search**, and **Tags** tabs in the left sidebar are two
 
 ---
 
-## 4. Quick Switcher (`Ctrl+O`), Search & Command Palette (`Ctrl+P`)
+## 4. Unified 4-Mode Search, In-Note Jump Bar & Command Palette
 
-- **Quick Switcher (`Ctrl+O` / `Cmd+O`):** Fuzzy-search across all note titles, paths, and aliases and jump immediately with `Enter`.
-- **Full-Text & Tag Search (`Ctrl+Shift+F`):** Searches note titles, body content, frontmatter aliases, and `#tags` across the entire vault.
+Zuber uses a unified whole-word search engine (`shared/searchEngine.ts`) across Desktop, Mobile, and Offline IndexedDB cache:
+
+- **Unified Search (`Ctrl+Shift+F` / Mobile Search):** Search across `Full Text`, `In Note`, `Files`, and `Commands` with:
+  - **Whole-Word Default** (`\b...\b`), `*` wildcards (`docker*`), `+required` / `-excluded` terms, and `"exact phrases"`.
+  - Toggleable **`?` Syntax Help** banner and **Relevance | Newest** result sorting.
+- **Floating In-Note Jump Bar (`Ctrl+F` / `Cmd+F`):** Opens an inline match counter (`N / M`) with `▲` / `▼` (`Enter`/`F3`, `Shift+Enter`/`Shift+F3`) navigation in both Live-Preview and Reading Mode.
+- **Quick Switcher (`Ctrl+O` / `Cmd+O`):** Fuzzy-search across note titles, paths, and aliases to jump immediately with `Enter`.
 - **Command Palette (`Ctrl+P` / `Cmd+P`):** Instant access to every Zuber command—creating notes, bases, canvases, switching themes, toggling Zen Mode, inserting timestamps, opening Version History, and triggering Git commits.
-- **Mobile 4-in-1 Search Modal (`< 768px`):** Tapping **Search** in the mobile bottom bar opens a unified modal with a scope selector (`In Note` default with floating `▲` / `▼` match jump bar, `Files`, offline IndexedDB `Full Text`, and `Settings`).
+- **Mobile 4-in-1 Search Modal (`< 768px`):** Tapping **Search** in the mobile bottom bar opens the same unified modal tuned for touch (`In Note` default with match jump bar, `Files`, offline `Full Text`, and `Settings` tab shortcuts).
+
+![Desktop Unified Search Modal with Syntax Help and Relevance Ranking](images/26-desktop-unified-search.png)
 
 ![Mobile 4-in-1 Search Modal](images/19-mobile-4in1-search.png)
 

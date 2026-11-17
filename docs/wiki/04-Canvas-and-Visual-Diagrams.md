@@ -17,21 +17,31 @@ Every `.canvas` file is saved as clean, standard JSON (without YAML frontmatter)
 
 ---
 
-## 2. Creating Nodes, Groups & Connections
+## 2. Creating Nodes, Images, Groups & Connections
 
-Use the top floating **Canvas Toolbar** to add elements:
-- **+ Text:** Add a Markdown text/shape node. Double-click any shape (or select it and start typing directly — *Type-to-Edit*) to edit its Markdown content.
-- **Embed Note:** Search and embed any `.md` note from your vault as a live preview card (`CanvasFileNode`) with an **Open ↗** button.
+Use the top floating **Canvas Toolbar** (automatically collapsing button labels on viewports `<= 900px` for maximum smartphone space) to add elements:
+- **+ Text:** Add a Markdown text/shape node. Double-click any shape (or select it and start typing directly — *Type-to-Edit*) to edit its Markdown content, including inline `![[image]]` embeds.
+- **Embed Note:** Search and embed any `.md` note from your vault as a live preview card (`CanvasFileNode`) with full Reading Mode rendering (inline images, callouts, `.zenc` decryption, and live non-circular nested `.canvas` embeds) plus an **Open ↗** button.
+- **Image ⌄:** Upload an image directly from your device or choose any existing vault image (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`, including `.zenc`).
+- **Drag & Drop & Paste (`Ctrl+V`):** Drag images or notes straight from the left **File Tree**, drop image files from your desktop, or paste clipboard images onto the canvas.
 - **Group:** Create a labeled visual container. Dragging a group automatically moves all enclosed child nodes together.
 - **Workflow ⌄ / Network ⌄:** Drop pre-styled workflow or infrastructure shapes onto the canvas.
 - **Box Select (`Marquee`):** Toggle drag-box selection (or hold `Shift` + drag) to select, move, duplicate, or delete multiple nodes at once.
 - **Grid & Snap:** Configure grid visibility (`Dots`, `Lines`, `Off`) and snap size (`10px`, `15px`, `20px`, `25px`).
 
-### Smart Edge Drawing & Auto-Node Creation
-- Hover over (or tap on touch devices) any node to reveal its 4 connection handles (`top`, `right`, `bottom`, `left`).
+### Image Shapes & Clickable Links
+- **All 11 Shapes for Images:** Select any image node and pick any of the 11 shapes (`circle`, `rounded`, `diamond`, `hexagon`, `cloud`, etc.) from the compact **4-column icon Shape Picker** (hover over any symbol to view its localized name). Images clip cleanly inside the shape border.
+- **Attach Clickable Links:** Open **Link** in the Inspector on any image or file node to attach either an **internal vault note/file** or an **external web URL** (`https://...`). A clickable link badge appears on the card (`Ctrl/Cmd+Click` or double-click in Edit Mode; single-click in Read-Only / Presentation Mode).
+
+![Canvas Embedded Notes, Shaped Image Nodes, Clickable Links and Icon Shape Picker](images/24-canvas-images-shapes-links.png)
+
+### Smart Edge Drawing & Enlarged Touch/Mouse Handles
+- Hover over (or tap on touch devices) any node to reveal its 4 centered connection handles (`top`, `right`, `bottom`, `left`) with enlarged `14×14px` desktop / `22×22px` touch visual dots and wide invisible hit areas (`34×34px` desktop, `46×46px` touch).
 - Drag from a handle to another node to create a directed arrow edge.
 - **Drop onto Empty Canvas:** Dragging a connection handle onto empty space automatically creates a new connected node at the drop location, docked to the nearest side!
 - **Reconnect Edges:** Select any edge (highlighted in gold) and drag its endpoints to attach it to a different node.
+
+![Mobile Canvas Compact Icon Toolbar and Enlarged Touch Handles](images/25-mobile-canvas-compact-toolbar.png)
 
 ---
 
@@ -51,7 +61,7 @@ Canvases are first-class citizens in Zuber's vault index:
 
 ---
 
-## 5. Embedding Canvases in Markdown Notes
+## 5. Embedding Canvases in Markdown Notes (Cycle-Safe)
 
 Include live, interactive pan-and-zoom diagrams inside any Markdown note:
 
@@ -60,7 +70,7 @@ Include live, interactive pan-and-zoom diagrams inside any Markdown note:
 ![[System-Architecture.canvas|420]]
 ```
 
-Clicking the diagram title in the embed header opens the full `.canvas` file in the Canvas Editor.
+Clicking the diagram title in the embed header opens the full `.canvas` file in the Canvas Editor. Embedded `.md` notes inside a canvas also render non-circular nested `.canvas` embeds live, while automatically detecting and blocking circular references (e.g., if Note A embeds Canvas B while Note A is itself displayed inside Canvas B).
 
 ---
 

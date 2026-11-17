@@ -84,7 +84,8 @@ For full deployment instructions (including **Nginx Proxy Manager** and the **Li
 | `Alt+←` (`Alt+ArrowLeft`) | **Go Back** in navigation history (or Research Split history) |
 | `Alt+D` | Open or create today's **Daily Note** |
 | `Alt+Z` | Toggle distraction-free **Zen Mode** |
-| `Ctrl+Shift+F` | Focus **Full-Text Search** in the left sidebar |
+| `Ctrl+Shift+F` | Open **Unified Full-Text Search** (`+`/`-`, `*` wildcards, `?` syntax help) |
+| `Ctrl+F` / `Cmd+F` | Open floating **In-Note Jump Bar** (`▲` / `▼` match navigation) |
 | `Ctrl+\` | Toggle **Left Sidebar** (File Tree) |
 | `Ctrl+Alt+\` | Toggle **Right Sidebar** (Backlinks, Outline, Local Graph) |
 | `Ctrl+.` / `Cmd+.` | Insert current timestamp (`YYYY-MM-DD HH:mm:ss`) |
@@ -96,8 +97,8 @@ For full deployment instructions (including **Nginx Proxy Manager** and the **Li
 1. **[Markdown Editor & Workflows](01-Markdown-Editor-and-Workflows)** — Live-Preview, Reading & Source modes, Visual Properties, Callouts, Mermaid & HTML blocks, Inline PDFs, Image toolbar, Send to Target Note (`sendtarget: true`), Templates (`isTemplate: true`), and Zen Mode.
 2. **[Research Split-View](02-Research-Split-View)** — Asymmetric 70/30 Split-View, undisturbed writing in the primary pane, smart click-routing vs. `Alt+Click`, automatic Back-button and Mentions sync, mobile vertical split, and Zen split divider.
 3. **[Bases, Dashboards & Kanban](03-Bases-Dashboards-and-Kanban)** — `.base` databases, Table & Card views, visual filter chips, 1D Kanban boards, 2D Swimlane matrices, card properties, column sorting, and live `![[File.base]]` dashboards.
-4. **[Canvas & Visual Diagrams](04-Canvas-and-Visual-Diagrams)** — JSON Canvas 1.0 editor, 11 workflow & network shapes, embedded notes, Wiki-links, right-click context toolbox, `![[Diagram.canvas]]` embeds, and Canvas Presentation Mode.
-5. **[Navigation, Graph & Search](05-Navigation-Graph-and-Search)** — File tree multi-select, Drag & Drop / *Move to…*, vault-wide link refactoring across `.md` & `.canvas`, Favorites & Recent panels, Quick Switcher, Command Palette, and 2D Knowledge Graph.
+4. **[Canvas & Visual Diagrams](04-Canvas-and-Visual-Diagrams)** — JSON Canvas 1.0 editor, 11 workflow & network shapes (icon-only picker), embedded notes with live images & non-circular nested canvas embeds, image Drag & Drop / Paste / Shapes / Clickable Links, enlarged mouse/touch handles, `![[Diagram.canvas]]` embeds, and Canvas Presentation Mode.
+5. **[Navigation, Graph & Search](05-Navigation-Graph-and-Search)** — File tree multi-select, Drag & Drop / *Move to…*, vault-wide link refactoring across `.md` & `.canvas`, Favorites & Recent panels, Unified 4-Mode Search (`+`/`-`, `*` wildcards, In-Note Jump Bar), Command Palette, and 2D Knowledge Graph.
 6. **[Git Versioning & History](06-Git-Versioning-and-History)** — Containerized Git engine, auto-commits on note leave & session close, HTTPS remote backup, per-file Version History (`git log --follow`), color-coded Diff Viewer, and one-click restore.
-7. **[Mobile PWA & Deployment](07-Mobile-PWA-and-Deployment)** — Chromebook & smartphone ergonomics, Mobile Reading Mode, Bottom Navigation Bar, Keyboard-Docked Edit Bar, `+ New ▾` touch toolbar, single-column mobile Kanban & `<BottomSheet>` controls, Offline IndexedDB Outbox, Android Web Share Target (`Inbox/` with `YYYY-MM-DD` prefix), First-Install Demo Vault Seeding, Docker + NPM, and Linux AppImage.
+7. **[Mobile PWA & Deployment](07-Mobile-PWA-and-Deployment)** — Chromebook & smartphone ergonomics, compact mobile Canvas icon toolbar, Mobile Reading Mode, Bottom Navigation Bar, Keyboard-Docked Edit Bar, `+ New ▾` touch toolbar, single-column mobile Kanban & `<BottomSheet>` controls, Offline IndexedDB Outbox, Diagnostics & Debug Log Export, Android Web Share Target (`Inbox/` with `YYYY-MM-DD` prefix), First-Install Demo Vault Seeding, Docker + NPM, and Linux AppImage.
 8. **[Folder Encryption & Security](08-Folder-Encryption-and-Security)** — Zero-Knowledge client-side `AES-256-GCM` `.zenc` folder encryption for all file types, per-folder passwords, auto-lock + IndexedDB cache purging, and optional WebAuthn fingerprint/biometric unlock.
