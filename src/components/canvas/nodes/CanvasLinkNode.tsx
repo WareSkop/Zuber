@@ -3,6 +3,7 @@ import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import { Globe, ExternalLink } from 'lucide-react';
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
+import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
 
 export const CanvasLinkNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
   const { readOnly } = useCanvasContext();
@@ -31,6 +32,7 @@ export const CanvasLinkNode: React.FC<NodeProps> = ({ id, data, selected, width,
         lineClassName="canvas-resizer-line"
         handleClassName="canvas-resizer-handle"
       />
+      <CanvasNodeHiddenBadge nodeId={id} />
 
       <Handle type="target" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
       <Handle type="source" position={Position.Top} id="top" className="canvas-node-handle handle-top" />

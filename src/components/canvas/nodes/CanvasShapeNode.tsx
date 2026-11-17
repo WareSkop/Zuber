@@ -6,6 +6,7 @@ import { Check, Link2 } from 'lucide-react';
 import type { CanvasShape } from '../../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
+import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
 
 export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
   const {
@@ -497,6 +498,7 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
         lineClassName="canvas-resizer-line"
         handleClassName="canvas-resizer-handle"
       />
+      <CanvasNodeHiddenBadge nodeId={id} />
 
       {/* 4 Multi-directional handles (Obsidian-compatible top, right, bottom, left) */}
       <Handle type="target" position={Position.Top} id="top" className="canvas-node-handle handle-top" />

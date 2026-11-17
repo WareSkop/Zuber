@@ -616,6 +616,12 @@ flowchart TD
 - Der Widget lädt die Canvas-Datei und rendert eine interaktive, zoombare und verschiebbare Mini-Leinwand direkt innerhalb des Markdown-Textes.
 - Im Lese-Modus (`reading`) bereinigt DOMPurify das HTML unter Erhalt des `data-canvas-path`-Attributs.
 
+### 17.7 Auflösungsunabhängiger Präsentationsmodus (`CanvasPresentationPanel.tsx` & `canvasPresentationUtils.ts`)
+- **Schema & Persistenz:** Alle Folien und Timing-Einstellungen werden unter `"presentation"` in der `.canvas`-JSON-Datei gespeichert (`CanvasBounds` in Weltkoordinaten, `hiddenNodeIds`, `CanvasPresentationConfig`). `canvasMapper.ts` erhält `presentation` bei regulären Bearbeitungen und bereinigt gelöschte Knoten-IDs automatisch aus `hiddenNodeIds`.
+- **Auflösungsunabhängige Berechnung:** `captureViewportBounds()` und `boundsToViewport()` rechnen zwischen aktuellem React-Flow-Viewport und Weltkoordinaten um, sodass jede Folie auf 1080p, 4K, Ultrawide und Tablets identisch gerahmt wird.
+- **Bearbeitungs-Panel & Ghosting:** Das über die Canvas-Toolbar einblendbare `CanvasPresentationPanel` ermöglicht das Erfassen/Aktualisieren von Folienansichten, Drag-&-Drop-/Pfeil-Sortierung, globale & folienspezifische Timing-Overrides sowie die Auswahl einer Folie inkl. Zielrahmen-Overlay (`SlideBoundsOverlay`) und Ghosting versteckter Knoten (`opacity: 0.35` + `CanvasNodeHiddenBadge` + Inspector-Toggle).
+- **Vollbild-Player & Progressive Reveal:** `isPresenting` blendet App-Chrome und Toolbars aus (`position: fixed; inset: 0`), animiert die Kamera per `requestAnimationFrame` (`animateViewportTo` mit parabolischem Zoom-Arc `computeParabolicViewportAt`), blendet neu erscheinende Knoten und zugehörige Kanten nach `revealDelay` gestaffelt ein und unterstützt `Space`/`ArrowRight`/`PageDown`/`Enter`, `ArrowLeft`/`PageUp`, `Escape` sowie ein automatisch ausblendendes Floating-HUD.
+
 ---
 
 ## 18. Datei- und Ordnerverwaltung im Dateibaum (`FileSidebar.tsx`)

@@ -61,3 +61,18 @@ Include live, interactive pan-and-zoom diagrams inside any Markdown note:
 ```
 
 Clicking the diagram title in the embed header opens the full `.canvas` file in the Canvas Editor.
+
+---
+
+## 6. Canvas Presentation Mode (Slides, Camera Path & Progressive Reveal)
+
+Turn any `.canvas` diagram into a smooth, resolution-independent presentation stored directly inside the `.canvas` JSON (`"presentation"` key, 100% compatible with Obsidian JSON Canvas 1.0):
+
+- **Resolution-Independent Slides:** Click **Presentation** in the Canvas Toolbar to open the Presentation Panel, then pan/zoom to any region and click **+ Capture Current View**. Slides store world-space `bounds` (`x`, `y`, `width`, `height`), guaranteeing identical framing on 1080p, 4K, ultrawide, and tablet screens.
+- **Per-Slide Element Visibility & Ghosting:** When a slide is selected in the panel, you can hide nodes for that slide via the **Canvas Inspector** (`EyeOff`) or click the `EyeOff` badge on ghosted nodes (`opacity: 0.35`) to reveal them again. Deleted nodes are automatically pruned from `hiddenNodeIds`.
+- **Configurable Camera & Reveal Timing:** Expand the **Settings (`⚙`)** section to adjust global **Camera Speed** (`200–2500 ms`), **Camera Arc** (`None`, `Subtle`, `Medium`, `Strong` parabolic zoom-out between distant slides), **Element Reveal Speed**, **Reveal Delay**, and **Stagger Delay**, or override timing per slide.
+- **Fullscreen Playback & Controls:** Click **Start Presentation** or **Play from Current** to enter a distraction-free fullscreen stage.
+  - `Space`, `ArrowRight`, `PageDown`, or `Enter`: Advance to the next slide (or fast-forward a running transition/reveal). Edges appear automatically once both connected nodes are visible.
+  - `ArrowLeft` or `PageUp`: Step back cleanly to the previous slide.
+  - `Escape`: Exit presentation mode.
+  - A minimal bottom-center **Floating HUD** auto-fades when the mouse is idle.

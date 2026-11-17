@@ -8,8 +8,85 @@ import type {
   CanvasShape,
   CanvasSide,
   CanvasEdgeStyle,
+  CanvasPresentation,
+  CanvasPresentationConfig,
+  CanvasPresentationSlide,
+  CanvasZoomArc,
 } from '../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../shared/canvasTypes';
+
+export const DEFAULT_PRESENTATION_CONFIG: CanvasPresentationConfig = {
+  zoomDuration: 850,
+  zoomArc: 'medium',
+  revealDuration: 400,
+  revealDelay: 100,
+  staggerDelay: 0,
+};
+
+const VALID_ZOOM_ARCS: CanvasZoomArc[] = ['none', 'subtle', 'medium', 'strong'];
+
+function clampNumber(val: unknown, fallback: number, min: number, max: number): number {
+  const num = Number(val);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(num)));
+}
+
+export function normalizePresentation(
+  raw?: Partial<CanvasPresentation> | null
+): CanvasPresentation {
+  const rawConfig = (raw?.config && typeof raw.config === 'object' ? raw.config : {}) as Partial<CanvasPresentationConfig>;
+  const config: CanvasPresentationConfig = {
+    zoomDuration: clampNumber(rawConfig.zoomDuration, DEFAULT_PRESENTATION_CONFIG.zoomDuration, 200, 3000),
+    zoomArc: VALID_ZOOM_ARCS.includes(rawConfig.zoomArc as CanvasZoomArc)
+      ? (rawConfig.zoomArc as CanvasZoomArc)
+      : DEFAULT_PRESENTATION_CONFIG.zoomArc,
+    revealDuration: clampNumber(rawConfig.revealDuration, DEFAULT_PRESENTATION_CONFIG.revealDuration, 100, 2000),
+    revealDelay: clampNumber(rawConfig.revealDelay, DEFAULT_PRESENTATION_CONFIG.revealDelay, 0, 1500),
+    staggerDelay: clampNumber(rawConfig.staggerDelay, DEFAULT_PRESENTATION_CONFIG.staggerDelay, 0, 500),
+  };
+
+  const rawSlides = Array.isArray(raw?.slides) ? raw.slides : [];
+  const slides: CanvasPresentationSlide[] = rawSlides
+    .filter((s): s is CanvasPresentationSlide => Boolean(s && typeof s === 'object' && s.bounds && typeof s.bounds === 'object'))
+    .map((s, idx) => {
+      const b = s.bounds;
+      const slide: CanvasPresentationSlide = {
+        id: typeof s.id === 'string' && s.id.trim() ? s.id : `slide_${idx + 1}`,
+        title: typeof s.title === 'string' ? s.title : `Slide ${idx + 1}`,
+        bounds: {
+          x: Number.isFinite(Number(b.x)) ? Number(b.x) : 0,
+          y: Number.isFinite(Number(b.y)) ? Number(b.y) : 0,
+          width: Math.max(1, Number.isFinite(Number(b.width)) ? Number(b.width) : 800),
+          height: Math.max(1, Number.isFinite(Number(b.height)) ? Number(b.height) : 600),
+        },
+        hiddenNodeIds: Array.isArray(s.hiddenNodeIds)
+          ? s.hiddenNodeIds.filter((id): id is string => typeof id === 'string')
+          : [],
+      };
+      if (s.zoomDuration !== undefined && s.zoomDuration !== null) {
+        slide.zoomDuration = clampNumber(s.zoomDuration, config.zoomDuration, 200, 3000);
+      }
+      if (s.revealDuration !== undefined && s.revealDuration !== null) {
+        slide.revealDuration = clampNumber(s.revealDuration, config.revealDuration, 100, 2000);
+      }
+      return slide;
+    });
+
+  return { config, slides };
+}
+
+export function prunePresentationNodeIds(
+  presentation: CanvasPresentation,
+  validNodeIds: Set<string>
+): CanvasPresentation {
+  return {
+    config: { ...presentation.config },
+    slides: presentation.slides.map((slide) => ({
+      ...slide,
+      hiddenNodeIds: slide.hiddenNodeIds.filter((id) => validNodeIds.has(id)),
+    })),
+  };
+}
 
 export function parseCanvasJson(rawJson: string): JsonCanvasDocument {
   if (!rawJson || !rawJson.trim()) {
@@ -29,7 +106,12 @@ export function parseCanvasJson(rawJson: string): JsonCanvasDocument {
             }
           : undefined;
 
-      return { nodes, edges, viewport };
+      const presentation =
+        parsed.presentation && typeof parsed.presentation === 'object'
+          ? normalizePresentation(parsed.presentation)
+          : undefined;
+
+      return presentation ? { nodes, edges, viewport, presentation } : { nodes, edges, viewport };
     }
   } catch (err) {
     console.warn('[Knowmesh Canvas] Failed to parse .canvas JSON, falling back to empty canvas:', err);
@@ -41,6 +123,7 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
   nodes: Node[];
   edges: Edge[];
   viewport?: Viewport;
+  presentation?: CanvasPresentation;
 } {
   const nodes: Node[] = (doc.nodes || []).map((n) => {
     // Map JSON canvas type to ReactFlow node type
@@ -134,7 +217,12 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
     return rfEdge;
   });
 
-  return { nodes, edges, viewport: doc.viewport };
+  return {
+    nodes,
+    edges,
+    viewport: doc.viewport,
+    presentation: doc.presentation ? normalizePresentation(doc.presentation) : undefined,
+  };
 }
 
 /**
@@ -218,7 +306,8 @@ export function getChildNodesInGroup(groupNode: Node, allNodes: Node[]): string[
 export function reactFlowToJsonCanvas(
   nodes: Node[],
   edges: Edge[],
-  viewport?: Viewport
+  viewport?: Viewport,
+  presentation?: CanvasPresentation
 ): string {
   const jsonNodes: JsonCanvasNode[] = nodes.map((node) => {
     const data = (node.data || {}) as Record<string, any>;
@@ -314,6 +403,12 @@ export function reactFlowToJsonCanvas(
       y: Math.round(viewport.y),
       zoom: Number(viewport.zoom.toFixed(2)),
     };
+  }
+
+  if (presentation) {
+    const validNodeIds = new Set(jsonNodes.map((n) => n.id));
+    const pruned = prunePresentationNodeIds(normalizePresentation(presentation), validNodeIds);
+    doc.presentation = pruned;
   }
 
   return JSON.stringify(doc, null, 2);

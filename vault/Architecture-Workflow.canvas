@@ -135,5 +135,71 @@
       "toSide": "bottom",
       "label": "Sync on Reconnect"
     }
-  ]
+  ],
+  "presentation": {
+    "config": {
+      "zoomDuration": 850,
+      "zoomArc": "medium",
+      "revealDuration": 400,
+      "revealDelay": 100,
+      "staggerDelay": 80
+    },
+    "slides": [
+      {
+        "id": "slide-1",
+        "title": "1. Client & Edge Entry",
+        "bounds": {
+          "x": 0,
+          "y": 100,
+          "width": 520,
+          "height": 320
+        },
+        "hiddenNodeIds": [
+          "node-server",
+          "node-db",
+          "node-idb",
+          "node-note"
+        ]
+      },
+      {
+        "id": "slide-2",
+        "title": "2. Reverse Proxy & Server",
+        "bounds": {
+          "x": 220,
+          "y": 95,
+          "width": 540,
+          "height": 220
+        },
+        "hiddenNodeIds": [
+          "node-db",
+          "node-idb",
+          "node-note"
+        ]
+      },
+      {
+        "id": "slide-3",
+        "title": "3. Offline-First Sync & Storage",
+        "bounds": {
+          "x": 240,
+          "y": 110,
+          "width": 770,
+          "height": 310
+        },
+        "hiddenNodeIds": [
+          "node-note"
+        ]
+      },
+      {
+        "id": "slide-4",
+        "title": "4. Full Architecture Overview",
+        "bounds": {
+          "x": 0,
+          "y": 90,
+          "width": 1020,
+          "height": 340
+        },
+        "hiddenNodeIds": []
+      }
+    ]
+  }
 }

@@ -258,10 +258,40 @@ export interface JsonCanvasEdge {
   edgeStyle?: CanvasEdgeStyle; // 'bezier' (Default) | 'straight' | 'step'
 }
 
+export interface CanvasBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CanvasPresentationConfig {
+  zoomDuration: number;     // 200–3000 ms (Default: 850)
+  zoomArc: 'none' | 'subtle' | 'medium' | 'strong';
+  revealDuration: number;   // 100–2000 ms (Default: 400)
+  revealDelay: number;      // 0–1500 ms (Default: 100)
+  staggerDelay: number;     // 0–500 ms (Default: 0)
+}
+
+export interface CanvasPresentationSlide {
+  id: string;
+  title: string;
+  bounds: CanvasBounds;     // Weltkoordinaten (auflösungsunabhängig)
+  hiddenNodeIds: string[];
+  zoomDuration?: number;
+  revealDuration?: number;
+}
+
+export interface CanvasPresentation {
+  config: CanvasPresentationConfig;
+  slides: CanvasPresentationSlide[];
+}
+
 export interface JsonCanvasDocument {
   nodes: JsonCanvasNode[];
   edges: JsonCanvasEdge[];
   viewport?: { x: number; y: number; zoom: number };
+  presentation?: CanvasPresentation;
 }
 ```
 

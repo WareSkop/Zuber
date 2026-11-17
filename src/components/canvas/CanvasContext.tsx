@@ -8,6 +8,9 @@ export interface CanvasContextType {
   readOnly?: boolean;
   editingNodeState?: { nodeId: string; initialChar: string } | null;
   setEditingNodeState?: (state: { nodeId: string; initialChar: string } | null) => void;
+  hiddenNodeIdsOnSelectedSlide?: Set<string>;
+  hasSelectedSlide?: boolean;
+  onToggleNodeHiddenOnSlide?: (nodeId: string) => void;
 }
 
 export const CanvasContext = createContext<CanvasContextType>({

@@ -56,10 +56,42 @@ export interface JsonCanvasEdge {
   edgeStyle?: CanvasEdgeStyle; // 'bezier' (Default) | 'straight' | 'step'
 }
 
+export interface CanvasBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type CanvasZoomArc = 'none' | 'subtle' | 'medium' | 'strong';
+
+export interface CanvasPresentationConfig {
+  zoomDuration: number;     // Camera transition duration in ms (default: 850, range: 200–3000)
+  zoomArc: CanvasZoomArc;   // Parabolic zoom-out arc between distant slides (default: 'medium')
+  revealDuration: number;   // Fade/scale-in duration for newly revealed nodes/edges in ms (default: 400, range: 100–2000)
+  revealDelay: number;      // Delay after camera finishes moving before revealing elements in ms (default: 100, range: 0–1500)
+  staggerDelay: number;     // Optional stagger between multiple newly revealed nodes in ms (default: 0, range: 0–500)
+}
+
+export interface CanvasPresentationSlide {
+  id: string;
+  title: string;
+  bounds: CanvasBounds;     // World-space rectangle (resolution-independent!)
+  hiddenNodeIds: string[];  // Node IDs hidden on this slide
+  zoomDuration?: number;    // Optional per-slide override
+  revealDuration?: number;  // Optional per-slide override
+}
+
+export interface CanvasPresentation {
+  config: CanvasPresentationConfig;
+  slides: CanvasPresentationSlide[];
+}
+
 export interface JsonCanvasDocument {
   nodes: JsonCanvasNode[];
   edges: JsonCanvasEdge[];
   viewport?: { x: number; y: number; zoom: number };
+  presentation?: CanvasPresentation;
 }
 
 /**

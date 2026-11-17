@@ -316,6 +316,14 @@ export interface EmailConfig {
   imap: ImapConfig;
 }
 
+export type {
+  CanvasBounds,
+  CanvasZoomArc,
+  CanvasPresentationConfig,
+  CanvasPresentationSlide,
+  CanvasPresentation,
+} from './canvasTypes';
+
 
 
 

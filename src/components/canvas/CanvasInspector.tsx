@@ -18,9 +18,12 @@ import {
   Network,
   Cloud,
   Monitor,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
 import { OBSIDIAN_CANVAS_COLORS } from '../../../shared/canvasTypes';
+import { useTranslation } from '../../i18n';
 
 interface CanvasInspectorProps {
   selectedNode: Node | null;
@@ -32,6 +35,9 @@ interface CanvasInspectorProps {
   onDeleteNode: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
   allNotes: { path: string; name: string; basename: string }[];
+  hasSelectedSlide?: boolean;
+  isSelectedNodeHiddenOnSlide?: boolean;
+  onToggleSelectedNodesHiddenOnSlide?: () => void;
 }
 
 export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
@@ -44,7 +50,11 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   onDeleteNode,
   onDeleteEdge,
   allNotes,
+  hasSelectedSlide = false,
+  isSelectedNodeHiddenOnSlide = false,
+  onToggleSelectedNodesHiddenOnSlide,
 }) => {
+  const { t } = useTranslation();
   const inspectorRef = React.useRef<HTMLDivElement>(null);
   const [edgeLabel, setEdgeLabel] = useState('');
   const [activePopover, setActivePopover] = useState<'shape' | 'color' | 'link' | null>(null);
@@ -281,6 +291,26 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
           )}
 
           <div className="inspector-separator" />
+
+          {hasSelectedSlide && onToggleSelectedNodesHiddenOnSlide && (
+            <button
+              type="button"
+              className={`inspector-tool-btn icon-only ${isSelectedNodeHiddenOnSlide ? 'active' : ''}`}
+              onClick={onToggleSelectedNodesHiddenOnSlide}
+              title={
+                isSelectedNodeHiddenOnSlide
+                  ? t('canvas.presentation.showOnSlide')
+                  : t('canvas.presentation.hideOnSlide')
+              }
+              aria-label={
+                isSelectedNodeHiddenOnSlide
+                  ? t('canvas.presentation.showOnSlide')
+                  : t('canvas.presentation.hideOnSlide')
+              }
+            >
+              {isSelectedNodeHiddenOnSlide ? <Eye size={15} /> : <EyeOff size={15} />}
+            </button>
+          )}
 
           {/* Duplicate Node */}
           <button

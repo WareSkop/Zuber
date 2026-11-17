@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Handle, Position, NodeResizer, type NodeProps, useReactFlow } from '@xyflow/react';
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
+import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
 
 export const CanvasGroupNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
   const { onUpdateNodeData, readOnly } = useCanvasContext();
@@ -46,6 +47,7 @@ export const CanvasGroupNode: React.FC<NodeProps> = ({ id, data, selected, width
         lineClassName="canvas-resizer-line"
         handleClassName="canvas-resizer-handle"
       />
+      <CanvasNodeHiddenBadge nodeId={id} />
 
       <Handle type="target" position={Position.Top} id="top" className="canvas-node-handle handle-top" />
       <Handle type="source" position={Position.Top} id="top" className="canvas-node-handle handle-top" />

@@ -6560,6 +6560,543 @@ input:checked + .slider:before {
   stroke: none !important;
 }
 
+/* ============================================================================
+   Canvas Presentation Mode (Panel, Ghosting, Bounds Frame & Fullscreen HUD)
+   ============================================================================ */
+
+.canvas-presentation-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-color, #d4af37);
+  color: var(--bg-primary, #0d1117);
+}
+
+.canvas-presentation-panel {
+  position: absolute;
+  top: 62px;
+  right: 12px;
+  bottom: 16px;
+  width: 300px;
+  max-width: calc(100% - 24px);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+  color: var(--text-primary);
+}
+
+.canvas-pres-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.canvas-pres-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.canvas-pres-header-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.canvas-pres-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.canvas-pres-icon-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.canvas-pres-icon-btn.active {
+  background: var(--accent-muted, rgba(212, 175, 55, 0.16));
+  color: var(--accent-color, #d4af37);
+}
+
+.canvas-pres-icon-btn.danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.canvas-pres-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.canvas-pres-play-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.canvas-pres-play-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary, var(--bg-primary));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-pres-play-btn.primary {
+  background: var(--accent-color, #d4af37);
+  border-color: var(--accent-color, #d4af37);
+  color: var(--bg-primary, #0d1117);
+  font-weight: 600;
+}
+
+.canvas-pres-play-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.canvas-pres-settings {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.canvas-pres-setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.canvas-pres-setting-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent-color, #d4af37);
+  cursor: pointer;
+}
+
+.canvas-pres-setting-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.canvas-pres-arc-pills {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.canvas-pres-arc-pill {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.canvas-pres-arc-pill.active {
+  background: var(--accent-muted, rgba(212, 175, 55, 0.16));
+  border-color: var(--accent-color, #d4af37);
+  color: var(--accent-color, #d4af37);
+  font-weight: 600;
+}
+
+.canvas-pres-capture-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.canvas-pres-capture-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px dashed var(--accent-color, #d4af37);
+  background: var(--accent-muted, rgba(212, 175, 55, 0.08));
+  color: var(--accent-color, #d4af37);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.canvas-pres-capture-btn:hover {
+  background: var(--accent-muted, rgba(212, 175, 55, 0.18));
+}
+
+.canvas-pres-slide-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvas-pres-empty-hint {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.canvas-pres-slide-item {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.canvas-pres-slide-item:hover {
+  border-color: var(--border-strong, var(--border-color));
+}
+
+.canvas-pres-slide-item.selected {
+  border-color: var(--accent-color, #d4af37);
+  background: var(--accent-muted, rgba(212, 175, 55, 0.08));
+}
+
+.canvas-pres-slide-item.drag-over {
+  border-top: 2px solid var(--accent-color, #d4af37);
+}
+
+.canvas-pres-slide-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-pres-drag-handle {
+  color: var(--text-muted);
+  cursor: grab;
+  display: inline-flex;
+  align-items: center;
+}
+
+.canvas-pres-slide-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.canvas-pres-slide-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.canvas-pres-slide-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-pres-slide-title-input {
+  width: 100%;
+  font-size: 12.5px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--accent-color, #d4af37);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.canvas-pres-slide-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.canvas-pres-slide-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.canvas-pres-override-popover {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.canvas-pres-reset-btn {
+  align-self: flex-end;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.canvas-pres-reset-btn:hover {
+  color: var(--text-primary);
+}
+
+/* Edit Mode Slide Bounds Frame */
+.canvas-pres-bounds-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  border: 2px dashed var(--accent-color, #d4af37);
+  border-radius: 8px;
+  background: rgba(212, 175, 55, 0.04);
+  z-index: 4;
+  box-sizing: border-box;
+}
+
+.canvas-pres-bounds-label {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: var(--accent-color, #d4af37);
+  color: var(--bg-primary, #0d1117);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Ghosted Node & Eye-Off Badge in Edit Mode */
+.react-flow__node.canvas-pres-ghosted {
+  opacity: 0.35;
+  transition: opacity 0.18s ease;
+}
+
+.react-flow__edge.canvas-pres-edge-ghosted {
+  opacity: 0.35;
+  transition: opacity 0.18s ease;
+}
+
+.canvas-node-hidden-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 15;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.canvas-node-hidden-badge:hover {
+  background: var(--accent-color, #d4af37);
+  color: var(--bg-primary, #0d1117);
+}
+
+/* Fullscreen Presentation Player Mode */
+.canvas-editor-wrapper.is-presenting {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9500 !important;
+  background: var(--bg-primary) !important;
+}
+
+.react-flow__node.canvas-pres-hidden {
+  pointer-events: none !important;
+}
+
+.react-flow__node.canvas-pres-hidden > * {
+  opacity: 0;
+  transform: scale(0.94);
+}
+
+.react-flow__node.canvas-pres-visible > * {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.react-flow__node.canvas-pres-revealing > * {
+  transition:
+    opacity var(--pres-reveal-duration, 400ms) cubic-bezier(0.22, 1, 0.36, 1) var(--pres-reveal-delay, 0ms),
+    transform var(--pres-reveal-duration, 400ms) cubic-bezier(0.22, 1, 0.36, 1) var(--pres-reveal-delay, 0ms);
+}
+
+.react-flow__edge.canvas-pres-edge-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.react-flow__edge.canvas-pres-edge-visible {
+  opacity: 1;
+}
+
+.react-flow__edge.canvas-pres-edge-revealing {
+  transition: opacity var(--pres-reveal-duration, 400ms) cubic-bezier(0.22, 1, 0.36, 1) var(--pres-reveal-delay, 0ms);
+}
+
+/* Floating Presentation HUD */
+.canvas-pres-hud {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  opacity: 0.96;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.canvas-pres-hud.is-idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-pres-hud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.canvas-pres-hud-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.canvas-pres-hud-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.16);
+  color: #ef4444;
+}
+
+.canvas-pres-hud-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.canvas-pres-hud-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  font-size: 12.5px;
+  max-width: 55vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-pres-hud-counter {
+  font-weight: 600;
+  color: var(--accent-color, #d4af37);
+}
+
+.canvas-pres-hud-sep {
+  color: var(--text-muted);
+}
+
+.canvas-pres-hud-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-pres-hud-end-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-muted, rgba(212, 175, 55, 0.18));
+  color: var(--accent-color, #d4af37);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.canvas-pres-hud-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+}
+
 /* Canvas Floating Horizontal Toolbar */
 .canvas-toolbar,
 .canvas-dock-toolbar {

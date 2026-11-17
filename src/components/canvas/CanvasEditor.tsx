@@ -11,6 +11,7 @@ import {
   addEdge,
   reconnectEdge,
   useReactFlow,
+  useViewport,
   ReactFlowProvider,
   ConnectionMode,
   SelectionMode,
@@ -24,8 +25,15 @@ import {
   type OnConnectEnd,
   type OnReconnect,
 } from '@xyflow/react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
+import type {
+  CanvasShape,
+  CanvasEdgeStyle,
+  CanvasPresentation,
+  CanvasPresentationConfig,
+  CanvasPresentationSlide,
+} from '../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../shared/canvasTypes';
 import { CanvasContext } from './CanvasContext';
 import {
@@ -33,13 +41,25 @@ import {
   jsonCanvasToReactFlow,
   reactFlowToJsonCanvas,
   getChildNodesInGroup,
+  DEFAULT_PRESENTATION_CONFIG,
+  prunePresentationNodeIds,
 } from './canvasMapper';
+import {
+  captureViewportBounds,
+  boundsToViewport,
+  animateViewportTo,
+  getVisibleNodeIdsForSlide,
+  isEdgeVisibleForNodes,
+  computeSlideTransitionVisibility,
+} from './canvasPresentationUtils';
 import { CanvasShapeNode } from './nodes/CanvasShapeNode';
 import { CanvasFileNode } from './nodes/CanvasFileNode';
 import { CanvasGroupNode } from './nodes/CanvasGroupNode';
 import { CanvasLinkNode } from './nodes/CanvasLinkNode';
 import { CanvasToolbar, type CanvasGridConfig } from './CanvasToolbar';
 import { CanvasInspector } from './CanvasInspector';
+import { CanvasPresentationPanel } from './CanvasPresentationPanel';
+import { useTranslation } from '../../i18n';
 
 export interface CanvasEditorProps {
   filePath: string;
@@ -63,6 +83,53 @@ const nodeTypes = {
   text: CanvasShapeNode,
 };
 
+const SlideBoundsOverlay: React.FC<{
+  slide: CanvasPresentationSlide;
+  slideIndex: number;
+}> = ({ slide, slideIndex }) => {
+  const { x, y, zoom } = useViewport();
+  const left = slide.bounds.x * zoom + x;
+  const top = slide.bounds.y * zoom + y;
+  const width = slide.bounds.width * zoom;
+  const height = slide.bounds.height * zoom;
+
+  return (
+    <div
+      className="canvas-pres-bounds-frame"
+      style={{
+        transform: `translate(${left}px, ${top}px)`,
+        width: `${width}px`,
+        height: `${height}px`,
+      }}
+      aria-hidden="true"
+    >
+      <span className="canvas-pres-bounds-label">
+        {slideIndex + 1}. {slide.title}
+      </span>
+    </div>
+  );
+};
+
+function createEmptyPresentation(): CanvasPresentation {
+  return {
+    config: { ...DEFAULT_PRESENTATION_CONFIG },
+    slides: [],
+  };
+}
+
+function shouldPersistPresentation(pres: CanvasPresentation): boolean {
+  if (pres.slides.length > 0) return true;
+  const c = pres.config;
+  const d = DEFAULT_PRESENTATION_CONFIG;
+  return (
+    c.zoomDuration !== d.zoomDuration ||
+    c.zoomArc !== d.zoomArc ||
+    c.revealDuration !== d.revealDuration ||
+    c.revealDelay !== d.revealDelay ||
+    c.staggerDelay !== d.staggerDelay
+  );
+}
+
 const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   filePath,
   rawContent,
@@ -73,10 +140,30 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   readOnly = false,
 }) => {
   const { fitView, getViewport, setViewport, screenToFlowPosition } = useReactFlow();
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  // Presentation state
+  const [presentation, setPresentation] = useState<CanvasPresentation>(createEmptyPresentation);
+  const presentationRef = useRef<CanvasPresentation>(presentation);
+  const [isPresentationPanelOpen, setIsPresentationPanelOpen] = useState(false);
+  const [selectedSlideId, setSelectedSlideId] = useState<string | null>(null);
+  const [isPresenting, setIsPresenting] = useState(false);
+  const [presentingSlideIndex, setPresentingSlideIndex] = useState(0);
+  const [revealPhase, setRevealPhase] = useState<'idle' | 'moving' | 'revealing'>('idle');
+  const [endIndicatorVisible, setEndIndicatorVisible] = useState(false);
+  const [isHudIdle, setIsHudIdle] = useState(false);
+  const [visibleNodeIdsInPresentation, setVisibleNodeIdsInPresentation] = useState<Set<string>>(new Set());
+  const [revealingDelayMap, setRevealingDelayMap] = useState<Map<string, number>>(new Map());
+  const [activeRevealDuration, setActiveRevealDuration] = useState<number>(DEFAULT_PRESENTATION_CONFIG.revealDuration);
+
+  const cancelAnimationRef = useRef<(() => void) | null>(null);
+  const revealDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hudIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Configurable Grid and Snap settings
   const [gridConfig, setGridConfig] = useState<CanvasGridConfig>(() => {
@@ -160,7 +247,15 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       } catch {
         // ignore
       }
-      const jsonStr = reactFlowToJsonCanvas(latestNodesRef.current, latestEdgesRef.current, vp);
+      const presToSave = shouldPersistPresentation(presentationRef.current)
+        ? presentationRef.current
+        : undefined;
+      const jsonStr = reactFlowToJsonCanvas(
+        latestNodesRef.current,
+        latestEdgesRef.current,
+        vp,
+        presToSave
+      );
       if (jsonStr !== lastEmittedJsonRef.current) {
         lastEmittedJsonRef.current = jsonStr;
         onChange(jsonStr);
@@ -199,6 +294,18 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     setEdges(rf.edges);
     latestNodesRef.current = rf.nodes;
     latestEdgesRef.current = rf.edges;
+
+    const loadedPresentation = rf.presentation ?? createEmptyPresentation();
+    presentationRef.current = loadedPresentation;
+    setPresentation(loadedPresentation);
+    setSelectedSlideId((prev) =>
+      prev && loadedPresentation.slides.some((s) => s.id === prev)
+        ? prev
+        : loadedPresentation.slides[0]?.id ?? null
+    );
+    if (pathChanged) {
+      setIsPresenting(false);
+    }
 
     historyRef.current = [{ nodes: rf.nodes, edges: rf.edges }];
     historyIndexRef.current = 0;
@@ -240,10 +347,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
   // Debounced auto-save to vault
   const triggerAutoSave = useCallback(
-    (currentNodes: Node[], currentEdges: Edge[]) => {
+    (currentNodes: Node[], currentEdges: Edge[], currentPresentation?: CanvasPresentation) => {
       if (readOnly || isInitialLoadRef.current) return;
       latestNodesRef.current = currentNodes;
       latestEdgesRef.current = currentEdges;
+      if (currentPresentation) {
+        presentationRef.current = currentPresentation;
+      }
       hasPendingSaveRef.current = true;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
@@ -256,7 +366,9 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         } catch {
           // ignore
         }
-        const jsonStr = reactFlowToJsonCanvas(currentNodes, currentEdges, vp);
+        const pres = presentationRef.current;
+        const presToSave = shouldPersistPresentation(pres) ? pres : undefined;
+        const jsonStr = reactFlowToJsonCanvas(currentNodes, currentEdges, vp, presToSave);
         lastEmittedJsonRef.current = jsonStr;
         onChange(jsonStr);
       }, 600);
@@ -910,12 +1022,17 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
       setNodes((nds) => {
         const nextNodes = nds.filter((n) => !idsToDelete.has(n.id));
+        const validIds = new Set(nextNodes.map((n) => n.id));
+        const prunedPres = prunePresentationNodeIds(presentationRef.current, validIds);
+        presentationRef.current = prunedPres;
+        setPresentation(prunedPres);
+
         setEdges((eds) => {
           const nextEdges = eds.filter(
             (e) => !idsToDelete.has(e.source) && !idsToDelete.has(e.target)
           );
           pushHistory(nextNodes, nextEdges);
-          triggerAutoSave(nextNodes, nextEdges);
+          triggerAutoSave(nextNodes, nextEdges, prunedPres);
           return nextEdges;
         });
         return nextNodes;
@@ -939,9 +1056,454 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [selectedEdges, setEdges, pushHistory, triggerAutoSave, nodes]
   );
 
-  // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, Delete, Type-to-Edit)
+  // ============================================================================
+  // Presentation Management & Playback
+  // ============================================================================
+  const getContainerDimensions = useCallback(() => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    return {
+      width: rect && rect.width > 0 ? rect.width : window.innerWidth || 1280,
+      height: rect && rect.height > 0 ? rect.height : window.innerHeight || 720,
+    };
+  }, []);
+
+  const updatePresentation = useCallback(
+    (updater: (prev: CanvasPresentation) => CanvasPresentation) => {
+      const next = updater(presentationRef.current);
+      presentationRef.current = next;
+      setPresentation(next);
+      triggerAutoSave(latestNodesRef.current, latestEdgesRef.current, next);
+    },
+    [triggerAutoSave]
+  );
+
+  const selectedSlideIndex = useMemo(
+    () => presentation.slides.findIndex((s) => s.id === selectedSlideId),
+    [presentation.slides, selectedSlideId]
+  );
+  const selectedSlide = selectedSlideIndex >= 0 ? presentation.slides[selectedSlideIndex] : null;
+  const hiddenNodeIdsOnSelectedSlide = useMemo(
+    () => new Set(selectedSlide?.hiddenNodeIds || []),
+    [selectedSlide]
+  );
+
+  const handleCaptureNewSlide = useCallback(() => {
+    const { width, height } = getContainerDimensions();
+    let vp: Viewport = { x: 0, y: 0, zoom: 1 };
+    try {
+      vp = getViewport();
+    } catch {}
+    const bounds = captureViewportBounds(vp, width, height);
+    const prevSlides = presentationRef.current.slides;
+    const prevSlide = prevSlides[prevSlides.length - 1];
+    const newId = `slide_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const newSlide: CanvasPresentationSlide = {
+      id: newId,
+      title: t('canvas.presentation.slideDefaultTitle', { num: prevSlides.length + 1 }),
+      bounds,
+      hiddenNodeIds: prevSlide ? [...prevSlide.hiddenNodeIds] : [],
+    };
+    updatePresentation((prev) => ({
+      ...prev,
+      slides: [...prev.slides, newSlide],
+    }));
+    setSelectedSlideId(newId);
+  }, [getContainerDimensions, getViewport, t, updatePresentation]);
+
+  const handleUpdateSlideView = useCallback(
+    (slideId: string) => {
+      const { width, height } = getContainerDimensions();
+      let vp: Viewport = { x: 0, y: 0, zoom: 1 };
+      try {
+        vp = getViewport();
+      } catch {}
+      const bounds = captureViewportBounds(vp, width, height);
+      updatePresentation((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) => (s.id === slideId ? { ...s, bounds } : s)),
+      }));
+    },
+    [getContainerDimensions, getViewport, updatePresentation]
+  );
+
+  const handleUpdateSlideTitle = useCallback(
+    (slideId: string, title: string) => {
+      updatePresentation((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) => (s.id === slideId ? { ...s, title } : s)),
+      }));
+    },
+    [updatePresentation]
+  );
+
+  const handleUpdateSlideOverrides = useCallback(
+    (slideId: string, overrides: { zoomDuration?: number; revealDuration?: number }) => {
+      updatePresentation((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) => {
+          if (s.id !== slideId) return s;
+          const updated: CanvasPresentationSlide = { ...s };
+          if (overrides.zoomDuration !== undefined) updated.zoomDuration = overrides.zoomDuration;
+          else delete updated.zoomDuration;
+          if (overrides.revealDuration !== undefined) updated.revealDuration = overrides.revealDuration;
+          else delete updated.revealDuration;
+          return updated;
+        }),
+      }));
+    },
+    [updatePresentation]
+  );
+
+  const handleReorderSlides = useCallback(
+    (fromIndex: number, toIndex: number) => {
+      updatePresentation((prev) => {
+        if (
+          fromIndex < 0 ||
+          toIndex < 0 ||
+          fromIndex >= prev.slides.length ||
+          toIndex >= prev.slides.length ||
+          fromIndex === toIndex
+        ) {
+          return prev;
+        }
+        const nextSlides = [...prev.slides];
+        const [moved] = nextSlides.splice(fromIndex, 1);
+        nextSlides.splice(toIndex, 0, moved);
+        return { ...prev, slides: nextSlides };
+      });
+    },
+    [updatePresentation]
+  );
+
+  const handleDeleteSlide = useCallback(
+    (slideId: string) => {
+      updatePresentation((prev) => {
+        const nextSlides = prev.slides.filter((s) => s.id !== slideId);
+        if (selectedSlideId === slideId) {
+          setSelectedSlideId(nextSlides[0]?.id ?? null);
+        }
+        return { ...prev, slides: nextSlides };
+      });
+    },
+    [selectedSlideId, updatePresentation]
+  );
+
+  const handleUpdatePresentationConfig = useCallback(
+    (partial: Partial<CanvasPresentationConfig>) => {
+      updatePresentation((prev) => ({
+        ...prev,
+        config: { ...prev.config, ...partial },
+      }));
+    },
+    [updatePresentation]
+  );
+
+  const handleSelectSlide = useCallback(
+    (slideId: string) => {
+      setSelectedSlideId(slideId);
+      const slide = presentationRef.current.slides.find((s) => s.id === slideId);
+      if (slide) {
+        const { width, height } = getContainerDimensions();
+        const targetVp = boundsToViewport(slide.bounds, width, height);
+        try {
+          setViewport(targetVp, { duration: 400 });
+        } catch {
+          try {
+            setViewport(targetVp);
+          } catch {}
+        }
+      }
+    },
+    [getContainerDimensions, setViewport]
+  );
+
+  const handleToggleNodeHiddenOnSlide = useCallback(
+    (nodeId: string) => {
+      if (!selectedSlideId) return;
+      updatePresentation((prev) => ({
+        ...prev,
+        slides: prev.slides.map((s) => {
+          if (s.id !== selectedSlideId) return s;
+          const exists = s.hiddenNodeIds.includes(nodeId);
+          return {
+            ...s,
+            hiddenNodeIds: exists
+              ? s.hiddenNodeIds.filter((id) => id !== nodeId)
+              : [...s.hiddenNodeIds, nodeId],
+          };
+        }),
+      }));
+    },
+    [selectedSlideId, updatePresentation]
+  );
+
+  const handleToggleSelectedNodesHiddenOnSlide = useCallback(() => {
+    if (!selectedSlideId || selectedNodes.length === 0) return;
+    const selectedIds = selectedNodes.map((n) => n.id);
+    updatePresentation((prev) => ({
+      ...prev,
+      slides: prev.slides.map((s) => {
+        if (s.id !== selectedSlideId) return s;
+        const hiddenSet = new Set(s.hiddenNodeIds);
+        const allAlreadyHidden = selectedIds.every((id) => hiddenSet.has(id));
+        if (allAlreadyHidden) {
+          for (const id of selectedIds) hiddenSet.delete(id);
+        } else {
+          for (const id of selectedIds) hiddenSet.add(id);
+        }
+        return { ...s, hiddenNodeIds: Array.from(hiddenSet) };
+      }),
+    }));
+  }, [selectedSlideId, selectedNodes, updatePresentation]);
+
+  const clearPresentationTimers = useCallback(() => {
+    if (cancelAnimationRef.current) {
+      cancelAnimationRef.current();
+      cancelAnimationRef.current = null;
+    }
+    if (revealDelayTimerRef.current) {
+      clearTimeout(revealDelayTimerRef.current);
+      revealDelayTimerRef.current = null;
+    }
+    if (revealFinishTimerRef.current) {
+      clearTimeout(revealFinishTimerRef.current);
+      revealFinishTimerRef.current = null;
+    }
+  }, []);
+
+  const resetHudIdleTimer = useCallback(() => {
+    setIsHudIdle(false);
+    if (hudIdleTimerRef.current) clearTimeout(hudIdleTimerRef.current);
+    hudIdleTimerRef.current = setTimeout(() => {
+      setIsHudIdle(true);
+    }, 2500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearPresentationTimers();
+      if (hudIdleTimerRef.current) clearTimeout(hudIdleTimerRef.current);
+    };
+  }, [clearPresentationTimers]);
+
+  const startPresentation = useCallback(
+    (fromIndex = 0) => {
+      const slides = presentationRef.current.slides;
+      if (slides.length === 0) return;
+      const safeIndex = Math.max(0, Math.min(slides.length - 1, fromIndex));
+      const targetSlide = slides[safeIndex];
+      const allNodeIds = latestNodesRef.current.map((n) => n.id);
+
+      clearPresentationTimers();
+      setContextMenuPos(null);
+      setEditingNodeState(null);
+      setIsPresenting(true);
+      setPresentingSlideIndex(safeIndex);
+      setEndIndicatorVisible(false);
+      setRevealPhase('idle');
+      setRevealingDelayMap(new Map());
+      setVisibleNodeIdsInPresentation(getVisibleNodeIdsForSlide(targetSlide, allNodeIds));
+      resetHudIdleTimer();
+
+      requestAnimationFrame(() => {
+        const { width, height } = getContainerDimensions();
+        const targetVp = boundsToViewport(targetSlide.bounds, width, height);
+        try {
+          setViewport(targetVp);
+        } catch {}
+      });
+    },
+    [clearPresentationTimers, getContainerDimensions, resetHudIdleTimer, setViewport]
+  );
+
+  const goToSlide = useCallback(
+    (targetIndex: number, direction: 'forward' | 'backward') => {
+      const { config, slides } = presentationRef.current;
+      if (targetIndex < 0 || targetIndex >= slides.length) return;
+      const targetSlide = slides[targetIndex];
+      const allNodeIds = latestNodesRef.current.map((n) => n.id);
+
+      clearPresentationTimers();
+      resetHudIdleTimer();
+      setEndIndicatorVisible(false);
+      setPresentingSlideIndex(targetIndex);
+
+      const { width, height } = getContainerDimensions();
+      const targetVp = boundsToViewport(targetSlide.bounds, width, height);
+      let startVp: Viewport = targetVp;
+      try {
+        startVp = getViewport();
+      } catch {}
+
+      const zoomDuration = targetSlide.zoomDuration ?? config.zoomDuration;
+      const revealDuration = targetSlide.revealDuration ?? config.revealDuration;
+
+      if (direction === 'backward') {
+        setRevealPhase('moving');
+        setRevealingDelayMap(new Map());
+        setVisibleNodeIdsInPresentation(getVisibleNodeIdsForSlide(targetSlide, allNodeIds));
+
+        cancelAnimationRef.current = animateViewportTo({
+          startViewport: startVp,
+          targetViewport: targetVp,
+          duration: zoomDuration,
+          containerWidth: width,
+          containerHeight: height,
+          zoomArc: config.zoomArc,
+          onUpdate: (vp) => {
+            try {
+              setViewport(vp);
+            } catch {}
+          },
+          onComplete: () => {
+            cancelAnimationRef.current = null;
+            setRevealPhase('idle');
+          },
+        });
+        return;
+      }
+
+      // Forward transition with progressive reveal
+      const prevSlide = slides[presentingSlideIndex];
+      const prevVisibleIds = prevSlide
+        ? getVisibleNodeIdsForSlide(prevSlide, allNodeIds)
+        : visibleNodeIdsInPresentation;
+      const transition = computeSlideTransitionVisibility(prevVisibleIds, targetSlide, allNodeIds);
+
+      setRevealPhase('moving');
+      setRevealingDelayMap(new Map());
+      setVisibleNodeIdsInPresentation(transition.immediateVisibleIds);
+
+      cancelAnimationRef.current = animateViewportTo({
+        startViewport: startVp,
+        targetViewport: targetVp,
+        duration: zoomDuration,
+        containerWidth: width,
+        containerHeight: height,
+        zoomArc: config.zoomArc,
+        onUpdate: (vp) => {
+          try {
+            setViewport(vp);
+          } catch {}
+        },
+        onComplete: () => {
+          cancelAnimationRef.current = null;
+          if (transition.newlyRevealedIds.length === 0) {
+            setRevealPhase('idle');
+            return;
+          }
+
+          setRevealPhase('revealing');
+          revealDelayTimerRef.current = setTimeout(() => {
+            const delayMap = new Map<string, number>();
+            transition.newlyRevealedIds.forEach((id, idx) => {
+              delayMap.set(id, idx * config.staggerDelay);
+            });
+            setActiveRevealDuration(revealDuration);
+            setRevealingDelayMap(delayMap);
+            setVisibleNodeIdsInPresentation(transition.targetVisibleIds);
+
+            const totalRevealMs =
+              revealDuration + Math.max(0, transition.newlyRevealedIds.length - 1) * config.staggerDelay + 40;
+            revealFinishTimerRef.current = setTimeout(() => {
+              setRevealingDelayMap(new Map());
+              setRevealPhase('idle');
+            }, totalRevealMs);
+          }, config.revealDelay);
+        },
+      });
+    },
+    [
+      clearPresentationTimers,
+      getContainerDimensions,
+      getViewport,
+      presentingSlideIndex,
+      resetHudIdleTimer,
+      setViewport,
+      visibleNodeIdsInPresentation,
+    ]
+  );
+
+  const fastForwardReveal = useCallback(() => {
+    const slides = presentationRef.current.slides;
+    const currentSlide = slides[presentingSlideIndex];
+    if (!currentSlide) return;
+
+    clearPresentationTimers();
+    const { width, height } = getContainerDimensions();
+    try {
+      setViewport(boundsToViewport(currentSlide.bounds, width, height));
+    } catch {}
+    const allNodeIds = latestNodesRef.current.map((n) => n.id);
+    setRevealingDelayMap(new Map());
+    setVisibleNodeIdsInPresentation(getVisibleNodeIdsForSlide(currentSlide, allNodeIds));
+    setRevealPhase('idle');
+  }, [clearPresentationTimers, getContainerDimensions, presentingSlideIndex, setViewport]);
+
+  const exitPresentation = useCallback(() => {
+    clearPresentationTimers();
+    if (hudIdleTimerRef.current) clearTimeout(hudIdleTimerRef.current);
+    setIsPresenting(false);
+    setEndIndicatorVisible(false);
+    setRevealPhase('idle');
+    setRevealingDelayMap(new Map());
+  }, [clearPresentationTimers]);
+
+  const handleAdvancePresentation = useCallback(() => {
+    if (revealPhase !== 'idle') {
+      fastForwardReveal();
+      return;
+    }
+    const slides = presentationRef.current.slides;
+    if (presentingSlideIndex < slides.length - 1) {
+      goToSlide(presentingSlideIndex + 1, 'forward');
+    } else if (!endIndicatorVisible) {
+      setEndIndicatorVisible(true);
+      resetHudIdleTimer();
+    } else {
+      exitPresentation();
+    }
+  }, [
+    endIndicatorVisible,
+    exitPresentation,
+    fastForwardReveal,
+    goToSlide,
+    presentingSlideIndex,
+    resetHudIdleTimer,
+    revealPhase,
+  ]);
+
+  const handlePrevPresentation = useCallback(() => {
+    if (presentingSlideIndex > 0) {
+      goToSlide(presentingSlideIndex - 1, 'backward');
+    }
+  }, [goToSlide, presentingSlideIndex]);
+
+  // Keyboard shortcut listener (Presentation navigation, Ctrl+Z, Ctrl+Y, Delete, Type-to-Edit)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isPresenting) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          exitPresentation();
+          return;
+        }
+        if (e.key === ' ' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          handleAdvancePresentation();
+          return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          handlePrevPresentation();
+          return;
+        }
+        return;
+      }
+
       // Guard 1: Ignore if already inside an active input or textarea or contenteditable element
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       if (
@@ -1016,9 +1578,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       });
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: isPresenting });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: isPresenting });
   }, [
+    isPresenting,
+    exitPresentation,
+    handleAdvancePresentation,
+    handlePrevPresentation,
     handleUndo,
     handleRedo,
     selectedNodes,
@@ -1028,6 +1594,109 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     readOnly,
   ]);
 
+  // Decorate nodes & edges for presentation playback or edit-mode ghosting
+  const renderedNodes = useMemo(() => {
+    if (isPresenting) {
+      return nodes.map((n) => {
+        const isVisible = visibleNodeIdsInPresentation.has(n.id);
+        const staggerMs = revealingDelayMap.get(n.id);
+        const presClass = !isVisible
+          ? 'canvas-pres-hidden'
+          : staggerMs !== undefined
+            ? 'canvas-pres-visible canvas-pres-revealing'
+            : 'canvas-pres-visible';
+        const extraStyle: Record<string, any> = {};
+        if (staggerMs !== undefined) {
+          extraStyle['--pres-reveal-duration'] = `${activeRevealDuration}ms`;
+          extraStyle['--pres-reveal-delay'] = `${staggerMs}ms`;
+        }
+        return {
+          ...n,
+          selected: false,
+          className: [n.className, presClass].filter(Boolean).join(' '),
+          style: { ...(n.style || {}), ...extraStyle },
+        };
+      });
+    }
+    if (isPresentationPanelOpen && selectedSlide && hiddenNodeIdsOnSelectedSlide.size > 0) {
+      return nodes.map((n) => {
+        if (!hiddenNodeIdsOnSelectedSlide.has(n.id)) return n;
+        return {
+          ...n,
+          className: [n.className, 'canvas-pres-ghosted'].filter(Boolean).join(' '),
+        };
+      });
+    }
+    return nodes;
+  }, [
+    activeRevealDuration,
+    hiddenNodeIdsOnSelectedSlide,
+    isPresentationPanelOpen,
+    isPresenting,
+    nodes,
+    revealingDelayMap,
+    selectedSlide,
+    visibleNodeIdsInPresentation,
+  ]);
+
+  const renderedEdges = useMemo(() => {
+    if (isPresenting) {
+      return edges.map((e) => {
+        const isVisible = isEdgeVisibleForNodes(e, visibleNodeIdsInPresentation);
+        const srcDelay = revealingDelayMap.get(e.source);
+        const tgtDelay = revealingDelayMap.get(e.target);
+        const isRevealing = isVisible && (srcDelay !== undefined || tgtDelay !== undefined);
+        const edgeDelay = Math.max(srcDelay ?? 0, tgtDelay ?? 0);
+        const presClass = !isVisible
+          ? 'canvas-pres-edge-hidden'
+          : isRevealing
+            ? 'canvas-pres-edge-visible canvas-pres-edge-revealing'
+            : 'canvas-pres-edge-visible';
+        const extraStyle: Record<string, any> = {};
+        if (isRevealing) {
+          extraStyle['--pres-reveal-duration'] = `${activeRevealDuration}ms`;
+          extraStyle['--pres-reveal-delay'] = `${edgeDelay}ms`;
+        }
+        return {
+          ...e,
+          selected: false,
+          className: [e.className, presClass].filter(Boolean).join(' '),
+          style: { ...(e.style || {}), ...extraStyle },
+        };
+      });
+    }
+    if (isPresentationPanelOpen && selectedSlide && hiddenNodeIdsOnSelectedSlide.size > 0) {
+      return edges.map((e) => {
+        if (
+          !hiddenNodeIdsOnSelectedSlide.has(e.source) &&
+          !hiddenNodeIdsOnSelectedSlide.has(e.target)
+        ) {
+          return e;
+        }
+        return {
+          ...e,
+          className: [e.className, 'canvas-pres-edge-ghosted'].filter(Boolean).join(' '),
+        };
+      });
+    }
+    return edges;
+  }, [
+    activeRevealDuration,
+    edges,
+    hiddenNodeIdsOnSelectedSlide,
+    isPresentationPanelOpen,
+    isPresenting,
+    revealingDelayMap,
+    selectedSlide,
+    visibleNodeIdsInPresentation,
+  ]);
+
+  const activePresentingSlide = presentation.slides[presentingSlideIndex] || null;
+  const effectiveReadOnly = readOnly || isPresenting;
+  const isSelectedNodeHidden = Boolean(
+    selectedNode && hiddenNodeIdsOnSelectedSlide.has(selectedNode.id)
+  );
+
   return (
     <CanvasContext.Provider
       value={{
@@ -1035,14 +1704,23 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         onSelectTag,
         onUpdateNodeData: handleUpdateNodeData,
         allNotes,
-        readOnly,
+        readOnly: effectiveReadOnly,
         editingNodeState,
         setEditingNodeState,
+        hiddenNodeIdsOnSelectedSlide,
+        hasSelectedSlide: Boolean(isPresentationPanelOpen && selectedSlide),
+        onToggleNodeHiddenOnSlide: handleToggleNodeHiddenOnSlide,
       }}
     >
-      <div className={`canvas-editor-wrapper ${selectedNode || selectedEdge ? 'has-selection' : ''}`} ref={containerRef}>
+      <div
+        className={`canvas-editor-wrapper ${selectedNode || selectedEdge ? 'has-selection' : ''} ${
+          isPresenting ? 'is-presenting' : ''
+        }`}
+        ref={containerRef}
+        onMouseMove={isPresenting ? resetHudIdleTimer : undefined}
+      >
         {/* Top dock toolbar */}
-        {!readOnly && (
+        {!effectiveReadOnly && (
           <CanvasToolbar
             onAddTextNode={handleAddTextNode}
             onAddFileNode={handleAddFileNode}
@@ -1057,11 +1735,14 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onUndo={handleUndo}
             onRedo={handleRedo}
             allNotes={allNotes}
+            isPresentationPanelOpen={isPresentationPanelOpen}
+            onTogglePresentationPanel={() => setIsPresentationPanelOpen((prev) => !prev)}
+            presentationSlideCount={presentation.slides.length}
           />
         )}
 
         {/* Floating Context Inspector for selected Node or Edge (mutually exclusive) */}
-        {!readOnly && (
+        {!effectiveReadOnly && (
           <CanvasInspector
             selectedNode={selectedNode}
             selectedEdge={selectedNode ? null : selectedEdge}
@@ -1072,6 +1753,27 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onDeleteNode={handleDeleteNode}
             onDeleteEdge={handleDeleteEdge}
             allNotes={allNotes}
+            hasSelectedSlide={Boolean(isPresentationPanelOpen && selectedSlide)}
+            isSelectedNodeHiddenOnSlide={isSelectedNodeHidden}
+            onToggleSelectedNodesHiddenOnSlide={handleToggleSelectedNodesHiddenOnSlide}
+          />
+        )}
+
+        {/* Presentation Slide Drawer / Panel in Edit Mode */}
+        {!effectiveReadOnly && isPresentationPanelOpen && (
+          <CanvasPresentationPanel
+            presentation={presentation}
+            selectedSlideId={selectedSlideId}
+            onSelectSlide={handleSelectSlide}
+            onCaptureNewSlide={handleCaptureNewSlide}
+            onUpdateSlideView={handleUpdateSlideView}
+            onUpdateSlideTitle={handleUpdateSlideTitle}
+            onUpdateSlideOverrides={handleUpdateSlideOverrides}
+            onReorderSlides={handleReorderSlides}
+            onDeleteSlide={handleDeleteSlide}
+            onUpdateConfig={handleUpdatePresentationConfig}
+            onStartPresentation={startPresentation}
+            onClose={() => setIsPresentationPanelOpen(false)}
           />
         )}
 
@@ -1079,14 +1781,14 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         <div className="canvas-reactflow-container" style={{ width: '100%', height: '100%' }}>
           <ReactFlow
             style={{ width: '100%', height: '100%' }}
-            nodes={nodes}
-            edges={edges}
+            nodes={renderedNodes}
+            edges={renderedEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
-            edgesReconnectable={!readOnly}
-            nodesDraggable={!readOnly}
-            nodesConnectable={!readOnly}
-            elementsSelectable={!readOnly}
+            edgesReconnectable={!effectiveReadOnly}
+            nodesDraggable={!effectiveReadOnly}
+            nodesConnectable={!effectiveReadOnly}
+            elementsSelectable={!effectiveReadOnly}
             elevateEdgesOnSelect={false}
             elevateNodesOnSelect={true}
             onConnect={onConnect}
@@ -1119,7 +1821,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             minZoom={0.15}
             maxZoom={2.5}
           >
-            {gridConfig.showGrid && gridConfig.gridVariant !== 'off' && (
+            {!isPresenting && gridConfig.showGrid && gridConfig.gridVariant !== 'off' && (
               <Background
                 variant={
                   gridConfig.gridVariant === 'lines'
@@ -1131,17 +1833,79 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
                 color="var(--border-subtle, rgba(255, 255, 255, 0.15))"
               />
             )}
-            <Controls showInteractive={false} className="canvas-rf-controls" />
-            <MiniMap
-              nodeColor={(n) => {
-                if (n.data?.color) return resolveCanvasColor(n.data.color as string) || 'var(--accent-color, #d4af37)';
-                return 'var(--text-muted, #888888)';
-              }}
-              maskColor="var(--border-subtle, rgba(0, 0, 0, 0.45))"
-              className="canvas-rf-minimap"
-            />
+            {!isPresenting && isPresentationPanelOpen && selectedSlide && (
+              <SlideBoundsOverlay slide={selectedSlide} slideIndex={selectedSlideIndex} />
+            )}
+            {!isPresenting && <Controls showInteractive={false} className="canvas-rf-controls" />}
+            {!isPresenting && (
+              <MiniMap
+                nodeColor={(n) => {
+                  if (n.data?.color) return resolveCanvasColor(n.data.color as string) || 'var(--accent-color, #d4af37)';
+                  return 'var(--text-muted, #888888)';
+                }}
+                maskColor="var(--border-subtle, rgba(0, 0, 0, 0.45))"
+                className="canvas-rf-minimap"
+              />
+            )}
           </ReactFlow>
         </div>
+
+        {/* Fullscreen Presentation Player HUD */}
+        {isPresenting && activePresentingSlide && (
+          <div
+            className={`canvas-pres-hud ${isHudIdle ? 'is-idle' : ''}`}
+            onMouseEnter={() => {
+              if (hudIdleTimerRef.current) clearTimeout(hudIdleTimerRef.current);
+              setIsHudIdle(false);
+            }}
+            onMouseLeave={resetHudIdleTimer}
+          >
+            <button
+              type="button"
+              className="canvas-pres-hud-btn"
+              disabled={presentingSlideIndex === 0}
+              onClick={handlePrevPresentation}
+              title={t('canvas.presentation.prevSlide')}
+              aria-label={t('canvas.presentation.prevSlide')}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div className="canvas-pres-hud-status">
+              <span className="canvas-pres-hud-counter">
+                {t('canvas.presentation.slideCounter', {
+                  current: presentingSlideIndex + 1,
+                  total: presentation.slides.length,
+                })}
+              </span>
+              <span className="canvas-pres-hud-sep">–</span>
+              <span className="canvas-pres-hud-title">{activePresentingSlide.title}</span>
+              {endIndicatorVisible && (
+                <span className="canvas-pres-hud-end-badge">
+                  {t('canvas.presentation.endOfPresentation')}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="canvas-pres-hud-btn"
+              onClick={handleAdvancePresentation}
+              title={t('canvas.presentation.nextSlide')}
+              aria-label={t('canvas.presentation.nextSlide')}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <div className="canvas-pres-hud-divider" />
+            <button
+              type="button"
+              className="canvas-pres-hud-btn danger"
+              onClick={exitPresentation}
+              title={t('canvas.presentation.exitPresentation')}
+              aria-label={t('canvas.presentation.exitPresentation')}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
       </div>
     </CanvasContext.Provider>
   );

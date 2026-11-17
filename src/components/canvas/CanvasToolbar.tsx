@@ -19,8 +19,10 @@ import {
   Plus,
   ChevronDown,
   BoxSelect,
+  Presentation,
 } from 'lucide-react';
 import type { CanvasShape } from '../../../shared/canvasTypes';
+import { useTranslation } from '../../i18n';
 
 export interface CanvasGridConfig {
   snapToGrid: boolean;
@@ -46,6 +48,9 @@ interface CanvasToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   allNotes: { path: string; name: string; basename: string }[];
+  isPresentationPanelOpen?: boolean;
+  onTogglePresentationPanel?: () => void;
+  presentationSlideCount?: number;
 }
 
 export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
@@ -64,7 +69,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onUndo,
   onRedo,
   allNotes,
+  isPresentationPanelOpen = false,
+  onTogglePresentationPanel,
+  presentationSlideCount = 0,
 }) => {
+  const { t } = useTranslation();
   const activeGridConfig: CanvasGridConfig = gridConfig || {
     snapToGrid: true,
     gridSize: 15,
@@ -500,6 +509,28 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             </div>
           )}
         </div>
+
+        {onTogglePresentationPanel && (
+          <>
+            <div className="canvas-toolbar-divider" />
+            <button
+              type="button"
+              className={`canvas-toolbar-btn canvas-presentation-toggle-btn ${isPresentationPanelOpen ? 'active' : ''}`}
+              onClick={() => {
+                onTogglePresentationPanel();
+                setOpenDropdown(null);
+              }}
+              title={t('canvas.presentation.toolbarTitle')}
+              aria-label={t('canvas.presentation.toolbarTitle')}
+            >
+              <Presentation size={15} />
+              <span>{t('canvas.presentation.toolbarButton')}</span>
+              {presentationSlideCount > 0 && (
+                <span className="canvas-presentation-count-badge">{presentationSlideCount}</span>
+              )}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
