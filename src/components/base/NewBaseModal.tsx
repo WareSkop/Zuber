@@ -89,11 +89,11 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
           <div className="new-base-modal-body scroller">
             {/* 1. Base Name */}
             <div className="new-base-form-group">
-              <label className="new-base-form-label">{t('base.nameLabel') || 'Name der Base:'}</label>
+              <label className="new-base-form-label">{t('base.nameLabel')}</label>
               <input
                 type="text"
                 className="new-base-input"
-                placeholder="z. B. Server-Inventar, Projektübersicht..."
+                placeholder={t('base.namePlaceholderExample')}
                 value={name}
                 autoFocus
                 required
@@ -103,13 +103,13 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
 
             {/* 2. Target Location */}
             <div className="new-base-form-group">
-              <label className="new-base-form-label">{t('base.locationLabel') || 'Speicherort im Vault:'}</label>
+              <label className="new-base-form-label">{t('base.locationLabel')}</label>
               <select
                 className="new-base-select"
                 value={folder}
                 onChange={(e) => setFolder(e.target.value)}
               >
-                <option value="">(Wurzelverzeichnis / Root)</option>
+                <option value="">{t('base.rootLocationOption')}</option>
                 {vaultFolders.map((f) => (
                   <option key={f} value={f}>
                     {f}
@@ -120,7 +120,7 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
 
             {/* 3. Filter Scope / Source Options */}
             <div className="new-base-form-group">
-              <label className="new-base-form-label">{t('base.sourceScopeLabel') || 'Bereich / Quelle einschränken:'}</label>
+              <label className="new-base-form-label">{t('base.sourceScopeLabel')}</label>
 
               <div className="new-base-radio-group">
                 {/* Option 1: Folder */}
@@ -133,7 +133,7 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
                       onChange={() => setScope('folder')}
                     />
                     <Folder size={16} className="radio-icon" />
-                    <span className="radio-label-text">Notizen im Ordner...</span>
+                    <span className="radio-label-text">{t('base.scopeInFolder')}</span>
                   </div>
                   {scope === 'folder' && (
                     <div className="new-base-radio-sub">
@@ -142,7 +142,7 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
                         value={scopeFolder}
                         onChange={(e) => setScopeFolder(e.target.value)}
                       >
-                        <option value="">(Alle Ordner)</option>
+                        <option value="">{t('base.allFoldersOption')}</option>
                         {vaultFolders.map((f) => (
                           <option key={f} value={f}>
                             {f}
@@ -163,7 +163,7 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
                       onChange={() => setScope('tag')}
                     />
                     <Tag size={16} className="radio-icon" />
-                    <span className="radio-label-text">Notizen mit Tag...</span>
+                    <span className="radio-label-text">{t('base.scopeWithTag')}</span>
                   </div>
                   {scope === 'tag' && (
                     <div className="new-base-radio-sub">
@@ -173,7 +173,7 @@ export const NewBaseModal: React.FC<NewBaseModalProps> = ({
                         onChange={(e) => setScopeTag(e.target.value)}
                       >
                         <option value="" disabled>
-                          Tag auswählen...
+                          {t('base.filterSelectTag')}
                         </option>
                         {vaultTags.map((tg) => (
                           <option key={tg} value={tg}>

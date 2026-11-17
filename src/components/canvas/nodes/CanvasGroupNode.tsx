@@ -3,8 +3,10 @@ import { Handle, Position, NodeResizer, type NodeProps, useReactFlow } from '@xy
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
 import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
+import { useTranslation } from '../../../i18n';
 
 export const CanvasGroupNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
+  const { t } = useTranslation();
   const { onUpdateNodeData, readOnly } = useCanvasContext();
   const { setNodes } = useReactFlow();
 
@@ -71,15 +73,15 @@ export const CanvasGroupNode: React.FC<NodeProps> = ({ id, data, selected, width
             }}
             onBlur={handleFinishLabel}
             autoFocus
-            placeholder="Gruppenname..."
+            placeholder={t('canvas.groupPlaceholder')}
           />
         ) : (
           <span
             className="canvas-group-title"
             onDoubleClick={() => !readOnly && setIsEditingLabel(true)}
-            title="Doppelklick zum Umbenennen"
+            title={t('canvas.doubleClickRename')}
           >
-            {label || <span className="canvas-empty-hint">Gruppe (Doppelklick)</span>}
+            {label || <span className="canvas-empty-hint">{t('canvas.groupDoubleClickHint')}</span>}
           </span>
         )}
       </div>

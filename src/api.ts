@@ -84,6 +84,12 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
+function isGermanLocale(): boolean {
+  const s = getSafeStorage();
+  const lang = s?.getItem('zuber_language') || s?.getItem('knowmesh_language');
+  return lang === 'de';
+}
+
 export function getStoredProfiles(): VaultProfile[] {
   try {
     const s = getSafeStorage();
@@ -99,7 +105,7 @@ export function getStoredProfiles(): VaultProfile[] {
   return [
     {
       id: 'default',
-      name: 'Aktueller Server',
+      name: isGermanLocale() ? 'Aktueller Server' : 'Current Server',
       serverUrl: typeof window !== 'undefined' ? window.location.origin : '',
       token: getStoredToken() || undefined,
     },
@@ -692,9 +698,15 @@ export const api = {
         return { authenticated: true, token, offline: true };
       }
       if (!hasOfflineAuthVerifier()) {
-        throw new Error('Keine Verbindung zum Zuber-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.');
+        throw new Error(
+          isGermanLocale()
+            ? 'Keine Verbindung zum Zuber-Server. Für die allererste Anmeldung wird eine Internetverbindung benötigt.'
+            : 'No connection to the Zuber server. An internet connection is required for the initial login.'
+        );
       }
-      throw new Error('Ungültiges Passwort (Offline-Prüfung).');
+      throw new Error(
+        isGermanLocale() ? 'Ungültiges Passwort (Offline-Prüfung).' : 'Invalid password (offline check).'
+      );
     }
   },
 
@@ -1013,7 +1025,11 @@ export const api = {
       if (count > 0) {
         return { success: true, count, paths: uploadedPaths };
       }
-      throw new Error('Offline: Nur .md und .canvas Dateien können offline importiert werden.');
+      throw new Error(
+        isGermanLocale()
+          ? 'Offline: Nur .md und .canvas Dateien können offline importiert werden.'
+          : 'Offline: Only .md and .canvas files can be imported while offline.'
+      );
     }
 
     const formData = new FormData();

@@ -381,7 +381,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
       (allFiles || []).map((f) => (f.path || '').toLowerCase())
     );
 
-    const baseTitle = 'Neue Notiz';
+    const baseTitle = t('base.newNoteTitle');
     let noteTitle = baseTitle;
     let fileName = `${noteTitle}.md`;
     let candidatePath = targetFolder ? `${targetFolder}/${fileName}` : fileName;
@@ -802,17 +802,26 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
               let Icon = FileText;
               if (rule.field === 'file.inFolder') {
                 Icon = Folder;
-                label = rule.operator === '!=' ? `Nicht in: ${rule.value || '/'}` : `Ordner: ${rule.value || '/'}`;
+                label =
+                  rule.operator === '!='
+                    ? t('base.filterChipNotInFolder', { value: String(rule.value || '/') })
+                    : t('base.filterChipInFolder', { value: String(rule.value || '/') });
               } else if (rule.field === 'file.hasTag') {
                 Icon = Tag;
-                label = rule.operator === '!=' ? `Ohne Tag: #${rule.value}` : `Tag: #${rule.value}`;
+                label =
+                  rule.operator === '!='
+                    ? t('base.filterChipNoTag', { value: String(rule.value ?? '') })
+                    : t('base.filterChipTag', { value: String(rule.value ?? '') });
               } else if (rule.field === 'file.hasLink') {
                 Icon = LinkIcon;
-                label = rule.operator === '!=' ? `Verlinkt nicht auf: [[${rule.value}]]` : `Verlinkt auf: [[${rule.value}]]`;
+                label =
+                  rule.operator === '!='
+                    ? t('base.filterChipNotLinksTo', { value: String(rule.value ?? '') })
+                    : t('base.filterChipLinksTo', { value: String(rule.value ?? '') });
               } else if (rule.operator === 'isEmpty') {
-                label = `${rule.field} ist leer`;
+                label = t('base.filterChipEmpty', { field: rule.field });
               } else if (rule.operator === '!isEmpty') {
-                label = `${rule.field} ist nicht leer`;
+                label = t('base.filterChipNotEmpty', { field: rule.field });
               }
 
               return (
@@ -823,7 +832,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
                     type="button"
                     className="chip-remove-btn"
                     onClick={() => handleRemoveFilterRule(rule.id)}
-                    title="Filter entfernen"
+                    title={t('base.filterRemove')}
                   >
                     <X size={12} />
                   </button>
@@ -851,7 +860,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
                   setParseError(err?.message || String(err));
                 }
               }}
-              placeholder={'filters:\n  file.inFolder("Projekte")\nviews:\n  - type: table\n    name: "Übersicht"'}
+              placeholder={t('base.sourcePlaceholder')}
               spellCheck={false}
             />
           </div>
@@ -873,7 +882,7 @@ export const BaseEditor: React.FC<BaseEditorProps> = ({
                 className="base-btn secondary-btn"
                 onClick={() => handleFilterRulesChange([])}
               >
-                <span>Alle Filter zurücksetzen</span>
+                <span>{t('base.filterResetAll')}</span>
               </button>
             )}
           </div>

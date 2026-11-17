@@ -132,10 +132,7 @@ export const TemplateSelectModal: React.FC<TemplateSelectModalProps> = ({
           {templates.length === 0 ? (
             <div className="template-modal-empty">
               <LayoutTemplate size={32} className="template-empty-icon" />
-              <p>
-                {t('templates.noTemplatesFound') ||
-                  "Keine Vorlagen gefunden. Markiere eine Notiz mit 'isTemplate: true' oder klicke im Dateibaum mit der rechten Maustaste auf eine Notiz und wähle 'Als Vorlage festlegen'."}
-              </p>
+              <p>{t('templates.noTemplatesFound')}</p>
             </div>
           ) : filteredTemplates.length === 0 ? (
             <div className="template-modal-no-results">

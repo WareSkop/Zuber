@@ -181,7 +181,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             })
             .catch(() => {
               if (!isMounted) return;
-              setNoteContent('# Fehler beim Laden der Notiz');
+              setNoteContent(t('research.noteLoadError'));
               setLoading(false);
             });
         });
@@ -224,6 +224,8 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
     return renderReadingHtml(noteContent, target.path, allNotes, {
       attachmentLabel: t('sidebar.pdfAttachmentLabel'),
       pageBreakLabel: t('editor.pageBreakLabel'),
+      openInNewTabLabel: t('editor.openInNewTab'),
+      embeddedNoteLabel: t('editor.embeddedNote'),
     });
   }, [target?.type, target?.path, noteContent, allNotes, t]);
 

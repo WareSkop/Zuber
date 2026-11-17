@@ -504,8 +504,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const themes = [
     {
       id: 'zuber',
-      name: 'Zuber (Standard)',
-      desc: 'Dunkles Zuber, Kristall-Gold (#d4af37) & Facetten-Türkis (#29b6c8)',
+      name: t('settings.themeZuberName'),
+      desc: t('settings.themeZuberDesc'),
       bg: '#0d1117',
       sidebar: '#161c24',
       accent: '#d4af37',
@@ -514,8 +514,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     {
       id: 'dark-cold',
-      name: 'Dunkel Kalt',
-      desc: 'Tiefes Mitternachtsblau (#0f172a) & Eisblau-Akzent (#38bdf8)',
+      name: t('settings.themeDarkColdName'),
+      desc: t('settings.themeDarkColdDesc'),
       bg: '#0f172a',
       sidebar: '#1e293b',
       accent: '#38bdf8',
@@ -524,8 +524,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     {
       id: 'dark-warm',
-      name: 'Dunkel Warm',
-      desc: 'Warmes Espresso-Anthrazit (#1c1917) & Bernstein-Akzent (#f59e0b)',
+      name: t('settings.themeDarkWarmName'),
+      desc: t('settings.themeDarkWarmDesc'),
       bg: '#1c1917',
       sidebar: '#292524',
       accent: '#f59e0b',
@@ -534,8 +534,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     {
       id: 'light-cold',
-      name: 'Hell Kalt',
-      desc: 'Eisweiß (#f8fafc), Schiefergrau & Kobaltblau (#2563eb)',
+      name: t('settings.themeLightColdName'),
+      desc: t('settings.themeLightColdDesc'),
       bg: '#f8fafc',
       sidebar: '#f1f5f9',
       accent: '#2563eb',
@@ -544,8 +544,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     },
     {
       id: 'light-warm',
-      name: 'Hell Warm',
-      desc: 'Elfenbein-Papier (#fdfbf7), Sepiatext & Bronze-Akzent (#b45309)',
+      name: t('settings.themeLightWarmName'),
+      desc: t('settings.themeLightWarmDesc'),
       bg: '#fdfbf7',
       sidebar: '#f5f0e6',
       accent: '#b45309',
@@ -1329,7 +1329,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
                         <span>11px</span>
-                        <span>Standard: 14px</span>
+                        <span>{t('settings.defaultSizePx', { size: 14 })}</span>
                         <span>20px</span>
                       </div>
                     </div>
@@ -1359,7 +1359,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
                         <span>12px</span>
-                        <span>Standard: 16px</span>
+                        <span>{t('settings.defaultSizePx', { size: 16 })}</span>
                         <span>24px</span>
                       </div>
                     </div>
@@ -1396,7 +1396,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
                         <span>12px</span>
-                        <span>Standard: 15px</span>
+                        <span>{t('settings.defaultSizePx', { size: 15 })}</span>
                         <span>22px</span>
                       </div>
                     </div>
@@ -1426,7 +1426,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
                         <span>13px</span>
-                        <span>Standard: 16px</span>
+                        <span>{t('settings.defaultSizePx', { size: 16 })}</span>
                         <span>26px</span>
                       </div>
                     </div>
@@ -1529,7 +1529,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div key={p.id} className={`profile-card ${p.id === activeProfileId ? 'active' : ''}`}>
                     <div className="profile-info">
                       <div className="profile-name-row">
-                        <strong>{p.name}</strong>
+                        <strong>
+                          {p.id === 'default' && (p.name === 'Aktueller Server' || p.name === 'Current Server')
+                            ? t('settings.defaultServerName')
+                            : p.name}
+                        </strong>
                         {p.id === activeProfileId && <span className="profile-active-badge">{t('settings.activeProfile')}</span>}
                       </div>
                       <span className="profile-url">{p.serverUrl}</span>
@@ -1995,7 +1999,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           {t('settings.gitLastPush')}: {new Date(gitStatus.lastPushTime).toLocaleString()}
                           {gitStatus.lastPushError && (
                             <span style={{ color: 'var(--obsidian-red)', display: 'block', marginTop: '2px' }}>
-                              Fehler: {gitStatus.lastPushError}
+                              {t('common.error')}: {gitStatus.lastPushError}
                             </span>
                           )}
                         </div>
@@ -2428,10 +2432,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         cursor: 'pointer',
                       }}
                     >
-                      <option value="debug">DEBUG (Ausführlich)</option>
-                      <option value="info">INFO (Standard)</option>
-                      <option value="warn">WARN (Warnungen)</option>
-                      <option value="error">ERROR (Nur Fehler)</option>
+                      <option value="debug">{t('settings.logsLevelDebug')}</option>
+                      <option value="info">{t('settings.logsLevelInfo')}</option>
+                      <option value="warn">{t('settings.logsLevelWarn')}</option>
+                      <option value="error">{t('settings.logsLevelError')}</option>
                     </select>
                   </div>
 

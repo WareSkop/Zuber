@@ -813,7 +813,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
                   className="base-board-col-confirm-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleCommitMobileColRename}
-                  title="Bestätigen"
+                  title={t('common.confirm')}
                 >
                   <Check size={14} />
                 </button>
@@ -822,7 +822,7 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
                   className="base-board-col-cancel-btn"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleCancelMobileColRename}
-                  title="Abbrechen"
+                  title={t('common.cancel')}
                 >
                   <X size={14} />
                 </button>
@@ -899,8 +899,8 @@ export const BaseBoardView: React.FC<BaseBoardViewProps> = ({
                       e.stopPropagation();
                       setIsMobileColMenuOpen(true);
                     }}
-                    title="Spalten-Optionen"
-                    aria-label="Spalten-Optionen"
+                    title={t('base.columnOptions')}
+                    aria-label={t('base.columnOptions')}
                   >
                     <MoreVertical size={16} />
                   </button>

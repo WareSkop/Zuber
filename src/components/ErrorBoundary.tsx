@@ -269,7 +269,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 margin: '0 0 12px 0',
               }}
             >
-              Zuber konnte nicht normal gestartet werden
+              {isEn ? 'Zuber could not start normally' : 'Zuber konnte nicht normal gestartet werden'}
             </h2>
             <p
               style={{
@@ -279,8 +279,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 lineHeight: 1.5,
               }}
             >
-              Ein unerwarteter Fehler ist beim Laden der Anwendung aufgetreten. Ihre lokal
-              gespeicherten Notizen in der IndexedDB sind sicher.
+              {isEn
+                ? 'An unexpected error occurred while running the app. Your locally cached notes in IndexedDB are safe.'
+                : 'Ein unerwarteter Fehler ist beim Laden der Anwendung aufgetreten. Ihre lokal gespeicherten Notizen in der IndexedDB sind sicher.'}
             </p>
 
             <div
@@ -363,7 +364,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 }}
               >
                 {this.state.isResetting
-                  ? 'Wird zurückgesetzt...'
+                  ? isEn
+                    ? 'Resetting...'
+                    : 'Wird zurückgesetzt...'
                   : isEn
                   ? 'Reset Active View & Reload'
                   : 'Ansicht zurücksetzen & neu laden'}
@@ -392,7 +395,11 @@ export class ErrorBoundary extends Component<Props, State> {
                 }}
               >
                 {this.state.isLoadingCache
-                  ? 'Cache wird geladen...'
+                  ? isEn
+                    ? 'Loading cache...'
+                    : 'Cache wird geladen...'
+                  : isEn
+                  ? '🔄 Load Local Cache / Restart App'
                   : '🔄 Lokalen Cache laden / App neu starten'}
               </button>
 
@@ -417,7 +424,13 @@ export class ErrorBoundary extends Component<Props, State> {
                   justifyContent: 'center',
                 }}
               >
-                {this.state.isRetrying ? 'Starte neu...' : 'Erneut versuchen'}
+                {this.state.isRetrying
+                  ? isEn
+                    ? 'Restarting...'
+                    : 'Starte neu...'
+                  : isEn
+                  ? 'Try Again'
+                  : 'Erneut versuchen'}
               </button>
             </div>
 

@@ -119,7 +119,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
         }
       } catch {
         if (!cancelled) {
-          setError(`Base-Datei konnte nicht geladen werden (${basePath})`);
+          setError(t('base.loadError', { path: basePath }));
           setLoading(false);
         }
       }
@@ -286,7 +286,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
           <div
             className="base-embed-title-cluster"
             onClick={() => onOpenNote(resolvedFullPath)}
-            title={`Öffne ${resolvedFullPath}`}
+            title={t('canvas.openNoteTooltip', { target: resolvedFullPath })}
             style={{ cursor: 'pointer' }}
           >
             <Database size={14} className="base-embed-icon" />
@@ -296,7 +296,7 @@ export const BaseEmbedWidget: React.FC<BaseEmbedWidgetProps> = ({
                 e.stopPropagation();
                 onOpenNote(resolvedFullPath);
               }}
-              title={`Öffne ${resolvedFullPath}`}
+              title={t('canvas.openNoteTooltip', { target: resolvedFullPath })}
               style={{ cursor: 'pointer' }}
             >
               {fileName}

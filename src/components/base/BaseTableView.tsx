@@ -267,7 +267,7 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                               e.stopPropagation();
                               setHeaderMenuCol(headerMenuCol === col ? null : col);
                             }}
-                            title="Spalten-Optionen"
+                            title={t('base.columnOptions')}
                           >
                             <MoreHorizontal size={13} />
                           </button>
@@ -280,7 +280,7 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                                 onClick={() => handleStartRename(col, displayName)}
                               >
                                 <Edit2 size={13} />
-                                <span>Anzeigename ändern</span>
+                                <span>{t('base.renameColumnLabel')}</span>
                               </button>
                               <button
                                 type="button"
@@ -291,7 +291,7 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                                 }}
                               >
                                 <ArrowUp size={13} />
-                                <span>Aufsteigend sortieren (A-Z)</span>
+                                <span>{t('base.sortAscMenu')}</span>
                               </button>
                               <button
                                 type="button"
@@ -302,7 +302,7 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                                 }}
                               >
                                 <ArrowDown size={13} />
-                                <span>Absteigend sortieren (Z-A)</span>
+                                <span>{t('base.sortDescMenu')}</span>
                               </button>
                               {col !== 'file.name' && (
                                 <button
@@ -314,7 +314,7 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                                   }}
                                 >
                                   <EyeOff size={13} />
-                                  <span>Spalte ausblenden</span>
+                                  <span>{t('base.hideColumn')}</span>
                                 </button>
                               )}
                             </div>
@@ -326,7 +326,7 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                       <div
                         className="col-resize-handle"
                         onMouseDown={(e) => handleResizeStart(e, col)}
-                        title="Ziehen zum Ändern der Spaltenbreite"
+                        title={t('base.dragResizeColumn')}
                       />
                     </th>
                   );
@@ -339,16 +339,16 @@ export const BaseTableView: React.FC<BaseTableViewProps> = ({
                       type="button"
                       className="base-add-col-btn"
                       onClick={() => setIsAddColumnDropdownOpen((o) => !o)}
-                      title="Spalte hinzufügen"
+                      title={t('base.addColumn')}
                     >
                       <Plus size={14} />
                     </button>
 
                     {isAddColumnDropdownOpen && (
                       <div className="base-dropdown-menu add-column-dropdown">
-                        <div className="dropdown-header-title">Spalte hinzufügen</div>
+                        <div className="dropdown-header-title">{t('base.addColumn')}</div>
                         {availablePropertiesToAdd.length === 0 ? (
-                          <div className="dropdown-empty-item">Alle Eigenschaften sichtbar</div>
+                          <div className="dropdown-empty-item">{t('base.allPropsVisible')}</div>
                         ) : (
                           availablePropertiesToAdd.map((p) => (
                             <button

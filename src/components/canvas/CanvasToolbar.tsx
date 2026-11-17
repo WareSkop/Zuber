@@ -20,8 +20,12 @@ import {
   ChevronDown,
   BoxSelect,
   Presentation,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react';
 import type { CanvasShape } from '../../../shared/canvasTypes';
+import { isImageFilePath } from './nodes/canvasShapeGeometry';
+import { stripZencExt } from '../../crypto/folderCrypto';
 import { useTranslation } from '../../i18n';
 
 export interface CanvasGridConfig {
@@ -48,6 +52,8 @@ interface CanvasToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   allNotes: { path: string; name: string; basename: string }[];
+  allFiles?: { path: string; name: string; basename?: string }[];
+  onUploadImageFiles?: (files: File[]) => void | Promise<void>;
   isPresentationPanelOpen?: boolean;
   onTogglePresentationPanel?: () => void;
   presentationSlideCount?: number;
@@ -69,6 +75,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   onUndo,
   onRedo,
   allNotes,
+  allFiles = [],
+  onUploadImageFiles,
   isPresentationPanelOpen = false,
   onTogglePresentationPanel,
   presentationSlideCount = 0,
@@ -88,10 +96,12 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       onToggleGrid();
     }
   };
-  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | 'grid' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | 'image' | 'grid' | null>(null);
   const [fileSearch, setFileSearch] = useState('');
+  const [imageSearch, setImageSearch] = useState('');
   const toolbarRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -146,6 +156,16 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     )
     .slice(0, 15);
 
+  const filteredImages = allFiles
+    .filter((f) => isImageFilePath(f.path))
+    .filter(
+      (f) =>
+        !imageSearch ||
+        f.name.toLowerCase().includes(imageSearch.toLowerCase()) ||
+        f.path.toLowerCase().includes(imageSearch.toLowerCase())
+    )
+    .slice(0, 20);
+
   return (
     <div className="canvas-toolbar" ref={toolbarRef}>
       {/* Node creation group */}
@@ -157,10 +177,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             onAddTextNode('rectangle');
             setOpenDropdown(null);
           }}
-          title="Text-Karte hinzufügen (+)"
+          title={t('canvas.addTextTooltip')}
         >
           <Plus size={15} />
-          <span>Text</span>
+          <span>{t('canvas.addText')}</span>
         </button>
 
         {/* Embed note/file picker */}
@@ -169,10 +189,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             type="button"
             className={`canvas-toolbar-btn ${openDropdown === 'file' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'file' ? null : 'file'))}
-            title="Notiz / Datei einbetten"
+            title={t('canvas.addFileTooltip')}
           >
             <FileText size={15} />
-            <span>Notiz einbetten</span>
+            <span>{t('canvas.addFile')}</span>
             <ChevronDown size={12} />
           </button>
 
@@ -183,14 +203,14 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                 <input
                   type="text"
                   autoFocus
-                  placeholder="Notiz oder Datei suchen..."
+                  placeholder={t('canvas.searchFilesPlaceholder')}
                   value={fileSearch}
                   onChange={(e) => setFileSearch(e.target.value)}
                 />
               </div>
               <div className="canvas-picker-list scroller">
                 {filteredNotes.length === 0 ? (
-                  <div className="canvas-picker-empty">Keine Dateien gefunden</div>
+                  <div className="canvas-picker-empty">{t('canvas.noFilesFound')}</div>
                 ) : (
                   filteredNotes.map((note) => (
                     <button
@@ -212,6 +232,84 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           )}
         </div>
 
+        {/* Embed / Upload Image picker */}
+        <div className="canvas-toolbar-dropdown">
+          <button
+            type="button"
+            className={`canvas-toolbar-btn ${openDropdown === 'image' ? 'active' : ''}`}
+            onClick={() => setOpenDropdown((prev) => (prev === 'image' ? null : 'image'))}
+            title={t('canvas.addImageTooltip')}
+          >
+            <ImageIcon size={15} />
+            <span>{t('canvas.addImage')}</span>
+            <ChevronDown size={12} />
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*,.svg"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length > 0 && onUploadImageFiles) {
+                void onUploadImageFiles(files);
+              }
+              e.target.value = '';
+              setOpenDropdown(null);
+            }}
+          />
+
+          {openDropdown === 'image' && (
+            <div ref={dropdownRef} className="canvas-dropdown-menu canvas-file-picker-menu">
+              {onUploadImageFiles && (
+                <button
+                  type="button"
+                  className="canvas-dropdown-item canvas-upload-image-item"
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <Upload size={14} />
+                  <span>{t('canvas.uploadImage')}</span>
+                </button>
+              )}
+              <div className="canvas-picker-search-row">
+                <Search size={14} />
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder={t('canvas.searchImagesPlaceholder')}
+                  value={imageSearch}
+                  onChange={(e) => setImageSearch(e.target.value)}
+                />
+              </div>
+              <div className="canvas-picker-list scroller">
+                {filteredImages.length === 0 ? (
+                  <div className="canvas-picker-empty">{t('canvas.noImagesFound')}</div>
+                ) : (
+                  filteredImages.map((img) => {
+                    const logical = stripZencExt(img.path);
+                    const title = stripZencExt(img.basename || img.name);
+                    return (
+                      <button
+                        key={img.path}
+                        type="button"
+                        className="canvas-dropdown-item"
+                        onClick={() => {
+                          onAddFileNode(img.path);
+                          setOpenDropdown(null);
+                        }}
+                      >
+                        <span className="picker-item-title">{title}</span>
+                        <span className="picker-item-path">{logical}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Group */}
         <button
           type="button"
@@ -220,10 +318,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             onAddGroupNode();
             setOpenDropdown(null);
           }}
-          title="Gruppe / Bereich hinzufügen"
+          title={t('canvas.addGroupTooltip')}
         >
           <FolderPlus size={15} />
-          <span>Gruppe</span>
+          <span>{t('canvas.addGroup')}</span>
         </button>
 
         {/* Workflow Shapes Dropdown */}
@@ -232,16 +330,16 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             type="button"
             className={`canvas-toolbar-btn ${openDropdown === 'workflow' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'workflow' ? null : 'workflow'))}
-            title="Workflow-Formen (Prozess, Entscheidung, Start/Ende)"
+            title={t('canvas.workflowTooltip')}
           >
             <GitBranch size={15} />
-            <span>Workflow</span>
+            <span>{t('canvas.workflow')}</span>
             <ChevronDown size={12} />
           </button>
 
           {openDropdown === 'workflow' && (
             <div ref={dropdownRef} className="canvas-dropdown-menu">
-              <div className="canvas-dropdown-title">Workflow-Formen</div>
+              <div className="canvas-dropdown-title">{t('canvas.workflowShapes')}</div>
               <button
                 type="button"
                 className="canvas-dropdown-item"
@@ -250,7 +348,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Square size={15} /> <span>Prozessschritt (Rechteck)</span>
+                <Square size={15} /> <span>{t('canvas.shapeProcess')}</span>
               </button>
               <button
                 type="button"
@@ -260,7 +358,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <div className="palette-icon-rounded" /> <span>Start / Ende (Abgerundet)</span>
+                <div className="palette-icon-rounded" /> <span>{t('canvas.shapeStartEnd')}</span>
               </button>
               <button
                 type="button"
@@ -270,7 +368,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Circle size={15} /> <span>Knotenpunkt / Status (Kreis)</span>
+                <Circle size={15} /> <span>{t('canvas.shapeTerminal')}</span>
               </button>
               <button
                 type="button"
@@ -280,7 +378,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Diamond size={15} /> <span>Entscheidung (Raute)</span>
+                <Diamond size={15} /> <span>{t('canvas.shapeDecision')}</span>
               </button>
               <button
                 type="button"
@@ -290,7 +388,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <div className="palette-icon-parallel" /> <span>Ein- / Ausgabe (Parallelogramm)</span>
+                <div className="palette-icon-parallel" /> <span>{t('canvas.shapeIo')}</span>
               </button>
               <button
                 type="button"
@@ -300,7 +398,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <div className="palette-icon-hexagon" /> <span>Bedingung / Filter (Hexagon)</span>
+                <div className="palette-icon-hexagon" /> <span>{t('canvas.shapeConditionFilter')}</span>
               </button>
               <button
                 type="button"
@@ -310,7 +408,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Database size={15} /> <span>Datenbank / Speicher (Zylinder)</span>
+                <Database size={15} /> <span>{t('canvas.shapeDatabase')}</span>
               </button>
             </div>
           )}
@@ -322,16 +420,16 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             type="button"
             className={`canvas-toolbar-btn ${openDropdown === 'network' ? 'active' : ''}`}
             onClick={() => setOpenDropdown((prev) => (prev === 'network' ? null : 'network'))}
-            title="Netzwerk-Elemente (Server, Router, Cloud, Workstation)"
+            title={t('canvas.networkTooltip')}
           >
             <Network size={15} />
-            <span>Netzwerk</span>
+            <span>{t('canvas.network')}</span>
             <ChevronDown size={12} />
           </button>
 
           {openDropdown === 'network' && (
             <div ref={dropdownRef} className="canvas-dropdown-menu">
-              <div className="canvas-dropdown-title">Netzwerk-Elemente</div>
+              <div className="canvas-dropdown-title">{t('canvas.networkShapes')}</div>
               <button
                 type="button"
                 className="canvas-dropdown-item"
@@ -340,7 +438,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Server size={15} /> <span>Server / Host</span>
+                <Server size={15} /> <span>{t('canvas.shapeServerHost')}</span>
               </button>
               <button
                 type="button"
@@ -350,7 +448,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Network size={15} /> <span>Router / Gateway / Switch</span>
+                <Network size={15} /> <span>{t('canvas.shapeRouter')}</span>
               </button>
               <button
                 type="button"
@@ -360,7 +458,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Cloud size={15} /> <span>Cloud / Internet</span>
+                <Cloud size={15} /> <span>{t('canvas.shapeCloud')}</span>
               </button>
               <button
                 type="button"
@@ -370,7 +468,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Monitor size={15} /> <span>Workstation / Client</span>
+                <Monitor size={15} /> <span>{t('canvas.shapeWorkstation')}</span>
               </button>
               <button
                 type="button"
@@ -380,7 +478,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   setOpenDropdown(null);
                 }}
               >
-                <Database size={15} /> <span>Datenbank / Storage</span>
+                <Database size={15} /> <span>{t('canvas.shapeDatabase')}</span>
               </button>
             </div>
           )}
@@ -396,8 +494,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           className="canvas-toolbar-btn icon-only"
           onClick={onUndo}
           disabled={!canUndo}
-          title="Rückgängig (Strg+Z)"
-          aria-label="Rückgängig"
+          title={t('canvas.undoShortcut')}
+          aria-label={t('canvas.undo')}
         >
           <Undo2 size={16} />
         </button>
@@ -406,8 +504,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           className="canvas-toolbar-btn icon-only"
           onClick={onRedo}
           disabled={!canRedo}
-          title="Wiederholen (Strg+Y)"
-          aria-label="Wiederholen"
+          title={`${t('canvas.redo')} (Ctrl+Y)`}
+          aria-label={t('canvas.redo')}
         >
           <Redo2 size={16} />
         </button>
@@ -415,8 +513,8 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           type="button"
           className="canvas-toolbar-btn icon-only"
           onClick={onFitView}
-          title="Ansicht einpassen (Fit View)"
-          aria-label="Ansicht einpassen"
+          title={t('canvas.fitView')}
+          aria-label={t('canvas.fitViewAria')}
         >
           <Maximize2 size={16} />
         </button>
@@ -426,10 +524,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           onClick={onToggleSelectionTool}
           title={
             isSelectionToolActive
-              ? 'Auswahl-Rechteck aktiv (Klicken zum Deaktivieren)'
-              : 'Auswahl-Rechteck / Marquee aktivieren (oder Shift gedrückt halten)'
+              ? t('canvas.marqueeActive')
+              : t('canvas.marqueeToggle')
           }
-          aria-label="Auswahl-Rechteck aktivieren"
+          aria-label={t('canvas.marqueeAria')}
         >
           <BoxSelect size={16} />
         </button>
@@ -442,15 +540,18 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               activeGridConfig.snapToGrid || activeGridConfig.gridVariant !== 'off' ? 'active' : ''
             }`}
             onClick={() => setOpenDropdown((prev) => (prev === 'grid' ? null : 'grid'))}
-            title={`Gitter & Einrasten (${activeGridConfig.snapToGrid ? 'Einrasten an' : 'Einrasten aus'}, ${activeGridConfig.gridSize}px)`}
-            aria-label="Gitter-Einstellungen"
+            title={t('canvas.gridTooltip', {
+              snap: activeGridConfig.snapToGrid ? t('canvas.snapOn') : t('canvas.snapOff'),
+              size: activeGridConfig.gridSize,
+            })}
+            aria-label={t('canvas.gridSettings')}
           >
             <Grid size={16} />
           </button>
 
           {openDropdown === 'grid' && (
             <div ref={dropdownRef} className="canvas-dropdown-menu canvas-grid-menu">
-              <div className="canvas-dropdown-title">Gitter & Einrasten</div>
+              <div className="canvas-dropdown-title">{t('canvas.gridAndSnap')}</div>
 
               {/* Snap to grid toggle */}
               <button
@@ -463,11 +564,11 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                   })
                 }
               >
-                <span>{activeGridConfig.snapToGrid ? '✓ Einrasten aktiv (Snap)' : 'Einrasten deaktiviert'}</span>
+                <span>{activeGridConfig.snapToGrid ? t('canvas.snapActiveLabel') : t('canvas.snapInactiveLabel')}</span>
               </button>
 
               <div className="canvas-dropdown-divider" />
-              <div className="canvas-dropdown-subtitle">Gittergröße</div>
+              <div className="canvas-dropdown-subtitle">{t('canvas.gridSize')}</div>
               <div className="canvas-grid-pills">
                 {[10, 15, 20, 25].map((size) => (
                   <button
@@ -487,7 +588,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
               </div>
 
               <div className="canvas-dropdown-divider" />
-              <div className="canvas-dropdown-subtitle">Hintergrund</div>
+              <div className="canvas-dropdown-subtitle">{t('canvas.backgroundLabel')}</div>
               <div className="canvas-grid-pills">
                 {(['dots', 'lines', 'off'] as const).map((variant) => (
                   <button
@@ -502,7 +603,7 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                       })
                     }
                   >
-                    {variant === 'dots' ? 'Punkte' : variant === 'lines' ? 'Linien' : 'Aus'}
+                    {variant === 'dots' ? t('canvas.gridDots') : variant === 'lines' ? t('canvas.gridLines') : t('canvas.gridOff')}
                   </button>
                 ))}
               </div>

@@ -56,6 +56,7 @@ import { CanvasShapeNode } from './nodes/CanvasShapeNode';
 import { CanvasFileNode } from './nodes/CanvasFileNode';
 import { CanvasGroupNode } from './nodes/CanvasGroupNode';
 import { CanvasLinkNode } from './nodes/CanvasLinkNode';
+import { isImageFilePath } from './nodes/canvasShapeGeometry';
 import { CanvasToolbar, type CanvasGridConfig } from './CanvasToolbar';
 import { CanvasInspector } from './CanvasInspector';
 import { CanvasPresentationPanel } from './CanvasPresentationPanel';
@@ -69,6 +70,8 @@ export interface CanvasEditorProps {
   onOpenNote: (path: string) => void;
   onSelectTag?: (tag: string) => void;
   allNotes: { path: string; name: string; basename: string }[];
+  allFiles?: { path: string; name: string; basename?: string }[];
+  onUploadImage?: (file: File) => Promise<string>;
   readOnly?: boolean;
 }
 
@@ -138,6 +141,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   onOpenNote,
   onSelectTag,
   allNotes,
+  allFiles = [],
+  onUploadImage,
   readOnly = false,
 }) => {
   const { fitView, getViewport, setViewport, screenToFlowPosition } = useReactFlow();
@@ -895,11 +900,12 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   );
 
   const handleAddFileNode = useCallback(
-    (targetFilePath: string) => {
+    (targetFilePath: string, customPos?: { x: number; y: number }) => {
       if (readOnly) return;
-      const width = 340;
-      const height = 280;
-      const pos = getCenterSpawnPosition(width, height, nodes.length);
+      const isImg = isImageFilePath(targetFilePath);
+      const width = isImg ? 300 : 340;
+      const height = isImg ? 240 : 280;
+      const pos = customPos || getCenterSpawnPosition(width, height, nodes.length);
       const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const newNode: Node = {
@@ -928,6 +934,30 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]
   );
 
+  const handleUploadImageFiles = useCallback(
+    async (files: File[], baseDropPos?: { x: number; y: number }) => {
+      if (readOnly || !onUploadImage) return;
+      const imageFiles = files.filter((f) => f.type.startsWith('image/') || isImageFilePath(f.name));
+      if (imageFiles.length === 0) return;
+
+      for (let idx = 0; idx < imageFiles.length; idx++) {
+        const file = imageFiles[idx];
+        try {
+          const uploadedRaw = await onUploadImage(file);
+          const uploadedPath = uploadedRaw.replace(/^!\[\[|\]\]$/g, '').trim();
+          if (!uploadedPath) continue;
+          const pos = baseDropPos
+            ? { x: baseDropPos.x + idx * 24, y: baseDropPos.y + idx * 24 }
+            : undefined;
+          handleAddFileNode(uploadedPath, pos);
+        } catch (err) {
+          clientLogger.error('canvas', 'Image upload into canvas failed', err);
+        }
+      }
+    },
+    [readOnly, onUploadImage, handleAddFileNode]
+  );
+
   const handleAddGroupNode = useCallback(() => {
     if (readOnly) return;
     const width = 420;
@@ -945,7 +975,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       selected: true,
       data: {
         rawType: 'group',
-        label: 'Neue Gruppe',
+        label: t('canvas.newGroupDefault'),
         color: undefined,
       },
     };
@@ -957,7 +987,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       triggerAutoSave(next, edges);
       return next;
     });
-  }, [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]);
+  }, [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges, t]);
 
   // Selected item tracking for Floating Inspector & Multi-Selection
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
@@ -1745,6 +1775,101 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     selectedNode && hiddenNodeIdsOnSelectedSlide.has(selectedNode.id)
   );
 
+  const ancestorPaths = useMemo(() => (filePath ? [filePath] : []), [filePath]);
+
+  const handleCanvasDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (effectiveReadOnly) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    },
+    [effectiveReadOnly]
+  );
+
+  const handleCanvasDrop = useCallback(
+    (e: React.DragEvent) => {
+      if (effectiveReadOnly) return;
+      e.preventDefault();
+
+      const flowPoint = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      const centeredPos = {
+        x: Math.round(flowPoint.x - 150),
+        y: Math.round(flowPoint.y - 120),
+      };
+
+      // Case A: Dragged from Zuber FileSidebar (images, notes, canvases, bases)
+      const pathsJson = e.dataTransfer.getData('application/x-knowmesh-paths');
+      const singlePath = e.dataTransfer.getData('application/x-knowmesh-file-path');
+      const internalPaths: string[] = [];
+      if (pathsJson) {
+        try {
+          const parsed = JSON.parse(pathsJson);
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              if (typeof item === 'string' && item.trim()) internalPaths.push(item.trim());
+            }
+          }
+        } catch {
+          // ignore malformed drag payload
+        }
+      } else if (singlePath && singlePath.trim()) {
+        internalPaths.push(singlePath.trim());
+      }
+
+      if (internalPaths.length > 0) {
+        const knownFiles = new Set(allFiles.map((f) => f.path));
+        const validPaths = internalPaths.filter((p) => {
+          if (knownFiles.size > 0) return knownFiles.has(p);
+          return /\.[a-z0-9]+$/i.test(p);
+        });
+        validPaths.forEach((p, idx) => {
+          handleAddFileNode(p, {
+            x: centeredPos.x + idx * 24,
+            y: centeredPos.y + idx * 24,
+          });
+        });
+        return;
+      }
+
+      // Case B: External image files dropped from OS / device
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        void handleUploadImageFiles(Array.from(e.dataTransfer.files), centeredPos);
+      }
+    },
+    [effectiveReadOnly, screenToFlowPosition, allFiles, handleAddFileNode, handleUploadImageFiles]
+  );
+
+  const handleCanvasPaste = useCallback(
+    (e: React.ClipboardEvent) => {
+      if (effectiveReadOnly || !onUploadImage) return;
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        void handleUploadImageFiles(imageFiles);
+      }
+    },
+    [effectiveReadOnly, onUploadImage, handleUploadImageFiles]
+  );
+
   return (
     <CanvasContext.Provider
       value={{
@@ -1758,6 +1883,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         hiddenNodeIdsOnSelectedSlide,
         hasSelectedSlide: Boolean(isPresentationPanelOpen && selectedSlide),
         onToggleNodeHiddenOnSlide: handleToggleNodeHiddenOnSlide,
+        currentCanvasPath: filePath,
+        ancestorPaths,
       }}
     >
       <div
@@ -1766,6 +1893,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         }`}
         ref={containerRef}
         onMouseMove={isPresenting ? resetHudIdleTimer : undefined}
+        onPaste={handleCanvasPaste}
       >
         {/* Top dock toolbar */}
         {!effectiveReadOnly && (
@@ -1783,6 +1911,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onUndo={handleUndo}
             onRedo={handleRedo}
             allNotes={allNotes}
+            allFiles={allFiles}
+            onUploadImageFiles={onUploadImage ? (files) => handleUploadImageFiles(files) : undefined}
             isPresentationPanelOpen={isPresentationPanelOpen}
             onTogglePresentationPanel={() => setIsPresentationPanelOpen((prev) => !prev)}
             presentationSlideCount={presentation.slides.length}
@@ -1826,7 +1956,12 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         )}
 
         {/* Full-size ReactFlow Container */}
-        <div className="canvas-reactflow-container" style={{ width: '100%', height: '100%' }}>
+        <div
+          className="canvas-reactflow-container"
+          style={{ width: '100%', height: '100%' }}
+          onDragOver={handleCanvasDragOver}
+          onDrop={handleCanvasDrop}
+        >
           <ReactFlow
             style={{ width: '100%', height: '100%' }}
             nodes={renderedNodes}

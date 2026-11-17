@@ -87,7 +87,7 @@ export const SendToTargetModal: React.FC<SendToTargetModalProps> = ({
       onClose();
     } catch (err) {
       console.error('[SendToTargetModal] Error:', err);
-      alert((err as Error).message || 'Fehler beim Senden an die Ziel-Notiz');
+      alert((err as Error).message || t('sendToTargetModal.sendError'));
     } finally {
       setIsSubmitting(false);
     }

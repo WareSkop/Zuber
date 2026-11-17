@@ -183,7 +183,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                 className="base-board-col-confirm-btn"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCommitRename}
-                title="Bestätigen"
+                title={t('common.confirm')}
               >
                 <Check size={12} />
               </button>
@@ -192,7 +192,7 @@ export const BaseBoardSwimlaneRow: React.FC<BaseBoardSwimlaneRowProps> = ({
                 className="base-board-col-cancel-btn"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCancelRename}
-                title="Abbrechen"
+                title={t('common.cancel')}
               >
                 <X size={12} />
               </button>

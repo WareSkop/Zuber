@@ -42,10 +42,13 @@ const I18nContext = createContext<I18nContextType>({
   language: 'en',
   setLanguage: () => {},
   t: (key, paramsOrFallback, fallback) => {
+    const val = getNestedValue(dictionaries.en, key);
+    if (val) {
+      return typeof paramsOrFallback === 'object' ? interpolate(val, paramsOrFallback) : val;
+    }
     if (typeof paramsOrFallback === 'string') return paramsOrFallback;
     if (typeof fallback === 'string') return fallback;
-    const val = getNestedValue(dictionaries.en, key);
-    return val || key;
+    return key;
   },
 });
 

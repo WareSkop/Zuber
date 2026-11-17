@@ -362,7 +362,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       setTimeout(() => setUploadStatus(null), 3500);
     } catch (err: unknown) {
       console.error('[Zuber] Upload error:', err);
-      alert((err as Error).message || 'Fehler beim Hochladen.');
+      alert((err as Error).message || t('sidebar.uploadError'));
       setUploadStatus(null);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -384,7 +384,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       setTimeout(() => setUploadStatus(null), 3500);
     } catch (err: unknown) {
       console.error('[Zuber] Folder upload error:', err);
-      alert((err as Error).message || 'Fehler beim Hochladen des Ordners.');
+      alert((err as Error).message || t('sidebar.uploadFolderError'));
       setUploadStatus(null);
     } finally {
       if (folderInputRef.current) folderInputRef.current.value = '';
@@ -397,7 +397,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       await api.downloadEntry(path, isDirectory);
     } catch (err: unknown) {
       console.error('[Zuber] Download error:', err);
-      alert((err as Error).message || 'Fehler beim Download.');
+      alert((err as Error).message || t('sidebar.downloadError'));
     }
   };
 
@@ -407,7 +407,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       await api.downloadBatch(paths);
     } catch (err: unknown) {
       console.error('[Zuber] Batch download error:', err);
-      alert((err as Error).message || 'Fehler beim Batch-Download.');
+      alert((err as Error).message || t('sidebar.downloadBatchError'));
     }
   };
 
@@ -742,7 +742,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       onRefresh();
     } catch (err) {
       console.error('[Zuber] Paste error:', err);
-      alert((err as Error).message || 'Fehler beim Einfügen');
+      alert((err as Error).message || t('sidebar.pasteError'));
     }
   };
 
@@ -910,7 +910,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         onRefresh();
       } catch (err) {
         console.error('[Zuber] Drag drop internal move error:', err);
-        alert((err as Error).message || 'Fehler beim Verschieben');
+        alert((err as Error).message || t('sidebar.moveError'));
       }
       return;
     }
@@ -929,7 +929,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         setTimeout(() => setUploadStatus(null), 3500);
       } catch (err: unknown) {
         console.error('[Zuber] Drop upload error:', err);
-        alert((err as Error).message || 'Fehler beim Hochladen.');
+        alert((err as Error).message || t('sidebar.uploadError'));
         setUploadStatus(null);
       }
     }
@@ -1009,8 +1009,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             <button
               type="button"
               className="tree-item-more-btn"
-              title="Menü"
-              aria-label="Menü"
+              title={t('sidebar.menu')}
+              aria-label={t('sidebar.menu')}
               onClick={(e) => {
                 e.stopPropagation();
                 openContextMenu(node, e.clientX, e.clientY);
@@ -1101,8 +1101,8 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         <button
           type="button"
           className="tree-item-more-btn"
-          title="Menü"
-          aria-label="Menü"
+          title={t('sidebar.menu')}
+          aria-label={t('sidebar.menu')}
           onClick={(e) => {
             e.stopPropagation();
             openContextMenu(node, e.clientX, e.clientY);

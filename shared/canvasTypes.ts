@@ -40,6 +40,7 @@ export interface JsonCanvasNode {
   shape?: CanvasShape;     // Default: 'rectangle'
   icon?: string;           // Optional Lucide icon name or badge
   zIndex?: number;
+  link?: string;           // Optional clickable note path or external URL on file/image nodes
 }
 
 export interface JsonCanvasEdge {

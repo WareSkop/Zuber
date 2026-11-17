@@ -880,7 +880,7 @@ views:
 `.trim();
 
     const existingFiles = [
-      { path: 'Sprint 42/Neue Notiz.md', name: 'Neue Notiz.md', folder: 'Sprint 42' },
+      { path: 'Sprint 42/New Note.md', name: 'New Note.md', folder: 'Sprint 42' },
     ];
 
     await act(async () => {
@@ -909,7 +909,7 @@ views:
     expect(modal).toBeTruthy();
     const input = container.querySelector('.modal-input') as HTMLInputElement;
     expect(input).toBeTruthy();
-    expect(input.value).toBe('Neue Notiz 1');
+    expect(input.value).toBe('New Note 1');
 
     // Confirm dialog
     const form = container.querySelector('form') as HTMLFormElement;
@@ -917,14 +917,14 @@ views:
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
 
-    // Because 'Sprint 42/Neue Notiz.md' already exists, collision handler chose 'Sprint 42/Neue Notiz 1.md'
+    // Because 'Sprint 42/New Note.md' already exists, collision handler chose 'Sprint 42/New Note 1.md'
     expect(saveNoteSpy).toHaveBeenCalledWith({
-      path: 'Sprint 42/Neue Notiz 1.md',
-      body: '# Neue Notiz 1\n\n',
+      path: 'Sprint 42/New Note 1.md',
+      body: '# New Note 1\n\n',
       properties: [{ key: 'status', value: 'Warte', type: 'text' }],
       forceOverwrite: true,
     });
-    expect(onSelectNote).toHaveBeenCalledWith('Sprint 42/Neue Notiz 1.md');
+    expect(onSelectNote).toHaveBeenCalledWith('Sprint 42/New Note 1.md');
 
     saveNoteSpy.mockRestore();
   });

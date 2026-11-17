@@ -967,10 +967,10 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             className={`graph-pill-btn ${localMode ? 'active' : ''}`}
             onClick={() => setLocalMode(true)}
             disabled={!activeNotePath}
-            title="Lokal"
+            title={t('graph.localTitle')}
           >
             <Maximize2 size={14} />
-            <span>Lokal</span>
+            <span>{t('graph.localTitle')}</span>
           </button>
           <button
             type="button"
@@ -1143,20 +1143,20 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
             {controlsTab === 'groups' && (
               <div className="graph-panel-section">
                 <div className="graph-groups-header">
-                  <span>Farb-Gruppen ({settings.groups.length})</span>
+                  <span>{t('graph.groups')} ({settings.groups.length})</span>
                   <button
                     type="button"
                     className="btn-add-group"
                     onClick={addGroup}
-                    title="Neue Gruppe hinzufügen"
+                    title={t('graph.addGroupTitle')}
                   >
-                    <Plus size={12} /> Gruppe
+                    <Plus size={12} /> {t('graph.addGroupShort')}
                   </button>
                 </div>
                 <div className="graph-groups-list">
                   {settings.groups.length === 0 ? (
                     <div className="graph-groups-empty">
-                      Keine Gruppen definiert. Klicke auf „+ Gruppe“, um Notizen nach Pfad oder Tag einzufärben.
+                      {t('graph.noGroupsHint')}
                     </div>
                   ) : (
                     settings.groups.map((group) => (
@@ -1168,12 +1168,12 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                           onChange={(e) =>
                             updateGroup(group.id, { color: e.target.value })
                           }
-                          title="Farbe wählen"
+                          title={t('graph.chooseColor')}
                         />
                         <input
                           type="text"
                           className="graph-group-query"
-                          placeholder="z. B. path:Projekte oder #krypto"
+                          placeholder={t('graph.groupQueryPlaceholder')}
                           value={group.query}
                           onChange={(e) =>
                             updateGroup(group.id, { query: e.target.value })
@@ -1183,7 +1183,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                           type="button"
                           className="graph-group-delete"
                           onClick={() => removeGroup(group.id)}
-                          title="Gruppe löschen"
+                          title={t('graph.deleteGroup')}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -1198,7 +1198,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
               <div className="graph-panel-section">
                 <div className="graph-control-slider">
                   <div className="slider-label">
-                    <span>Knotengröße</span>
+                    <span>{t('graph.nodeSize')}</span>
                     <span className="slider-val">{settings.nodeSizeMultiplier.toFixed(1)}×</span>
                   </div>
                   <input
@@ -1218,7 +1218,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
 
                 <div className="graph-control-slider">
                   <div className="slider-label">
-                    <span>Text-Schwelle</span>
+                    <span>{t('graph.textThreshold')}</span>
                     <span className="slider-val">{settings.textFadeThreshold.toFixed(2)}</span>
                   </div>
                   <input
@@ -1238,7 +1238,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
 
                 <div className="graph-control-slider">
                   <div className="slider-label">
-                    <span>Zentripetalkraft</span>
+                    <span>{t('graph.centerForce')}</span>
                     <span className="slider-val">{Math.round(settings.centerStrength * 1000)}</span>
                   </div>
                   <input
@@ -1258,7 +1258,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
 
                 <div className="graph-control-slider">
                   <div className="slider-label">
-                    <span>Abstoßungskraft</span>
+                    <span>{t('graph.repulsionForce')}</span>
                     <span className="slider-val">{settings.repelStrength}</span>
                   </div>
                   <input
@@ -1278,7 +1278,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
 
                 <div className="graph-control-slider">
                   <div className="slider-label">
-                    <span>Link-Abstand</span>
+                    <span>{t('graph.linkDistance')}</span>
                     <span className="slider-val">{settings.linkDistance}px</span>
                   </div>
                   <input
@@ -1304,7 +1304,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
                     resetCamera();
                   }}
                 >
-                  <RotateCcw size={13} /> Auf Standard zurücksetzen
+                  <RotateCcw size={13} /> {t('graph.resetDefaults')}
                 </button>
               </div>
             )}
@@ -1343,7 +1343,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
               setTouchSelectedNode(null);
             }}
           >
-            <span>Notiz öffnen</span>
+            <span>{t('graph.openNote')}</span>
             <ExternalLink size={13} />
           </button>
           <button
@@ -1359,10 +1359,10 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
       {/* Legend */}
       <div className="graph-legend">
         <span className="legend-item">
-          <span className="legend-dot note-dot" /> Notiz
+          <span className="legend-dot note-dot" /> {t('graph.noteLegend')}
         </span>
         <span className="legend-item">
-          <span className="legend-dot active-dot" /> Aktuell
+          <span className="legend-dot active-dot" /> {t('graph.legendCurrent')}
         </span>
         {settings.showTags && (
           <span className="legend-item">
@@ -1371,7 +1371,7 @@ const GraphViewImpl: React.FC<GraphViewProps> = ({
         )}
         {settings.showUnresolved && (
           <span className="legend-item">
-            <span className="legend-dot unresolved-dot" /> Offen
+            <span className="legend-dot unresolved-dot" /> {t('graph.legendOpen')}
           </span>
         )}
       </div>

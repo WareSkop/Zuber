@@ -234,7 +234,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
             className={`toolbar-btn ${openMenu === 'heading' ? 'active' : ''}`}
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => toggleMenu('heading', e.currentTarget)}
-            title="Überschriften (H1 - H6 & Normaler Text)"
+            title={t('toolbar.headingsTitle')}
             aria-haspopup="true"
             aria-expanded={openMenu === 'heading'}
           >

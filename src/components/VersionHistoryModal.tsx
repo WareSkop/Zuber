@@ -205,7 +205,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         setPrevVersionContent(null);
       }
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: (err as Error).message || 'Fehler beim Laden des Versionsverlaufs' });
+      setFeedback({ type: 'error', message: (err as Error).message || t('history.loadError') });
     } finally {
       setLoading(false);
     }
@@ -249,7 +249,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         }
       } catch (err: unknown) {
         if (isMounted) {
-          setFeedback({ type: 'error', message: (err as Error).message || 'Fehler beim Laden der Version' });
+          setFeedback({ type: 'error', message: (err as Error).message || t('history.loadVersionError') });
         }
       } finally {
         if (isMounted) setLoadingVersion(false);
@@ -272,7 +272,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
       await api.commitGit({ reason: `initial commit: ${filePath}` });
       await loadHistory();
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: (err as Error).message || 'Fehler beim Erstellen des Commits' });
+      setFeedback({ type: 'error', message: (err as Error).message || t('history.createCommitError') });
     } finally {
       setCreatingCommit(false);
     }
@@ -490,7 +490,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
                   <div className="version-history-actions">
                     {viewMode !== 'full' && (
-                      <div className="vh-stats-badge" title="Hinzugefügte und entfernte Zeilen">
+                      <div className="vh-stats-badge" title={t('history.diffStatsTitle')}>
                         <span className="stat-add">+{stats.additions}</span>
                         <span className="stat-del">-{stats.deletions}</span>
                       </div>

@@ -108,7 +108,7 @@ export const MoveToModal: React.FC<MoveToModalProps> = ({
       onClose();
     } catch (err) {
       console.error('[MoveToModal] Error:', err);
-      alert((err as Error).message || 'Fehler beim Verschieben');
+      alert((err as Error).message || t('moveToModal.moveError'));
     } finally {
       setIsSubmitting(false);
     }

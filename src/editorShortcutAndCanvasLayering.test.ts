@@ -91,12 +91,14 @@ describe('Editor Shortcut CTRL+. & Canvas Edge Layering', () => {
 
     it('verifies CanvasShapeNode renders an opaque base background to prevent edge lines shining through', () => {
       const shapeNodeFile = path.resolve(__dirname, 'components/canvas/nodes/CanvasShapeNode.tsx');
+      const geometryFile = path.resolve(__dirname, 'components/canvas/nodes/canvasShapeGeometry.tsx');
       const content = fs.readFileSync(shapeNodeFile, 'utf-8');
+      const geometryContent = fs.readFileSync(geometryFile, 'utf-8');
 
       // Opaque base fill definition
       expect(content).toContain("const baseFill = 'var(--bg-secondary, #1e293b)'");
       // All shapes render baseFill under tint
-      expect(content).toContain('fill={baseFill}');
+      expect(geometryContent).toContain('fill={baseFill}');
     });
   });
 });

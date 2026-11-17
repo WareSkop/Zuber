@@ -5,10 +5,16 @@ import DOMPurify from 'dompurify';
 import { Check, Link2 } from 'lucide-react';
 import type { CanvasShape } from '../../../../shared/canvasTypes';
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
+import { api } from '../../../api';
+import { escapeHtml } from '../../../utils/readingMode';
+import { resolveDecryptedAttachmentUrl } from '../../../crypto/encryptedAttachmentUrl';
 import { useCanvasContext } from '../CanvasContext';
 import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
+import { renderShapeSvgElements, isImageFilePath } from './canvasShapeGeometry';
+import { useTranslation } from '../../../i18n';
 
 export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
+  const { t } = useTranslation();
   const {
     onOpenNote,
     onSelectTag,
@@ -17,6 +23,7 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
     readOnly,
     editingNodeState,
     setEditingNodeState,
+    currentCanvasPath,
   } = useCanvasContext();
   const { setNodes } = useReactFlow();
 
@@ -25,6 +32,7 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
   const [showWikiDropdown, setShowWikiDropdown] = useState(false);
   const [wikiQuery, setWikiQuery] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const displayRef = useRef<HTMLDivElement>(null);
 
   const shape: CanvasShape = (data.shape as CanvasShape) || 'rectangle';
   const customColor = resolveCanvasColor(data.color as string);
@@ -128,15 +136,34 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
     const rawText = (data.text as string) || '';
     if (!rawText.trim()) return '';
 
-    // Transform [[Wiki-Links]]
+    // 1. Transform ![[ImageEmbed]] before [[Wiki-Links]]
     let processed = rawText.replace(
-      /\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
+      /!\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
+      (_, target, alt) => {
+        const cleanTarget = (target || '').trim();
+        const altVal = (alt || '').trim();
+        if (isImageFilePath(cleanTarget)) {
+          const src = escapeHtml(api.getAttachmentUrl(cleanTarget, currentCanvasPath || ''));
+          const styleAttr = /^\d+$/.test(altVal) ? ` style="max-width:${altVal}px"` : '';
+          const altAttr = escapeHtml(altVal && !/^\d+$/.test(altVal) ? altVal : cleanTarget.split('/').pop() || cleanTarget);
+          return `<img src="${src}" alt="${altAttr}" class="canvas-shape-inline-image" loading="lazy"${styleAttr} />`;
+        }
+        const displayLabel = escapeHtml(altVal || cleanTarget);
+        return `<a href="#" class="cm-wikilink-widget canvas-wikilink nodrag" data-wiki-target="${encodeURIComponent(
+          cleanTarget
+        )}" title="${t('canvas.openNoteTooltip', { target: cleanTarget })}">${displayLabel}</a>`;
+      }
+    );
+
+    // 2. Transform [[Wiki-Links]] (negative lookbehind so ![[...]] is never matched)
+    processed = processed.replace(
+      /(?<!!)\[\[([^\]|#\n]+)(?:#[^\]|\n]+)?(?:\|([^\]\n]+))?\]\]/g,
       (_, target, alias) => {
         const cleanTarget = (target || '').trim();
         const displayLabel = (alias || target || '').trim();
         return `<a href="#" class="cm-wikilink-widget canvas-wikilink nodrag" data-wiki-target="${encodeURIComponent(
           cleanTarget
-        )}" title="Notiz öffnen: ${cleanTarget}">${displayLabel}</a>`;
+        )}" title="${t('canvas.openNoteTooltip', { target: cleanTarget })}">${displayLabel}</a>`;
       }
     );
 
@@ -150,7 +177,44 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
     return DOMPurify.sanitize(rawParsed, {
       ADD_ATTR: ['data-wiki-target', 'data-tag', 'target', 'href'],
     });
-  }, [data.text]);
+  }, [data.text, currentCanvasPath, t]);
+
+  useEffect(() => {
+    const el = displayRef.current;
+    if (!el || isEditing || !renderedHtml) return;
+    let cancelled = false;
+    const revokedUrls: string[] = [];
+
+    el.querySelectorAll<HTMLImageElement>('img').forEach((img) => {
+      const src = img.getAttribute('src') || '';
+      if (!src.includes('/api/vault/attachment')) return;
+      try {
+        const parsed = new URL(src, window.location.origin);
+        const targetParam = parsed.searchParams.get('target');
+        if (!targetParam) return;
+        resolveDecryptedAttachmentUrl(targetParam, currentCanvasPath)
+          .then((res) => {
+            if (!res) return;
+            if (cancelled) {
+              if (res.isObjectUrl) URL.revokeObjectURL(res.url);
+              return;
+            }
+            if (res.isObjectUrl) revokedUrls.push(res.url);
+            img.src = res.url;
+          })
+          .catch(() => {});
+      } catch {
+        // ignore URL parse error
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      for (const u of revokedUrls) {
+        URL.revokeObjectURL(u);
+      }
+    };
+  }, [renderedHtml, isEditing, currentCanvasPath]);
 
   const handleDisplayMouseDown = (e: React.MouseEvent) => {
     const targetEl = (e.target as HTMLElement).closest('[data-wiki-target], [data-tag], a');
@@ -190,289 +254,6 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
   const fillColor = customColor
     ? `${customColor}26` // ~15% opacity tint
     : baseFill;
-
-  const renderShapeSvg = () => {
-    switch (shape) {
-      case 'rounded':
-        return (
-          <g>
-            <rect
-              x="2"
-              y="2"
-              width="96"
-              height="96"
-              rx="24"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <rect
-              x="2"
-              y="2"
-              width="96"
-              height="96"
-              rx="24"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'circle':
-        return (
-          <g>
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="48"
-              ry="48"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <ellipse
-              cx="50"
-              cy="50"
-              rx="48"
-              ry="48"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'diamond':
-        return (
-          <g>
-            <polygon
-              points="50,2 98,50 50,98 2,50"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <polygon
-              points="50,2 98,50 50,98 2,50"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'parallelogram':
-        return (
-          <g>
-            <polygon
-              points="18,2 98,2 82,98 2,98"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <polygon
-              points="18,2 98,2 82,98 2,98"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'hexagon':
-        return (
-          <g>
-            <polygon
-              points="18,2 82,2 98,50 82,98 18,98 2,50"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <polygon
-              points="18,2 82,2 98,50 82,98 18,98 2,50"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'cylinder':
-        return (
-          <g>
-            <path
-              d="M 4,16 L 4,84 A 46,14 0 0,0 96,84 L 96,16"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <ellipse
-              cx="50"
-              cy="16"
-              rx="46"
-              ry="13"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <path
-              d="M 4,16 L 4,84 A 46,14 0 0,0 96,84 L 96,16"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <path
-              d="M 4,46 A 46,13 0 0,0 96,46"
-              fill="none"
-              stroke={strokeColor}
-              strokeWidth="1.2"
-              strokeDasharray="4 3"
-              opacity="0.65"
-            />
-            <ellipse
-              cx="50"
-              cy="16"
-              rx="46"
-              ry="13"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'cloud':
-        return (
-          <g>
-            <path
-              d="M 22,65 C 10,65 5,52 14,42 C 12,28 26,18 38,24 C 45,12 65,12 72,24 C 84,18 96,28 94,42 C 102,52 96,65 86,65 C 90,78 78,88 66,86 C 58,94 42,94 34,86 C 22,88 12,78 22,65 Z"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <path
-              d="M 22,65 C 10,65 5,52 14,42 C 12,28 26,18 38,24 C 45,12 65,12 72,24 C 84,18 96,28 94,42 C 102,52 96,65 86,65 C 90,78 78,88 66,86 C 58,94 42,94 34,86 C 22,88 12,78 22,65 Z"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-      case 'server':
-        return (
-          <g>
-            <rect
-              x="3"
-              y="3"
-              width="94"
-              height="94"
-              rx="8"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <rect
-              x="3"
-              y="3"
-              width="94"
-              height="94"
-              rx="8"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <line x1="4" y1="34" x2="96" y2="34" stroke={strokeColor} strokeWidth="1.2" opacity="0.6" />
-            <line x1="4" y1="66" x2="96" y2="66" stroke={strokeColor} strokeWidth="1.2" opacity="0.6" />
-            <circle cx="14" cy="18" r="3" fill="#3fb950" />
-            <circle cx="24" cy="18" r="3" fill="var(--accent-color, #7852ee)" />
-            <circle cx="14" cy="50" r="3" fill="#3fb950" />
-            <circle cx="24" cy="50" r="3" fill="var(--accent-color, #7852ee)" />
-            <circle cx="14" cy="82" r="3" fill="#3fb950" />
-            <circle cx="24" cy="82" r="3" fill="var(--accent-color, #7852ee)" />
-          </g>
-        );
-      case 'router':
-        return (
-          <g>
-            <rect
-              x="5"
-              y="16"
-              width="90"
-              height="68"
-              rx="12"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <rect
-              x="5"
-              y="16"
-              width="90"
-              height="68"
-              rx="12"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <path
-              d="M 28,50 L 72,50 M 62,42 L 72,50 L 62,58 M 38,42 L 28,50 L 38,58 M 50,28 L 50,72 M 42,38 L 50,28 L 58,38 M 42,62 L 50,72 L 58,62"
-              fill="none"
-              stroke={strokeColor}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </g>
-        );
-      case 'workstation':
-        return (
-          <g>
-            <rect
-              x="5"
-              y="6"
-              width="90"
-              height="64"
-              rx="6"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <rect
-              x="5"
-              y="6"
-              width="90"
-              height="64"
-              rx="6"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <line x1="50" y1="70" x2="50" y2="86" stroke={strokeColor} strokeWidth="3" />
-            <line x1="32" y1="88" x2="68" y2="88" stroke={strokeColor} strokeWidth="3" strokeLinecap="round" />
-          </g>
-        );
-      case 'rectangle':
-      default:
-        return (
-          <g>
-            <rect
-              x="2"
-              y="2"
-              width="96"
-              height="96"
-              rx="6"
-              fill={baseFill}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-            <rect
-              x="2"
-              y="2"
-              width="96"
-              height="96"
-              rx="6"
-              fill={fillColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
-            />
-          </g>
-        );
-    }
-  };
 
   return (
     <div
@@ -525,7 +306,7 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
         }}
         aria-hidden="true"
       >
-        {renderShapeSvg()}
+        {renderShapeSvgElements(shape, baseFill, fillColor, strokeColor, strokeWidth)}
       </svg>
 
       {/* Content Container */}
@@ -566,13 +347,13 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
                 }
               }}
               autoFocus
-              placeholder="Text eingeben (Markdown & [[Wiki-Links]] unterstützt)..."
+              placeholder={t('canvas.shapeTextPlaceholder')}
             />
             {/* Quick Note WikiLink autocomplete popup */}
             {showWikiDropdown && filteredNotes.length > 0 && (
               <div className="canvas-wikilink-dropdown nodrag nowheel">
                 <div className="canvas-dropdown-header">
-                  <Link2 size={12} /> Notiz verlinken:
+                  <Link2 size={12} /> {t('canvas.linkNoteLabel')}
                 </div>
                 {filteredNotes.map((note) => (
                   <button
@@ -594,19 +375,20 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
               type="button"
               className="canvas-edit-done-btn"
               onClick={handleFinishEditing}
-              title="Fertig (Strg+Enter)"
+              title={t('canvas.doneShortcut')}
             >
               <Check size={14} />
             </button>
           </div>
         ) : (
           <div
+            ref={displayRef}
             className="canvas-node-display-text canvas-shape-markdown markdown-rendered"
             style={{ width: '100%', textAlign: 'center' }}
             onMouseDown={handleDisplayMouseDown}
             onClick={handleDisplayClick}
             dangerouslySetInnerHTML={{
-              __html: renderedHtml || '<span class="canvas-empty-hint">Doppelklick zum Bearbeiten...</span>',
+              __html: renderedHtml || `<span class="canvas-empty-hint">${t('canvas.doubleClickEdit')}</span>`,
             }}
           />
         )}

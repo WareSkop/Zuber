@@ -35,6 +35,8 @@ export async function loadAndInitMermaid(isDark: boolean) {
 export interface ReadingRenderOptions {
   attachmentLabel?: string;
   pageBreakLabel?: string;
+  openInNewTabLabel?: string;
+  embeddedNoteLabel?: string;
 }
 
 export function preprocessPrintPageBreaks(markdown: string, pageBreakLabel = 'Page Break'): string {
@@ -74,6 +76,8 @@ export function renderReadingHtml(
 ): string {
   const attachmentLabel = options?.attachmentLabel || 'Attachment';
   const pageBreakLabel = options?.pageBreakLabel || 'Page Break';
+  const openInNewTabLabel = escapeHtml(options?.openInNewTabLabel || 'Open in new tab');
+  const embeddedNoteLabel = escapeHtml(options?.embeddedNoteLabel || 'Embedded Note');
   let processed = preprocessPrintPageBreaks(body || '', pageBreakLabel);
 
   // 1. Transform Callouts: > [!type] Title \n > content
@@ -199,14 +203,14 @@ export function renderReadingHtml(
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
-        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">${INLINE_FILE_SVG}${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>${INLINE_FILE_SVG}</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
+        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">${INLINE_FILE_SVG}${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="${openInNewTabLabel}">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>${INLINE_FILE_SVG}</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
       }
       if (IMAGE_EXT_REGEX.test(logicalTarget)) {
         const url = escapeHtml(api.getAttachmentUrl(target, notePath));
         const styleAttr = /^\d+$/.test(alt) ? ` style="max-width:${alt}px"` : '';
         return `<span class="reading-image-embed"><img src="${url}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async"${styleAttr} /></span>`;
       }
-      return `<div class="reading-note-embed" data-wikilink="${escapeHtml(target)}"><span class="embedded-note-header">${INLINE_FILE_SVG}<span>Eingebettete Notiz: <strong>${escapeHtml(alt)}</strong></span></span></div>`;
+      return `<div class="reading-note-embed" data-wikilink="${escapeHtml(target)}"><span class="embedded-note-header">${INLINE_FILE_SVG}<span>${embeddedNoteLabel}: <strong>${escapeHtml(alt)}</strong></span></span></div>`;
     }
   );
 
@@ -315,7 +319,7 @@ export function renderReadingHtml(
         if (/^\d+$/.test(alt)) {
           height = `${alt}px`;
         }
-        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">${INLINE_FILE_SVG}${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="In neuem Tab öffnen">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>${INLINE_FILE_SVG}</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
+        return `<div class="cm-lp-pdf-embed reading-pdf-embed"><div class="cm-lp-pdf-header"><span class="cm-lp-pdf-title">${INLINE_FILE_SVG}${escapeHtml(fileName)}</span><a href="${url}" target="_blank" rel="noopener noreferrer" class="cm-lp-pdf-open-btn" title="${openInNewTabLabel}">↗</a></div><iframe src="${url}#toolbar=1&view=FitH" class="cm-lp-pdf-frame" style="height: ${height};" loading="lazy"></iframe><div class="print-pdf-attachment-callout"><span>${INLINE_FILE_SVG}</span><span><strong>${escapeHtml(attachmentLabel)}:</strong> ${escapeHtml(fileName)}</span></div></div>`;
       }
       const rawUrl = /^(https?:|data:)/i.test(target)
         ? target

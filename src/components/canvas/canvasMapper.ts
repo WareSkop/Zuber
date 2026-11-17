@@ -152,6 +152,7 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
         file: n.file || '',
         subpath: n.subpath || '',
         url: n.url || '',
+        linkUrl: typeof n.link === 'string' ? n.link : '',
         label: n.label || '',
         color: n.color,
         shape: (n.shape as CanvasShape) || 'rectangle',
@@ -340,6 +341,7 @@ export function reactFlowToJsonCanvas(
     if (data.color) jsonNode.color = data.color;
     if (data.shape && data.shape !== 'rectangle') jsonNode.shape = data.shape;
     if (data.icon) jsonNode.icon = data.icon;
+    if (typeof data.linkUrl === 'string' && data.linkUrl.trim()) jsonNode.link = data.linkUrl.trim();
     if (typeof node.style?.zIndex === 'number') jsonNode.zIndex = node.style.zIndex;
 
     if (nodeType === 'text') {

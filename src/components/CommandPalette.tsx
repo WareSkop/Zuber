@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, CornerDownLeft, ArrowUpDown } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 export interface CommandItem {
   id: string;
   title: string;
-  category: 'Editor' | 'Formatierung' | 'Ansicht' | 'Navigation' | 'Vault' | 'Einstellungen';
+  category: string;
   shortcut?: string;
   icon?: React.ReactNode;
   keywords?: string[];
@@ -22,6 +23,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onClose,
   commands,
 }) => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -115,7 +117,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Befehl eingeben oder suchen... (z. B. Bild, Tabelle, Fett, Theme)"
+            placeholder={t('commandPalette.placeholder')}
           />
           <kbd className="command-palette-esc-badge" onClick={onClose}>
             ESC
@@ -125,7 +127,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         <div className="command-palette-list" ref={listRef}>
           {filteredCommands.length === 0 ? (
             <div className="command-palette-empty">
-              Keine Befehle für „{search}“ gefunden.
+              {t('commandPalette.noResults', { search })}
             </div>
           ) : (
             filteredCommands.map((cmd, idx) => {
@@ -154,15 +156,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         <div className="command-palette-footer">
           <span className="command-palette-tip">
             <ArrowUpDown size={12} />
-            <span>Navigieren</span>
+            <span>{t('commandPalette.navigateHint')}</span>
           </span>
           <span className="command-palette-tip">
             <CornerDownLeft size={12} />
-            <span>Ausführen</span>
+            <span>{t('commandPalette.executeHint')}</span>
           </span>
           <span className="command-palette-tip">
             <kbd>ESC</kbd>
-            <span>Schließen</span>
+            <span>{t('commandPalette.closeHint')}</span>
           </span>
         </div>
       </div>

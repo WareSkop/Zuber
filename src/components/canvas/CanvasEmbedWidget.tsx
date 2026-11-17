@@ -11,12 +11,13 @@ import { ExternalLink } from 'lucide-react';
 import { api } from '../../api';
 import { syncEngine } from '../../sync/syncEngine';
 import { WorkflowCanvasIcon } from './WorkflowCanvasIcon';
-import { CanvasContext } from './CanvasContext';
+import { CanvasContext, useCanvasContext, isCanvasAncestorCycle, normalizeCanvasCyclePath } from './CanvasContext';
 import { CanvasShapeNode } from './nodes/CanvasShapeNode';
 import { CanvasFileNode } from './nodes/CanvasFileNode';
 import { CanvasGroupNode } from './nodes/CanvasGroupNode';
 import { CanvasLinkNode } from './nodes/CanvasLinkNode';
 import { parseCanvasJson, jsonCanvasToReactFlow } from './canvasMapper';
+import { useTranslation } from '../../i18n';
 
 export interface CanvasEmbedWidgetProps {
   canvasPath: string;
@@ -47,6 +48,8 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
   height,
   fullSize = false,
 }) => {
+  const { t } = useTranslation();
+  const parentCanvasCtx = useCanvasContext();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +132,43 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
     return 'calc(100% - 38px)';
   }, []);
 
+  const ancestorChain = useMemo(() => {
+    const rawList = [
+      ...(parentCanvasCtx.ancestorPaths || []),
+      ...(currentNotePath ? [currentNotePath] : []),
+    ];
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const item of rawList) {
+      const norm = normalizeCanvasCyclePath(item);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }, [parentCanvasCtx.ancestorPaths, currentNotePath]);
+
+  const isCircularEmbed = useMemo(
+    () => isCanvasAncestorCycle(resolvedFullPath, ancestorChain),
+    [resolvedFullPath, ancestorChain]
+  );
+
+  const nextAncestorPaths = useMemo(() => {
+    const normResolved = normalizeCanvasCyclePath(resolvedFullPath);
+    if (!normResolved || ancestorChain.some((a) => normalizeCanvasCyclePath(a) === normResolved)) {
+      return ancestorChain;
+    }
+    return [...ancestorChain, resolvedFullPath];
+  }, [ancestorChain, resolvedFullPath]);
+
   useEffect(() => {
+    if (isCircularEmbed) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -170,7 +209,7 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [resolvedFullPath, canvasPath]);
+  }, [resolvedFullPath, canvasPath, isCircularEmbed]);
 
   const fitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -208,7 +247,7 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
         <div
           className="canvas-embed-title-cluster"
           onClick={() => onOpenNote(resolvedFullPath)}
-          title={`Öffne ${resolvedFullPath}`}
+          title={t('canvas.openNoteTooltip', { target: resolvedFullPath })}
           style={{ cursor: 'pointer' }}
         >
           <WorkflowCanvasIcon size={14} className="canvas-embed-icon" />
@@ -218,7 +257,7 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
               e.stopPropagation();
               onOpenNote(resolvedFullPath);
             }}
-            title={`Öffne ${resolvedFullPath}`}
+            title={t('canvas.openNoteTooltip', { target: resolvedFullPath })}
             style={{ cursor: 'pointer' }}
           >
             {fileName}
@@ -228,10 +267,10 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
           type="button"
           className="canvas-embed-open-btn"
           onClick={() => onOpenNote(resolvedFullPath)}
-          title="Im Editor öffnen ↗"
-          aria-label="Im Editor öffnen"
+          title={`${t('canvas.openInEditor')} ↗`}
+          aria-label={t('canvas.openInEditor')}
         >
-          <span>Im Editor öffnen</span>
+          <span>{t('canvas.openInEditor')}</span>
           <ExternalLink size={13} />
         </button>
       </div>
@@ -245,8 +284,12 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
           position: 'relative',
         }}
       >
-        {loading ? (
-          <div className="canvas-embed-loading">Lädt Canvas-Vorschau...</div>
+        {isCircularEmbed ? (
+          <div className="canvas-embed-error canvas-embed-cycle-guard">
+            {t('canvas.circularEmbedNotice', { target: fileName })}
+          </div>
+        ) : loading ? (
+          <div className="canvas-embed-loading">{t('canvas.loadingPreview')}</div>
         ) : error ? (
           <div className="canvas-embed-error">{error}</div>
         ) : (
@@ -255,6 +298,8 @@ export const CanvasEmbedWidget: React.FC<CanvasEmbedWidgetProps> = ({
               onOpenNote,
               allNotes,
               readOnly: true,
+              currentCanvasPath: resolvedFullPath,
+              ancestorPaths: nextAncestorPaths,
             }}
           >
             <ReactFlowProvider>

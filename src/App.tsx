@@ -462,9 +462,9 @@ export const App: React.FC = () => {
         setIsInstalledApp(true);
       }
     } else {
-      alert('Tipp: Um Zuber als WebAPK auf Android/Chromebook oder Desktop zu installieren, tippe im Browser-Menü auf „App installieren“ oder „Zum Startbildschirm hinzufügen“.');
+      alert(t('sidebar.webApkInstallTip'));
     }
-  }, [installPrompt]);
+  }, [installPrompt, t]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -959,7 +959,7 @@ export const App: React.FC = () => {
               sourcePath: note.path,
               sourceTitle: note.name,
               line: 1,
-              snippet: `${note.name} verlinkt auf diese Notiz`,
+              snippet: t('sidebar.linksToThisNote', { name: note.name }),
             });
           }
         }
@@ -968,7 +968,7 @@ export const App: React.FC = () => {
         // ignore
       }
     }
-  }, []);
+  }, [t]);
 
   // Sync right-sidebar backlinks whenever the active target note (Research pane or Main editor) changes
   useEffect(() => {
@@ -1476,7 +1476,7 @@ export const App: React.FC = () => {
         showToast(t('templates.noteCreatedToast') || `Notiz "${cleanTitle}" aus Vorlage erstellt.`);
       } catch (err) {
         console.error('Failed to create note from template:', err);
-        alert((err as Error).message || 'Fehler beim Erstellen der Notiz aus Vorlage');
+        alert((err as Error).message || t('templates.createNoteError'));
       }
     },
     [templateParentFolder, openNoteByPath, loadVaultIndex, showToast, t]
@@ -1624,9 +1624,9 @@ export const App: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to create daily note:', err);
-      showToast(`Fehler beim Erstellen der Tagesnotiz: ${String(err)}`);
+      showToast(t('sidebar.dailyNoteCreateError', { error: String(err) }));
     }
-  }, [openNoteByPath, isMobile, loadVaultIndex, showToast]);
+  }, [openNoteByPath, isMobile, loadVaultIndex, showToast, t]);
 
   handleOpenDailyNoteRef.current = handleOpenDailyNote;
 
@@ -3109,11 +3109,19 @@ export const App: React.FC = () => {
   );
 
   const commands: CommandItem[] = useMemo(() => {
+    const isDe = language === 'de';
+    const catEditor = t('commandPalette.catEditor');
+    const catFormat = t('commandPalette.catFormatting');
+    const catView = t('commandPalette.catView');
+    const catNav = t('commandPalette.catNavigation');
+    const catVault = t('commandPalette.catVault');
+    const catSettings = t('commandPalette.catSettings');
+
     return [
       {
         id: 'editor-send-to-target',
-        title: t('commands.sendToTarget') || 'Markierten Text an Ziel-Notiz senden…',
-        category: 'Editor',
+        title: t('commands.sendToTarget'),
+        category: catEditor,
         icon: <Target size={16} />,
         keywords: ['send', 'target', 'ziel', 'verschieben', 'move', 'backlink'],
         action: () => {
@@ -3123,9 +3131,9 @@ export const App: React.FC = () => {
       // Formatting
       {
         id: 'format-bold',
-        title: 'Fett umschalten (Bold)',
-        category: 'Formatierung',
-        shortcut: 'Strg+B',
+        title: isDe ? 'Fett umschalten (Bold)' : 'Toggle Bold',
+        category: catFormat,
+        shortcut: isDe ? 'Strg+B' : 'Ctrl+B',
         icon: <Bold size={16} />,
         keywords: ['bold', 'fett', 'stark', 'text'],
         action: () => {
@@ -3135,9 +3143,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'format-italic',
-        title: 'Kursiv umschalten (Italic)',
-        category: 'Formatierung',
-        shortcut: 'Strg+I',
+        title: isDe ? 'Kursiv umschalten (Italic)' : 'Toggle Italic',
+        category: catFormat,
+        shortcut: isDe ? 'Strg+I' : 'Ctrl+I',
         icon: <Italic size={16} />,
         keywords: ['italic', 'kursiv', 'schräg'],
         action: () => {
@@ -3147,9 +3155,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'format-strikethrough',
-        title: 'Durchgestrichen umschalten (Strikethrough)',
-        category: 'Formatierung',
-        shortcut: 'Strg+Shift+X',
+        title: isDe ? 'Durchgestrichen umschalten (Strikethrough)' : 'Toggle Strikethrough',
+        category: catFormat,
+        shortcut: isDe ? 'Strg+Shift+X' : 'Ctrl+Shift+X',
         icon: <Strikethrough size={16} />,
         keywords: ['strikethrough', 'durchstreichen'],
         action: () => {
@@ -3159,8 +3167,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'format-highlight',
-        title: 'Markierung einfügen (Highlight)',
-        category: 'Formatierung',
+        title: t('commands.highlight'),
+        category: catFormat,
         shortcut: 'Alt+H',
         icon: <Highlighter size={16} />,
         keywords: ['highlight', 'markieren', 'gelb', 'text'],
@@ -3171,9 +3179,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'format-code',
-        title: 'Inline-Code umschalten',
-        category: 'Formatierung',
-        shortcut: 'Strg+E',
+        title: isDe ? 'Inline-Code umschalten' : 'Toggle Inline Code',
+        category: catFormat,
+        shortcut: isDe ? 'Strg+E' : 'Ctrl+E',
         icon: <Code2 size={16} />,
         keywords: ['code', 'inline', 'backtick'],
         action: () => {
@@ -3183,9 +3191,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-codeblock',
-        title: 'Codeblock einfügen',
-        category: 'Formatierung',
-        shortcut: 'Strg+Shift+C',
+        title: t('commands.codeblock'),
+        category: catFormat,
+        shortcut: isDe ? 'Strg+Shift+C' : 'Ctrl+Shift+C',
         icon: <Code2 size={16} />,
         keywords: ['codeblock', 'pre', 'syntax', 'programmieren'],
         action: () => {
@@ -3195,8 +3203,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-table',
-        title: 'Tabelle einfügen',
-        category: 'Formatierung',
+        title: t('commands.table'),
+        category: catFormat,
         shortcut: 'Alt+Shift+T',
         icon: <Table size={16} />,
         keywords: ['tabelle', 'table', 'grid', 'spalten'],
@@ -3207,9 +3215,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-task',
-        title: 'Aufgabenliste / Checkbox einfügen',
-        category: 'Formatierung',
-        shortcut: 'Strg+Shift+L',
+        title: t('commands.taskList'),
+        category: catFormat,
+        shortcut: isDe ? 'Strg+Shift+L' : 'Ctrl+Shift+L',
         icon: <CheckSquare size={16} />,
         keywords: ['task', 'todo', 'aufgabe', 'checkbox', 'haken'],
         action: () => {
@@ -3219,18 +3227,18 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-image',
-        title: 'Bild oder Anhang einfügen',
-        category: 'Editor',
-        shortcut: 'Strg+Shift+I',
+        title: t('commands.image'),
+        category: catEditor,
+        shortcut: isDe ? 'Strg+Shift+I' : 'Ctrl+Shift+I',
         icon: <ImagePlus size={16} />,
         keywords: ['bild', 'image', 'foto', 'grafik', 'upload', 'anhang'],
         action: handleUploadImageClick,
       },
       {
         id: 'insert-wikilink',
-        title: 'Wiki-Link einfügen',
-        category: 'Formatierung',
-        shortcut: 'Strg+K',
+        title: t('commands.wikilink'),
+        category: catFormat,
+        shortcut: isDe ? 'Strg+K' : 'Ctrl+K',
         icon: <Link2 size={16} />,
         keywords: ['link', 'wikilink', 'verweis', 'interne notiz'],
         action: () => {
@@ -3240,9 +3248,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-quote',
-        title: 'Zitatblock einfügen',
-        category: 'Formatierung',
-        shortcut: 'Strg+Shift+.',
+        title: t('commands.quote'),
+        category: catFormat,
+        shortcut: isDe ? 'Strg+Shift+.' : 'Ctrl+Shift+.',
         icon: <Quote size={16} />,
         keywords: ['quote', 'zitat', 'block'],
         action: () => {
@@ -3252,9 +3260,9 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-timestamp',
-        title: 'Datum & Zeitstempel einfügen (YYYY-MM-DD HH:mm:ss)',
-        category: 'Editor',
-        shortcut: 'Strg+.',
+        title: t('commands.timestamp'),
+        category: catEditor,
+        shortcut: isDe ? 'Strg+.' : 'Ctrl+.',
         icon: <Calendar size={16} />,
         keywords: ['zeit', 'datum', 'timestamp', 'uhrzeit', 'time', 'date', 'heute', 'now'],
         action: () => {
@@ -3264,8 +3272,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-h1',
-        title: 'Überschrift 1 (H1) einfügen',
-        category: 'Formatierung',
+        title: t('commands.h1'),
+        category: catFormat,
         icon: <Heading1 size={16} />,
         keywords: ['h1', 'titel', 'überschrift', 'heading'],
         action: () => {
@@ -3275,8 +3283,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-h2',
-        title: 'Überschrift 2 (H2) einfügen',
-        category: 'Formatierung',
+        title: isDe ? 'Überschrift 2 (H2) einfügen' : 'Insert Heading 2 (H2)',
+        category: catFormat,
         icon: <Heading2 size={16} />,
         keywords: ['h2', 'untertitel', 'überschrift'],
         action: () => {
@@ -3286,8 +3294,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-h3',
-        title: 'Überschrift 3 (H3) einfügen',
-        category: 'Formatierung',
+        title: isDe ? 'Überschrift 3 (H3) einfügen' : 'Insert Heading 3 (H3)',
+        category: catFormat,
         icon: <Heading3 size={16} />,
         keywords: ['h3', 'überschrift'],
         action: () => {
@@ -3297,8 +3305,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'insert-hr',
-        title: 'Trennlinie / Horizontale Linie einfügen',
-        category: 'Formatierung',
+        title: isDe ? 'Trennlinie / Horizontale Linie einfügen' : 'Insert Divider / Horizontal Rule',
+        category: catFormat,
         icon: <Minus size={16} />,
         keywords: ['linie', 'divider', 'hr', 'trennlinie'],
         action: () => {
@@ -3310,8 +3318,8 @@ export const App: React.FC = () => {
       // Views
       {
         id: 'view-zen',
-        title: 'Ansicht: Zen-Modus umschalten (Fokus)',
-        category: 'Ansicht',
+        title: isDe ? 'Ansicht: Zen-Modus umschalten (Fokus)' : 'View: Toggle Zen Mode (Focus)',
+        category: catView,
         shortcut: 'Alt+Z',
         icon: <Maximize2 size={16} />,
         keywords: ['zen', 'fokus', 'vollbild', 'distraction free', 'schreiben'],
@@ -3319,8 +3327,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'view-live',
-        title: 'Ansicht: Live-Preview-Modus aktivieren',
-        category: 'Ansicht',
+        title: isDe ? 'Ansicht: Live-Preview-Modus aktivieren' : 'View: Switch to Live Preview Mode',
+        category: catView,
         shortcut: 'Alt+1',
         icon: <Eye size={16} />,
         keywords: ['live', 'preview', 'editor'],
@@ -3328,8 +3336,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'view-reading',
-        title: 'Ansicht: Lese-Modus aktivieren',
-        category: 'Ansicht',
+        title: isDe ? 'Ansicht: Lese-Modus aktivieren' : 'View: Switch to Reading Mode',
+        category: catView,
         shortcut: 'Alt+2',
         icon: <BookOpen size={16} />,
         keywords: ['lesen', 'reading', 'read'],
@@ -3337,8 +3345,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'view-source',
-        title: 'Ansicht: Quellcode-Modus aktivieren',
-        category: 'Ansicht',
+        title: isDe ? 'Ansicht: Quellcode-Modus aktivieren' : 'View: Switch to Source Mode',
+        category: catView,
         shortcut: 'Alt+3',
         icon: <Code2 size={16} />,
         keywords: ['source', 'quellcode', 'raw', 'markdown'],
@@ -3361,8 +3369,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'view-graph',
-        title: 'Ansicht: Graph-Ansicht öffnen / umschalten',
-        category: 'Ansicht',
+        title: isDe ? 'Ansicht: Graph-Ansicht öffnen / umschalten' : 'View: Toggle Graph View',
+        category: catView,
         shortcut: 'Alt+G',
         icon: <GitFork size={16} />,
         keywords: ['graph', 'netzwerk', 'beziehungen', 'karte'],
@@ -3371,8 +3379,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'view-split',
-        title: 'Ansicht: Recherche-Split-View umschalten (70/30)',
-        category: 'Ansicht',
+        title: isDe ? 'Ansicht: Recherche-Split-View umschalten (70/30)' : 'View: Toggle Research Split View (70/30)',
+        category: catView,
         icon: <Columns size={16} />,
         keywords: ['split', 'recherche', 'referenz', 'zweigeteilt', 'nebeneinander'],
         action: handleToggleSplit,
@@ -3382,10 +3390,10 @@ export const App: React.FC = () => {
       {
         id: 'nav-go-back',
         title:
-          (workspaceView === 'split'
-            ? t('nav.goBackResearch', 'Zurück in Rechercheansicht (Alt+←) / Alt+Klick für Haupteditor')
-            : t('nav.goBack', 'Zurück (Alt+←)')) || 'Navigation: Zurück',
-        category: 'Navigation',
+          workspaceView === 'split'
+            ? t('nav.goBackResearch')
+            : t('nav.goBack'),
+        category: catNav,
         shortcut: 'Alt+←',
         icon: <ArrowLeft size={16} />,
         keywords: ['back', 'zurück', 'verlauf', 'history', 'navigation', 'recherche', 'research'],
@@ -3393,37 +3401,37 @@ export const App: React.FC = () => {
       },
       {
         id: 'nav-left-sidebar',
-        title: 'Navigation: Linke Seitenleiste ein-/ausblenden',
-        category: 'Navigation',
-        shortcut: 'Strg+B',
+        title: t('commandPalette.cmdToggleLeftSidebar'),
+        category: catNav,
+        shortcut: isDe ? 'Strg+B' : 'Ctrl+B',
         icon: <PanelLeft size={16} />,
-        keywords: ['dateien', 'ordner', 'sidebar', 'links'],
+        keywords: ['dateien', 'ordner', 'sidebar', 'links', 'files'],
         action: () => setLeftSidebarOpen((o) => !o),
       },
       {
         id: 'nav-right-sidebar',
-        title: 'Navigation: Rechte Seitenleiste ein-/ausblenden',
-        category: 'Navigation',
-        shortcut: 'Strg+J',
+        title: t('commandPalette.cmdToggleRightSidebar'),
+        category: catNav,
+        shortcut: isDe ? 'Strg+J' : 'Ctrl+J',
         icon: <PanelRight size={16} />,
-        keywords: ['backlinks', 'gliederung', 'sidebar', 'rechts'],
+        keywords: ['backlinks', 'gliederung', 'sidebar', 'rechts', 'outline'],
         action: () => setRightSidebarOpen((o) => !o),
       },
 
       // Vault & Notes
       {
         id: 'vault-new-note',
-        title: 'Vault: Neue Notiz erstellen',
-        category: 'Vault',
-        shortcut: 'Strg+N',
+        title: t('commandPalette.cmdNewNote'),
+        category: catVault,
+        shortcut: isDe ? 'Strg+N' : 'Ctrl+N',
         icon: <FilePlus size={16} />,
-        keywords: ['neu', 'notiz', 'anlegen', 'erstellen'],
+        keywords: ['neu', 'notiz', 'anlegen', 'erstellen', 'new'],
         action: () => openCreateNoteDialog(),
       },
       {
         id: 'open-daily-note',
-        title: t('sidebar.openDailyNote') || 'Tagesnotiz öffnen / erstellen',
-        category: 'Vault',
+        title: t('sidebar.openDailyNote'),
+        category: catVault,
         shortcut: 'Alt+D',
         icon: <Calendar size={16} />,
         keywords: ['daily', 'tagesnotiz', 'heute', 'today', 'kalender', 'calendar'],
@@ -3433,33 +3441,33 @@ export const App: React.FC = () => {
       },
       {
         id: 'vault-new-canvas',
-        title: 'Vault: Neues Canvas erstellen (Workflow / Diagramm)',
-        category: 'Vault',
+        title: isDe ? 'Vault: Neues Canvas erstellen (Workflow / Diagramm)' : 'Vault: Create new Canvas (Workflow / Diagram)',
+        category: catVault,
         icon: <WorkflowCanvasIcon size={16} />,
         keywords: ['canvas', 'diagramm', 'flowchart', 'network', 'workflow', 'whiteboard'],
         action: () => openCreateCanvasDialog(),
       },
       {
         id: 'vault-new-base',
-        title: language === 'de' ? 'Vault: Neue Base erstellen (Datenbank / Tabelle)' : 'Vault: Create new Base (Database / Table)',
-        category: 'Vault',
+        title: isDe ? 'Vault: Neue Base erstellen (Datenbank / Tabelle)' : 'Vault: Create new Base (Database / Table)',
+        category: catVault,
         icon: <Database size={16} />,
         keywords: ['base', 'database', 'datenbank', 'table', 'tabelle'],
         action: () => openCreateBaseDialog(),
       },
       {
         id: 'vault-save-note',
-        title: 'Vault: Notiz sofort speichern',
-        category: 'Vault',
-        shortcut: 'Strg+S',
+        title: t('commandPalette.cmdManualSave'),
+        category: catVault,
+        shortcut: isDe ? 'Strg+S' : 'Ctrl+S',
         icon: <Check size={16} />,
         keywords: ['speichern', 'save', 'persistieren'],
         action: handleManualSave,
       },
       {
         id: 'vault-rename-note',
-        title: 'Vault: Aktuelle Notiz umbenennen',
-        category: 'Vault',
+        title: isDe ? 'Vault: Aktuelle Notiz umbenennen' : 'Vault: Rename current note',
+        category: catVault,
         icon: <Edit3 size={16} />,
         keywords: ['umbenennen', 'rename', 'titel'],
         action: () => {
@@ -3475,8 +3483,8 @@ export const App: React.FC = () => {
       },
       {
         id: 'vault-delete-note',
-        title: 'Vault: Aktuelle Notiz löschen',
-        category: 'Vault',
+        title: isDe ? 'Vault: Aktuelle Notiz löschen' : 'Vault: Delete current note',
+        category: catVault,
         icon: <Trash2 size={16} />,
         keywords: ['löschen', 'delete', 'entfernen', 'papierkorb'],
         action: () => {
@@ -3490,16 +3498,16 @@ export const App: React.FC = () => {
       },
       {
         id: 'vault-download-note',
-        title: 'Vault: Aktuelle Notiz als .md herunterladen',
-        category: 'Vault',
+        title: isDe ? 'Vault: Aktuelle Notiz als .md herunterladen' : 'Vault: Download current note as .md',
+        category: catVault,
         icon: <Download size={16} />,
         keywords: ['export', 'download', 'herunterladen', 'datei'],
         action: handleDownloadNote,
       },
       {
         id: 'vault-version-history',
-        title: 'Vault: Versionsverlauf für aktuelle Notiz öffnen',
-        category: 'Vault',
+        title: isDe ? 'Vault: Versionsverlauf für aktuelle Notiz öffnen' : 'Vault: Open version history for current note',
+        category: catVault,
         icon: <History size={16} />,
         keywords: ['history', 'versionsverlauf', 'git', 'diff', 'wiederherstellen', 'commits'],
         action: () => {
@@ -3512,57 +3520,57 @@ export const App: React.FC = () => {
       // Settings & Themes
       {
         id: 'settings-open',
-        title: 'Einstellungen: Einstellungen & Profile öffnen',
-        category: 'Einstellungen',
-        shortcut: 'Strg+,',
+        title: t('commandPalette.cmdOpenSettings'),
+        category: catSettings,
+        shortcut: isDe ? 'Strg+,' : 'Ctrl+,',
         icon: <Settings size={16} />,
         keywords: ['settings', 'konfiguration', 'passwort', 'profile'],
         action: () => setSettingsOpen(true),
       },
       {
         id: 'sync-now',
-        title: 'Synchronisation: Jetzt vollständigen Sync ausführen',
-        category: 'Einstellungen',
+        title: isDe ? 'Synchronisation: Jetzt vollständigen Sync ausführen' : 'Sync: Run full synchronization now',
+        category: catSettings,
         icon: <RefreshCw size={16} />,
         keywords: ['sync', 'abgleich', 'server', 'offline'],
         action: () => syncEngine.syncNow(),
       },
       {
         id: 'theme-dark',
-        title: 'Darstellung: Theme „Zuber Dark“ (Standard)',
-        category: 'Einstellungen',
+        title: `${t('settings.tabAppearance')}: ${t('settings.themeZuberName')}`,
+        category: catSettings,
         icon: <Palette size={16} />,
         keywords: ['theme', 'dark', 'dunkel', 'zuber', 'knowmesh', 'basalt'],
         action: () => setTheme('zuber'),
       },
       {
         id: 'theme-light',
-        title: 'Darstellung: Theme „Zuber Hell“',
-        category: 'Einstellungen',
+        title: `${t('settings.tabAppearance')}: ${t('settings.themeLightColdName')}`,
+        category: catSettings,
         icon: <Palette size={16} />,
         keywords: ['theme', 'light', 'hell', 'weiß', 'zuber', 'knowmesh'],
         action: () => setTheme('light-cold'),
       },
       {
         id: 'theme-amoled',
-        title: 'Darstellung: Theme „AMOLED Schwarz“',
-        category: 'Einstellungen',
+        title: isDe ? 'Darstellung: Theme „AMOLED Schwarz“' : 'Appearance: Theme "AMOLED Black"',
+        category: catSettings,
         icon: <Palette size={16} />,
-        keywords: ['theme', 'amoled', 'oled', 'schwarz'],
+        keywords: ['theme', 'amoled', 'oled', 'schwarz', 'black'],
         action: () => setTheme('theme-amoled-black'),
       },
       {
         id: 'theme-sepia',
-        title: 'Darstellung: Theme „Warm Sepia“',
-        category: 'Einstellungen',
+        title: isDe ? 'Darstellung: Theme „Warm Sepia“' : 'Appearance: Theme "Warm Sepia"',
+        category: catSettings,
         icon: <Palette size={16} />,
-        keywords: ['theme', 'sepia', 'warm', 'papier'],
+        keywords: ['theme', 'sepia', 'warm', 'papier', 'paper'],
         action: () => setTheme('theme-warm-sepia'),
       },
       {
         id: 'theme-dracula',
-        title: 'Darstellung: Theme „Dracula“',
-        category: 'Einstellungen',
+        title: isDe ? 'Darstellung: Theme „Dracula“' : 'Appearance: Theme "Dracula"',
+        category: catSettings,
         icon: <Palette size={16} />,
         keywords: ['theme', 'dracula', 'lila', 'purple'],
         action: () => setTheme('theme-dracula'),
@@ -3570,6 +3578,7 @@ export const App: React.FC = () => {
     ];
   }, [
     editorMode,
+    workspaceView,
     activeNote,
     openCreateNoteDialog,
     openCreateCanvasDialog,
@@ -3583,7 +3592,7 @@ export const App: React.FC = () => {
   ]);
 
   if (!authChecked) {
-    return <div className="loading-screen">Lade Zuber...</div>;
+    return <div className="loading-screen">{language === 'de' ? 'Lade Zuber...' : 'Loading Zuber...'}</div>;
   }
 
   if (!authenticated) {
@@ -3740,6 +3749,8 @@ export const App: React.FC = () => {
                 setLeftSidebarOpen(true);
               }}
               allNotes={allNotesForEditor}
+              allFiles={allFiles}
+              onUploadImage={handleUploadImageFile}
             />
           </Suspense>
         </div>

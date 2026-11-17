@@ -4,8 +4,10 @@ import { Globe, ExternalLink } from 'lucide-react';
 import { resolveCanvasColor } from '../../../../shared/canvasTypes';
 import { useCanvasContext } from '../CanvasContext';
 import { CanvasNodeHiddenBadge } from './CanvasNodeHiddenBadge';
+import { useTranslation } from '../../../i18n';
 
 export const CanvasLinkNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
+  const { t } = useTranslation();
   const { readOnly } = useCanvasContext();
   const url = (data.url as string) || '';
   const customColor = resolveCanvasColor(data.color as string);
@@ -58,7 +60,7 @@ export const CanvasLinkNode: React.FC<NodeProps> = ({ id, data, selected, width,
           target="_blank"
           rel="noopener noreferrer"
           className="canvas-link-btn nodrag"
-          title="Im Web öffnen ↗"
+          title={t('canvas.openInWeb')}
           onClick={(e) => e.stopPropagation()}
         >
           <ExternalLink size={14} />

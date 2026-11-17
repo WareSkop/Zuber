@@ -61,7 +61,7 @@ describe('PDF Export & Reading Mode Embeds', () => {
     expect(html).not.toContain('📄');
     expect(html).toContain('class="embedded-note-header"');
     expect(html).toContain('<svg class="embed-inline-icon"');
-    expect(html).toContain('Eingebettete Notiz:');
+    expect(html).toContain('Embedded Note:');
     expect(html).toContain('AnotherNote');
   });
 

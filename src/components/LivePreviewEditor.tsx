@@ -1501,31 +1501,32 @@ class EmbedWidget extends WidgetType {
     };
 
     // Left, Center, Right, Inline buttons
+    const isDe = typeof document !== 'undefined' && document.documentElement.lang === 'de';
     toolbar.appendChild(
       createBtn(
         'left',
-        'Linksbündig (float: left)',
+        this.t ? this.t('editor.alignLeftFloat') : isDe ? 'Linksbündig (float: left)' : 'Align left (float: left)',
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="15" y1="12" x2="3" y2="12"></line><line x1="17" y1="18" x2="3" y2="18"></line></svg>'
       )
     );
     toolbar.appendChild(
       createBtn(
         'center',
-        'Zentriert (margin: auto)',
+        isDe ? 'Zentriert (margin: auto)' : 'Centered (margin: auto)',
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="19" y1="12" x2="5" y2="12"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>'
       )
     );
     toolbar.appendChild(
       createBtn(
         'right',
-        'Rechtsbündig (float: right)',
+        this.t ? this.t('editor.alignRightFloat') : isDe ? 'Rechtsbündig (float: right)' : 'Align right (float: right)',
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="12" x2="9" y2="12"></line><line x1="21" y1="18" x2="7" y2="18"></line></svg>'
       )
     );
     toolbar.appendChild(
       createBtn(
         undefined,
-        'Inline (Keine Ausrichtung)',
+        isDe ? 'Inline (Keine Ausrichtung)' : 'Inline (No alignment)',
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="12" x2="3" y2="12"></line><line x1="21" y1="18" x2="3" y2="18"></line></svg>'
       )
     );
@@ -1538,7 +1539,7 @@ class EmbedWidget extends WidgetType {
     const resetBtn = document.createElement('button');
     resetBtn.type = 'button';
     resetBtn.className = 'cm-image-btn cm-image-btn-reset';
-    resetBtn.title = 'Originalbreite wiederherstellen';
+    resetBtn.title = isDe ? 'Originalbreite wiederherstellen' : 'Reset to original width';
     resetBtn.innerHTML =
       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>';
     resetBtn.addEventListener('mousedown', (e) => {
@@ -1548,11 +1549,11 @@ class EmbedWidget extends WidgetType {
     });
     toolbar.appendChild(resetBtn);
 
-    // Delete Button (Papierkorb)
+    // Delete Button
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.className = 'cm-image-btn cm-image-btn-delete';
-    deleteBtn.title = this.t ? this.t('editor.removeImage') : 'Bild entfernen';
+    deleteBtn.title = this.t ? this.t('editor.removeImage') : 'Remove image';
     deleteBtn.innerHTML =
       '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>';
     deleteBtn.addEventListener('mousedown', (e) => {
@@ -1565,13 +1566,14 @@ class EmbedWidget extends WidgetType {
     toolbar.appendChild(deleteBtn);
 
     // Resize Handles
+    const resizeHint = this.t ? this.t('editor.resizeImageHandle') : isDe ? 'Bildgröße mit der Maus anpassen (Ziehen)' : 'Resize image with mouse (drag)';
     const handleSE = document.createElement('span');
     handleSE.className = 'cm-image-resize-handle cm-image-resize-handle-se';
-    handleSE.title = 'Bildgröße mit der Maus anpassen (Ziehen)';
+    handleSE.title = resizeHint;
 
     const handleSW = document.createElement('span');
     handleSW.className = 'cm-image-resize-handle cm-image-resize-handle-sw';
-    handleSW.title = 'Bildgröße mit der Maus anpassen (Ziehen)';
+    handleSW.title = resizeHint;
 
     const setupDrag = (handle: HTMLElement, isLeft: boolean) => {
       handle.addEventListener('mousedown', (e) => {
@@ -1742,13 +1744,15 @@ class InteractiveCodeBlockWidget extends WidgetType {
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
     copyBtn.className = 'cm-lp-codeblock-copy-btn';
-    copyBtn.title = 'Code kopieren';
+    const copyLabel = this.t ? this.t('editor.copyCode') : 'Copy';
+    const copiedLabel = this.t ? this.t('common.copied') : 'Copied!';
+    copyBtn.title = copyLabel;
     copyBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
-      <span class="copy-text">Kopieren</span>
+      <span class="copy-text">${copyLabel}</span>
     `;
     copyBtn.onmousedown = (e) => e.preventDefault();
     copyBtn.onclick = async (e) => {
@@ -1765,10 +1769,10 @@ class InteractiveCodeBlockWidget extends WidgetType {
       }
       copyBtn.classList.add('copied');
       const textSpan = copyBtn.querySelector('.copy-text');
-      if (textSpan) textSpan.textContent = 'Kopiert!';
+      if (textSpan) textSpan.textContent = copiedLabel;
       setTimeout(() => {
         copyBtn.classList.remove('copied');
-        if (textSpan) textSpan.textContent = 'Kopieren';
+        if (textSpan) textSpan.textContent = copyLabel;
       }, 2000);
     };
     header.appendChild(copyBtn);
@@ -1887,17 +1891,20 @@ class CodeBlockHeaderWidget extends WidgetType {
   }
 
   toDOM() {
+    const isDe = typeof document !== 'undefined' && document.documentElement.lang === 'de';
+    const copyLabel = isDe ? 'Kopieren' : 'Copy';
+    const copiedLabel = isDe ? 'Kopiert!' : 'Copied!';
     const wrap = document.createElement('div');
     wrap.className = 'cm-lp-codeblock-header';
     const langDisplay = (this.language || 'code').toUpperCase();
     wrap.innerHTML = `
       <span class="cm-lp-codeblock-lang">${langDisplay}</span>
-      <button type="button" class="cm-lp-codeblock-copy-btn" title="Code kopieren">
+      <button type="button" class="cm-lp-codeblock-copy-btn" title="${copyLabel}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
         </svg>
-        <span class="copy-text">Kopieren</span>
+        <span class="copy-text">${copyLabel}</span>
       </button>
     `;
     const btn = wrap.querySelector('.cm-lp-codeblock-copy-btn') as HTMLButtonElement | null;
@@ -1917,10 +1924,10 @@ class CodeBlockHeaderWidget extends WidgetType {
         }
         btn.classList.add('copied');
         const textSpan = btn.querySelector('.copy-text');
-        if (textSpan) textSpan.textContent = 'Kopiert!';
+        if (textSpan) textSpan.textContent = copiedLabel;
         setTimeout(() => {
           btn.classList.remove('copied');
-          if (textSpan) textSpan.textContent = 'Kopieren';
+          if (textSpan) textSpan.textContent = copyLabel;
         }, 2000);
       };
     }
@@ -3824,6 +3831,8 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     return renderReadingHtml(body, notePath, allNotes, {
       attachmentLabel: t('sidebar.pdfAttachmentLabel'),
       pageBreakLabel: t('editor.pageBreakLabel'),
+      openInNewTabLabel: t('editor.openInNewTab'),
+      embeddedNoteLabel: t('editor.embeddedNote'),
     });
   }, [body, mode, notePath, allNotes, t]);
 

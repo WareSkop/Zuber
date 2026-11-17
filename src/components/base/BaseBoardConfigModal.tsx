@@ -55,6 +55,7 @@ const ColumnConfigRow: React.FC<ColumnConfigRowProps> = ({
   onDelete,
   deleteTitle,
 }) => {
+  const { t } = useTranslation();
   return (
     <div className="base-board-column-config-row">
       <div className="reorder-buttons">
@@ -63,7 +64,7 @@ const ColumnConfigRow: React.FC<ColumnConfigRowProps> = ({
           className="col-move-btn"
           disabled={idx === 0}
           onClick={() => onMove(idx, 'up')}
-          title="Nach oben"
+          title={t('base.moveUp')}
         >
           <ArrowUp size={12} />
         </button>
@@ -72,7 +73,7 @@ const ColumnConfigRow: React.FC<ColumnConfigRowProps> = ({
           className="col-move-btn"
           disabled={idx === total - 1}
           onClick={() => onMove(idx, 'down')}
-          title="Nach unten"
+          title={t('base.moveDown')}
         >
           <ArrowDown size={12} />
         </button>
@@ -83,7 +84,7 @@ const ColumnConfigRow: React.FC<ColumnConfigRowProps> = ({
         className="base-input column-name-input"
         value={col.name}
         onChange={(e) => onRename(col.id, e.target.value)}
-        placeholder="Spaltenname..."
+        placeholder={t('base.newColumnPlaceholder')}
       />
 
       <button
@@ -120,6 +121,7 @@ const SwimlaneConfigRow: React.FC<SwimlaneConfigRowProps> = ({
   deleteTitle,
   placeholder,
 }) => {
+  const { t } = useTranslation();
   return (
     <div className="base-board-column-config-row base-board-swimlane-config-row">
       <div className="reorder-buttons">
@@ -128,7 +130,7 @@ const SwimlaneConfigRow: React.FC<SwimlaneConfigRowProps> = ({
           className="col-move-btn"
           disabled={idx === 0}
           onClick={() => onMove(idx, 'up')}
-          title="Nach oben"
+          title={t('base.moveUp')}
         >
           <ArrowUp size={12} />
         </button>
@@ -137,7 +139,7 @@ const SwimlaneConfigRow: React.FC<SwimlaneConfigRowProps> = ({
           className="col-move-btn"
           disabled={idx === total - 1}
           onClick={() => onMove(idx, 'down')}
-          title="Nach unten"
+          title={t('base.moveDown')}
         >
           <ArrowDown size={12} />
         </button>
@@ -192,7 +194,7 @@ export const BaseBoardConfigModal: React.FC<BaseBoardConfigModalProps> = ({
   const detectedCardProperties = useMemo(() => {
     const map = new Map<string, string>();
     map.set('tags', displayNames['tags'] || 'Tags (tags)');
-    map.set('file.folder', displayNames['file.folder'] || 'Ordner (file.folder)');
+    map.set('file.folder', displayNames['file.folder'] || t('base.folderPropertyLabel'));
 
     // Properties from matching notes / records
     const extracted = extractVaultProperties(allNotes);

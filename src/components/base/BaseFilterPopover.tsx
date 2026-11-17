@@ -93,18 +93,18 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
               value={rule.field}
               onChange={(e) => handleUpdateRule(idx, { field: e.target.value })}
             >
-              <optgroup label="Funktionen & Verknüpfungen">
-                <option value="file.inFolder">📁 Liegt in Ordner... (file.inFolder)</option>
-                <option value="file.hasTag">🏷️ Hat Tag... (file.hasTag)</option>
-                <option value="file.hasLink">🔗 Verlinkt auf... (file.hasLink)</option>
+              <optgroup label={t('base.filterGroupFunctions')}>
+                <option value="file.inFolder">{t('base.filterInFolderOption')}</option>
+                <option value="file.hasTag">{t('base.filterHasTagOption')}</option>
+                <option value="file.hasLink">{t('base.filterHasLinkOption')}</option>
               </optgroup>
-              <optgroup label="Datei-Eigenschaften">
-                <option value="file.name">Dateiname (file.name)</option>
-                <option value="file.folder">Ordnerpfad (file.folder)</option>
-                <option value="file.ext">Dateiendung (file.ext)</option>
+              <optgroup label={t('base.filterGroupFileProps')}>
+                <option value="file.name">{t('base.filterPropName')}</option>
+                <option value="file.folder">{t('base.filterPropFolder')}</option>
+                <option value="file.ext">{t('base.filterPropExt')}</option>
               </optgroup>
               {availableProperties.length > 0 && (
-                <optgroup label="Frontmatter-Eigenschaften">
+                <optgroup label={t('base.filterGroupFrontmatter')}>
                   {availableProperties.map((p) => (
                     <option key={p.key} value={p.key}>
                       {p.label}
@@ -122,21 +122,21 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
             >
               {isSpecialFunc ? (
                 <>
-                  <option value="==">ist</option>
-                  <option value="!=">ist nicht</option>
+                  <option value="==">{t('base.filterOpIs')}</option>
+                  <option value="!=">{t('base.filterOpIsNot')}</option>
                 </>
               ) : (
                 <>
-                  <option value="==">ist gleich (==)</option>
-                  <option value="!=">ist ungleich (!=)</option>
-                  <option value="contains">enthält</option>
-                  <option value="startsWith">beginnt mit</option>
-                  <option value="!isEmpty">ist nicht leer</option>
-                  <option value="isEmpty">ist leer</option>
-                  <option value=">">&gt; (größer als)</option>
-                  <option value="<">&lt; (kleiner als)</option>
-                  <option value=">=">&gt;= (größer gleich)</option>
-                  <option value="<=">&lt;= (kleiner gleich)</option>
+                  <option value="==">{t('base.filterOpEquals')}</option>
+                  <option value="!=">{t('base.filterOpNotEquals')}</option>
+                  <option value="contains">{t('base.filterOpContains')}</option>
+                  <option value="startsWith">{t('base.filterOpStartsWith')}</option>
+                  <option value="!isEmpty">{t('base.filterOpIsNotEmpty')}</option>
+                  <option value="isEmpty">{t('base.filterOpIsEmpty')}</option>
+                  <option value=">">{t('base.filterOpGt')}</option>
+                  <option value="<">{t('base.filterOpLt')}</option>
+                  <option value=">=">{t('base.filterOpGte')}</option>
+                  <option value="<=">{t('base.filterOpLte')}</option>
                 </>
               )}
             </select>
@@ -149,7 +149,7 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
                   value={String(rule.value || '')}
                   onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
                 >
-                  <option value="">(Wurzelverzeichnis)</option>
+                  <option value="">{t('base.filterRootFolder')}</option>
                   {vaultFolders.map((f) => (
                     <option key={f} value={f}>
                       {f}
@@ -163,11 +163,11 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
                   onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
                 >
                   <option value="" disabled>
-                    Tag auswählen...
+                    {t('base.filterSelectTag')}
                   </option>
-                  {vaultTags.map((t) => (
-                    <option key={t} value={t}>
-                      #{t}
+                  {vaultTags.map((tagItem) => (
+                    <option key={tagItem} value={tagItem}>
+                      #{tagItem}
                     </option>
                   ))}
                 </select>
@@ -177,7 +177,7 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
                     type="text"
                     list={`datalist-notes-${rule.id}`}
                     className="base-filter-input val-input"
-                    placeholder={t('base.targetNotePlaceholder') || 'Zielnotiz auswählen...'}
+                    placeholder={t('base.targetNotePlaceholder')}
                     value={String(rule.value ?? '')}
                     onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
                   />
@@ -195,7 +195,7 @@ export const BaseFilterPopover: React.FC<BaseFilterPopoverProps> = ({
                 <input
                   type="text"
                   className="base-filter-input"
-                  placeholder="Wert..."
+                  placeholder={t('base.filterValuePlaceholder')}
                   value={String(rule.value ?? '')}
                   onChange={(e) => handleUpdateRule(idx, { value: e.target.value })}
                 />

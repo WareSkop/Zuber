@@ -94,7 +94,7 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     expect(onAddTextNode).toHaveBeenCalledWith('rectangle');
 
     // Group button click
-    const groupBtn = Array.from(buttons || []).find((b) => b.textContent?.includes('Gruppe')) as HTMLButtonElement;
+    const groupBtn = Array.from(buttons || []).find((b) => b.textContent?.includes('Group')) as HTMLButtonElement;
     expect(groupBtn).toBeDefined();
     act(() => {
       groupBtn.click();
@@ -112,9 +112,9 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     const dropdownMenu = container.querySelector('.canvas-dropdown-menu');
     expect(dropdownMenu).not.toBeNull();
 
-    // Click "Entscheidung (Raute)" in Workflow menu
+    // Click "Decision (Diamond)" in Workflow menu
     const diamondItem = Array.from(dropdownMenu?.querySelectorAll('.canvas-dropdown-item') || []).find((el) =>
-      el.textContent?.includes('Entscheidung')
+      el.textContent?.includes('Decision')
     ) as HTMLButtonElement;
     expect(diamondItem).toBeDefined();
     act(() => {
@@ -126,7 +126,7 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     expect(container.querySelector('.canvas-dropdown-menu')).toBeNull();
 
     // Network dropdown test
-    const networkBtn = Array.from(buttons || []).find((b) => b.textContent?.includes('Netzwerk')) as HTMLButtonElement;
+    const networkBtn = Array.from(buttons || []).find((b) => b.textContent?.includes('Network')) as HTMLButtonElement;
     act(() => {
       networkBtn.click();
     });
@@ -257,13 +257,13 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     const inspector = container.querySelector('.canvas-floating-inspector');
     expect(inspector).not.toBeNull();
 
-    // Verify tool buttons (Form, Farbe, Link, Duplicate, Delete)
+    // Verify tool buttons (Shape, Color, Link, Duplicate, Delete)
     const formBtn = Array.from(inspector?.querySelectorAll('.inspector-tool-btn') || []).find((b) =>
-      b.textContent?.includes('Form')
+      b.textContent?.includes('Shape')
     ) as HTMLButtonElement;
     expect(formBtn).toBeDefined();
 
-    // Click "Form" to open shapes popover
+    // Click "Shape" to open shapes popover
     act(() => {
       formBtn.click();
     });
@@ -271,9 +271,9 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     const shapesGrid = container.querySelector('.inspector-dropdown-menu.shapes-grid');
     expect(shapesGrid).not.toBeNull();
 
-    // Click "Raute" shape in popover
+    // Click "Decision (Diamond)" shape in popover
     const diamondBtn = Array.from(shapesGrid?.querySelectorAll('.inspector-grid-item') || []).find((b) =>
-      b.textContent?.includes('Raute')
+      b.textContent?.includes('Diamond')
     ) as HTMLButtonElement;
     expect(diamondBtn).toBeDefined();
 
@@ -534,9 +534,9 @@ describe('Knowmesh Canvas - DOM & Layout Verification', () => {
     expect(inspectorEl.style.left).toBe('158px'); // 150 + 8
     expect(inspectorEl.style.top).toBe('208px'); // 200 + 8
 
-    // Open Form popover and verify classes
+    // Open Shape popover and verify classes
     const formBtn = Array.from(inspectorEl.querySelectorAll('.inspector-tool-btn') || []).find((b) =>
-      b.textContent?.includes('Form')
+      b.textContent?.includes('Shape')
     ) as HTMLButtonElement;
     expect(formBtn).toBeDefined();
 

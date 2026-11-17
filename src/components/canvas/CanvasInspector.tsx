@@ -20,9 +20,12 @@ import {
   Monitor,
   Eye,
   EyeOff,
+  Check,
+  X,
 } from 'lucide-react';
 import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
 import { OBSIDIAN_CANVAS_COLORS } from '../../../shared/canvasTypes';
+import { isImageFilePath } from './nodes/canvasShapeGeometry';
 import { useTranslation } from '../../i18n';
 
 interface CanvasInspectorProps {
@@ -59,6 +62,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   const [edgeLabel, setEdgeLabel] = useState('');
   const [activePopover, setActivePopover] = useState<'shape' | 'color' | 'link' | null>(null);
   const [linkSearch, setLinkSearch] = useState('');
+  const [externalLinkInput, setExternalLinkInput] = useState('');
   const [posStyle, setPosStyle] = useState<React.CSSProperties | undefined>(undefined);
 
   React.useLayoutEffect(() => {
@@ -97,7 +101,9 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
 
   useEffect(() => {
     setActivePopover(null);
-  }, [selectedNode?.id, selectedEdge?.id]);
+    const existing = typeof selectedNode?.data?.linkUrl === 'string' ? selectedNode.data.linkUrl : '';
+    setExternalLinkInput(existing);
+  }, [selectedNode?.id, selectedNode?.data?.linkUrl, selectedEdge?.id]);
 
   const popoverRef = React.useRef<HTMLDivElement>(null);
 
@@ -153,27 +159,27 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
 
   // Obsidian colors list: "1" to "6" + null (neutral)
   const colorPresets = [
-    { key: '', label: 'Standard', hex: 'var(--border-color, #555)' },
-    { key: '1', label: 'Rot', hex: OBSIDIAN_CANVAS_COLORS['1'].hex },
-    { key: '2', label: 'Orange', hex: OBSIDIAN_CANVAS_COLORS['2'].hex },
-    { key: '3', label: 'Gelb', hex: OBSIDIAN_CANVAS_COLORS['3'].hex },
-    { key: '4', label: 'Grün', hex: OBSIDIAN_CANVAS_COLORS['4'].hex },
-    { key: '5', label: 'Cyan', hex: OBSIDIAN_CANVAS_COLORS['5'].hex },
-    { key: '6', label: 'Violett', hex: OBSIDIAN_CANVAS_COLORS['6'].hex },
+    { key: '', label: t('canvas.colorDefault'), hex: 'var(--border-color, #555)' },
+    { key: '1', label: t('canvas.colorRed'), hex: OBSIDIAN_CANVAS_COLORS['1'].hex },
+    { key: '2', label: t('canvas.colorOrange'), hex: OBSIDIAN_CANVAS_COLORS['2'].hex },
+    { key: '3', label: t('canvas.colorYellow'), hex: OBSIDIAN_CANVAS_COLORS['3'].hex },
+    { key: '4', label: t('canvas.colorGreen'), hex: OBSIDIAN_CANVAS_COLORS['4'].hex },
+    { key: '5', label: t('canvas.colorCyan'), hex: OBSIDIAN_CANVAS_COLORS['5'].hex },
+    { key: '6', label: t('canvas.colorPurple'), hex: OBSIDIAN_CANVAS_COLORS['6'].hex },
   ];
 
   const shapesList: { shape: CanvasShape; label: string; icon: React.ReactNode }[] = [
-    { shape: 'rectangle', label: 'Rechteck', icon: <Square size={14} /> },
-    { shape: 'rounded', label: 'Abgerundet', icon: <div className="palette-icon-rounded mini" /> },
-    { shape: 'circle', label: 'Kreis', icon: <Circle size={14} /> },
-    { shape: 'diamond', label: 'Raute', icon: <Diamond size={14} /> },
-    { shape: 'parallelogram', label: 'Parallelogramm', icon: <div className="palette-icon-parallel mini" /> },
-    { shape: 'hexagon', label: 'Hexagon', icon: <div className="palette-icon-hexagon mini" /> },
-    { shape: 'cylinder', label: 'Datenbank', icon: <Database size={14} /> },
-    { shape: 'cloud', label: 'Cloud', icon: <Cloud size={14} /> },
-    { shape: 'server', label: 'Server', icon: <Server size={14} /> },
-    { shape: 'router', label: 'Router', icon: <Network size={14} /> },
-    { shape: 'workstation', label: 'Client', icon: <Monitor size={14} /> },
+    { shape: 'rectangle', label: t('canvas.shapeProcess'), icon: <Square size={14} /> },
+    { shape: 'rounded', label: t('canvas.shapeStartEnd'), icon: <div className="palette-icon-rounded mini" /> },
+    { shape: 'circle', label: t('canvas.shapeTerminal'), icon: <Circle size={14} /> },
+    { shape: 'diamond', label: t('canvas.shapeDecision'), icon: <Diamond size={14} /> },
+    { shape: 'parallelogram', label: t('canvas.shapeIo'), icon: <div className="palette-icon-parallel mini" /> },
+    { shape: 'hexagon', label: t('canvas.shapeConditionFilter'), icon: <div className="palette-icon-hexagon mini" /> },
+    { shape: 'cylinder', label: t('canvas.shapeDatabase'), icon: <Database size={14} /> },
+    { shape: 'cloud', label: t('canvas.shapeCloud'), icon: <Cloud size={14} /> },
+    { shape: 'server', label: t('canvas.shapeServer'), icon: <Server size={14} /> },
+    { shape: 'router', label: t('canvas.shapeRouter'), icon: <Network size={14} /> },
+    { shape: 'workstation', label: t('canvas.shapeWorkstation'), icon: <Monitor size={14} /> },
   ];
 
   return (
@@ -181,17 +187,18 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
       {/* --- NODE INSPECTOR --- */}
       {selectedNode ? (
         <div className="inspector-content-row">
-          {/* Shape Switcher (only for text/shape nodes) */}
-          {selectedNode.type === 'canvasShape' && (
+          {/* Shape Switcher (text/shape nodes and image file nodes) */}
+          {(selectedNode.type === 'canvasShape' ||
+            (selectedNode.type === 'canvasFile' && isImageFilePath(selectedNode.data?.file as string))) && (
             <div className="inspector-popover-anchor">
               <button
                 type="button"
                 className={`inspector-tool-btn ${activePopover === 'shape' ? 'active' : ''}`}
                 onClick={() => setActivePopover((v) => (v === 'shape' ? null : 'shape'))}
-                title="Form ändern"
+                title={t('canvas.changeShape')}
               >
                 <Square size={15} />
-                <span className="inspector-btn-label">Form</span>
+                <span className="inspector-btn-label">{t('canvas.shape')}</span>
               </button>
               {activePopover === 'shape' && (
                 <div ref={popoverRef} className="inspector-dropdown-menu shapes-grid canvas-shape-picker-popover canvas-inspector-popover">
@@ -221,10 +228,10 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               type="button"
               className={`inspector-tool-btn ${activePopover === 'color' ? 'active' : ''}`}
               onClick={() => setActivePopover((v) => (v === 'color' ? null : 'color'))}
-              title="Farbe ändern"
+              title={t('canvas.changeColor')}
             >
               <Palette size={15} />
-              <span className="inspector-btn-label">Farbe</span>
+              <span className="inspector-btn-label">{t('canvas.color')}</span>
             </button>
             {activePopover === 'color' && (
               <div ref={popoverRef} className="inspector-dropdown-menu colors-row canvas-inspector-popover">
@@ -245,24 +252,73 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
             )}
           </div>
 
-          {/* Insert WikiLink */}
-          {selectedNode.type === 'canvasShape' && (
+          {/* Insert WikiLink (text/shape nodes) or Set Clickable Link (file/image nodes) */}
+          {(selectedNode.type === 'canvasShape' || selectedNode.type === 'canvasFile') && (
             <div className="inspector-popover-anchor">
               <button
                 type="button"
-                className={`inspector-tool-btn ${activePopover === 'link' ? 'active' : ''}`}
+                className={`inspector-tool-btn ${
+                  activePopover === 'link' || (selectedNode.type === 'canvasFile' && Boolean(selectedNode.data?.linkUrl))
+                    ? 'active'
+                    : ''
+                }`}
                 onClick={() => setActivePopover((v) => (v === 'link' ? null : 'link'))}
-                title="[[Wiki-Link]] einfügen"
+                title={selectedNode.type === 'canvasFile' ? t('canvas.setNodeLink') : t('canvas.insertWikiLink')}
               >
                 <Link2 size={15} />
                 <span className="inspector-btn-label">Link</span>
               </button>
               {activePopover === 'link' && (
                 <div ref={popoverRef} className="inspector-dropdown-menu link-picker scroller canvas-inspector-popover">
+                  {selectedNode.type === 'canvasFile' && (
+                    <div className="inspector-external-link-row">
+                      <input
+                        type="url"
+                        placeholder={t('canvas.externalUrlPlaceholder')}
+                        className="inspector-link-search"
+                        value={externalLinkInput}
+                        onChange={(e) => setExternalLinkInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const trimmed = externalLinkInput.trim();
+                            onUpdateNodeData(selectedNode.id, { linkUrl: trimmed || undefined });
+                            setActivePopover(null);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="inspector-link-apply-btn"
+                        title={t('canvas.applyLink')}
+                        onClick={() => {
+                          const trimmed = externalLinkInput.trim();
+                          onUpdateNodeData(selectedNode.id, { linkUrl: trimmed || undefined });
+                          setActivePopover(null);
+                        }}
+                      >
+                        <Check size={13} />
+                      </button>
+                      {Boolean(selectedNode.data?.linkUrl) && (
+                        <button
+                          type="button"
+                          className="inspector-link-clear-btn"
+                          title={t('canvas.removeLink')}
+                          onClick={() => {
+                            onUpdateNodeData(selectedNode.id, { linkUrl: undefined });
+                            setExternalLinkInput('');
+                            setActivePopover(null);
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <input
                     type="text"
-                    autoFocus
-                    placeholder="Notiz wählen..."
+                    autoFocus={selectedNode.type === 'canvasShape'}
+                    placeholder={t('canvas.selectNotePlaceholder')}
                     className="inspector-link-search"
                     value={linkSearch}
                     onChange={(e) => setLinkSearch(e.target.value)}
@@ -274,11 +330,19 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                       <button
                         key={n.path}
                         type="button"
-                        className="inspector-link-item"
+                        className={`inspector-link-item ${
+                          selectedNode.type === 'canvasFile' && selectedNode.data?.linkUrl === n.path ? 'active' : ''
+                        }`}
                         onClick={() => {
-                          const currentText = (selectedNode.data?.text as string) || '';
-                          const append = ` [[${n.basename || n.name}]]`;
-                          onUpdateNodeData(selectedNode.id, { text: currentText ? `${currentText}${append}` : `[[${n.basename || n.name}]]` });
+                          if (selectedNode.type === 'canvasFile') {
+                            onUpdateNodeData(selectedNode.id, { linkUrl: n.path });
+                          } else {
+                            const currentText = (selectedNode.data?.text as string) || '';
+                            const append = ` [[${n.basename || n.name}]]`;
+                            onUpdateNodeData(selectedNode.id, {
+                              text: currentText ? `${currentText}${append}` : `[[${n.basename || n.name}]]`,
+                            });
+                          }
                           setActivePopover(null);
                         }}
                       >
@@ -317,7 +381,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
             type="button"
             className="inspector-tool-btn icon-only"
             onClick={() => onDuplicateNode(selectedNode.id)}
-            title="Knoten duplizieren"
+            title={t('canvas.duplicateNode')}
           >
             <Copy size={15} />
           </button>
@@ -327,7 +391,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
             type="button"
             className="inspector-tool-btn danger icon-only"
             onClick={() => onDeleteNode(selectedNode.id)}
-            title="Knoten löschen (Entf)"
+            title={t('canvas.deleteNode')}
           >
             <Trash2 size={15} />
           </button>
@@ -340,7 +404,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               type="text"
               className="inspector-edge-input"
               value={edgeLabel}
-              placeholder="Kanten-Beschriftung..."
+              placeholder={t('canvas.edgeLabel')}
               onChange={(e) => {
                 setEdgeLabel(e.target.value);
                 onUpdateEdgeData(selectedEdge.id, {}, e.target.value);
@@ -354,7 +418,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               type="button"
               className={`inspector-toggle-btn ${selectedEdge.data?.edgeStyle === 'bezier' || !selectedEdge.data?.edgeStyle ? 'active' : ''}`}
               onClick={() => onUpdateEdgeData(selectedEdge.id, { edgeStyle: 'bezier' }, edgeLabel)}
-              title="Geschwungen (Bezier)"
+              title={t('canvas.edgeSmooth')}
             >
               <Spline size={14} />
             </button>
@@ -362,7 +426,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               type="button"
               className={`inspector-toggle-btn ${selectedEdge.data?.edgeStyle === 'straight' ? 'active' : ''}`}
               onClick={() => onUpdateEdgeData(selectedEdge.id, { edgeStyle: 'straight' }, edgeLabel)}
-              title="Gerade (Straight)"
+              title={t('canvas.edgeStraight')}
             >
               <GitCommit size={14} />
             </button>
@@ -370,7 +434,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               type="button"
               className={`inspector-toggle-btn ${selectedEdge.data?.edgeStyle === 'step' ? 'active' : ''}`}
               onClick={() => onUpdateEdgeData(selectedEdge.id, { edgeStyle: 'step' }, edgeLabel)}
-              title="Orthogonal / Eckig (Step)"
+              title={t('canvas.edgeStep')}
             >
               <CornerDownRight size={14} />
             </button>
@@ -385,7 +449,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 const nextFrom = selectedEdge.data?.fromEnd === 'arrow' ? 'none' : 'arrow';
                 onUpdateEdgeData(selectedEdge.id, { fromEnd: nextFrom }, edgeLabel);
               }}
-              title="Pfeil am Anfang umschalten"
+              title={t('canvas.toggleArrowStart')}
             >
               <ArrowLeft size={14} />
             </button>
@@ -396,7 +460,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 const nextTo = selectedEdge.data?.toEnd === 'none' ? 'arrow' : 'none';
                 onUpdateEdgeData(selectedEdge.id, { toEnd: nextTo }, edgeLabel);
               }}
-              title="Pfeil am Ende umschalten"
+              title={t('canvas.toggleArrowEnd')}
             >
               <ArrowRight size={14} />
             </button>
@@ -408,7 +472,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
               type="button"
               className={`inspector-tool-btn icon-only ${activePopover === 'color' ? 'active' : ''}`}
               onClick={() => setActivePopover((v) => (v === 'color' ? null : 'color'))}
-              title="Kantenfarbe"
+              title={t('canvas.edgeColor')}
             >
               <Palette size={15} />
             </button>
@@ -438,7 +502,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
             type="button"
             className="inspector-tool-btn danger icon-only"
             onClick={() => onDeleteEdge(selectedEdge.id)}
-            title="Verbindung löschen (Entf)"
+            title={t('canvas.deleteEdge')}
           >
             <Trash2 size={15} />
           </button>

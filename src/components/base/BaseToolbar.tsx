@@ -401,11 +401,11 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
           type="button"
           className={`base-toolbar-btn filter-toggle-btn ${activeFilterCount > 0 ? 'has-filters' : ''} ${isFilterPopoverOpen ? 'active' : ''}`}
           onClick={onToggleFilterPopover}
-          title={t('base.filter', 'Filter anpassen')}
-          aria-label={t('base.filter', 'Filter anpassen')}
+          title={t('base.filterAdjust')}
+          aria-label={t('base.filterAdjust')}
         >
           <Filter size={15} />
-          {!isMobile && <span>Filter</span>}
+          {!isMobile && <span>{t('base.filterBtn')}</span>}
           {activeFilterCount > 0 && <span className="base-badge-count">{activeFilterCount}</span>}
         </button>
 
@@ -418,13 +418,13 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
               setIsSortDropdownOpen((o) => !o);
               setIsGroupDropdownOpen(false);
             }}
-            title="Sortierung festlegen"
-            aria-label="Sortierung festlegen"
+            title={t('base.sortSetTitle')}
+            aria-label={t('base.sortSetTitle')}
           >
             <ArrowUpDown size={15} />
             {!isMobile && (
               <span className="btn-label-desktop">
-                {currentSort ? `Sortiert (${currentSort.property})` : 'Sortieren'}
+                {currentSort ? t('base.sortedBy', { prop: currentSort.property }) : t('base.sortBtn')}
               </span>
             )}
           </button>
@@ -440,7 +440,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                 }}
               >
                 {!currentSort && <Check size={13} />}
-                <span>(Keine Sortierung)</span>
+                <span>{t('base.noSort')}</span>
               </button>
               {availableProperties.map((p) => {
                 const isSelected = currentSort?.property === p.key;
@@ -483,13 +483,13 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
               setIsGroupDropdownOpen((o) => !o);
               setIsSortDropdownOpen(false);
             }}
-            title="Gruppierung festlegen"
-            aria-label="Gruppierung festlegen"
+            title={t('base.groupSetTitle')}
+            aria-label={t('base.groupSetTitle')}
           >
             <Layers size={15} />
             {!isMobile && (
               <span className="btn-label-desktop">
-                {currentGroupBy ? `Gruppiert (${currentGroupBy.property})` : 'Gruppieren'}
+                {currentGroupBy ? t('base.groupedBy', { prop: currentGroupBy.property }) : t('base.groupBtn')}
               </span>
             )}
           </button>
@@ -505,7 +505,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                 }}
               >
                 {!currentGroupBy && <Check size={13} />}
-                <span>(Keine Gruppierung)</span>
+                <span>{t('base.noGroup')}</span>
               </button>
               {availableProperties.map((p) => {
                 const isSelected = currentGroupBy?.property === p.key;
@@ -539,11 +539,11 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
             type="button"
             className="base-toolbar-btn columns-btn"
             onClick={onOpenColumnsModal}
-            title="Spalten einblenden / ausblenden"
-            aria-label="Spalten einblenden / ausblenden"
+            title={t('base.columnsToggleTitle')}
+            aria-label={t('base.columnsToggleTitle')}
           >
             <Columns size={15} />
-            {!isMobile && <span className="btn-label-desktop">Spalten</span>}
+            {!isMobile && <span className="btn-label-desktop">{t('base.columnsBtn')}</span>}
           </button>
         ) : onOpenBoardConfigModal ? (
           <button
@@ -860,7 +860,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                 setIsSortDropdownOpen(false);
               }}
             >
-              <span className="bottom-sheet-action-label">(Keine Sortierung)</span>
+              <span className="bottom-sheet-action-label">{t('base.noSort')}</span>
               {!currentSort && <Check size={16} className="bottom-sheet-check-icon" />}
             </button>
             {availableProperties.map((p) => {
@@ -908,7 +908,7 @@ export const BaseToolbar: React.FC<BaseToolbarProps> = ({
                 setIsGroupDropdownOpen(false);
               }}
             >
-              <span className="bottom-sheet-action-label">(Keine Gruppierung)</span>
+              <span className="bottom-sheet-action-label">{t('base.noGroup')}</span>
               {!currentGroupBy && <Check size={16} className="bottom-sheet-check-icon" />}
             </button>
             {availableProperties.map((p) => {

@@ -8210,6 +8210,29 @@ input:checked + .slider:before {
   white-space: nowrap;
 }
 
+.canvas-file-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-file-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .canvas-file-open-btn {
   background: transparent;
   border: none;
@@ -8226,13 +8249,225 @@ input:checked + .slider:before {
   color: var(--text-primary);
 }
 
+.canvas-file-link-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 140px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-color, #d4af37);
+  background: var(--accent-secondary-bg, rgba(212, 175, 55, 0.14));
+  color: var(--accent-color, #d4af37);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-file-link-badge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.canvas-file-link-badge:hover {
+  background: var(--accent-color, #d4af37);
+  color: var(--bg-primary, #0f172a);
+}
+
 .canvas-file-body {
   flex: 1;
+  min-height: 0;
   padding: 10px;
   overflow-y: auto;
   font-size: 12.5px;
   line-height: 1.45;
   user-select: text;
+}
+
+.canvas-file-body.is-image-body {
+  padding: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-file-image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.canvas-file-image-container.has-link {
+  cursor: pointer;
+}
+
+.canvas-file-image-container img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  display: block;
+}
+
+.canvas-file-markdown img,
+.canvas-shape-inline-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+  margin: 6px auto;
+}
+
+.canvas-file-node.is-shaped-image {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.canvas-file-shaped-image-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.canvas-file-shaped-image-wrapper.has-link {
+  cursor: pointer;
+}
+
+.canvas-file-shaped-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.canvas-file-shape-border-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-file-link-badge.floating {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  background: rgba(15, 23, 42, 0.86);
+  backdrop-filter: blur(4px);
+}
+
+.canvas-file-open-btn.floating {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  background: rgba(15, 23, 42, 0.72);
+  color: #f8fafc;
+  border-radius: 6px;
+  padding: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.canvas-file-node.is-shaped-image:hover .canvas-file-open-btn.floating,
+.canvas-file-node.is-shaped-image.selected .canvas-file-open-btn.floating {
+  opacity: 1;
+}
+
+.canvas-file-safe-embed-card {
+  margin: 6px 0;
+}
+
+.canvas-file-safe-embed-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvas-file-safe-embed-btn.is-cycle {
+  border-color: var(--accent-color, #d4af37);
+  color: var(--accent-color, #d4af37);
+}
+
+.canvas-file-cycle-guard,
+.canvas-embed-cycle-guard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--accent-color, #d4af37);
+  padding: 16px;
+}
+
+.inspector-external-link-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.inspector-external-link-row .inspector-link-search {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.inspector-link-apply-btn,
+.inspector-link-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.inspector-link-apply-btn:hover {
+  border-color: var(--accent-color, #d4af37);
+  color: var(--accent-color, #d4af37);
+}
+
+.inspector-link-clear-btn:hover {
+  border-color: var(--obsidian-red, #e93147);
+  color: var(--obsidian-red, #e93147);
+}
+
+.canvas-upload-image-item {
+  font-weight: 600;
+  color: var(--accent-color, #d4af37);
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  margin-bottom: 4px;
 }
 
 /* Group Node */

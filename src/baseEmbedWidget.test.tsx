@@ -382,7 +382,7 @@ views:
     const titleEl = container.querySelector('.canvas-embed-title.clickable') as HTMLElement;
     expect(titleEl).toBeTruthy();
     expect(titleEl.textContent).toBe('Flow.canvas');
-    expect(titleEl.getAttribute('title')).toBe('Öffne Diagrams/Flow.canvas');
+    expect(titleEl.getAttribute('title')).toBe('Open note: Diagrams/Flow.canvas');
 
     await act(async () => {
       titleEl.click();
