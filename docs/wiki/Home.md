@@ -2,6 +2,8 @@
 
 Welcome to the official **Zuber User Manual**. Whether you are taking quick notes on your smartphone, working distraction-free on a Chromebook, or organizing complex projects on your desktop, Zuber gives you fast, reliable access to your Markdown knowledge vault anywhere.
 
+> **Built with AI:** This project was created using **Antigravity** and **Google Gemini**.
+
 ---
 
 ## Foreword & Origin Story
