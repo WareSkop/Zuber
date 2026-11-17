@@ -1,4 +1,10 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { clientLogger } from '../utils/logger';
+import {
+  buildDiagnosticReport,
+  copyDiagnosticReport,
+  shareOrDownloadDiagnosticReport,
+} from '../utils/logExport';
 
 interface Props {
   children: ReactNode;
@@ -12,6 +18,8 @@ interface State {
   isResetting: boolean;
   isLoadingCache: boolean;
   isRetrying: boolean;
+  copiedLogs: boolean;
+  exportedLogs: boolean;
 }
 
 const ACTIVE_VIEW_STORAGE_KEYS = [
@@ -48,6 +56,8 @@ export class ErrorBoundary extends Component<Props, State> {
       isResetting: false,
       isLoadingCache: false,
       isRetrying: false,
+      copiedLogs: false,
+      exportedLogs: false,
     };
   }
 
@@ -59,16 +69,75 @@ export class ErrorBoundary extends Component<Props, State> {
       isResetting: false,
       isLoadingCache: false,
       isRetrying: false,
+      copiedLogs: false,
+      exportedLogs: false,
     };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('[Zuber ErrorBoundary] Uncaught render error caught by boundary:', error, errorInfo);
+    clientLogger.error('react-crash', error.message || 'Uncaught render error', {
+      name: error.name,
+      stack: error.stack,
+      componentStack: errorInfo?.componentStack,
+    });
+    this.reportCrashToServer(error, errorInfo);
     this.setState({
       error,
       errorInfo,
     });
   }
+
+  private reportCrashToServer(error: Error, errorInfo: ErrorInfo): void {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    if (typeof fetch !== 'function') return;
+    try {
+      const token =
+        typeof localStorage !== 'undefined'
+          ? localStorage.getItem('zuber_auth_token') || localStorage.getItem('knowmesh_auth_token')
+          : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const ctx = clientLogger.getDiagnosticsContext();
+      fetch('/api/logs/client-crash', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          message: error.message,
+          stack: error.stack,
+          componentStack: errorInfo?.componentStack,
+          viewport: ctx.viewport,
+        }),
+      }).catch(() => {});
+    } catch {
+      // ignore reporting failures
+    }
+  }
+
+  private buildCrashReportText(): string {
+    return buildDiagnosticReport({
+      clientEntries: clientLogger.getEntries(),
+      logLevel: clientLogger.getLevel(),
+      sourceFilter: 'client',
+    });
+  }
+
+  private handleExportLogs = async (): Promise<void> => {
+    const text = this.buildCrashReportText();
+    await shareOrDownloadDiagnosticReport(text);
+    this.setState({ exportedLogs: true });
+    setTimeout(() => this.setState({ exportedLogs: false }), 2500);
+  };
+
+  private handleCopyLogs = async (): Promise<void> => {
+    const text = this.buildCrashReportText();
+    const ok = await copyDiagnosticReport(text);
+    if (ok) {
+      this.setState({ copiedLogs: true });
+      setTimeout(() => this.setState({ copiedLogs: false }), 2500);
+    }
+  };
 
   private clearActiveViewStorage(): void {
     try {
@@ -136,12 +205,15 @@ export class ErrorBoundary extends Component<Props, State> {
       isResetting: false,
       isLoadingCache: false,
       isRetrying: false,
+      copiedLogs: false,
+      exportedLogs: false,
     });
   };
 
   public render(): ReactNode {
     if (this.state.hasError) {
       const errorMessage = this.state.error?.message || 'Unbekannter Anwendungsfehler';
+      const componentStack = this.state.errorInfo?.componentStack?.trim() || '';
       const isEn =
         typeof localStorage !== 'undefined' && localStorage.getItem('zuber_language') === 'en';
 
@@ -222,12 +294,43 @@ export class ErrorBoundary extends Component<Props, State> {
                 color: '#f85149',
                 textAlign: 'left',
                 overflowX: 'auto',
-                marginBottom: '24px',
+                marginBottom: componentStack ? '12px' : '24px',
                 maxHeight: '160px',
               }}
             >
               {errorMessage}
             </div>
+
+            {componentStack && (
+              <details
+                style={{
+                  textAlign: 'left',
+                  marginBottom: '20px',
+                  backgroundColor: '#0d1117',
+                  border: '1px solid #21262d',
+                  borderRadius: '6px',
+                  padding: '8px 12px',
+                  fontSize: '11px',
+                  color: '#8b949e',
+                }}
+              >
+                <summary style={{ cursor: 'pointer', fontWeight: 500 }}>
+                  {isEn ? 'Component Stack (Details)' : 'Komponenten-Stack (Details)'}
+                </summary>
+                <pre
+                  style={{
+                    margin: '8px 0 0 0',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: 'monospace',
+                    maxHeight: '140px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {componentStack}
+                </pre>
+              </details>
+            )}
 
             <div
               style={{
@@ -315,6 +418,72 @@ export class ErrorBoundary extends Component<Props, State> {
                 }}
               >
                 {this.state.isRetrying ? 'Starte neu...' : 'Erneut versuchen'}
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                marginTop: '14px',
+                paddingTop: '14px',
+                borderTop: '1px solid #21262d',
+              }}
+            >
+              <button
+                type="button"
+                className="error-boundary-btn error-boundary-btn-export"
+                onClick={this.handleExportLogs}
+                style={{
+                  backgroundColor: '#1f2937',
+                  color: '#e5e7eb',
+                  border: '1px solid #374151',
+                  borderRadius: '6px',
+                  padding: '8px 14px',
+                  minHeight: '44px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                  pointerEvents: 'auto',
+                }}
+              >
+                {this.state.exportedLogs
+                  ? isEn
+                    ? '✓ Logs exported'
+                    : '✓ Logs exportiert'
+                  : isEn
+                  ? 'Export Debug Logs (.txt)'
+                  : 'Debug-Logs exportieren (.txt)'}
+              </button>
+
+              <button
+                type="button"
+                className="error-boundary-btn error-boundary-btn-copy"
+                onClick={this.handleCopyLogs}
+                style={{
+                  backgroundColor: '#1f2937',
+                  color: '#e5e7eb',
+                  border: '1px solid #374151',
+                  borderRadius: '6px',
+                  padding: '8px 14px',
+                  minHeight: '44px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                  pointerEvents: 'auto',
+                }}
+              >
+                {this.state.copiedLogs
+                  ? isEn
+                    ? '✓ Copied'
+                    : '✓ Kopiert'
+                  : isEn
+                  ? 'Copy Logs'
+                  : 'Logs kopieren'}
               </button>
             </div>
           </div>

@@ -91,7 +91,7 @@ describe('ErrorBoundary & Startup Crash Prevention (React Error #60 & Recovery B
     );
 
     const buttons = Array.from(container.querySelectorAll('button')) as HTMLButtonElement[];
-    expect(buttons).toHaveLength(3);
+    expect(buttons).toHaveLength(5);
     for (const btn of buttons) {
       expect(btn.getAttribute('type')).toBe('button');
       expect(btn.style.minHeight).toBe('44px');
@@ -339,5 +339,33 @@ describe('ErrorBoundary & Startup Crash Prevention (React Error #60 & Recovery B
       );
     });
     expect(container.querySelector('.error-boundary-overlay')).toBeNull();
+  });
+
+  it('logs componentStack into clientLogger and renders export/copy buttons on crash', async () => {
+    const { clientLogger } = await import('../utils/logger');
+    clientLogger.clear();
+
+    const CrashChild: React.FC = () => {
+      throw new Error('Simulated React error #310');
+    };
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await act(async () => {
+      root.render(
+        <ErrorBoundary>
+          <CrashChild />
+        </ErrorBoundary>
+      );
+    });
+    consoleErrorSpy.mockRestore();
+
+    expect(container.querySelector('.error-boundary-overlay')).not.toBeNull();
+    expect(container.querySelector('.error-boundary-btn-export')).not.toBeNull();
+    expect(container.querySelector('.error-boundary-btn-copy')).not.toBeNull();
+
+    const crashLog = clientLogger.getEntries().find((e) => e.category === 'react-crash');
+    expect(crashLog).toBeDefined();
+    expect(crashLog?.message).toContain('Simulated React error #310');
+    expect(crashLog?.details).toContain('CrashChild');
   });
 });

@@ -60,6 +60,7 @@ import { CanvasToolbar, type CanvasGridConfig } from './CanvasToolbar';
 import { CanvasInspector } from './CanvasInspector';
 import { CanvasPresentationPanel } from './CanvasPresentationPanel';
 import { useTranslation } from '../../i18n';
+import { clientLogger } from '../../utils/logger';
 
 export interface CanvasEditorProps {
   filePath: string;
@@ -258,10 +259,15 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       );
       if (jsonStr !== lastEmittedJsonRef.current) {
         lastEmittedJsonRef.current = jsonStr;
+        clientLogger.debug('canvas', `flushSave emitting update for "${filePath}"`, {
+          nodes: latestNodesRef.current.length,
+          edges: latestEdgesRef.current.length,
+          bytes: jsonStr.length,
+        });
         onChange(jsonStr);
       }
     }
-  }, [getViewport, onChange, readOnly]);
+  }, [filePath, getViewport, onChange, readOnly]);
 
   // Flush pending changes on unmount (e.g. switching notes or closing tab)
   useEffect(() => {
@@ -290,6 +296,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
     const doc = parseCanvasJson(rawContent);
     const rf = jsonCanvasToReactFlow(doc);
+    clientLogger.debug('canvas', `Syncing canvas "${filePath}"`, {
+      pathChanged,
+      externalChange,
+      nodes: rf.nodes.length,
+      edges: rf.edges.length,
+      bytes: rawContent.length,
+    });
     setNodes(rf.nodes);
     setEdges(rf.edges);
     latestNodesRef.current = rf.nodes;
@@ -370,10 +383,15 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         const presToSave = shouldPersistPresentation(pres) ? pres : undefined;
         const jsonStr = reactFlowToJsonCanvas(currentNodes, currentEdges, vp, presToSave);
         lastEmittedJsonRef.current = jsonStr;
+        clientLogger.debug('canvas', `triggerAutoSave emitting update for "${filePath}"`, {
+          nodes: currentNodes.length,
+          edges: currentEdges.length,
+          bytes: jsonStr.length,
+        });
         onChange(jsonStr);
       }, 600);
     },
-    [onChange, readOnly, getViewport]
+    [filePath, onChange, readOnly, getViewport]
   );
 
   // Notify changes on nodes or edges update
@@ -402,6 +420,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   // Group dragging: moving a group node moves all enclosed child nodes
   const onNodeDragStart: OnNodeDrag = useCallback(
     (_event, node) => {
+      clientLogger.debug('canvas', `Node drag start: ${node.id}`, { type: node.type });
       const isGroup =
         node.type === 'canvasGroup' ||
         node.type === 'group' ||
@@ -449,7 +468,11 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   );
 
   const onNodeDragStop: OnNodeDrag = useCallback(
-    (_event, _node) => {
+    (_event, node) => {
+      clientLogger.debug('canvas', `Node drag stop: ${node.id}`, {
+        x: Math.round(node.position.x),
+        y: Math.round(node.position.y),
+      });
       draggingChildNodeIdsRef.current.clear();
       dragStartGroupPosRef.current = null;
       setNodes((nds) => {

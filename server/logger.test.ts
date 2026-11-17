@@ -174,5 +174,25 @@ describe('Server & Client Logging Subsystem', () => {
       expect(data.ok).toBe(true);
       expect(serverLogger.getEntries().length).toBe(0);
     });
+
+    it('records client crash reports via POST /api/logs/client-crash', async () => {
+      const res = await fetch(`${baseUrl}/api/logs/client-crash`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'Minified React error #310',
+          componentStack: 'at ConflictModal\n  at App',
+          viewport: '390x844',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+
+      const crashEntry = serverLogger.getEntries().find((e) => e.category === 'client-crash');
+      expect(crashEntry).toBeDefined();
+      expect(crashEntry?.message).toBe('Minified React error #310');
+      expect(crashEntry?.details).toContain('ConflictModal');
+    });
   });
 });

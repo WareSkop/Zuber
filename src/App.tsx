@@ -1240,6 +1240,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const unsubSync = syncEngine.subscribe((state) => {
+      clientLogger.debug('sync', `SyncEngine state -> "${state}"`);
       setSyncState(state);
       if (state === 'synced') {
         loadVaultIndex().catch(() => {});
@@ -1248,7 +1249,12 @@ export const App: React.FC = () => {
         }
       }
     });
-    const unsubConflicts = syncEngine.subscribeConflicts(setConflicts);
+    const unsubConflicts = syncEngine.subscribeConflicts((nextConflicts) => {
+      clientLogger.debug('sync', `Conflicts list updated: count=${nextConflicts.length}`, {
+        paths: nextConflicts.map((c) => c.path),
+      });
+      setConflicts(nextConflicts);
+    });
     return () => {
       unsubSync();
       unsubConflicts();
@@ -2088,6 +2094,7 @@ export const App: React.FC = () => {
         ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
+          clientLogger.debug('websocket', 'WebSocket connected');
           setWsConnected(true);
           if (syncEngine.getSyncState() === 'offline') {
             syncEngine.checkConnectionAndSync().catch(() => {});
@@ -2144,7 +2151,8 @@ export const App: React.FC = () => {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (ev) => {
+          clientLogger.debug('websocket', `WebSocket closed (code=${ev.code}, clean=${ev.wasClean})`);
           setWsConnected(false);
           if (!disposed && (typeof navigator === 'undefined' || navigator.onLine)) {
             reconnectTimer = setTimeout(connectWs, 3500);
@@ -2247,6 +2255,11 @@ export const App: React.FC = () => {
             const currentBaseMtime =
               activeNoteRef.current?.path === path ? activeNoteRef.current.updatedAt : undefined;
 
+            clientLogger.debug('sync', `Saving "${path}"`, {
+              baseMtime: currentBaseMtime,
+              bytes: (currentPayload.rawContent || currentPayload.body || '').length,
+            });
+
             const saved = await syncEngine.saveNote({
               path,
               ...currentPayload,
@@ -2257,6 +2270,9 @@ export const App: React.FC = () => {
             const finishTime = Date.now();
             lastLocalSaveTimeRef.current = finishTime;
             recentSelfWritesRef.current.set(saved.path, finishTime);
+            clientLogger.debug('sync', `Saved "${saved.path}" in ${finishTime - now}ms`, {
+              updatedAt: saved.updatedAt,
+            });
 
             // Update activeNoteRef immediately if note path still matches
             if (activeNoteRef.current && activeNoteRef.current.path === saved.path) {

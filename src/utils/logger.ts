@@ -10,7 +10,28 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
 const STORAGE_KEY_LEVEL = 'zuber_log_level';
 const STORAGE_KEY_LOGS = 'zuber_client_logs';
 const MAX_BUFFER_SIZE = 1000;
-const MAX_PERSISTED_LOGS = 200;
+const MAX_PERSISTED_LOGS = 400;
+const MAX_DETAILS_LENGTH = 2500;
+
+export interface DiagnosticsContext {
+  userAgent: string;
+  viewport: string;
+  isMobile: boolean;
+  onLine: boolean;
+  visibilityState: string;
+  connectionType: string;
+  serviceWorkerState: string;
+  scriptBundles: string[];
+  logLevel: LogLevel;
+  bufferedEntries: number;
+}
+
+export function redactSensitiveText(input: string): string {
+  return input
+    .replace(/(Bearer\s+)[A-Za-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
+    .replace(/([?&](?:token|password|secret|auth)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/("(?:password|token|sessionSecret|authToken|imapPassword|smtpPassword)"\s*:\s*)"[^"]*"/gi, '$1"[REDACTED]"');
+}
 
 export class ClientLogger {
   private buffer: LogEntry[] = [];
@@ -37,9 +58,12 @@ export class ClientLogger {
   }
 
   private loadPersistedLogs(): LogEntry[] {
-    if (typeof sessionStorage === 'undefined') return [];
     try {
-      const raw = sessionStorage.getItem(STORAGE_KEY_LOGS) || sessionStorage.getItem('knowmesh_client_logs');
+      const raw =
+        (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY_LOGS)) ||
+        (typeof sessionStorage !== 'undefined' &&
+          (sessionStorage.getItem(STORAGE_KEY_LOGS) || sessionStorage.getItem('knowmesh_client_logs'))) ||
+        null;
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) return parsed.slice(-MAX_BUFFER_SIZE);
@@ -51,12 +75,17 @@ export class ClientLogger {
   }
 
   private persistLogs(): void {
-    if (typeof sessionStorage === 'undefined') return;
+    if (typeof localStorage === 'undefined') return;
     try {
       const subset = this.buffer.slice(-MAX_PERSISTED_LOGS);
-      sessionStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(subset));
+      localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(subset));
     } catch {
-      // ignore
+      try {
+        const compact = this.buffer.slice(-100);
+        localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(compact));
+      } catch {
+        // ignore quota errors
+      }
     }
   }
 
@@ -76,6 +105,45 @@ export class ClientLogger {
 
   public getLevel(): LogLevel {
     return this.currentLevel;
+  }
+
+  public isDebugEnabled(): boolean {
+    return this.currentLevel === 'debug';
+  }
+
+  public getDiagnosticsContext(): DiagnosticsContext {
+    const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+    const win = typeof window !== 'undefined' ? window : undefined;
+    const doc = typeof document !== 'undefined' ? document : undefined;
+    const conn = (nav as any)?.connection;
+    const swController = nav?.serviceWorker?.controller;
+    const scriptBundles = doc
+      ? Array.from(doc.querySelectorAll('script[src]'))
+          .map((el) => el.getAttribute('src') || '')
+          .filter(Boolean)
+          .slice(0, 10)
+      : [];
+    const width = win?.innerWidth ?? 0;
+    const height = win?.innerHeight ?? 0;
+
+    return {
+      userAgent: nav?.userAgent || 'unknown',
+      viewport: `${width}x${height}`,
+      isMobile: width > 0 ? width < 768 : false,
+      onLine: nav ? nav.onLine : true,
+      visibilityState: doc?.visibilityState || 'unknown',
+      connectionType: conn
+        ? `${conn.effectiveType || 'unknown'} (rtt=${conn.rtt ?? '?'}ms, downlink=${conn.downlink ?? '?'}Mbps)`
+        : 'unavailable',
+      serviceWorkerState: swController
+        ? `${swController.state} (${swController.scriptURL})`
+        : nav && 'serviceWorker' in nav
+          ? 'no-controller'
+          : 'unsupported',
+      scriptBundles,
+      logLevel: this.currentLevel,
+      bufferedEntries: this.buffer.length,
+    };
   }
 
   public setLevel(level: LogLevel): void {
@@ -111,7 +179,15 @@ export class ClientLogger {
           detailsStr = String(details);
         }
       }
+      if (detailsStr) {
+        detailsStr = redactSensitiveText(detailsStr);
+        if (detailsStr.length > MAX_DETAILS_LENGTH) {
+          detailsStr = `${detailsStr.slice(0, MAX_DETAILS_LENGTH)}... [truncated]`;
+        }
+      }
     }
+
+    const safeMessage = redactSensitiveText(message);
 
     const entry: LogEntry = {
       id: `cli-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -119,7 +195,7 @@ export class ClientLogger {
       level,
       source: 'client',
       category,
-      message,
+      message: safeMessage,
       details: detailsStr,
     };
 
@@ -166,6 +242,13 @@ export class ClientLogger {
 
   public clear(): void {
     this.buffer = [];
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_KEY_LOGS);
+      } catch {
+        // ignore
+      }
+    }
     if (typeof sessionStorage !== 'undefined') {
       try {
         sessionStorage.removeItem(STORAGE_KEY_LOGS);

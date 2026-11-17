@@ -24,6 +24,9 @@ import {
   Type,
   ScrollText,
   Copy,
+  Download,
+  Share2,
+  Bug,
   Mail,
 } from 'lucide-react';
 import { version as appVersion } from '../../package.json';
@@ -36,6 +39,12 @@ import {
 } from '../api';
 import { syncEngine, type SyncState } from '../sync/syncEngine';
 import { clientLogger } from '../utils/logger';
+import {
+  buildDiagnosticReport,
+  copyDiagnosticReport,
+  downloadDiagnosticReport,
+  shareOrDownloadDiagnosticReport,
+} from '../utils/logExport';
 import { getAutoLockMinutes, setAutoLockMinutes } from '../crypto/unlockedFoldersStore';
 import type {
   EmailConfig,
@@ -374,31 +383,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     );
   }, [clientLogs, serverLogs, logSource, logFilter]);
 
+  const buildCurrentLogReport = () => {
+    const q = logFilter.trim().toLowerCase();
+    const matchesFilter = (e: LogEntry) =>
+      !q ||
+      e.message.toLowerCase().includes(q) ||
+      e.category.toLowerCase().includes(q) ||
+      e.level.toLowerCase().includes(q) ||
+      (e.details && e.details.toLowerCase().includes(q));
+
+    return buildDiagnosticReport({
+      clientEntries: clientLogs.filter(matchesFilter),
+      serverEntries: serverLogs.filter(matchesFilter),
+      appVersion,
+      currentTheme,
+      logLevel,
+      sourceFilter: logSource,
+    });
+  };
+
   const handleCopyLogs = async () => {
-    const header = [
-      `# Zuber Diagnostics & Log Export`,
-      `Generated: ${new Date().toISOString()}`,
-      `Zuber Version: v${appVersion}`,
-      `Active Theme: ${currentTheme}`,
-      `Online Status: ${navigator.onLine ? 'Online' : 'Offline'}`,
-      `Active Log Level: ${logLevel.toUpperCase()}`,
-      `Filtered Source: ${logSource} (${filteredLogs.length} entries)`,
-      `--------------------------------------------------------------------------------`,
-      '',
-    ].join('\n');
-
-    const formattedBody = filteredLogs.map((e) => {
-      const details = e.details ? `\n    ${e.details.replace(/\n/g, '\n    ')}` : '';
-      return `[${e.timestamp}] [${e.source.toUpperCase()}] [${e.level.toUpperCase()}] [${e.category}] ${e.message}${details}`;
-    }).join('\n');
-
-    try {
-      await navigator.clipboard.writeText(`${header}\n${formattedBody}`);
+    const ok = await copyDiagnosticReport(buildCurrentLogReport());
+    if (ok) {
       setCopiedLogs(true);
       setTimeout(() => setCopiedLogs(false), 2500);
-    } catch (err) {
-      console.error('Failed to copy logs to clipboard:', err);
     }
+  };
+
+  const handleDownloadLogs = () => {
+    downloadDiagnosticReport(buildCurrentLogReport());
+  };
+
+  const handleShareLogs = async () => {
+    await shareOrDownloadDiagnosticReport(buildCurrentLogReport());
   };
 
   const loadGitInfo = async () => {
@@ -2349,6 +2366,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="settings-section-desc">{t('settings.logsDesc')}</p>
               </div>
 
+              {/* Debug Mode Toggle Banner */}
+              <div
+                className="logs-debug-toggle-card"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: logLevel === 'debug' ? 'rgba(212, 175, 55, 0.12)' : 'var(--bg-secondary)',
+                  border: logLevel === 'debug' ? '1px solid var(--accent-color, #d4af37)' : '1px solid var(--border-color)',
+                  marginBottom: '14px',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 240px' }}>
+                  <Bug size={18} style={{ color: logLevel === 'debug' ? 'var(--accent-color, #d4af37)' : 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {t('settings.logsDebugMode')}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.4 }}>
+                      {t('settings.logsDebugModeDesc')}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={logLevel === 'debug' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => handleLogLevelChange(logLevel === 'debug' ? 'info' : 'debug')}
+                  style={{ minHeight: '36px', padding: '6px 14px', fontWeight: 600 }}
+                >
+                  {logLevel === 'debug' ? t('settings.logsDebugModeEnabled') : t('settings.logsDebugModeDisabled')}
+                </button>
+              </div>
+
               {/* Controls Toolbar */}
               <div className="logs-toolbar" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -2378,7 +2432,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </select>
                   </div>
 
-                  {/* Actions: Copy, Refresh, Clear */}
+                  {/* Actions: Copy, Export, Share, Refresh, Clear */}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -2390,6 +2444,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {copiedLogs ? <Check size={14} style={{ color: 'var(--obsidian-green, #10b981)' }} /> : <Copy size={14} />}
                       <span>{copiedLogs ? t('settings.logsCopied') : t('settings.logsCopy')}</span>
                     </button>
+
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleDownloadLogs}
+                      title={t('settings.logsExport')}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
+                    >
+                      <Download size={14} />
+                      <span>{t('settings.logsExport')}</span>
+                    </button>
+
+                    {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={handleShareLogs}
+                        title={t('settings.logsShare')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px' }}
+                      >
+                        <Share2 size={14} />
+                        <span>{t('settings.logsShare')}</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"

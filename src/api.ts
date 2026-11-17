@@ -307,6 +307,10 @@ async function apiFetch<T>(
     signal = controller.signal;
   }
 
+  const method = (fetchOptions.method || 'GET').toUpperCase();
+  const shouldDebugLog = !path.startsWith('/api/logs');
+  const startedAt = Date.now();
+
   try {
     const res = await fetch(fullUrl, {
       ...fetchOptions,
@@ -324,8 +328,17 @@ async function apiFetch<T>(
         if (data.serverNote) serverNote = data.serverNote;
       } catch {}
 
+      const elapsedMs = Date.now() - startedAt;
       if (res.status === 409 && serverNote) {
+        if (shouldDebugLog) {
+          clientLogger.warn('api', `${method} ${path} -> 409 Conflict (${elapsedMs}ms)`, {
+            serverUpdatedAt: serverNote.updatedAt,
+          });
+        }
         throw new ApiConflictError(errMsg || 'Konflikt beim Speichern', serverNote);
+      }
+      if (shouldDebugLog) {
+        clientLogger.debug('api', `${method} ${path} -> HTTP ${res.status} (${elapsedMs}ms)`, errMsg);
       }
       throw new ApiHttpError(errMsg, res.status);
     }
@@ -338,21 +351,28 @@ async function apiFetch<T>(
       }
     }
 
+    if (shouldDebugLog && clientLogger.isDebugEnabled()) {
+      clientLogger.debug('api', `${method} ${path} -> ${res.status} (${Date.now() - startedAt}ms)`);
+    }
+
     return (await res.json()) as T;
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    const elapsedMs = Date.now() - startedAt;
+    if (
+      (err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError')
+    ) {
+      if (shouldDebugLog) {
+        clientLogger.warn('api', `${method} ${path} -> Timeout/Abort after ${elapsedMs}ms (limit=${defaultTimeoutMs}ms)`);
+      }
       throw new Error(
         path.includes('/api/email/')
           ? 'Request timed out while waiting for mail server response.'
           : 'Request timed out while waiting for server response.'
       );
     }
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error(
-        path.includes('/api/email/')
-          ? 'Request timed out while waiting for mail server response.'
-          : 'Request timed out while waiting for server response.'
-      );
+    if (shouldDebugLog && !(err instanceof ApiConflictError) && !(err instanceof ApiHttpError)) {
+      clientLogger.debug('api', `${method} ${path} -> Network/Fetch error (${elapsedMs}ms)`, err);
     }
     throw err;
   } finally {

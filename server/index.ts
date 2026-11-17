@@ -1158,6 +1158,27 @@ export function createApp(vaultService: VaultService, gitService?: GitService, e
     res.json({ ok: true });
   });
 
+  app.post('/api/logs/client-crash', requireAuth, (req, res) => {
+    const body = (req.body || {}) as {
+      message?: unknown;
+      stack?: unknown;
+      componentStack?: unknown;
+      url?: unknown;
+      viewport?: unknown;
+    };
+    const msg = typeof body.message === 'string' ? body.message.slice(0, 500) : 'Unknown client crash';
+    const stack = typeof body.stack === 'string' ? body.stack.slice(0, 1500) : '';
+    const componentStack = typeof body.componentStack === 'string' ? body.componentStack.slice(0, 1500) : '';
+    const viewport = typeof body.viewport === 'string' ? body.viewport.slice(0, 64) : '';
+
+    serverLogger.error('client-crash', msg, {
+      viewport,
+      componentStack: componentStack || undefined,
+      stack: stack || undefined,
+    });
+    res.json({ ok: true });
+  });
+
   // Fallback to SPA index.html for client-side routing in production
   if (fs.existsSync(distDir)) {
     app.get('*', (req, res, next) => {
