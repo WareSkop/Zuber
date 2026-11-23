@@ -339,7 +339,17 @@ export function createApp(vaultService: VaultService, gitService?: GitService, e
     try {
       const tree = vaultService.getFileTree();
       const files = vaultService.getAllFiles();
-      res.json({ tree, files });
+      const canvasMeta = vaultService.getCanvasTreeMetadata();
+      const externalLinks = vaultService.getExternalLinks();
+      res.json({ tree, files, canvasMeta, externalLinks });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get('/api/vault/external-links', requireAuth, (_req, res) => {
+    try {
+      res.json({ externalLinks: vaultService.getExternalLinks() });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
@@ -698,6 +708,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService, e
           else if (file.mimetype === 'image/gif') ext = '.gif';
           else if (file.mimetype === 'image/webp') ext = '.webp';
           else if (file.mimetype === 'image/svg+xml') ext = '.svg';
+          else if (file.mimetype === 'application/pdf') ext = '.pdf';
           else ext = '.png';
         }
         let base = path.basename(file.originalname || 'image', ext).replace(/[^\w.-]/g, '_');
@@ -719,6 +730,7 @@ export function createApp(vaultService: VaultService, gitService?: GitService, e
       }
       const relPath = path.relative(vaultService.getVaultDir(), req.file.path).replace(/\\/g, '/');
       vaultService.indexFile(relPath);
+      vaultService.notifyChange(relPath, true);
       serverLogger.info('vault', `Uploaded attachment "${req.file.originalname}" (${req.file.size} bytes) -> "${relPath}"`);
       const wikiEmbed = `![[${relPath}]]`;
       res.json({

@@ -2,9 +2,11 @@ import React, { createContext, useContext } from 'react';
 import { stripZencExt } from '../../crypto/folderCrypto';
 
 export interface CanvasContextType {
-  onOpenNote: (path: string) => void;
+  onOpenNote: (path: string, event?: React.MouseEvent | { altKey?: boolean; preventDefault?: () => void }) => void;
+  onOpenExternalUrl?: (url: string, event?: React.MouseEvent) => void;
   onSelectTag?: (tag: string) => void;
   onUpdateNodeData?: (nodeId: string, partialData: Record<string, any>) => void;
+  onResizeFileNode?: (nodeId: string, width: number, height: number, isPreview: boolean) => void;
   allNotes: { path: string; name: string; basename: string }[];
   readOnly?: boolean;
   editingNodeState?: { nodeId: string; initialChar: string } | null;

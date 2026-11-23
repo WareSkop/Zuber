@@ -57,12 +57,15 @@ import {
   notifyVaultEntryDeleted,
 } from './utils/vaultNavigation';
 import type {
+  AggregatedExternalLink,
   BacklinkItem,
+  CanvasTreeMetadata,
   FileTreeNode,
   FrontmatterProperty,
   GraphData,
   NoteData,
 } from '../shared/types';
+import { routeExternalLinkClick } from './utils/researchLinkUtils';
 import {
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
@@ -187,6 +190,8 @@ export const App: React.FC = () => {
     edges: [],
     tags: [],
   });
+  const [canvasMeta, setCanvasMeta] = useState<Record<string, CanvasTreeMetadata>>({});
+  const [externalLinks, setExternalLinks] = useState<AggregatedExternalLink[]>([]);
   const [backlinks, setBacklinks] = useState<{ linked: BacklinkItem[]; unlinked: BacklinkItem[] }>({
     linked: [],
     unlinked: [],
@@ -872,6 +877,10 @@ export const App: React.FC = () => {
         const notesMeta = treeRes.notes ?? (treeRes.files || []).filter((f: any) => f.extension === 'md');
         await syncEngine.getLocalDb().setMeta('allNotes', notesMeta);
         await syncEngine.getLocalDb().setMeta('graph', graphRes);
+        const nextCanvasMeta = treeRes.canvasMeta || {};
+        const nextExternalLinks = treeRes.externalLinks || [];
+        await syncEngine.getLocalDb().setMeta('canvasMeta', nextCanvasMeta);
+        await syncEngine.getLocalDb().setMeta('externalLinks', nextExternalLinks);
 
         const remainingOutbox = await syncEngine.getLocalDb().getOutbox();
         let finalTree = treeRes.tree;
@@ -886,6 +895,8 @@ export const App: React.FC = () => {
         setAllFiles(finalFiles);
         setVaultPath(treeRes.vaultPath);
         setGraphData(graphRes);
+        setCanvasMeta(nextCanvasMeta);
+        setExternalLinks(nextExternalLinks);
         return {
           treeRes: { ...treeRes, tree: finalTree, files: finalFiles },
           graphRes,
@@ -903,10 +914,16 @@ export const App: React.FC = () => {
         edges: [],
         tags: [],
       };
+      const cachedCanvasMeta =
+        (await syncEngine.getLocalDb().getMeta<Record<string, CanvasTreeMetadata>>('canvasMeta')) || {};
+      const cachedExternalLinks =
+        (await syncEngine.getLocalDb().getMeta<AggregatedExternalLink[]>('externalLinks')) || [];
 
       setTree(reconciled.tree);
       setAllFiles(reconciled.files);
       setGraphData(cachedGraph);
+      setCanvasMeta(cachedCanvasMeta);
+      setExternalLinks(cachedExternalLinks);
       return {
         treeRes: {
           tree: reconciled.tree,
@@ -2617,15 +2634,21 @@ export const App: React.FC = () => {
         if (targetInResearch) {
           openInResearch(local);
         } else {
+          const logicalLocal = stripZencExt(local).toLowerCase();
           const isDoc =
-            local.toLowerCase().endsWith('.md') ||
-            local.toLowerCase().endsWith('.canvas') ||
-            local.toLowerCase().endsWith('.base');
+            logicalLocal.endsWith('.md') ||
+            logicalLocal.endsWith('.canvas') ||
+            logicalLocal.endsWith('.base');
           if (isDoc) {
             if (workspaceViewRef.current === 'graph') {
               setWorkspaceView('editor');
             }
             await openNoteByPath(local);
+          } else if (isZencPath(local)) {
+            const resolved = await resolveDecryptedAttachmentUrl(local, currentFrom || undefined);
+            if (resolved?.url) {
+              window.open(resolved.url, '_blank');
+            }
           } else {
             window.open(api.getAttachmentUrl(local, currentFrom || undefined), '_blank');
           }
@@ -2972,6 +2995,67 @@ export const App: React.FC = () => {
       }, 1000);
     }
   };
+
+  const handleUploadCanvasAsset = useCallback(
+    async (file: File, targetFolder: string): Promise<string> => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      isUploadingAttachmentRef.current = true;
+      try {
+        const activeP = activePathRef.current || activeNoteRef.current?.path;
+        const cleanTarget = targetFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || 'attachments';
+        const unlockedFolder = activeP ? unlockedFoldersStore.findUnlockedFolderForPath(activeP) : undefined;
+        const effectiveFolder =
+          unlockedFolder && !cleanTarget.startsWith(`${unlockedFolder.folderPath}/`)
+            ? `${unlockedFolder.folderPath}/${cleanTarget}`
+            : cleanTarget;
+        const uploaded = await api.uploadAttachment(file, effectiveFolder, activeP || undefined);
+        const now = Date.now();
+        recentSelfWritesRef.current.set(uploaded.path, now);
+        if (activeNoteRef.current) {
+          recentSelfWritesRef.current.set(activeNoteRef.current.path, now);
+        }
+        await loadVaultIndex();
+        return uploaded.path;
+      } finally {
+        setTimeout(() => {
+          isUploadingAttachmentRef.current = false;
+        }, 1000);
+      }
+    },
+    [loadVaultIndex]
+  );
+
+  const handleCreateNoteInCanvas = useCallback(
+    async (targetPath: string, title: string): Promise<string> => {
+      const created = await syncEngine.saveNote({
+        path: targetPath,
+        body: `# ${title}\n\n`,
+        properties: [],
+        forceOverwrite: true,
+      });
+      const savedPath = created?.path || targetPath;
+      recentSelfWritesRef.current.set(savedPath, Date.now());
+      await loadVaultIndex();
+      return savedPath;
+    },
+    [loadVaultIndex]
+  );
+
+  const handleOpenExternalUrl = useCallback(
+    (url: string, event?: React.MouseEvent) => {
+      routeExternalLinkClick({
+        url,
+        isResearchOpen: workspaceViewRef.current === 'split',
+        event,
+        onOpenInResearch: (u) => setResearchTarget({ path: u, type: 'web' }),
+        openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+      });
+    },
+    []
+  );
 
   const handleUploadImageClick = () => {
     const input = document.createElement('input');
@@ -3740,10 +3824,11 @@ export const App: React.FC = () => {
               filePath={activeNote.path}
               rawContent={activeNote.rawContent || activeNote.body || '{}'}
               onChange={handleCanvasChange}
-              onOpenNote={(targetPath) => {
-                handleNavigateWikiLink(targetPath);
+              onOpenNote={(targetPath, ev) => {
+                handleNavigateWikiLink(targetPath, ev);
                 if (isMobile) setLeftSidebarOpen(false);
               }}
+              onOpenExternalUrl={handleOpenExternalUrl}
               onSelectTag={(tag) => {
                 setSelectedTagFilter(tag.replace(/^#+/, ''));
                 setLeftSidebarOpen(true);
@@ -3751,6 +3836,8 @@ export const App: React.FC = () => {
               allNotes={allNotesForEditor}
               allFiles={allFiles}
               onUploadImage={handleUploadImageFile}
+              onUploadAsset={handleUploadCanvasAsset}
+              onCreateNoteInCanvas={handleCreateNoteInCanvas}
             />
           </Suspense>
         </div>
@@ -4037,6 +4124,9 @@ export const App: React.FC = () => {
                 activePath={activeNote?.path ?? null}
                 tags={graphData.tags}
                 selectedTagFilter={selectedTagFilter}
+                canvasMeta={canvasMeta}
+                externalLinks={externalLinks}
+                onOpenExternalUrl={handleOpenExternalUrl}
                 onClose={() => setLeftSidebarOpen(false)}
                 onLeftResizeStart={handleLeftResizeStart}
                 isResizingLeft={isResizingLeft}
@@ -4049,6 +4139,9 @@ export const App: React.FC = () => {
               activePath={activeNote?.path ?? null}
               tags={graphData.tags}
               selectedTagFilter={selectedTagFilter}
+              canvasMeta={canvasMeta}
+              externalLinks={externalLinks}
+              onOpenExternalUrl={handleOpenExternalUrl}
               onClose={() => setLeftSidebarOpen(false)}
               onLeftResizeStart={handleLeftResizeStart}
               isResizingLeft={isResizingLeft}

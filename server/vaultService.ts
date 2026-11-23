@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type {
+  AggregatedExternalLink,
+  AggregatedExternalLinkSource,
   AttachmentKind,
   BacklinkItem,
+  CanvasTreeMetadata,
   FileTreeNode,
   FrontmatterProperty,
   GraphData,
@@ -14,6 +17,10 @@ import type {
   SyncManifestEntry,
 } from '../shared/types';
 import {
+  getDefaultCanvasAssetsFolder,
+  resolveCanvasAssetsFolder,
+} from '../shared/canvasTypes';
+import {
   extractMatchSnippet,
   parseSearchQuery,
   scoreSearchMatch,
@@ -22,6 +29,7 @@ import {
 import {
   extractHeadings,
   extractLinksAndEmbeds,
+  extractExternalLinksFromMarkdown,
   extractTags,
   extractCanvasLinksAndTags,
   getAttachmentKind,
@@ -122,6 +130,8 @@ export class VaultService {
   private lookupDirty = true;
   private treeCache: FileTreeNode[] | null = null;
   private graphCache: GraphData | null = null;
+  private canvasMetaCache: Record<string, CanvasTreeMetadata> | null = null;
+  private externalLinksCache: AggregatedExternalLink[] | null = null;
 
   private pendingPaths = new Set<string>();
   private pendingStructural = false;
@@ -171,6 +181,8 @@ export class VaultService {
 
   private invalidate(structural: boolean): void {
     this.graphCache = null;
+    this.canvasMetaCache = null;
+    this.externalLinksCache = null;
     this.lookupDirty = true;
     if (structural) this.treeCache = null;
   }
@@ -242,6 +254,7 @@ export class VaultService {
   private parseNote(relPath: string, rawContent: string, mtimeMs: number): NoteData {
     const { frontmatter, properties, body } = parseMarkdownWithFrontmatter(rawContent);
     const { links, embeds } = extractLinksAndEmbeds(body);
+    const externalLinks = extractExternalLinksFromMarkdown(body);
     const isSendTarget = isNoteSendTarget(frontmatter, properties);
     const isTemplate = isNoteTemplate(frontmatter, properties);
     return {
@@ -258,11 +271,12 @@ export class VaultService {
       updatedAt: mtimeMs,
       isSendTarget,
       isTemplate,
+      externalLinks,
     };
   }
 
   private parseCanvas(relPath: string, rawContent: string, mtimeMs: number): NoteData {
-    const { links, tags } = extractCanvasLinksAndTags(rawContent);
+    const { links, tags, externalLinks, assetsFolder } = extractCanvasLinksAndTags(rawContent);
     return {
       path: relPath,
       name: path.basename(relPath).replace(/\.canvas$/i, ''),
@@ -275,6 +289,8 @@ export class VaultService {
       tags,
       headings: [],
       updatedAt: mtimeMs,
+      externalLinks,
+      ...(assetsFolder ? { assetsFolder } : {}),
     };
   }
 
@@ -296,7 +312,9 @@ export class VaultService {
 
   private removeFromIndex(relPath: string): void {
     const prefix = `${relPath}/`;
-    let changed = this.files.delete(relPath) || this.folders.delete(relPath);
+    const deletedFile = this.files.delete(relPath);
+    const deletedFolder = this.folders.delete(relPath);
+    let changed = deletedFile || deletedFolder;
     this.notes.delete(relPath);
     for (const key of Array.from(this.files.keys())) {
       if (key.startsWith(prefix)) {
@@ -628,15 +646,122 @@ export class VaultService {
     return list;
   }
 
+  public getCanvasTreeMetadata(): Record<string, CanvasTreeMetadata> {
+    if (this.canvasMetaCache) return this.canvasMetaCache;
+    this.ensureLookups();
+
+    const result: Record<string, CanvasTreeMetadata> = {};
+    for (const note of this.notes.values()) {
+      if (!note.path.toLowerCase().endsWith('.canvas')) continue;
+      const assetsFolder = resolveCanvasAssetsFolder(note.path, note.assetsFolder);
+      const refSet = new Set<string>();
+      for (const rawLink of note.links) {
+        const resolved = this.resolveWikiTarget(rawLink, note.path);
+        if (resolved && resolved !== note.path && this.files.has(resolved)) {
+          refSet.add(resolved);
+        }
+      }
+      result[note.path] = {
+        canvasPath: note.path,
+        assetsFolder,
+        referencedFiles: Array.from(refSet).sort((a, b) => a.localeCompare(b)),
+        externalLinks: note.externalLinks || [],
+      };
+    }
+
+    this.canvasMetaCache = result;
+    return result;
+  }
+
+  public getExternalLinks(): AggregatedExternalLink[] {
+    if (this.externalLinksCache) return this.externalLinksCache;
+
+    const byUrl = new Map<
+      string,
+      {
+        url: string;
+        title?: string;
+        domain: string;
+        sourcesMap: Map<string, AggregatedExternalLinkSource>;
+      }
+    >();
+
+    for (const note of this.notes.values()) {
+      if (note.path.toLowerCase().endsWith('.zenc') || note.path.endsWith('.zuber-lock.json')) continue;
+      const lowerPath = note.path.toLowerCase();
+      const isCanvas = lowerPath.endsWith('.canvas');
+      const isMd = lowerPath.endsWith('.md');
+      if (!isCanvas && !isMd) continue;
+
+      const extLinks = note.externalLinks || [];
+      if (extLinks.length === 0) continue;
+
+      const kind: 'markdown' | 'canvas' = isCanvas ? 'canvas' : 'markdown';
+      for (const ref of extLinks) {
+        if (!ref.url) continue;
+        let domain = ref.url;
+        try {
+          domain = new URL(ref.url).hostname.replace(/^www\./i, '') || ref.url;
+        } catch {}
+
+        let bucket = byUrl.get(ref.url);
+        if (!bucket) {
+          bucket = {
+            url: ref.url,
+            ...(ref.title ? { title: ref.title } : {}),
+            domain,
+            sourcesMap: new Map(),
+          };
+          byUrl.set(ref.url, bucket);
+        } else if (!bucket.title && ref.title) {
+          bucket.title = ref.title;
+        }
+
+        const existingSource = bucket.sourcesMap.get(note.path);
+        if (!existingSource) {
+          bucket.sourcesMap.set(note.path, {
+            path: note.path,
+            name: note.name,
+            ...(ref.title ? { title: ref.title } : {}),
+            kind,
+          });
+        } else if (!existingSource.title && ref.title) {
+          existingSource.title = ref.title;
+        }
+      }
+    }
+
+    const list: AggregatedExternalLink[] = Array.from(byUrl.values())
+      .map((item) => ({
+        url: item.url,
+        ...(item.title ? { title: item.title } : {}),
+        domain: item.domain,
+        sources: Array.from(item.sourcesMap.values()).sort((a, b) => a.path.localeCompare(b.path)),
+      }))
+      .sort((a, b) => {
+        if (b.sources.length !== a.sources.length) return b.sources.length - a.sources.length;
+        const domCmp = a.domain.localeCompare(b.domain);
+        if (domCmp !== 0) return domCmp;
+        return (a.title || a.url).localeCompare(b.title || b.url);
+      });
+
+    this.externalLinksCache = list;
+    return list;
+  }
+
   public getVaultOverview(): {
     tree: FileTreeNode[];
     files: any[];
     notes: NoteSummary[];
+    canvasMeta: Record<string, CanvasTreeMetadata>;
+    externalLinks: AggregatedExternalLink[];
   } {
     return {
       tree: this.getFileTree(),
       files: this.getAllFiles(),
       notes: this.getAllNotes(),
+      canvasMeta: this.getCanvasTreeMetadata(),
+      externalLinks: this.getExternalLinks(),
     };
   }
 
@@ -763,8 +888,15 @@ export class VaultService {
       // Cheap freshness check (single stat) in case the watcher has not fired yet
       try {
         const stat = fs.statSync(path.join(this.vaultDir, resolvedRel));
+        if (!stat.isFile()) {
+          this.removeFromIndex(resolvedRel);
+          throw new Error(`Notiz nicht gefunden: ${resolvedRel}`);
+        }
         if (stat.mtimeMs === cached.updatedAt) return cached;
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('Notiz nicht gefunden:')) {
+          throw err;
+        }
         this.removeFromIndex(resolvedRel);
         throw new Error(`Notiz nicht gefunden: ${resolvedRel}`);
       }
@@ -948,6 +1080,9 @@ export class VaultService {
     }
 
     const absPath = this.resolveSafePath(normalizedRel);
+    if (fs.existsSync(absPath) && fs.statSync(absPath).isDirectory()) {
+      throw new Error(`Pfad ist ein Verzeichnis und keine Datei: ${normalizedRel}`);
+    }
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
 
     const raw = payload.rawContent ?? payload.content;
@@ -968,6 +1103,47 @@ export class VaultService {
     fs.mkdirSync(absPath, { recursive: true });
     this.folders.add(this.toRelativePath(absPath));
     this.invalidate(true);
+  }
+
+  private moveCompanionAssetsDirIfPresent(
+    oldCanvasRel: string,
+    newCanvasRel: string,
+    mappings: RenameMapping[]
+  ): string | null {
+    const lowerOld = oldCanvasRel.toLowerCase();
+    if (!lowerOld.endsWith('.canvas') && !lowerOld.endsWith('.canvas.zenc')) {
+      return null;
+    }
+    const oldCompanionRel = getDefaultCanvasAssetsFolder(oldCanvasRel);
+    const newCompanionRel = getDefaultCanvasAssetsFolder(newCanvasRel);
+    if (!oldCompanionRel || !newCompanionRel || oldCompanionRel === newCompanionRel) {
+      return null;
+    }
+    const oldCompanionAbs = this.resolveSafePath(oldCompanionRel);
+    if (!fs.existsSync(oldCompanionAbs)) return null;
+    let compStat: fs.Stats;
+    try {
+      compStat = fs.statSync(oldCompanionAbs);
+    } catch {
+      return null;
+    }
+    if (!compStat.isDirectory()) return null;
+
+    const newCompanionAbs = this.resolveSafePath(newCompanionRel);
+    if (fs.existsSync(newCompanionAbs)) return null;
+
+    fs.mkdirSync(path.dirname(newCompanionAbs), { recursive: true });
+    fs.renameSync(oldCompanionAbs, newCompanionAbs);
+
+    this.removeFromIndex(oldCompanionRel);
+    this.indexDirectory(newCompanionRel);
+
+    mappings.push({
+      oldPath: oldCompanionRel,
+      newPath: newCompanionRel,
+      isDirectory: true,
+    });
+    return newCompanionRel;
   }
 
   public renameOrMove(oldRelPath: string, newRelPath: string): { newPath: string } {
@@ -995,12 +1171,17 @@ export class VaultService {
     if (stat.isDirectory()) this.indexDirectory(finalNewRel);
     else this.indexFile(finalNewRel);
 
-    const mapping: RenameMapping = {
-      oldPath: oldRelPath,
-      newPath: finalNewRel,
-      isDirectory: stat.isDirectory(),
-    };
-    this.refactorVaultLinks([mapping]);
+    const mappings: RenameMapping[] = [
+      {
+        oldPath: oldRelPath,
+        newPath: finalNewRel,
+        isDirectory: stat.isDirectory(),
+      },
+    ];
+    if (stat.isFile()) {
+      this.moveCompanionAssetsDirIfPresent(oldRelPath, finalNewRel, mappings);
+    }
+    this.refactorVaultLinks(mappings);
     this.invalidate(true);
     this.queueNotification(finalNewRel, true);
 
@@ -1010,9 +1191,11 @@ export class VaultService {
   public moveBatch(moves: Array<{ oldPath: string; newPath: string }>): { results: Array<{ oldPath: string; newPath: string }> } {
     const results: Array<{ oldPath: string; newPath: string }> = [];
     const mappings: RenameMapping[] = [];
+    const movedCompanionOldPaths = new Set<string>();
 
     for (const move of moves) {
       const oldRelPath = move.oldPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+      if (movedCompanionOldPaths.has(oldRelPath)) continue;
       const oldAbs = this.resolveSafePath(oldRelPath);
       if (!fs.existsSync(oldAbs)) continue;
 
@@ -1041,6 +1224,12 @@ export class VaultService {
         newPath: finalNewRel,
         isDirectory: stat.isDirectory(),
       });
+      if (stat.isFile()) {
+        const movedComp = this.moveCompanionAssetsDirIfPresent(oldRelPath, finalNewRel, mappings);
+        if (movedComp) {
+          movedCompanionOldPaths.add(getDefaultCanvasAssetsFolder(oldRelPath));
+        }
+      }
       results.push({ oldPath: oldRelPath, newPath: finalNewRel });
     }
 

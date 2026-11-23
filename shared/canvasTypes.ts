@@ -21,6 +21,13 @@ export type CanvasShape =
 
 export type CanvasSide = 'top' | 'right' | 'bottom' | 'left';
 export type CanvasEdgeStyle = 'bezier' | 'straight' | 'step';
+export type CanvasFileDisplayMode = 'card' | 'preview';
+
+export const CANVAS_COMPANION_SUFFIX = '.assets';
+export const COMPACT_FILE_NODE_SIZE = { width: 220, height: 58 } as const;
+export const DEFAULT_MD_PREVIEW_SIZE = { width: 340, height: 280 } as const;
+export const DEFAULT_PDF_PREVIEW_SIZE = { width: 380, height: 440 } as const;
+export const DEFAULT_IMAGE_NODE_SIZE = { width: 300, height: 240 } as const;
 
 export interface JsonCanvasNode {
   id: string;
@@ -41,6 +48,9 @@ export interface JsonCanvasNode {
   icon?: string;           // Optional Lucide icon name or badge
   zIndex?: number;
   link?: string;           // Optional clickable note path or external URL on file/image nodes
+  displayMode?: CanvasFileDisplayMode; // Default: 'card' for newly created .md/.pdf file nodes
+  previewWidth?: number;   // Remembered width when in 'preview' mode
+  previewHeight?: number;  // Remembered height when in 'preview' mode
 }
 
 export interface JsonCanvasEdge {
@@ -93,6 +103,55 @@ export interface JsonCanvasDocument {
   edges: JsonCanvasEdge[];
   viewport?: { x: number; y: number; zoom: number };
   presentation?: CanvasPresentation;
+  assetsFolder?: string; // Optional override; defaults to "<canvasPath>.assets"
+}
+
+function normalizeCanvasRelPath(rawPath?: string | null): string {
+  if (!rawPath) return '';
+  return rawPath.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+}
+
+function stripZencSuffix(filePath: string): string {
+  return filePath.replace(/\.zenc$/i, '');
+}
+
+/**
+ * Returns the default companion assets folder for a `.canvas` file
+ * (e.g. `"Projects/Test.canvas"` -> `"Projects/Test.canvas.assets"`).
+ */
+export function getDefaultCanvasAssetsFolder(canvasPath: string): string {
+  const clean = stripZencSuffix(normalizeCanvasRelPath(canvasPath));
+  if (!clean) return '';
+  return `${clean}${CANVAS_COMPANION_SUFFIX}`;
+}
+
+/**
+ * Resolves the effective assets/companion folder for a `.canvas` document.
+ */
+export function resolveCanvasAssetsFolder(
+  canvasPath: string,
+  customAssetsFolder?: string | null
+): string {
+  const custom = normalizeCanvasRelPath(customAssetsFolder);
+  if (custom) return custom;
+  return getDefaultCanvasAssetsFolder(canvasPath);
+}
+
+/**
+ * Checks whether a vault path (including `.zenc`-encrypted paths) points to a PDF file.
+ */
+export function isPdfFilePath(filePath?: string | null): boolean {
+  if (!filePath) return false;
+  return stripZencSuffix(filePath.trim()).toLowerCase().endsWith('.pdf');
+}
+
+/**
+ * Checks whether a file node supports switching between `'card'` and `'preview'` display modes.
+ */
+export function supportsFileDisplayMode(filePath?: string | null): boolean {
+  if (!filePath) return false;
+  const clean = stripZencSuffix(filePath.trim()).toLowerCase();
+  return clean.endsWith('.md') || clean.endsWith('.pdf');
 }
 
 /**

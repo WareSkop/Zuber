@@ -7,6 +7,7 @@ import {
 } from './canvasMapper';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import type { JsonCanvasDocument, CanvasShape } from '../../../shared/canvasTypes';
+import { COMPACT_FILE_NODE_SIZE } from '../../../shared/canvasTypes';
 
 describe('Knowmesh Canvas - canvasMapper & State Roundtrip', () => {
   it('1. loads an empty canvas safely without errors', () => {
@@ -397,5 +398,85 @@ describe('Knowmesh Canvas - canvasMapper & State Roundtrip', () => {
     const parsedSource = parseCanvasJson(jsonStrSource);
     expect(parsedSource.edges[0].fromEnd).toBe('arrow');
     expect(parsedSource.edges[0].toEnd).toBe('none');
+  });
+
+  it('7. preserves displayMode, previewWidth, previewHeight, assetsFolder, and compact default sizing across roundtrip', () => {
+    const rawJson = JSON.stringify({
+      assetsFolder: 'Projects/Board.canvas.assets/',
+      nodes: [
+        {
+          id: 'card-no-dims',
+          type: 'file',
+          file: 'Projects/Board.canvas.assets/Quick.md',
+          x: 10,
+          y: 20,
+          displayMode: 'card',
+          previewWidth: 410,
+          previewHeight: 330,
+        },
+        {
+          id: 'preview-pdf',
+          type: 'file',
+          file: 'Docs/Spec.pdf',
+          x: 300,
+          y: 20,
+          width: 420,
+          height: 500,
+          displayMode: 'preview',
+          previewWidth: 420,
+          previewHeight: 500,
+        },
+        {
+          id: 'legacy-file',
+          type: 'file',
+          file: 'Legacy.md',
+          x: 800,
+          y: 20,
+          width: 300,
+          height: 220,
+        },
+      ],
+      edges: [],
+    });
+
+    const parsed = parseCanvasJson(rawJson);
+    expect(parsed.assetsFolder).toBe('Projects/Board.canvas.assets');
+
+    const rf = jsonCanvasToReactFlow(parsed);
+    expect(rf.assetsFolder).toBe('Projects/Board.canvas.assets');
+
+    const cardNode = rf.nodes.find((n) => n.id === 'card-no-dims');
+    expect(cardNode?.width).toBe(COMPACT_FILE_NODE_SIZE.width);
+    expect(cardNode?.height).toBe(COMPACT_FILE_NODE_SIZE.height);
+    expect(cardNode?.data.displayMode).toBe('card');
+    expect(cardNode?.data.previewWidth).toBe(410);
+    expect(cardNode?.data.previewHeight).toBe(330);
+
+    const previewNode = rf.nodes.find((n) => n.id === 'preview-pdf');
+    expect(previewNode?.data.displayMode).toBe('preview');
+    expect(previewNode?.data.previewWidth).toBe(420);
+    expect(previewNode?.data.previewHeight).toBe(500);
+
+    const legacyNode = rf.nodes.find((n) => n.id === 'legacy-file');
+    expect(legacyNode?.data.displayMode).toBeUndefined();
+
+    const serialized = reactFlowToJsonCanvas(rf.nodes, rf.edges, rf.viewport, rf.presentation, rf.assetsFolder);
+    const roundtripped = parseCanvasJson(serialized);
+    expect(roundtripped.assetsFolder).toBe('Projects/Board.canvas.assets');
+
+    const rtCard = roundtripped.nodes.find((n) => n.id === 'card-no-dims');
+    expect(rtCard?.displayMode).toBe('card');
+    expect(rtCard?.width).toBe(COMPACT_FILE_NODE_SIZE.width);
+    expect(rtCard?.height).toBe(COMPACT_FILE_NODE_SIZE.height);
+    expect(rtCard?.previewWidth).toBe(410);
+    expect(rtCard?.previewHeight).toBe(330);
+
+    const rtPreview = roundtripped.nodes.find((n) => n.id === 'preview-pdf');
+    expect(rtPreview?.displayMode).toBe('preview');
+    expect(rtPreview?.previewWidth).toBe(420);
+    expect(rtPreview?.previewHeight).toBe(500);
+
+    const rtLegacy = roundtripped.nodes.find((n) => n.id === 'legacy-file');
+    expect(rtLegacy?.displayMode).toBeUndefined();
   });
 });

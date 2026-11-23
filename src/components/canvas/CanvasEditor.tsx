@@ -25,16 +25,26 @@ import {
   type OnConnectEnd,
   type OnReconnect,
 } from '@xyflow/react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, FilePlus, Plus, FolderPlus, ChevronDown } from 'lucide-react';
 
-import type {
-  CanvasShape,
-  CanvasEdgeStyle,
-  CanvasPresentation,
-  CanvasPresentationConfig,
-  CanvasPresentationSlide,
+import {
+  COMPACT_FILE_NODE_SIZE,
+  DEFAULT_IMAGE_NODE_SIZE,
+  DEFAULT_MD_PREVIEW_SIZE,
+  DEFAULT_PDF_PREVIEW_SIZE,
+  getDefaultCanvasAssetsFolder,
+  resolveCanvasAssetsFolder,
+  isPdfFilePath,
+  supportsFileDisplayMode,
+  resolveCanvasColor,
+  type CanvasShape,
+  type CanvasEdgeStyle,
+  type CanvasPresentation,
+  type CanvasPresentationConfig,
+  type CanvasPresentationSlide,
+  type CanvasFileDisplayMode,
 } from '../../../shared/canvasTypes';
-import { resolveCanvasColor } from '../../../shared/canvasTypes';
+import { stripZencExt } from '../../crypto/folderCrypto';
 import { CanvasContext } from './CanvasContext';
 import {
   parseCanvasJson,
@@ -62,16 +72,20 @@ import { CanvasInspector } from './CanvasInspector';
 import { CanvasPresentationPanel } from './CanvasPresentationPanel';
 import { useTranslation } from '../../i18n';
 import { clientLogger } from '../../utils/logger';
+import { api } from '../../api';
 
 export interface CanvasEditorProps {
   filePath: string;
   rawContent: string;
   onChange: (newContent: string) => void;
-  onOpenNote: (path: string) => void;
+  onOpenNote: (path: string, event?: React.MouseEvent | { altKey?: boolean; preventDefault?: () => void }) => void;
+  onOpenExternalUrl?: (url: string, event?: React.MouseEvent) => void;
   onSelectTag?: (tag: string) => void;
   allNotes: { path: string; name: string; basename: string }[];
   allFiles?: { path: string; name: string; basename?: string }[];
   onUploadImage?: (file: File) => Promise<string>;
+  onUploadAsset?: (file: File, targetFolder: string) => Promise<string>;
+  onCreateNoteInCanvas?: (targetPath: string, title: string) => Promise<string>;
   readOnly?: boolean;
 }
 
@@ -134,15 +148,33 @@ function shouldPersistPresentation(pres: CanvasPresentation): boolean {
   );
 }
 
+function getNodeSize(node: Node, fallbackW: number, fallbackH: number): { width: number; height: number } {
+  let w = node.measured?.width ?? node.width;
+  if (typeof w !== 'number' && typeof node.style?.width === 'string') {
+    w = parseFloat(node.style.width);
+  }
+  let h = node.measured?.height ?? node.height;
+  if (typeof h !== 'number' && typeof node.style?.height === 'string') {
+    h = parseFloat(node.style.height);
+  }
+  return {
+    width: Math.round(w && Number.isFinite(w) && w > 0 ? w : fallbackW),
+    height: Math.round(h && Number.isFinite(h) && h > 0 ? h : fallbackH),
+  };
+}
+
 const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   filePath,
   rawContent,
   onChange,
   onOpenNote,
+  onOpenExternalUrl,
   onSelectTag,
   allNotes,
   allFiles = [],
   onUploadImage,
+  onUploadAsset,
+  onCreateNoteInCanvas,
   readOnly = false,
 }) => {
   const { fitView, getViewport, setViewport, screenToFlowPosition } = useReactFlow();
@@ -204,6 +236,24 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
 
   // Floating context menu position for right-click inspector
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const [paneContextMenu, setPaneContextMenu] = useState<{
+    screenX: number;
+    screenY: number;
+    flowPos: { x: number; y: number };
+  } | null>(null);
+
+  // Canvas companion assetsFolder setting & inline create-note dialog
+  const [assetsFolder, setAssetsFolder] = useState<string | undefined>(undefined);
+  const assetsFolderRef = useRef<string | undefined>(assetsFolder);
+  assetsFolderRef.current = assetsFolder;
+
+  const [createNoteModal, setCreateNoteModal] = useState<{ targetPos?: { x: number; y: number } } | null>(null);
+  const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteFolder, setNewNoteFolder] = useState('');
+  const [showFolderOverride, setShowFolderOverride] = useState(false);
+  const [creatingNote, setCreatingNote] = useState(false);
+  const createNoteDialogRef = useRef<HTMLDialogElement>(null);
+  const paneContextMenuRef = useRef<HTMLDivElement>(null);
 
   // Type-to-edit state for single selected node
   const [editingNodeState, setEditingNodeState] = useState<{ nodeId: string; initialChar: string } | null>(null);
@@ -267,7 +317,8 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         latestNodesRef.current,
         latestEdgesRef.current,
         vp,
-        presToSave
+        presToSave,
+        assetsFolderRef.current
       );
       if (jsonStr !== lastEmittedJsonRef.current) {
         lastEmittedJsonRef.current = jsonStr;
@@ -322,6 +373,10 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     setEdges(rf.edges);
     latestNodesRef.current = rf.nodes;
     latestEdgesRef.current = rf.edges;
+
+    const loadedAssetsFolder = rf.assetsFolder;
+    assetsFolderRef.current = loadedAssetsFolder;
+    setAssetsFolder(loadedAssetsFolder);
 
     const loadedPresentation = rf.presentation ?? createEmptyPresentation();
     presentationRef.current = loadedPresentation;
@@ -396,7 +451,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         }
         const pres = presentationRef.current;
         const presToSave = shouldPersistPresentation(pres) ? pres : undefined;
-        const jsonStr = reactFlowToJsonCanvas(currentNodes, currentEdges, vp, presToSave);
+        const jsonStr = reactFlowToJsonCanvas(
+          currentNodes,
+          currentEdges,
+          vp,
+          presToSave,
+          assetsFolderRef.current
+        );
         lastEmittedJsonRef.current = jsonStr;
         clientLogger.debug('canvas', `triggerAutoSave emitting update for "${filePath}"`, {
           nodes: currentNodes.length,
@@ -765,6 +826,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   const handleNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
       event.preventDefault();
+      setPaneContextMenu(null);
       // 1. Select the right-clicked node exclusively:
       setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === node.id })));
       setEdges((eds) => eds.map((e) => ({ ...e, selected: false })));
@@ -778,6 +840,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
   const handleEdgeContextMenu = useCallback(
     (event: React.MouseEvent, edge: Edge) => {
       event.preventDefault();
+      setPaneContextMenu(null);
       // 1. Select the right-clicked edge exclusively:
       setEdges((eds) => eds.map((e) => ({ ...e, selected: e.id === edge.id })));
       setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
@@ -788,20 +851,41 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [setNodes, setEdges]
   );
 
+  const handlePaneContextMenu = useCallback(
+    (event: React.MouseEvent | MouseEvent) => {
+      event.preventDefault();
+      setContextMenuPos(null);
+      if (readOnly) return;
+      const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const clampedX = Math.max(12, Math.min(event.clientX, window.innerWidth - 236));
+      const clampedY = Math.max(12, Math.min(event.clientY, window.innerHeight - 160));
+      setPaneContextMenu({
+        screenX: clampedX,
+        screenY: clampedY,
+        flowPos,
+      });
+    },
+    [readOnly, screenToFlowPosition]
+  );
+
   const handlePaneClick = useCallback(() => {
     setContextMenuPos(null);
+    setPaneContextMenu(null);
   }, []);
 
   const handleNodeClick = useCallback(() => {
     setContextMenuPos(null);
+    setPaneContextMenu(null);
   }, []);
 
   const handleEdgeClick = useCallback(() => {
     setContextMenuPos(null);
+    setPaneContextMenu(null);
   }, []);
 
   const handleMoveStart = useCallback(() => {
     setContextMenuPos(null);
+    setPaneContextMenu(null);
   }, []);
 
   // Undo / Redo actions
@@ -863,13 +947,30 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [getViewport]
   );
 
+  // Companion folder calculation & override
+  const defaultAssetsFolder = useMemo(() => getDefaultCanvasAssetsFolder(filePath), [filePath]);
+  const effectiveAssetsFolder = useMemo(
+    () => resolveCanvasAssetsFolder(filePath, assetsFolder),
+    [filePath, assetsFolder]
+  );
+
+  const handleChangeAssetsFolder = useCallback(
+    (nextFolder: string | undefined) => {
+      const normalized = nextFolder?.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || undefined;
+      assetsFolderRef.current = normalized;
+      setAssetsFolder(normalized);
+      triggerAutoSave(latestNodesRef.current, latestEdgesRef.current);
+    },
+    [triggerAutoSave]
+  );
+
   // Add new nodes
   const handleAddTextNode = useCallback(
-    (shape: CanvasShape = 'rectangle') => {
+    (shape: CanvasShape = 'rectangle', customPos?: { x: number; y: number }) => {
       if (readOnly) return;
       const width = shape === 'circle' ? 140 : shape === 'diamond' ? 180 : 260;
       const height = shape === 'circle' ? 140 : shape === 'diamond' ? 140 : 160;
-      const pos = getCenterSpawnPosition(width, height, nodes.length);
+      const pos = customPos || getCenterSpawnPosition(width, height, nodes.length);
       const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const newNode: Node = {
@@ -903,8 +1004,17 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     (targetFilePath: string, customPos?: { x: number; y: number }) => {
       if (readOnly) return;
       const isImg = isImageFilePath(targetFilePath);
-      const width = isImg ? 300 : 340;
-      const height = isImg ? 240 : 280;
+      const isCompactEligible = supportsFileDisplayMode(targetFilePath);
+      const width = isImg
+        ? DEFAULT_IMAGE_NODE_SIZE.width
+        : isCompactEligible
+          ? COMPACT_FILE_NODE_SIZE.width
+          : 300;
+      const height = isImg
+        ? DEFAULT_IMAGE_NODE_SIZE.height
+        : isCompactEligible
+          ? COMPACT_FILE_NODE_SIZE.height
+          : 180;
       const pos = customPos || getCenterSpawnPosition(width, height, nodes.length);
       const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
@@ -920,6 +1030,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           rawType: 'file',
           file: targetFilePath,
           color: undefined,
+          ...(isCompactEligible ? { displayMode: 'card' as CanvasFileDisplayMode } : {}),
         },
       };
 
@@ -934,16 +1045,140 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
     [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges]
   );
 
-  const handleUploadImageFiles = useCallback(
-    async (files: File[], baseDropPos?: { x: number; y: number }) => {
-      if (readOnly || !onUploadImage) return;
-      const imageFiles = files.filter((f) => f.type.startsWith('image/') || isImageFilePath(f.name));
-      if (imageFiles.length === 0) return;
+  const handleToggleFileDisplayMode = useCallback(
+    (nodeId: string, targetMode: CanvasFileDisplayMode) => {
+      if (readOnly) return;
+      setNodes((nds) => {
+        let changed = false;
+        const next = nds.map((n) => {
+          if (n.id !== nodeId || n.type !== 'canvasFile') return n;
+          const filePathStr = (n.data?.file as string) || '';
+          if (!supportsFileDisplayMode(filePathStr)) return n;
 
-      for (let idx = 0; idx < imageFiles.length; idx++) {
-        const file = imageFiles[idx];
+          const currentMode: CanvasFileDisplayMode =
+            n.data?.displayMode === 'card' ? 'card' : 'preview';
+          if (currentMode === targetMode) return n;
+
+          changed = true;
+          const isPdf = isPdfFilePath(filePathStr);
+          const defaultPreview = isPdf ? DEFAULT_PDF_PREVIEW_SIZE : DEFAULT_MD_PREVIEW_SIZE;
+
+          if (targetMode === 'preview') {
+            const savedW =
+              typeof n.data?.previewWidth === 'number' && n.data.previewWidth > 0
+                ? Math.round(n.data.previewWidth)
+                : defaultPreview.width;
+            const savedH =
+              typeof n.data?.previewHeight === 'number' && n.data.previewHeight > 0
+                ? Math.round(n.data.previewHeight)
+                : defaultPreview.height;
+
+            return {
+              ...n,
+              width: savedW,
+              height: savedH,
+              measured: { width: savedW, height: savedH },
+              style: { ...(n.style || {}), width: `${savedW}px`, height: `${savedH}px` },
+              data: {
+                ...n.data,
+                displayMode: 'preview' as CanvasFileDisplayMode,
+                previewWidth: savedW,
+                previewHeight: savedH,
+              },
+            };
+          } else {
+            const { width: curW, height: curH } = getNodeSize(
+              n,
+              defaultPreview.width,
+              defaultPreview.height
+            );
+            const rememberedW =
+              curW >= 140
+                ? curW
+                : typeof n.data?.previewWidth === 'number'
+                  ? n.data.previewWidth
+                  : defaultPreview.width;
+            const rememberedH =
+              curH >= 100
+                ? curH
+                : typeof n.data?.previewHeight === 'number'
+                  ? n.data.previewHeight
+                  : defaultPreview.height;
+
+            return {
+              ...n,
+              width: COMPACT_FILE_NODE_SIZE.width,
+              height: COMPACT_FILE_NODE_SIZE.height,
+              measured: {
+                width: COMPACT_FILE_NODE_SIZE.width,
+                height: COMPACT_FILE_NODE_SIZE.height,
+              },
+              style: {
+                ...(n.style || {}),
+                width: `${COMPACT_FILE_NODE_SIZE.width}px`,
+                height: `${COMPACT_FILE_NODE_SIZE.height}px`,
+              },
+              data: {
+                ...n.data,
+                displayMode: 'card' as CanvasFileDisplayMode,
+                previewWidth: rememberedW,
+                previewHeight: rememberedH,
+              },
+            };
+          }
+        });
+        if (!changed) return nds;
+        pushHistory(next, edges);
+        triggerAutoSave(next, edges);
+        return next;
+      });
+    },
+    [readOnly, setNodes, pushHistory, triggerAutoSave, edges]
+  );
+
+  const handleResizeFileNode = useCallback(
+    (nodeId: string, width: number, height: number, isPreview: boolean) => {
+      if (readOnly) return;
+      setNodes((nds) => {
+        const next = nds.map((n) => {
+          if (n.id !== nodeId) return n;
+          const nextData = isPreview
+            ? { ...n.data, previewWidth: width, previewHeight: height }
+            : n.data;
+          return {
+            ...n,
+            width,
+            height,
+            measured: { width, height },
+            style: { ...(n.style || {}), width: `${width}px`, height: `${height}px` },
+            data: nextData,
+          };
+        });
+        pushHistory(next, edges);
+        triggerAutoSave(next, edges);
+        return next;
+      });
+    },
+    [readOnly, setNodes, pushHistory, triggerAutoSave, edges]
+  );
+
+  const handleUploadAssetFiles = useCallback(
+    async (files: File[], baseDropPos?: { x: number; y: number }) => {
+      if (readOnly || (!onUploadAsset && !onUploadImage)) return;
+      const supportedFiles = files.filter((f) => {
+        const isImg = f.type.startsWith('image/') || isImageFilePath(f.name);
+        const isPdf = f.type === 'application/pdf' || isPdfFilePath(f.name);
+        return isImg || isPdf;
+      });
+      if (supportedFiles.length === 0) return;
+
+      const targetDir = effectiveAssetsFolder || 'attachments';
+      for (let idx = 0; idx < supportedFiles.length; idx++) {
+        const file = supportedFiles[idx];
         try {
-          const uploadedRaw = await onUploadImage(file);
+          const uploadedRaw = onUploadAsset
+            ? await onUploadAsset(file, targetDir)
+            : await onUploadImage!(file);
           const uploadedPath = uploadedRaw.replace(/^!\[\[|\]\]$/g, '').trim();
           if (!uploadedPath) continue;
           const pos = baseDropPos
@@ -951,43 +1186,217 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             : undefined;
           handleAddFileNode(uploadedPath, pos);
         } catch (err) {
-          clientLogger.error('canvas', 'Image upload into canvas failed', err);
+          clientLogger.error('canvas', 'Asset upload into canvas failed', err);
         }
       }
     },
-    [readOnly, onUploadImage, handleAddFileNode]
+    [readOnly, onUploadAsset, onUploadImage, effectiveAssetsFolder, handleAddFileNode]
   );
 
-  const handleAddGroupNode = useCallback(() => {
-    if (readOnly) return;
-    const width = 420;
-    const height = 320;
-    const pos = getCenterSpawnPosition(width, height, nodes.length);
-    const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const handleUploadImageFiles = useCallback(
+    async (files: File[], baseDropPos?: { x: number; y: number }) => {
+      const imageFiles = files.filter((f) => f.type.startsWith('image/') || isImageFilePath(f.name));
+      if (imageFiles.length === 0) return;
+      await handleUploadAssetFiles(imageFiles, baseDropPos);
+    },
+    [handleUploadAssetFiles]
+  );
 
-    const newNode: Node = {
-      id,
-      type: 'canvasGroup',
-      position: { x: pos.x, y: pos.y },
-      width,
-      height,
-      style: { width: `${width}px`, height: `${height}px`, zIndex: -1 },
-      selected: true,
-      data: {
-        rawType: 'group',
-        label: t('canvas.newGroupDefault'),
-        color: undefined,
-      },
+  const handleAddGroupNode = useCallback(
+    (customPos?: { x: number; y: number }) => {
+      if (readOnly) return;
+      const width = 420;
+      const height = 320;
+      const pos = customPos || getCenterSpawnPosition(width, height, nodes.length);
+      const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+      const newNode: Node = {
+        id,
+        type: 'canvasGroup',
+        position: { x: pos.x, y: pos.y },
+        width,
+        height,
+        style: { width: `${width}px`, height: `${height}px`, zIndex: -1 },
+        selected: true,
+        data: {
+          rawType: 'group',
+          label: t('canvas.newGroupDefault'),
+          color: undefined,
+        },
+      };
+
+      setNodes((current) => {
+        const unselected = current.map((n) => ({ ...n, selected: false }));
+        const next = [...unselected, newNode];
+        pushHistory(next, edges);
+        triggerAutoSave(next, edges);
+        return next;
+      });
+    },
+    [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges, t]
+  );
+
+  const openCreateNoteModal = useCallback(
+    (targetPos?: { x: number; y: number }) => {
+      if (readOnly) return;
+      setPaneContextMenu(null);
+      setContextMenuPos(null);
+      setNewNoteTitle('');
+      setNewNoteFolder(effectiveAssetsFolder);
+      setShowFolderOverride(false);
+      setCreateNoteModal({ targetPos });
+    },
+    [readOnly, effectiveAssetsFolder]
+  );
+
+  const handleCreateNoteSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (readOnly || creatingNote || !createNoteModal) return;
+
+      const rawTitle = newNoteTitle.trim();
+      const sanitizedBase = rawTitle
+        .replace(/\.md$/i, '')
+        .replace(/[\\/:*?"<>|\0]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!sanitizedBase) return;
+
+      const folder = (newNoteFolder || effectiveAssetsFolder || '')
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/^\/+|\/+$/g, '');
+
+      const existingLower = new Set(allFiles.map((f) => stripZencExt(f.path).toLowerCase()));
+      let candidateName = sanitizedBase;
+      let targetPath = folder ? `${folder}/${candidateName}.md` : `${candidateName}.md`;
+      let counter = 2;
+      while (existingLower.has(targetPath.toLowerCase())) {
+        candidateName = `${sanitizedBase} ${counter}`;
+        targetPath = folder ? `${folder}/${candidateName}.md` : `${candidateName}.md`;
+        counter++;
+      }
+
+      setCreatingNote(true);
+      try {
+        let createdPath = targetPath;
+        if (onCreateNoteInCanvas) {
+          createdPath = await onCreateNoteInCanvas(targetPath, sanitizedBase);
+        } else {
+          const saved = await api.saveNote({
+            path: targetPath,
+            body: `# ${sanitizedBase}\n\n`,
+            properties: [],
+            forceOverwrite: true,
+          });
+          createdPath = saved?.path || targetPath;
+        }
+
+        const spawnPos = createNoteModal.targetPos
+          ? {
+              x: Math.round(createNoteModal.targetPos.x - COMPACT_FILE_NODE_SIZE.width / 2),
+              y: Math.round(createNoteModal.targetPos.y - COMPACT_FILE_NODE_SIZE.height / 2),
+            }
+          : undefined;
+        handleAddFileNode(createdPath, spawnPos);
+        setCreateNoteModal(null);
+      } catch (err) {
+        clientLogger.error('canvas', 'Create note inside canvas failed', err);
+      } finally {
+        setCreatingNote(false);
+      }
+    },
+    [
+      readOnly,
+      creatingNote,
+      createNoteModal,
+      newNoteTitle,
+      newNoteFolder,
+      effectiveAssetsFolder,
+      allFiles,
+      onCreateNoteInCanvas,
+      handleAddFileNode,
+    ]
+  );
+
+  // Native <dialog> lifecycle + progressive-enhancement closedby="any" fallback
+  useEffect(() => {
+    const dialog = createNoteDialogRef.current;
+    if (!dialog) return;
+
+    if (!createNoteModal) {
+      if (dialog.open) {
+        try {
+          dialog.close?.();
+        } catch {
+          dialog.removeAttribute('open');
+        }
+      }
+      return;
+    }
+
+    if (!dialog.open) {
+      try {
+        if (typeof dialog.showModal === 'function') {
+          dialog.showModal();
+        } else {
+          dialog.setAttribute('open', '');
+        }
+      } catch {
+        dialog.setAttribute('open', '');
+      }
+    }
+
+    const handleClose = () => {
+      dialog.returnValue = '';
+      setCreateNoteModal(null);
     };
+    dialog.addEventListener('close', handleClose);
 
-    setNodes((current) => {
-      const unselected = current.map((n) => ({ ...n, selected: false }));
-      const next = [...unselected, newNode];
-      pushHistory(next, edges);
-      triggerAutoSave(next, edges);
-      return next;
-    });
-  }, [readOnly, getCenterSpawnPosition, nodes.length, setNodes, pushHistory, triggerAutoSave, edges, t]);
+    // Fallback light-dismiss when native `closedby` is unsupported
+    let removeLightDismiss: (() => void) | undefined;
+    if (typeof HTMLDialogElement !== 'undefined' && !('closedBy' in HTMLDialogElement.prototype)) {
+      let pressedOutside = false;
+      const isOutside = (ev: PointerEvent) => {
+        const r = dialog.getBoundingClientRect();
+        return ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom;
+      };
+      const onPointerDown = (ev: PointerEvent) => {
+        pressedOutside = isOutside(ev);
+      };
+      const onPointerUp = (ev: PointerEvent) => {
+        if (pressedOutside && isOutside(ev)) {
+          try {
+            dialog.close?.();
+          } catch {
+            setCreateNoteModal(null);
+          }
+        }
+      };
+      dialog.addEventListener('pointerdown', onPointerDown);
+      dialog.addEventListener('pointerup', onPointerUp);
+      removeLightDismiss = () => {
+        dialog.removeEventListener('pointerdown', onPointerDown);
+        dialog.removeEventListener('pointerup', onPointerUp);
+      };
+    }
+
+    return () => {
+      dialog.removeEventListener('close', handleClose);
+      removeLightDismiss?.();
+    };
+  }, [createNoteModal]);
+
+  useEffect(() => {
+    if (!paneContextMenu) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (paneContextMenuRef.current && !paneContextMenuRef.current.contains(e.target as globalThis.Node)) {
+        setPaneContextMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [paneContextMenu]);
 
   // Selected item tracking for Floating Inspector & Multi-Selection
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes]);
@@ -1597,12 +2006,13 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       }
 
       // Ignore when a modal or palette dialog is open
-      if (document.querySelector('.modal-overlay, .modal-backdrop, .command-palette-modal, .version-history-modal-backdrop')) {
+      if (document.querySelector('dialog[open], .modal-overlay, .modal-backdrop, .command-palette-modal, .version-history-modal-backdrop')) {
         return;
       }
 
       if (e.key === 'Escape') {
         setContextMenuPos(null);
+        setPaneContextMenu(null);
       }
 
       // Undo / Redo
@@ -1792,12 +2202,41 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
       e.preventDefault();
 
       const flowPoint = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      const centeredPos = {
-        x: Math.round(flowPoint.x - 150),
-        y: Math.round(flowPoint.y - 120),
+      const getDropPosForPath = (targetPath: string, idx = 0) => {
+        const isImg = isImageFilePath(targetPath);
+        const isCard = supportsFileDisplayMode(targetPath);
+        const dropW = isImg
+          ? DEFAULT_IMAGE_NODE_SIZE.width
+          : isCard
+            ? COMPACT_FILE_NODE_SIZE.width
+            : 300;
+        const dropH = isImg
+          ? DEFAULT_IMAGE_NODE_SIZE.height
+          : isCard
+            ? COMPACT_FILE_NODE_SIZE.height
+            : 180;
+        return {
+          x: Math.round(flowPoint.x - dropW / 2) + idx * 24,
+          y: Math.round(flowPoint.y - dropH / 2) + idx * 24,
+        };
       };
 
-      // Case A: Dragged from Zuber FileSidebar (images, notes, canvases, bases)
+      // Case A1: Dedicated Zuber FileSidebar drag payload (application/x-zuber-file)
+      const zuberFileJson = e.dataTransfer.getData('application/x-zuber-file');
+      if (zuberFileJson) {
+        try {
+          const parsed = JSON.parse(zuberFileJson);
+          if (parsed && typeof parsed.path === 'string' && parsed.path.trim()) {
+            const targetPath = parsed.path.trim();
+            handleAddFileNode(targetPath, getDropPosForPath(targetPath, 0));
+            return;
+          }
+        } catch {
+          // ignore malformed drag payload
+        }
+      }
+
+      // Case A2: Legacy / Multi-select drag payload from FileSidebar
       const pathsJson = e.dataTransfer.getData('application/x-knowmesh-paths');
       const singlePath = e.dataTransfer.getData('application/x-knowmesh-file-path');
       const internalPaths: string[] = [];
@@ -1823,25 +2262,34 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
           return /\.[a-z0-9]+$/i.test(p);
         });
         validPaths.forEach((p, idx) => {
-          handleAddFileNode(p, {
-            x: centeredPos.x + idx * 24,
-            y: centeredPos.y + idx * 24,
-          });
+          handleAddFileNode(p, getDropPosForPath(p, idx));
         });
         return;
       }
 
-      // Case B: External image files dropped from OS / device
+      // Case B: External image and PDF files dropped from OS / device
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        void handleUploadImageFiles(Array.from(e.dataTransfer.files), centeredPos);
+        const droppedFiles = Array.from(e.dataTransfer.files);
+        const first = droppedFiles[0];
+        const firstIsPdf = first && (first.type === 'application/pdf' || isPdfFilePath(first.name));
+        const basePos = firstIsPdf
+          ? {
+              x: Math.round(flowPoint.x - COMPACT_FILE_NODE_SIZE.width / 2),
+              y: Math.round(flowPoint.y - COMPACT_FILE_NODE_SIZE.height / 2),
+            }
+          : {
+              x: Math.round(flowPoint.x - DEFAULT_IMAGE_NODE_SIZE.width / 2),
+              y: Math.round(flowPoint.y - DEFAULT_IMAGE_NODE_SIZE.height / 2),
+            };
+        void handleUploadAssetFiles(droppedFiles, basePos);
       }
     },
-    [effectiveReadOnly, screenToFlowPosition, allFiles, handleAddFileNode, handleUploadImageFiles]
+    [effectiveReadOnly, screenToFlowPosition, allFiles, handleAddFileNode, handleUploadAssetFiles]
   );
 
   const handleCanvasPaste = useCallback(
     (e: React.ClipboardEvent) => {
-      if (effectiveReadOnly || !onUploadImage) return;
+      if (effectiveReadOnly || (!onUploadAsset && !onUploadImage)) return;
       const activeEl = document.activeElement as HTMLElement | null;
       if (
         activeEl &&
@@ -1867,15 +2315,17 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
         void handleUploadImageFiles(imageFiles);
       }
     },
-    [effectiveReadOnly, onUploadImage, handleUploadImageFiles]
+    [effectiveReadOnly, onUploadAsset, onUploadImage, handleUploadImageFiles]
   );
 
   return (
     <CanvasContext.Provider
       value={{
         onOpenNote,
+        onOpenExternalUrl,
         onSelectTag,
         onUpdateNodeData: handleUpdateNodeData,
+        onResizeFileNode: handleResizeFileNode,
         allNotes,
         readOnly: effectiveReadOnly,
         editingNodeState,
@@ -1912,7 +2362,11 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onRedo={handleRedo}
             allNotes={allNotes}
             allFiles={allFiles}
-            onUploadImageFiles={onUploadImage ? (files) => handleUploadImageFiles(files) : undefined}
+            onUploadImageFiles={onUploadAsset || onUploadImage ? (files) => handleUploadImageFiles(files) : undefined}
+            onRequestCreateNote={() => openCreateNoteModal()}
+            assetsFolder={assetsFolder}
+            defaultAssetsFolder={defaultAssetsFolder}
+            onChangeAssetsFolder={handleChangeAssetsFolder}
             isPresentationPanelOpen={isPresentationPanelOpen}
             onTogglePresentationPanel={() => setIsPresentationPanelOpen((prev) => !prev)}
             presentationSlideCount={presentation.slides.length}
@@ -1926,6 +2380,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             selectedEdge={selectedNode ? null : selectedEdge}
             contextMenuPos={contextMenuPos}
             onUpdateNodeData={handleUpdateNodeData}
+            onToggleFileDisplayMode={handleToggleFileDisplayMode}
             onUpdateEdgeData={handleUpdateEdgeData}
             onDuplicateNode={handleDuplicateNode}
             onDeleteNode={handleDeleteNode}
@@ -1986,7 +2441,7 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             onNodeContextMenu={handleNodeContextMenu}
             onEdgeContextMenu={handleEdgeContextMenu}
             onPaneClick={handlePaneClick}
-            onPaneContextMenu={handlePaneClick}
+            onPaneContextMenu={handlePaneContextMenu}
             onNodeClick={handleNodeClick}
             onEdgeClick={handleEdgeClick}
             onMoveStart={handleMoveStart}
@@ -2032,6 +2487,132 @@ const CanvasEditorInner: React.FC<CanvasEditorProps> = ({
             )}
           </ReactFlow>
         </div>
+
+        {/* Canvas Pane Right-Click Context Menu */}
+        {!effectiveReadOnly && paneContextMenu && (
+          <div
+            ref={paneContextMenuRef}
+            className="tree-context-menu canvas-pane-context-menu"
+            style={{
+              position: 'fixed',
+              left: `${paneContextMenu.screenX}px`,
+              top: `${paneContextMenu.screenY}px`,
+              zIndex: 120,
+            }}
+          >
+            <button
+              type="button"
+              className="tree-context-item"
+              onClick={() => openCreateNoteModal(paneContextMenu.flowPos)}
+            >
+              <FilePlus size={15} />
+              <span>{t('canvas.createNoteHere')}</span>
+            </button>
+            <button
+              type="button"
+              className="tree-context-item"
+              onClick={() => {
+                const { x, y } = paneContextMenu.flowPos;
+                setPaneContextMenu(null);
+                handleAddTextNode('rectangle', { x: Math.round(x - 130), y: Math.round(y - 80) });
+              }}
+            >
+              <Plus size={15} />
+              <span>{t('canvas.addText')}</span>
+            </button>
+            <button
+              type="button"
+              className="tree-context-item"
+              onClick={() => {
+                const { x, y } = paneContextMenu.flowPos;
+                setPaneContextMenu(null);
+                handleAddGroupNode({ x: Math.round(x - 210), y: Math.round(y - 160) });
+              }}
+            >
+              <FolderPlus size={15} />
+              <span>{t('canvas.addGroup')}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Inline Create Note Modal (Native <dialog>) */}
+        <dialog
+          ref={createNoteDialogRef}
+          className="canvas-inline-dialog"
+          aria-labelledby="canvas-create-note-title"
+          {...({ closedby: 'any' } as any)}
+        >
+          <div className="canvas-inline-dialog-header">
+            <h3 id="canvas-create-note-title">{t('canvas.createNoteModalTitle')}</h3>
+            <button
+              type="button"
+              className="canvas-inline-dialog-close"
+              onClick={() => setCreateNoteModal(null)}
+              aria-label={t('common.close')}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <form onSubmit={handleCreateNoteSubmit} className="canvas-inline-dialog-form">
+            <input
+              type="text"
+              autoFocus
+              className="canvas-inline-dialog-input"
+              placeholder={t('canvas.noteTitlePlaceholder')}
+              value={newNoteTitle}
+              onChange={(e) => setNewNoteTitle(e.target.value)}
+              disabled={creatingNote}
+            />
+            <button
+              type="button"
+              className="canvas-inline-folder-toggle"
+              onClick={() => setShowFolderOverride((v) => !v)}
+              aria-expanded={showFolderOverride}
+            >
+              <ChevronDown
+                size={13}
+                style={{
+                  transform: showFolderOverride ? 'rotate(0deg)' : 'rotate(-90deg)',
+                  transition: 'transform 0.15s ease',
+                }}
+              />
+              <span>{t('canvas.customFolderToggle')}</span>
+              <span className="canvas-inline-folder-preview">
+                {newNoteFolder || effectiveAssetsFolder}
+              </span>
+            </button>
+            {showFolderOverride && (
+              <label className="canvas-inline-folder-field">
+                <span>{t('canvas.targetFolderLabel')}</span>
+                <input
+                  type="text"
+                  className="canvas-inline-dialog-input"
+                  value={newNoteFolder}
+                  placeholder={effectiveAssetsFolder}
+                  onChange={(e) => setNewNoteFolder(e.target.value)}
+                  disabled={creatingNote}
+                />
+              </label>
+            )}
+            <div className="canvas-inline-dialog-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setCreateNoteModal(null)}
+                disabled={creatingNote}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={creatingNote || !newNoteTitle.trim()}
+              >
+                {creatingNote ? t('common.loading') : t('canvas.createNoteBtn')}
+              </button>
+            </div>
+          </form>
+        </dialog>
 
         {/* Fullscreen Presentation Player HUD */}
         {isPresenting && activePresentingSlide && (

@@ -34,6 +34,32 @@ export interface BacklinkItem {
   isUnlinked?: boolean;
 }
 
+export interface ExternalLinkRef {
+  url: string;
+  title?: string;
+}
+
+export interface CanvasTreeMetadata {
+  canvasPath: string;
+  assetsFolder: string;
+  referencedFiles: string[];
+  externalLinks: ExternalLinkRef[];
+}
+
+export interface AggregatedExternalLinkSource {
+  path: string;
+  name: string;
+  title?: string;
+  kind: 'markdown' | 'canvas';
+}
+
+export interface AggregatedExternalLink {
+  url: string;
+  title?: string;
+  domain: string;
+  sources: AggregatedExternalLinkSource[];
+}
+
 export interface NoteData {
   path: string;
   name: string;
@@ -48,6 +74,8 @@ export interface NoteData {
   updatedAt: number;
   isSendTarget?: boolean;
   isTemplate?: boolean;
+  externalLinks?: ExternalLinkRef[];
+  assetsFolder?: string;
 }
 
 export interface NoteSummary {

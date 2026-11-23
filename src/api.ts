@@ -1,6 +1,8 @@
 import type {
+  AggregatedExternalLink,
   AttachmentKind,
   BacklinkItem,
+  CanvasTreeMetadata,
   EmailConfig,
   FileTreeNode,
   FrontmatterProperty,
@@ -390,6 +392,8 @@ export interface OfflineSyncDelegate {
   getTreeData?(): Promise<{
     tree: FileTreeNode[];
     files: { path: string; name: string; basename: string; extension: string; isSendTarget?: boolean }[];
+    canvasMeta?: Record<string, CanvasTreeMetadata>;
+    externalLinks?: AggregatedExternalLink[];
     vaultPath: string;
   }>;
   getNote?(path: string): Promise<NoteData>;
@@ -420,6 +424,8 @@ export const rawApi = {
     tree: FileTreeNode[];
     files: any[];
     notes?: NoteSummary[];
+    canvasMeta?: Record<string, CanvasTreeMetadata>;
+    externalLinks?: AggregatedExternalLink[];
     vaultPath: string;
   }> {
     return apiFetch('/api/vault/tree');
@@ -429,6 +435,8 @@ export const rawApi = {
     tree: FileTreeNode[];
     files: any[];
     notes: NoteSummary[];
+    canvasMeta?: Record<string, CanvasTreeMetadata>;
+    externalLinks?: AggregatedExternalLink[];
   }> {
     return apiFetch('/api/vault/overview');
   },
@@ -752,6 +760,8 @@ export const api = {
     tree: FileTreeNode[];
     files: any[];
     notes?: NoteSummary[];
+    canvasMeta?: Record<string, CanvasTreeMetadata>;
+    externalLinks?: AggregatedExternalLink[];
     vaultPath: string;
   }> {
     if (offlineSyncDelegate?.getTreeData && typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -764,8 +774,14 @@ export const api = {
     tree: FileTreeNode[];
     files: any[];
     notes: NoteSummary[];
+    canvasMeta?: Record<string, CanvasTreeMetadata>;
+    externalLinks?: AggregatedExternalLink[];
   }> {
     return rawApi.getVaultOverview();
+  },
+
+  getExternalLinks(): Promise<{ externalLinks: AggregatedExternalLink[] }> {
+    return apiFetch('/api/vault/external-links');
   },
 
   getNote(path: string): Promise<NoteData> {

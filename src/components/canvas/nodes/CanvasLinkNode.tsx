@@ -8,7 +8,7 @@ import { useTranslation } from '../../../i18n';
 
 export const CanvasLinkNode: React.FC<NodeProps> = ({ id, data, selected, width, height }) => {
   const { t } = useTranslation();
-  const { readOnly } = useCanvasContext();
+  const { readOnly, onOpenExternalUrl } = useCanvasContext();
   const url = (data.url as string) || '';
   const customColor = resolveCanvasColor(data.color as string);
   const strokeColor = customColor || (selected ? 'var(--accent-color, #7852ee)' : 'var(--border-color, #444)');
@@ -61,7 +61,12 @@ export const CanvasLinkNode: React.FC<NodeProps> = ({ id, data, selected, width,
           rel="noopener noreferrer"
           className="canvas-link-btn nodrag"
           title={t('canvas.openInWeb')}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onOpenExternalUrl && /^https?:\/\//i.test(url)) {
+              onOpenExternalUrl(url, e);
+            }
+          }}
         >
           <ExternalLink size={14} />
         </a>

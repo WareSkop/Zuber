@@ -12,8 +12,9 @@ import type {
   CanvasPresentationConfig,
   CanvasPresentationSlide,
   CanvasZoomArc,
+  CanvasFileDisplayMode,
 } from '../../../shared/canvasTypes';
-import { resolveCanvasColor } from '../../../shared/canvasTypes';
+import { COMPACT_FILE_NODE_SIZE, resolveCanvasColor } from '../../../shared/canvasTypes';
 
 export const DEFAULT_PRESENTATION_CONFIG: CanvasPresentationConfig = {
   zoomDuration: 850,
@@ -111,7 +112,18 @@ export function parseCanvasJson(rawJson: string): JsonCanvasDocument {
           ? normalizePresentation(parsed.presentation)
           : undefined;
 
-      return presentation ? { nodes, edges, viewport, presentation } : { nodes, edges, viewport };
+      const assetsFolder =
+        typeof parsed.assetsFolder === 'string' && parsed.assetsFolder.trim()
+          ? parsed.assetsFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+          : undefined;
+
+      return {
+        nodes,
+        edges,
+        viewport,
+        ...(presentation ? { presentation } : {}),
+        ...(assetsFolder ? { assetsFolder } : {}),
+      };
     }
   } catch (err) {
     console.warn('[Knowmesh Canvas] Failed to parse .canvas JSON, falling back to empty canvas:', err);
@@ -124,6 +136,7 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
   edges: Edge[];
   viewport?: Viewport;
   presentation?: CanvasPresentation;
+  assetsFolder?: string;
 } {
   const nodes: Node[] = (doc.nodes || []).map((n) => {
     // Map JSON canvas type to ReactFlow node type
@@ -132,8 +145,31 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
     else if (n.type === 'group') rfType = 'canvasGroup';
     else if (n.type === 'link') rfType = 'canvasLink';
 
-    const width = Math.max(40, n.width || (n.type === 'group' ? 400 : 260));
-    const height = Math.max(40, n.height || (n.type === 'group' ? 300 : 160));
+    const defaultW =
+      n.type === 'group'
+        ? 400
+        : n.type === 'file' && n.displayMode === 'card'
+          ? COMPACT_FILE_NODE_SIZE.width
+          : 260;
+    const defaultH =
+      n.type === 'group'
+        ? 300
+        : n.type === 'file' && n.displayMode === 'card'
+          ? COMPACT_FILE_NODE_SIZE.height
+          : 160;
+    const width = Math.max(40, n.width || defaultW);
+    const height = Math.max(40, n.height || defaultH);
+
+    const displayMode: CanvasFileDisplayMode | undefined =
+      n.displayMode === 'card' || n.displayMode === 'preview' ? n.displayMode : undefined;
+    const previewWidth =
+      typeof n.previewWidth === 'number' && Number.isFinite(n.previewWidth) && n.previewWidth > 0
+        ? Math.round(n.previewWidth)
+        : undefined;
+    const previewHeight =
+      typeof n.previewHeight === 'number' && Number.isFinite(n.previewHeight) && n.previewHeight > 0
+        ? Math.round(n.previewHeight)
+        : undefined;
 
     return {
       id: n.id,
@@ -157,6 +193,9 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
         color: n.color,
         shape: (n.shape as CanvasShape) || 'rectangle',
         icon: n.icon,
+        ...(displayMode ? { displayMode } : {}),
+        ...(previewWidth !== undefined ? { previewWidth } : {}),
+        ...(previewHeight !== undefined ? { previewHeight } : {}),
       },
     };
   });
@@ -218,11 +257,17 @@ export function jsonCanvasToReactFlow(doc: JsonCanvasDocument): {
     return rfEdge;
   });
 
+  const assetsFolder =
+    typeof doc.assetsFolder === 'string' && doc.assetsFolder.trim()
+      ? doc.assetsFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+      : undefined;
+
   return {
     nodes,
     edges,
     viewport: doc.viewport,
     presentation: doc.presentation ? normalizePresentation(doc.presentation) : undefined,
+    ...(assetsFolder ? { assetsFolder } : {}),
   };
 }
 
@@ -308,7 +353,8 @@ export function reactFlowToJsonCanvas(
   nodes: Node[],
   edges: Edge[],
   viewport?: Viewport,
-  presentation?: CanvasPresentation
+  presentation?: CanvasPresentation,
+  assetsFolder?: string
 ): string {
   const jsonNodes: JsonCanvasNode[] = nodes.map((node) => {
     const data = (node.data || {}) as Record<string, any>;
@@ -349,6 +395,15 @@ export function reactFlowToJsonCanvas(
     } else if (nodeType === 'file') {
       jsonNode.file = typeof data.file === 'string' ? data.file : '';
       if (data.subpath) jsonNode.subpath = data.subpath;
+      if (data.displayMode === 'card' || data.displayMode === 'preview') {
+        jsonNode.displayMode = data.displayMode;
+      }
+      if (typeof data.previewWidth === 'number' && Number.isFinite(data.previewWidth) && data.previewWidth > 0) {
+        jsonNode.previewWidth = Math.round(data.previewWidth);
+      }
+      if (typeof data.previewHeight === 'number' && Number.isFinite(data.previewHeight) && data.previewHeight > 0) {
+        jsonNode.previewHeight = Math.round(data.previewHeight);
+      }
     } else if (nodeType === 'group') {
       jsonNode.label = typeof data.label === 'string' ? data.label : '';
     } else if (nodeType === 'link') {
@@ -411,6 +466,13 @@ export function reactFlowToJsonCanvas(
     const validNodeIds = new Set(jsonNodes.map((n) => n.id));
     const pruned = prunePresentationNodeIds(normalizePresentation(presentation), validNodeIds);
     doc.presentation = pruned;
+  }
+
+  if (typeof assetsFolder === 'string' && assetsFolder.trim()) {
+    const cleanAssets = assetsFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    if (cleanAssets) {
+      doc.assetsFolder = cleanAssets;
+    }
   }
 
   return JSON.stringify(doc, null, 2);

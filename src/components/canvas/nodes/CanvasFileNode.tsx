@@ -12,7 +12,12 @@ import {
   Database,
 } from 'lucide-react';
 import { api } from '../../../api';
-import { resolveCanvasColor, type CanvasShape } from '../../../../shared/canvasTypes';
+import {
+  isPdfFilePath,
+  resolveCanvasColor,
+  supportsFileDisplayMode,
+  type CanvasShape,
+} from '../../../../shared/canvasTypes';
 import { stripZencExt } from '../../../crypto/folderCrypto';
 import { resolveDecryptedAttachmentUrl } from '../../../crypto/encryptedAttachmentUrl';
 import { renderReadingHtml } from '../../../utils/readingMode';
@@ -46,7 +51,15 @@ function getLinkBadgeLabel(linkUrl: string): string {
 
 export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const { t } = useTranslation();
-  const { onOpenNote, onSelectTag, allNotes, readOnly, ancestorPaths = [] } = useCanvasContext();
+  const {
+    onOpenNote,
+    onOpenExternalUrl,
+    onSelectTag,
+    onResizeFileNode,
+    allNotes,
+    readOnly,
+    ancestorPaths = [],
+  } = useCanvasContext();
   const filePath = (data.file as string) || '';
   const customColor = resolveCanvasColor(data.color as string);
   const shape: CanvasShape = (data.shape as CanvasShape) || 'rectangle';
@@ -55,6 +68,7 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const [noteContent, setNoteContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [decryptedImageUrl, setDecryptedImageUrl] = useState<string | null>(null);
+  const [decryptedPdfUrl, setDecryptedPdfUrl] = useState<string | null>(null);
 
   const markdownContainerRef = useRef<HTMLDivElement>(null);
   const rawUid = useId();
@@ -62,14 +76,18 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
 
   const logicalPath = stripZencExt(filePath);
   const isMarkdown = logicalPath.toLowerCase().endsWith('.md');
+  const isPdf = isPdfFilePath(filePath);
   const isImage = isImageFilePath(filePath);
+  const canToggleDisplayMode = supportsFileDisplayMode(filePath);
+  const isCardMode = canToggleDisplayMode && data.displayMode === 'card';
   const isCircularSelf = Boolean(filePath && isCanvasAncestorCycle(filePath, ancestorPaths));
   const fileName = logicalPath.split('/').pop() || logicalPath || t('canvas.untitledFile');
+  const compactDisplayTitle = isMarkdown ? fileName.replace(/\.md$/i, '') : fileName;
   const isCustomImageShape = isImage && shape !== 'rectangle';
 
   useEffect(() => {
     let cancelled = false;
-    if (isMarkdown && filePath && !isCircularSelf) {
+    if (isMarkdown && !isCardMode && filePath && !isCircularSelf) {
       setLoading(true);
       api
         .getNote(filePath)
@@ -91,7 +109,7 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     return () => {
       cancelled = true;
     };
-  }, [filePath, isMarkdown, isCircularSelf, t]);
+  }, [filePath, isMarkdown, isCardMode, isCircularSelf, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +138,34 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
       }
     };
   }, [filePath, isImage, isCircularSelf]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrlToRevoke: string | null = null;
+    setDecryptedPdfUrl(null);
+
+    if (isPdf && !isCardMode && filePath && !isCircularSelf) {
+      resolveDecryptedAttachmentUrl(filePath)
+        .then((res) => {
+          if (cancelled) {
+            if (res?.isObjectUrl) URL.revokeObjectURL(res.url);
+            return;
+          }
+          if (res?.url) {
+            if (res.isObjectUrl) objectUrlToRevoke = res.url;
+            setDecryptedPdfUrl(res.url);
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
+  }, [filePath, isPdf, isCardMode, isCircularSelf]);
 
   const renderedMarkdown = useMemo(() => {
     if (!noteContent || !isMarkdown || isCircularSelf) return '';
@@ -285,6 +331,14 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     };
   }, [renderedMarkdown, filePath, ancestorPaths, allNotes, onOpenNote, onSelectTag, t]);
 
+  const invokeOpenNote = (target: string, e?: React.MouseEvent) => {
+    if (e?.altKey) {
+      onOpenNote(target, { altKey: true });
+    } else {
+      onOpenNote(target);
+    }
+  };
+
   const handleMarkdownClick = (e: React.MouseEvent) => {
     const tagEl = (e.target as HTMLElement).closest('[data-tag]') as HTMLElement | null;
     if (tagEl) {
@@ -301,6 +355,12 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
     if (targetEl) {
       const href = targetEl.getAttribute('href') || '';
       if (/^https?:\/\//i.test(href)) {
+        if (onOpenExternalUrl) {
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenExternalUrl(href, e);
+          return;
+        }
         e.stopPropagation();
         return;
       }
@@ -315,33 +375,37 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
         targetEl.getAttribute('data-wikilink') ||
         href;
       if (target && target !== '#') {
-        onOpenNote(decodeURIComponent(target));
+        invokeOpenNote(decodeURIComponent(target), e);
       }
     }
   };
 
-  const openLinkedTarget = (target: string) => {
+  const openLinkedTarget = (target: string, e?: React.MouseEvent) => {
     const trimmed = target.trim();
     if (!trimmed) return;
     if (/^(https?:\/\/|mailto:)/i.test(trimmed)) {
-      window.open(trimmed, '_blank', 'noopener,noreferrer');
+      if (onOpenExternalUrl && /^https?:\/\//i.test(trimmed)) {
+        onOpenExternalUrl(trimmed, e);
+      } else {
+        window.open(trimmed, '_blank', 'noopener,noreferrer');
+      }
     } else {
-      onOpenNote(trimmed);
+      invokeOpenNote(trimmed, e);
     }
   };
 
   const handleImageInteraction = (e: React.MouseEvent, forceOpen = false) => {
     if (readOnly && linkUrl) {
       e.stopPropagation();
-      openLinkedTarget(linkUrl);
+      openLinkedTarget(linkUrl, e);
       return;
     }
     if (forceOpen || e.ctrlKey || e.metaKey) {
       e.stopPropagation();
       if (linkUrl) {
-        openLinkedTarget(linkUrl);
+        openLinkedTarget(linkUrl, e);
       } else {
-        onOpenNote(filePath);
+        invokeOpenNote(filePath, e);
       }
     }
   };
@@ -349,6 +413,10 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   const strokeColor = customColor || (selected ? 'var(--accent-color, #7852ee)' : 'var(--border-color, #444)');
   const strokeWidth = selected ? '2.5' : '2';
   const resolvedImageSrc = decryptedImageUrl || api.getAttachmentUrl(filePath);
+  const rawPdfBaseUrl = decryptedPdfUrl || api.getAttachmentUrl(filePath);
+  const resolvedPdfSrc = rawPdfBaseUrl.includes('#')
+    ? rawPdfBaseUrl
+    : `${rawPdfBaseUrl}#toolbar=1&view=FitH`;
   const cssClip = isCustomImageShape ? getShapeCssClipPath(shape) : null;
   const clipPathValue = cssClip || `url(#${clipId})`;
   const isExternalLink = /^https?:\/\//i.test(linkUrl);
@@ -357,21 +425,33 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
   return (
     <div
       className={`canvas-custom-node canvas-file-node ${isImage ? 'is-image-node' : ''} ${
-        isCustomImageShape ? `is-shaped-image shape-${shape}` : ''
-      } ${selected ? 'selected' : ''}`}
+        isCardMode ? 'is-compact-card' : ''
+      } ${isCustomImageShape ? `is-shaped-image shape-${shape}` : ''} ${selected ? 'selected' : ''}`}
       style={{
         width: '100%',
         height: '100%',
         borderColor: isCustomImageShape ? 'transparent' : strokeColor,
-        backgroundColor: isCustomImageShape ? 'transparent' : undefined,
+        backgroundColor: isCustomImageShape
+          ? 'transparent'
+          : isCardMode && customColor
+            ? `color-mix(in srgb, ${customColor} 12%, var(--bg-secondary))`
+            : undefined,
       }}
     >
       <NodeResizer
         isVisible={selected && !readOnly}
-        minWidth={isImage ? 80 : 120}
-        minHeight={isImage ? 60 : 80}
+        minWidth={isCardMode ? 160 : isImage ? 80 : 140}
+        minHeight={isCardMode ? 48 : isImage ? 60 : 80}
         lineClassName="canvas-resizer-line"
         handleClassName="canvas-resizer-handle"
+        onResizeEnd={(_ev, params) => {
+          onResizeFileNode?.(
+            id,
+            Math.round(params.width),
+            Math.round(params.height),
+            canToggleDisplayMode && !isCardMode
+          );
+        }}
       />
       <CanvasNodeHiddenBadge nodeId={id} />
 
@@ -406,6 +486,50 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
             <p>{t('canvas.circularEmbedNotice', { target: fileName })}</p>
           </div>
         </>
+      ) : isCardMode ? (
+        <div
+          className="canvas-file-compact-row"
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            invokeOpenNote(filePath, e);
+          }}
+        >
+          <span className="canvas-file-compact-icon" title={filePath}>
+            <FileText size={16} className={isPdf ? 'canvas-file-pdf-icon' : undefined} />
+            {isPdf && <span className="canvas-file-pdf-badge">{t('canvas.pdfBadge')}</span>}
+          </span>
+          <span className="canvas-file-compact-title" title={filePath}>
+            {compactDisplayTitle}
+          </span>
+          <div className="canvas-file-header-actions">
+            {linkUrl && (
+              <button
+                type="button"
+                className="canvas-file-link-badge nodrag"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openLinkedTarget(linkUrl, e);
+                }}
+                title={t('canvas.openLinkedTarget', { target: linkUrl })}
+              >
+                {isExternalLink ? <Globe size={11} /> : <Link2 size={11} />}
+                <span>{linkBadgeLabel}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              className="canvas-file-open-btn nodrag"
+              onClick={(e) => {
+                e.stopPropagation();
+                invokeOpenNote(filePath, e);
+              }}
+              title={t('canvas.openFile')}
+              aria-label={t('canvas.openFileAria')}
+            >
+              <ExternalLink size={13} />
+            </button>
+          </div>
+        </div>
       ) : isCustomImageShape ? (
         <div
           className={`canvas-file-shaped-image-wrapper ${linkUrl ? 'has-link' : ''}`}
@@ -486,6 +610,8 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 <ImageIcon size={14} />
               ) : isMarkdown ? (
                 <FileText size={14} />
+              ) : isPdf ? (
+                <FileText size={14} className="canvas-file-pdf-icon" />
               ) : logicalPath.toLowerCase().endsWith('.base') ? (
                 <Database size={14} />
               ) : (
@@ -500,7 +626,7 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                   className="canvas-file-link-badge nodrag"
                   onClick={(e) => {
                     e.stopPropagation();
-                    openLinkedTarget(linkUrl);
+                    openLinkedTarget(linkUrl, e);
                   }}
                   title={t('canvas.openLinkedTarget', { target: linkUrl })}
                 >
@@ -513,7 +639,7 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                 className="canvas-file-open-btn nodrag"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenNote(filePath);
+                  invokeOpenNote(filePath, e);
                 }}
                 title={t('canvas.openFile')}
                 aria-label={t('canvas.openFileAria')}
@@ -524,7 +650,15 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
           </div>
 
           {/* File Body Content */}
-          <div className={`canvas-file-body ${isImage ? 'is-image-body' : 'nowheel nodrag scroller'}`}>
+          <div
+            className={`canvas-file-body ${
+              isImage
+                ? 'is-image-body'
+                : isPdf
+                  ? `is-pdf-body ${selected ? 'nodrag nowheel' : ''}`
+                  : 'nowheel nodrag scroller'
+            }`}
+          >
             {isMarkdown ? (
               loading ? (
                 <div className="canvas-file-loading">{t('canvas.loadingNote')}</div>
@@ -541,6 +675,15 @@ export const CanvasFileNode: React.FC<NodeProps> = ({ id, data, selected }) => {
                   dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
                 />
               )
+            ) : isPdf ? (
+              <div className="canvas-file-pdf-container">
+                <iframe
+                  src={resolvedPdfSrc}
+                  title={fileName}
+                  className="canvas-file-pdf-iframe"
+                  style={{ pointerEvents: selected || readOnly ? 'auto' : 'none' }}
+                />
+              </div>
             ) : isImage ? (
               <div
                 className={`canvas-file-image-container ${linkUrl ? 'has-link' : ''}`}

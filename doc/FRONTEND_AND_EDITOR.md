@@ -570,23 +570,28 @@ flowchart TD
 ### 17.2 Bidirektionales Daten-Mapping (`canvasMapper.ts`)
 - **JSON Canvas $\rightarrow$ React Flow:**
   - Konvertiert `JsonCanvasNode` in getypte React Flow Nodes (`shape`, `file`, `group`, `link`).
+  - Bewahrt optionale Darstellungs-Metadaten für Dateiknoten (`displayMode?: 'card' | 'preview'`, `previewWidth`, `previewHeight`) sowie ein optionales Root-Feld `assetsFolder` am `JsonCanvasDocument` (Standardabmessung für kompakte `card`-Knoten: `220 × 58`; abwärtskompatibel für Bestandsknoten ohne `displayMode`, die weiterhin als `'preview'` gerendert werden).
   - Rekonstruiert Obsidian-Farbpaletten (1 bis 6) oder Hex-Farbcodes via `resolveCanvasColor()`.
   - Stellt den gespeicherten Ansichtsausschnitt (`viewport: { x, y, zoom }`) wieder her.
 - **React Flow $\rightarrow$ JSON Canvas:**
   - Extrahiert saubere, minimal getypte Knoten und Kanten ohne interne React Flow Transient-States.
   - Standardknoten (`rectangle` ohne Spezial-Shape) werden als reguläre Obsidian `text`- oder `file`-Nodes exportiert.
-  - Erweiterte Zuber-Formen behalten `shape: CanvasShape` bei (Graceful Degradation: Obsidian Desktop rendert sie als rechteckige Textkarten und ignoriert `shape`).
+  - Erweiterte Zuber-Formen sowie `displayMode`, `previewWidth`, `previewHeight` und `assetsFolder` bleiben als abwärtskompatible JSON-Felder erhalten (Graceful Degradation: Obsidian Desktop ignoriert Zusatzfelder).
 
 ### 17.3 Container-Hierarchie, State-Sync & Interaktion
 - **Explizite Container-Höhe:** Vom übergeordneten Workspace (`.canvas-workspace-pane`) über `.canvas-editor-wrapper` bis zu `.canvas-reactflow-container` ist eine durchgängige Mindesthöhe von `450px` bzw. `height: 100%` festgelegt. Das `<ReactFlow>`-Element spannt so garantiert die gesamte Arbeitsfläche auf.
 - **Schutz vor State-Loop / Echo-Resets:** `CanvasEditor` speichert vor jedem Aufruf von `onChange(jsonStr)` den String in `lastEmittedJsonRef.current`. Wenn `App.tsx` den State aktualisiert und `rawContent` zurückreicht, erkennt der `useEffect`, dass die Änderung intern ausgelöst wurde, und bricht den Reset der Knoten und Kanten sofort ab (`return;`).
-- **Sichere Spawn-Positionierung:** Neue Knoten (`+ Text`, `Workflow`, `Netzwerk`) berechnen ihre Koordinaten aus dem aktuellen Viewport und der `getBoundingClientRect()` des Containers (`Math.round((-vp.x + width/2)/safeZoom - nodeW/2)`), wodurch sie exakt im sichtbaren Zentrum platziert und selektiert werden.
-- **Horizontale Toolbar (`CanvasToolbar.tsx`):**
+- **Sichere Spawn-Positionierung & Drag & Drop:**
+  - Neue Knoten (`+ Text`, `Workflow`, `Netzwerk`) berechnen ihre Koordinaten aus dem aktuellen Viewport und der `getBoundingClientRect()` des Containers (`Math.round((-vp.x + width/2)/safeZoom - nodeW/2)`).
+  - **Drag & Drop aus `FileSidebar` (`application/x-zuber-file`):** Bestehende `.md`-, `.pdf`- oder Bilddateien lassen sich direkt aus dem Dateibaum auf beliebige Leinwandkoordinaten (`screenToFlowPosition`) ziehen (`.md`/`.pdf` starten standardmäßig kompakt im Modus `displayMode: 'card'`, Bilder als Bild-Node).
+  - **OS-Datei-Drop (Bilder & PDFs):** Direktes Ziehen unterstützter Bilder (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`) oder `.pdf`-Dokumente aus dem Betriebssystem lädt die Dateien über `POST /api/vault/upload` lazily in den Canvas Companion-Ordner (`doc.assetsFolder || <CanvasPath>.assets`) hoch und legt an der Drop-Position automatisch den passenden Node an.
+- **Horizontale Toolbar (`CanvasToolbar.tsx`) & Pane-Kontextmenü:**
   - Aufgeräumte horizontale Leiste am oberen Rand (`flex-direction: row !important; gap: 6px;`).
-  - Schneller Zugriff auf Text, Notiz einbetten (mit Live-Suche), Gruppe, `Workflow ⌄` (Prozessschritt, Start/Ende, Kreis, Raute, Parallelogramm, Hexagon, Zylinder) und `Netzwerk ⌄` (Server, Router, Cloud, Workstation, Storage).
+  - Schneller Zugriff auf Text, **Neue Notiz** (`+ New Note` öffnet einen nativen `<dialog>`-Prompt mit fokussiertem Titel-Eingabefeld und optional aufklappbarem Zielordner-Override; erstellt `# <Titel>\n\n` direkt im Companion-Ordner und platziert sofort einen kompakten File-Node), Datei/PDF/Notiz einbetten (mit Live-Suche), Gruppe, `Workflow ⌄` (Prozessschritt, Start/Ende, Kreis, Raute, Parallelogramm, Hexagon, Zylinder) und `Netzwerk ⌄` (Server, Router, Cloud, Workstation, Storage).
   - Dropdown-Menüs schließen sofort nach Auswahl des gewünschten Knotens.
-  - Eigene Gruppe für Undo / Redo, Fit-View und Gittermodus (`dots`, `lines`, `off`).
-- **Debounced Auto-Save (600 ms):** Jede Modifikation an Position, Größe, Text, Form oder Kantenverbindung löst nach 600 ms ein atomares Speichern über `api.saveNote()` aus.
+  - Eigene Gruppe für Undo / Redo, Fit-View, Gittermodus (`dots`, `lines`, `off`) sowie **Canvas-Einstellungen** (Popover zum Einsehen/Ändern/Zurücksetzen von `assetsFolder`).
+  - Rechtsklick auf freie Leinwandfläche (`onPaneContextMenu`) öffnet ein Pane-Kontextmenü mit **„Neue Notiz hier erstellen…“**, Text- und Gruppenerstellung exakt an den Mauskoordinaten.
+- **Debounced Auto-Save (600 ms):** Jede Modifikation an Position, Größe, Text, Form, `assetsFolder` oder Kantenverbindung löst nach 600 ms ein atomares Speichern über `api.saveNote()` aus.
 - **Undo / Redo:** Eigener Snapshot-basierter Verlaufsspeicher (Stack mit bis zu 50 Schritten), steuerbar über Tastenkürzel (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl/Cmd+Y`) und Toolbar-Buttons.
 - **Touch- & Gestenunterstützung:** Flüssiges Zwei-Finger-Pinching zum Zoomen und Schieben per Drag.
 
@@ -597,16 +602,20 @@ flowchart TD
    - Doppelklick aktiviert den Inline-Markdown-Editor.
    - Schnelle Wiki-Link-Vervollständigung: Beim Tippen von `[[` öffnet sich eine Vorschlagsliste aller Vault-Notizen.
    - Integrierter `NodeResizer` zur freien Größenanpassung.
-2. **`CanvasFileNode.tsx` (Vault-Notiz-Einbettung):**
-   - Bindet beliebige Markdown-Notizen aus dem Vault direkt auf dem Canvas ein.
-   - Zeigt eine scrollbare Textvorschau des Notiz-Bodys und eine „Öffnen ↗“-Aktion zum direkten Wechsel in die Notiz.
+2. **`CanvasFileNode.tsx` (Vault-Notiz-, PDF- & Bild-Einbettung mit Card/Preview-Umschaltung):**
+   - **Kompakter Platzhalter-Modus (`displayMode: 'card'`, Standard für neu hinzugefügte `.md`- & `.pdf`-Nodes):** Rendert eine einzeilige Karte (`220 × 58`, ohne Scrollbalken) mit Datei-Typ-Icon bzw. `PDF`-Badge, bereinigtem Titel (ohne `.md`-Endung bei Notizen), Quick-Open-Button (`↗` inkl. Research-Split-Routing), optionalem Node-Link-Badge, Farbgebung über den Canvas-Farbpreset und allen 4 Verbindungspunkten.
+   - **Vorschau-Modus (`displayMode: 'preview'`):**
+     - Markdown (`.md`): Scrollbare, vollständig gerenderte Notiz-Vorschau inkl. eingebetteter Assets und Wiki-Links.
+     - PDF (`.pdf`): Eingebetteter PDF-Viewer via `<iframe src="/api/vault/attachment?...#toolbar=1&view=FitH">` (unterstützt `.zenc`-Entschlüsselung über `resolveDecryptedAttachmentUrl`; `pointer-events: auto` bei Selektion/`readOnly` für Seiten-Scrolling, `none` im unselektierten Zustand für flüssiges Canvas-Panning).
+   - **Gemerkte Vorschaumaße (`previewWidth`, `previewHeight`):** Größenänderungen per `NodeResizer` im `preview`-Modus aktualisieren `previewWidth`/`previewHeight`. Beim Wechsel `preview → card → preview` wird exakt die zuletzt gewählte Vorschaugröße wiederhergestellt (Fallback: `340 × 280` für `.md`, `380 × 440` für `.pdf`).
 3. **`CanvasGroupNode.tsx` (Container):**
    - Halbdurchsichtige visuelle Umrandung zur Strukturierung logischer Komponenten und Funktionsblöcke.
 4. **`CanvasLinkNode.tsx` (Externe Links):**
-   - Stellt Weblinks mit Domain, Titel und Klick-Weiterleitung dar.
+   - Stellt Weblinks mit Domain, Titel und Klick-Weiterleitung (inkl. Research Split / `Ctrl+Klick` über `onOpenExternalUrl`) dar.
 
 ### 17.5 Schwebender Attribut- & Kanten-Inspektor (`CanvasInspector.tsx`)
-- **Horizontale Pill-Bar:** Beim Selektieren eines Knotens oder einer Kante dockt am unteren Rand (`bottom: 20px; left: 50%; transform: translateX(-50%);`) ein schlanker, abgerundeter Inspektor-Balken (`border-radius: 9999px`) mit Glasmorphismus-Hintergrund an.
+- **Horizontale Pill-Bar & Knoten-Kontextmenü:** Beim Selektieren (unten angedockt) oder Rechtsklick auf einen Knoten öffnet sich `CanvasInspector` als schwebender Aktionsbalken mit Glasmorphismus-Hintergrund.
+- **`[Card | Preview]` / `[Block | Vorschau]`-Umschalter:** Für ausgewählte `.md`- und `.pdf`-`CanvasFileNode`s erscheint direkt im Inspektor bzw. Knoten-Kontextmenü ein zweistufiger Modus-Schalter.
 - **Nach oben öffnende Popovers (`bottom: calc(100% + 10px)`):** Formen-Raster (Shapes-Grid), Farbauswahl (Obsidian Canvas Colors) und Wiki-Link-Suche öffnen sich garantiert nach oben und werden durch Screen-Edges oder Canvas-Container niemals abgeschnitten.
 - **Click-Outside-Handling:** Ein Dokument-weiter `mousedown`-Listener schließt geöffnete Popovers automatisch bei Klicks auf die Leinwand oder andere Elemente.
 - **Kanten-Steuerung:** Ermöglicht das Beschriften von Kanten, Umschalten des Verbindungslinien-Stils (`bezier`, `straight`, `step`), Konfigurieren von Pfeilspitzen (`arrow`, `none` am Start/Ende) und Zuweisen von Kantenfarben.
@@ -1280,3 +1289,18 @@ Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `htt
 - **Einheitliche 4-Modi-Suche & In-Note-Jump-Bar (`MobileSearchModal.tsx`, `FileSidebar.tsx`, `LivePreviewEditor.tsx`, `App.tsx`):**
   - Das vereinheitlichte Suchmodal (`MobileSearchModal`) steht über `Ctrl+P` (Standardmodus) und `Ctrl+O` (Modus `files`) auf Desktop und Mobile zur Verfügung und unterstützt vier Modi (`fulltext`, `inNote`, `files`, `commands`), Wechsel per `Alt+1`–`Alt+4`, Tastaturnavigation (`ArrowUp`/`ArrowDown`/`Enter`/`Escape`), `?`-Syntax-Hilfe sowie die Sortierung **`Relevanz` / `Neueste`** (`relevance` | `newest`) in `fulltext` und in der Desktop-Seitenleiste (`FileSidebar`).
   - `Ctrl+F` öffnet auf Desktop eine schwebende In-Note-Jump-Bar (`.desktop-in-note-jump-bar`) mit Live-Suche, `N / M`-Trefferzähler, `▲`/`▼`-Navigation (`Enter`/`F3` vorwärts, `Shift+Enter`/`Shift+F3` rückwärts) und `Escape`; in Live-Preview (`inNoteSearchField`) und Reading-Mode werden alle Treffer via `parseSearchQuery()` + `findRegexMatchesInText()` mehrfarbig per `<mark>` hervorgehoben.
+
+---
+
+## 39. Canvas Companion-Ordner (`.canvas.assets/`), Virtueller Dateibaum & Globale Externe Links (`FileSidebar.tsx`, `canvasTreeUtils.ts`)
+
+- **Virtuelle Companion-Hierarchie unter `.canvas`-Dateien (`src/utils/canvasTreeUtils.ts`, `FileSidebar.tsx`):**
+  - Verzeichnisse vom Typ `<CanvasName>.canvas.assets/` werden im Dateibaum über `buildCanvasTreeModel()` als eigenständige Ordner unterdrückt (`suppressedFolderPaths`), da POSIX/NTFS keine gleichnamige Datei + Ordner im selben Parent-Verzeichnis zulassen.
+  - Stattdessen erhält die zugehörige `.canvas`-Dateizeile automatisch einen Auf-/Zuklapp-Pfeil (`.tree-canvas-chevron-btn`), sobald Companion-Dateien, verlinkte Vault-Dateien oder externe Weblinks existieren; beim Öffnen einer Companion-Datei wird deren Eltern-Canvas im Baum automatisch expandiert (`findParentCanvasForCompanionFile()`).
+  - Im aufgeklappten Zweig (`.tree-canvas-children`) erscheinen nahtlos drei Gruppen ohne störende Zwischen-Ordner:
+    1. Physische Dateien im Companion-Ordner (`<CanvasName>.canvas.assets/` oder konfigurierter `assetsFolder`) mit voller Kontextmenü- und Multi-Select-Unterstützung.
+    2. Referenzen auf Vault-Dateien außerhalb des Companion-Ordners (`type: "file"`-Nodes oder `[[Wiki-Links]]` auf dem Canvas), dedupliziert und mit `Link2`-Indikator (`.canvas-linked-file-item`) versehen.
+    3. Externe `http(s)://`-URLs des Canvas (`type: "link"`, Text-Links, File-`link`) mit Globus-Icon (`.canvas-external-link-item`).
+- **Einklappbare Sektion „External Links / Externe Links“ in `FileSidebar.tsx`:**
+  - Am unteren Rand der linken Sidebar aggregiert ein einklappbares Panel (Zustand persistiert unter `zuber_show_external_links_panel`) alle vaultweiten externen `http(s)://`-URLs aus Markdown-Notizen und `.canvas`-Dokumenten.
+  - Bietet Live-Filterung über Titel, Domain, URL und Quell-Notiznamen, einen Quellen-Zähler je URL (Klick klappt anklickbare Quell-Chips aus) sowie Klick-Routing gemäß Zubers Research-Split- bzw. `Ctrl+Klick`-/Externer-Browser-Regeln (`routeExternalLinkClick()`).

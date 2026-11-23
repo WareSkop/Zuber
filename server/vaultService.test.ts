@@ -5,6 +5,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   extractLinksAndEmbeds,
   extractTags,
+  extractExternalLinksFromMarkdown,
+  extractCanvasLinksAndTags,
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
   refactorMarkdownContent,
@@ -1535,6 +1537,149 @@ Weitere Punkte folgen.`,
         expect(boolRes.map((r) => r.path)).toEqual(['Zuber.md', 'Entwicklung.md']);
       } finally {
         fs.rmSync(searchTmp, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('Canvas Companion Folders, Directory Safety & External Links Aggregation', () => {
+    it('extractExternalLinksFromMarkdown and extractCanvasLinksAndTags extract URLs, files, wiki-links, and assetsFolder', () => {
+      const mdBody = [
+        'Check [Spec Docs](https://example.org/spec "Optional") and bare https://zuber.dev/guide.',
+        'Ignore ![Img](https://example.org/img.png) or duplicates of https://example.org/spec.',
+      ].join('\n');
+      const mdLinks = extractExternalLinksFromMarkdown(mdBody);
+      expect(mdLinks.map((l) => l.url)).toContain('https://example.org/spec');
+      expect(mdLinks.map((l) => l.url)).toContain('https://zuber.dev/guide');
+      expect(mdLinks.find((l) => l.url === 'https://example.org/spec')?.title).toBe('Spec Docs');
+
+      const rawCanvas = JSON.stringify({
+        assetsFolder: 'Projects/Board.canvas.assets/',
+        nodes: [
+          { id: 'f1', type: 'file', file: 'Projects/Board.canvas.assets/NoteA.md', link: 'https://linked.example.com/ref', x: 0, y: 0, width: 220, height: 58 },
+          { id: 'l1', type: 'link', url: 'https://jsoncanvas.org/spec/1.0/', label: 'JSON Canvas', x: 0, y: 100, width: 220, height: 80 },
+          { id: 't1', type: 'text', text: 'See [[SharedNote]] and [Homepage](https://zuber.dev) #roadmap', x: 100, y: 0, width: 240, height: 120 },
+        ],
+        edges: [{ id: 'e1', fromNode: 'f1', toNode: 't1', label: '[[EdgeRef]]' }],
+      });
+
+      const meta = extractCanvasLinksAndTags(rawCanvas);
+      expect(meta.assetsFolder).toBe('Projects/Board.canvas.assets');
+      expect(meta.links).toContain('Projects/Board.canvas.assets/NoteA.md');
+      expect(meta.links).toContain('SharedNote');
+      expect(meta.links).toContain('EdgeRef');
+      expect(meta.tags).toContain('roadmap');
+      expect(meta.externalLinks.map((e) => e.url)).toEqual([
+        'https://linked.example.com/ref',
+        'https://jsoncanvas.org/spec/1.0/',
+        'https://zuber.dev/',
+      ]);
+      expect(meta.externalLinks.find((e) => e.url === 'https://jsoncanvas.org/spec/1.0/')?.title).toBe('JSON Canvas');
+    });
+
+    it('never parses or indexes a directory ending with .canvas as a canvas document', () => {
+      const dirTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zuber-canvas-dir-guard-'));
+      try {
+        fs.mkdirSync(path.join(dirTmp, 'NotACanvas.canvas'), { recursive: true });
+        fs.writeFileSync(path.join(dirTmp, 'NotACanvas.canvas', 'inside.md'), '# Inside\nHello', 'utf-8');
+        fs.writeFileSync(path.join(dirTmp, 'Real.canvas'), JSON.stringify({ nodes: [], edges: [] }), 'utf-8');
+
+        const svc = new VaultService(dirTmp);
+        const notes = svc.getAllNotes();
+        const files = svc.getAllFiles();
+        expect(files.some((f) => f.path === 'Real.canvas')).toBe(true);
+        expect(files.some((f) => f.path === 'NotACanvas.canvas')).toBe(false);
+        expect(notes.some((n) => n.path === 'NotACanvas.canvas')).toBe(false);
+        expect(notes.some((n) => n.path === 'NotACanvas.canvas/inside.md')).toBe(true);
+        expect(svc.getNote('Real.canvas').path).toBe('Real.canvas');
+        expect(() => svc.getNote('NotACanvas.canvas')).toThrow();
+        const tree = svc.getFileTree();
+        expect(tree.find((n) => n.name === 'NotACanvas.canvas')?.type).toBe('folder');
+        expect(tree.find((n) => n.name === 'Real.canvas')?.type).toBe('file');
+      } finally {
+        fs.rmSync(dirTmp, { recursive: true, force: true });
+      }
+    });
+
+    it('computes getCanvasTreeMetadata / getExternalLinks and atomically moves companion .canvas.assets on renameOrMove & moveBatch', () => {
+      const compTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zuber-companion-test-'));
+      try {
+        fs.mkdirSync(path.join(compTmp, 'Projects', 'Board.canvas.assets'), { recursive: true });
+        fs.mkdirSync(path.join(compTmp, 'Docs'), { recursive: true });
+        fs.writeFileSync(path.join(compTmp, 'Docs', 'Spec.pdf'), '%PDF-1.4\n', 'utf-8');
+        fs.writeFileSync(
+          path.join(compTmp, 'SharedNote.md'),
+          '# Shared\nSee [Spec Portal](https://example.org/spec) and https://zuber.dev.\nBack to [[Projects/Board.canvas]].\n',
+          'utf-8'
+        );
+        fs.writeFileSync(
+          path.join(compTmp, 'Projects', 'Board.canvas.assets', 'NoteA.md'),
+          '# Note A\nInside companion folder.\n',
+          'utf-8'
+        );
+        fs.writeFileSync(
+          path.join(compTmp, 'Projects', 'Board.canvas'),
+          JSON.stringify({
+            assetsFolder: 'Projects/Board.canvas.assets',
+            nodes: [
+              { id: 'n1', type: 'file', file: 'Projects/Board.canvas.assets/NoteA.md', x: 0, y: 0, width: 220, height: 58, displayMode: 'card' },
+              { id: 'n2', type: 'file', file: 'Docs/Spec.pdf', x: 260, y: 0, width: 220, height: 58, displayMode: 'card' },
+              { id: 'n3', type: 'text', text: 'Ref [[SharedNote]] & https://example.org/spec', x: 0, y: 120, width: 240, height: 120 },
+            ],
+            edges: [],
+          }),
+          'utf-8'
+        );
+
+        const svc = new VaultService(compTmp);
+        const canvasMeta = svc.getCanvasTreeMetadata();
+        const boardMeta = canvasMeta['Projects/Board.canvas'];
+        expect(boardMeta).toBeDefined();
+        expect(boardMeta.assetsFolder).toBe('Projects/Board.canvas.assets');
+        expect(boardMeta.referencedFiles).toContain('Projects/Board.canvas.assets/NoteA.md');
+        expect(boardMeta.referencedFiles).toContain('Docs/Spec.pdf');
+        expect(boardMeta.referencedFiles).toContain('SharedNote.md');
+        expect(boardMeta.externalLinks.map((l) => l.url)).toContain('https://example.org/spec');
+
+        const extLinks = svc.getExternalLinks();
+        const specEntry = extLinks.find((e) => e.url === 'https://example.org/spec');
+        expect(specEntry).toBeDefined();
+        expect(specEntry?.sources.map((s) => s.path)).toEqual([
+          'Projects/Board.canvas',
+          'SharedNote.md',
+        ]);
+        const zuberEntry = extLinks.find((e) => e.url === 'https://zuber.dev/');
+        expect(zuberEntry?.sources.map((s) => s.path)).toEqual(['SharedNote.md']);
+
+        // Atomic renameOrMove
+        const renameRes = svc.renameOrMove('Projects/Board.canvas', 'Archive/Roadmap.canvas');
+        expect(renameRes.newPath).toBe('Archive/Roadmap.canvas');
+        expect(fs.existsSync(path.join(compTmp, 'Projects', 'Board.canvas.assets'))).toBe(false);
+        expect(fs.existsSync(path.join(compTmp, 'Archive', 'Roadmap.canvas.assets', 'NoteA.md'))).toBe(true);
+
+        const renamedCanvas = JSON.parse(svc.getNote('Archive/Roadmap.canvas').rawContent);
+        expect(renamedCanvas.assetsFolder).toBe('Archive/Roadmap.canvas.assets');
+        expect(renamedCanvas.nodes.find((n: any) => n.id === 'n1')?.file).toBe(
+          'Archive/Roadmap.canvas.assets/NoteA.md'
+        );
+        expect(svc.getNote('SharedNote.md').rawContent).toContain('[[Archive/Roadmap.canvas]]');
+
+        // Atomic moveBatch
+        const batchRes = svc.moveBatch([
+          { oldPath: 'Archive/Roadmap.canvas', newPath: 'Moved/Roadmap.canvas' },
+        ]);
+        expect(batchRes.results).toEqual([
+          { oldPath: 'Archive/Roadmap.canvas', newPath: 'Moved/Roadmap.canvas' },
+        ]);
+        expect(fs.existsSync(path.join(compTmp, 'Archive', 'Roadmap.canvas.assets'))).toBe(false);
+        expect(fs.existsSync(path.join(compTmp, 'Moved', 'Roadmap.canvas.assets', 'NoteA.md'))).toBe(true);
+
+        const movedCanvas = JSON.parse(svc.getNote('Moved/Roadmap.canvas').rawContent);
+        expect(movedCanvas.assetsFolder).toBe('Moved/Roadmap.canvas.assets');
+        expect(movedCanvas.nodes.find((n: any) => n.id === 'n1')?.file).toBe(
+          'Moved/Roadmap.canvas.assets/NoteA.md'
+        );
+      } finally {
+        fs.rmSync(compTmp, { recursive: true, force: true });
       }
     });
   });

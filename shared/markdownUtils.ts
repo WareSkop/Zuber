@@ -1,5 +1,5 @@
 import YAML from 'yaml';
-import type { AttachmentKind, FrontmatterProperty, NoteHeading, PropertyType } from './types';
+import type { AttachmentKind, ExternalLinkRef, FrontmatterProperty, NoteHeading, PropertyType } from './types';
 
 const FRONTMATTER_REGEX = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
@@ -260,6 +260,90 @@ export function extractLinksAndEmbeds(body: string): {
     links: Array.from(linksSet),
     embeds: Array.from(embedsSet),
   };
+}
+
+function trimTrailingUrlPunctuation(rawUrl: string): string {
+  let url = rawUrl;
+  while (url.length > 0) {
+    const last = url[url.length - 1];
+    if (last === ')' && (url.match(/\(/g)?.length ?? 0) >= (url.match(/\)/g)?.length ?? 0)) {
+      break;
+    }
+    if ('.,;:!?)]}\'"'.includes(last)) {
+      url = url.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return url;
+}
+
+function normalizeHttpUrl(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim().replace(/^<|>$/g, '');
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extracts deduplicated external http(s) URLs from Markdown links `[title](https://...)`
+ * and bare URLs while ignoring fenced/inline code blocks.
+ */
+export function extractExternalLinksFromMarkdown(body: string): ExternalLinkRef[] {
+  if (!body) return [];
+  const withoutCode = body
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`\r\n]+`/g, ' ');
+
+  const linkMap = new Map<string, ExternalLinkRef>();
+  const recordUrl = (rawUrl: string, rawTitle?: string) => {
+    const normalized = normalizeHttpUrl(rawUrl) || (/^https?:\/\//i.test(rawUrl.trim()) ? rawUrl.trim() : null);
+    if (!normalized) return;
+    const cleanTitle = rawTitle?.trim();
+    const usableTitle =
+      cleanTitle && cleanTitle !== normalized && cleanTitle !== rawUrl.trim()
+        ? cleanTitle
+        : undefined;
+    const existing = linkMap.get(normalized);
+    if (!existing) {
+      linkMap.set(normalized, { url: normalized, ...(usableTitle ? { title: usableTitle } : {}) });
+    } else if (!existing.title && usableTitle) {
+      existing.title = usableTitle;
+    }
+  };
+
+  // 1. Standard Markdown links [label](https://...) (skip image embeds ![alt](...))
+  const mdLinkRegex = /(!?)\[([^\]\r\n]*)\]\((\s*<[^>]+>|[^)\r\n]+)\)/g;
+  const textForBareScan = withoutCode.replace(mdLinkRegex, (_full, bang, label, rawHref) => {
+    if (bang !== '!') {
+      const cleanedHref = String(rawHref)
+        .trim()
+        .replace(/^<|>$/g, '')
+        .replace(/\s+["'][^"']*["']$/, '')
+        .trim();
+      if (/^https?:\/\//i.test(cleanedHref)) {
+        recordUrl(cleanedHref, String(label || ''));
+      }
+    }
+    return ' ';
+  });
+
+  // 2. Bare http(s):// URLs outside Markdown link syntax
+  const bareUrlRegex = /\bhttps?:\/\/[^\s<>"'`]+/gi;
+  let bareMatch: RegExpExecArray | null;
+  while ((bareMatch = bareUrlRegex.exec(textForBareScan)) !== null) {
+    const cleaned = trimTrailingUrlPunctuation(bareMatch[0]);
+    if (cleaned) {
+      recordUrl(cleaned);
+    }
+  }
+
+  return Array.from(linkMap.values());
 }
 
 /**
@@ -595,6 +679,17 @@ export function refactorCanvasContent(rawJson: string, mappings: RenameMapping[]
       const oldPrefix = oldPath.endsWith('/') ? oldPath : `${oldPath}/`;
       const newPrefix = newPath.endsWith('/') ? newPath : `${newPath}/`;
 
+      if (isDir && typeof doc.assetsFolder === 'string' && doc.assetsFolder.trim()) {
+        const cleanAssets = doc.assetsFolder.replace(/^[/\\]+|[/\\]+$/g, '').replace(/\\/g, '/');
+        if (cleanAssets === oldPath) {
+          doc.assetsFolder = newPath;
+          modified = true;
+        } else if (cleanAssets.startsWith(oldPrefix)) {
+          doc.assetsFolder = newPrefix + cleanAssets.slice(oldPrefix.length);
+          modified = true;
+        }
+      }
+
       // 1. Process Nodes
       if (Array.isArray(doc.nodes)) {
         for (const node of doc.nodes) {
@@ -616,6 +711,27 @@ export function refactorCanvasContent(rawJson: string, mappings: RenameMapping[]
                 node.file = newPath;
                 modified = true;
               }
+            }
+          }
+
+          // Optional clickable internal link on file/image nodes: node.link
+          if (
+            typeof node.link === 'string' &&
+            node.link.trim() &&
+            !/^(https?:|mailto:|tel:)/i.test(node.link.trim())
+          ) {
+            const cleanLink = node.link.trim().replace(/^[/\\]+/, '').replace(/\\/g, '/');
+            if (isDir) {
+              if (cleanLink === oldPath) {
+                node.link = newPath;
+                modified = true;
+              } else if (cleanLink.startsWith(oldPrefix)) {
+                node.link = newPrefix + cleanLink.slice(oldPrefix.length);
+                modified = true;
+              }
+            } else if (cleanLink === oldPath) {
+              node.link = newPath;
+              modified = true;
             }
           }
 
@@ -666,17 +782,51 @@ export function refactorCanvasContent(rawJson: string, mappings: RenameMapping[]
 
 /**
  * Parses JSON Canvas (.canvas) content and extracts all outbound file links,
- * internal [[Wiki-Links]], and #tags from text, file, and group nodes.
+ * internal [[Wiki-Links]], external http(s) URLs, #tags, and optional assetsFolder.
  */
 export function extractCanvasLinksAndTags(rawJson: string): {
   links: string[];
   tags: string[];
+  externalLinks: ExternalLinkRef[];
+  assetsFolder?: string;
 } {
   const linksSet = new Set<string>();
   const tagsSet = new Set<string>();
+  const externalMap = new Map<string, ExternalLinkRef>();
+  let assetsFolder: string | undefined;
+
+  const recordExternal = (rawUrl: string, rawTitle?: string) => {
+    const normalized = normalizeHttpUrl(rawUrl) || (/^https?:\/\//i.test(rawUrl.trim()) ? rawUrl.trim() : null);
+    if (!normalized) return;
+    const cleanTitle = rawTitle?.trim();
+    const usableTitle =
+      cleanTitle && cleanTitle !== normalized && cleanTitle !== rawUrl.trim()
+        ? cleanTitle
+        : undefined;
+    const existing = externalMap.get(normalized);
+    if (!existing) {
+      externalMap.set(normalized, { url: normalized, ...(usableTitle ? { title: usableTitle } : {}) });
+    } else if (!existing.title && usableTitle) {
+      existing.title = usableTitle;
+    }
+  };
+
+  const collectTextMetadata = (text: string) => {
+    const { links } = extractLinksAndEmbeds(text);
+    for (const l of links) linksSet.add(l);
+    const tags = extractTags([], text);
+    for (const t of tags) tagsSet.add(t);
+    for (const ext of extractExternalLinksFromMarkdown(text)) {
+      recordExternal(ext.url, ext.title);
+    }
+  };
 
   try {
     const doc = JSON.parse(rawJson);
+    if (doc && typeof doc.assetsFolder === 'string' && doc.assetsFolder.trim()) {
+      assetsFolder = doc.assetsFolder.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    }
+
     if (doc && Array.isArray(doc.nodes)) {
       for (const node of doc.nodes) {
         if (!node || typeof node !== 'object') continue;
@@ -687,20 +837,35 @@ export function extractCanvasLinksAndTags(rawJson: string): {
           linksSet.add(cleanFile);
         }
 
-        // 2. node.text
-        if (typeof node.text === 'string' && node.text.trim()) {
-          const { links } = extractLinksAndEmbeds(node.text);
-          for (const l of links) linksSet.add(l);
-          const tags = extractTags([], node.text);
-          for (const t of tags) tagsSet.add(t);
+        // 2. type === 'link': node.url
+        if (node.type === 'link' && typeof node.url === 'string' && node.url.trim()) {
+          const titleCandidate =
+            typeof node.label === 'string' && node.label.trim()
+              ? node.label.trim()
+              : typeof node.text === 'string' && node.text.trim()
+                ? node.text.trim()
+                : undefined;
+          recordExternal(node.url.trim(), titleCandidate);
         }
 
-        // 3. node.label
+        // 3. Optional clickable link on file/image nodes: node.link
+        if (typeof node.link === 'string' && node.link.trim()) {
+          const trimmedLink = node.link.trim();
+          if (/^https?:\/\//i.test(trimmedLink)) {
+            recordExternal(trimmedLink);
+          } else if (!/^(mailto:|tel:)/i.test(trimmedLink)) {
+            linksSet.add(trimmedLink);
+          }
+        }
+
+        // 4. node.text
+        if (typeof node.text === 'string' && node.text.trim()) {
+          collectTextMetadata(node.text);
+        }
+
+        // 5. node.label
         if (typeof node.label === 'string' && node.label.trim()) {
-          const { links } = extractLinksAndEmbeds(node.label);
-          for (const l of links) linksSet.add(l);
-          const tags = extractTags([], node.label);
-          for (const t of tags) tagsSet.add(t);
+          collectTextMetadata(node.label);
         }
       }
     }
@@ -709,10 +874,7 @@ export function extractCanvasLinksAndTags(rawJson: string): {
       for (const edge of doc.edges) {
         if (!edge || typeof edge !== 'object') continue;
         if (typeof edge.label === 'string' && edge.label.trim()) {
-          const { links } = extractLinksAndEmbeds(edge.label);
-          for (const l of links) linksSet.add(l);
-          const tags = extractTags([], edge.label);
-          for (const t of tags) tagsSet.add(t);
+          collectTextMetadata(edge.label);
         }
       }
     }
@@ -720,11 +882,13 @@ export function extractCanvasLinksAndTags(rawJson: string): {
     // Ignore JSON parsing errors for corrupted or empty canvas files
   }
 
-    return {
-      links: Array.from(linksSet),
-      tags: Array.from(tagsSet),
-    };
-  }
+  return {
+    links: Array.from(linksSet),
+    tags: Array.from(tagsSet),
+    externalLinks: Array.from(externalMap.values()),
+    ...(assetsFolder ? { assetsFolder } : {}),
+  };
+}
 
 /**
  * Refactors folder and note references inside an Obsidian Base (.base) YAML configuration.

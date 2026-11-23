@@ -245,11 +245,11 @@ Zuber behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als e
 - Während Notizen (`.md`) mit YAML-Frontmatter (`--- ... ---`) serialisiert werden, bleiben `.canvas`-Dateien strikt reines JSON.
 - `VaultService.saveNote()` erkennt `.canvas` und speichert den Textkörper (`body`) direkt ohne Frontmatter-Header ab.
 
-### 10.2 Vollständige Indizierung (`extractCanvasLinksAndTags`)
-- `VaultService.indexFile()` parst `.canvas`-Dateien und nutzt `extractCanvasLinksAndTags(rawJson)` aus `shared/markdownUtils.ts`:
-  - **Knoten vom Typ `file`:** Der referenzierte relative Pfad wird als ausgehender Link (`links`) und Einbettung (`embeds`) registriert.
-  - **Knoten vom Typ `text`:** Roher Markdown-Text wird auf `[[Wiki-Links]]`, `[MD-Links](...)` und `#tags` untersucht.
-  - **Erweiterte Zuber-Shapes:** Auch benutzerdefinierte Formen mit `text` oder `label` werden nach Links durchsucht.
+### 10.2 Vollständige Indizierung (`extractCanvasLinksAndTags` & `extractExternalLinksFromMarkdown`)
+- `VaultService.indexFile()` parst `.canvas`-Dateien und nutzt `extractCanvasLinksAndTags(rawJson)` aus `shared/markdownUtils.ts` (sowie `extractExternalLinksFromMarkdown()` für `.md`-Notizen):
+  - **Strenge Datei-/Verzeichnis-Unterscheidung:** `indexFile()`, `getNote()` (`!stat.isFile()`-Guard), `saveNote()` und `removeFromIndex()` unterscheiden strikt zwischen regulären Dateien und Verzeichnissen — selbst ein Verzeichnis, dessen Name auf `.canvas` endet, wird niemals als Canvas-Dokument indiziert oder als JSON geparst.
+  - **Knoten vom Typ `file`:** Der referenzierte relative Pfad wird als ausgehender Link (`links`) und Einbettung (`embeds`) registriert; optionale `node.link`-Ziele werden je nach Schema intern oder als externer Link erfasst.
+  - **Knoten vom Typ `text`, `link` & Zuber-Shapes:** Roher Markdown-Text, `type: "link"`-URLs sowie benutzerdefinierte Formen mit `text` oder `label` werden auf `[[Wiki-Links]]`, `[MD-Links](...)`, `#tags` und `http(s)://`-URLs (`externalLinks`) untersucht; optional wird ein gesetztes Root-Feld `assetsFolder` extrahiert.
   - **Kantenbeschriftungen (`label`):** Auch Beschriftungen von Verbindungslinien können Wiki-Links enthalten.
 
 ### 10.3 Wissensgraph & Backlinks
@@ -257,13 +257,19 @@ Zuber behandelt `.canvas`-Dateien (Obsidian JSON Canvas Spezifikation 1.0) als e
 - **Kanten:** Alle aus dem Canvas extrahierten Wiki-Links werden zu regulären Kanten im Wissensgraph aufgelöst.
 - **Backlinks (`getBacklinks`):** Wenn ein Canvas auf eine Notiz oder ein Attachment verweist, erscheint der Canvas in der Backlink-Liste der Zielnotiz mit einem aussagekräftigen Kontext-Snippet (z. B. `[Canvas Node (file)]: ...` oder `[Canvas Link]: ...`).
 
-### 10.4 Refactoring & Pfadanpassung (`renameOrMove`)
-- Beim Umbenennen oder Verschieben von Dateien im Vault durchsucht `VaultService.renameOrMove()` auch alle `.canvas`-Dateien.
-- Datei-Referenzen (`node.file`) sowie Wiki-Links in Text-Knoten und Kanten-Labels werden atomar auf den neuen Pfad aktualisiert.
+### 10.4 Companion-Ordner (`.canvas.assets/`) & atomares Refactoring (`renameOrMove` / `moveBatch`)
+- Beim Erstellen oder Ablegen von Notizen/Bildern/PDFs in einem Canvas wird lazily ein Companion-Verzeichnis `<CanvasName>.canvas.assets/` (z. B. `Projects/Test.canvas.assets/` neben `Projects/Test.canvas`, POSIX/NTFS-kompatibel ohne Pfadkollision) oder der am Canvas konfigurierte `assetsFolder` angelegt.
+- Beim Umbenennen oder Verschieben einer `.canvas`-Datei via `VaultService.renameOrMove()` bzw. `moveBatch()` erkennt `moveCompanionAssetsDirIfPresent()` ein vorhandenes Companion-Verzeichnis `<AlterCanvas>.canvas.assets/`, verschiebt es atomar zu `<NeuerCanvas>.canvas.assets/` und reicht beide Pfad-Mappings an `refactorVaultLinks()` (`refactorCanvasContent()`) weiter, sodass `node.file`, `doc.assetsFolder` und vaultweite Wiki-Links synchron aktualisiert werden.
 
 ### 10.5 Offline-Synchronisation (`getSyncManifest`)
 - Im Sync-Manifest (`GET /api/vault/sync-manifest`) werden `.canvas`-Dateien als `type: 'markdown'` klassifiziert.
 - Dadurch werden sie von der clientseitigen `SyncEngine` (`localDb.ts`) vollständig im Offline-Cache vorgehalten und über die Outbox synchronisiert.
+
+### 10.6 Canvas-Baum-Metadaten & Globale Externe Links (`getCanvasTreeMetadata`, `getExternalLinks`)
+- `VaultService` berechnet gecacht (mit Invalidierung bei jeder strukturellen oder inhaltlichen Änderung in `invalidate()`):
+  - `getCanvasTreeMetadata()`: liefert je `.canvas` effektiven `assetsFolder`, aufgelöste `referencedFiles` sowie `externalLinks`.
+  - `getExternalLinks()`: aggregiert alle externen `http(s)://`-URLs über Markdown-Notizen und `.canvas`-Dateien hinweg, dedupliziert nach URL und verknüpft sie mit sortierten `sources` (`path`, `name`, `title?`, `kind`).
+- Beide Strukturen werden über `GET /api/vault/tree`, `GET /api/vault/overview` und den dedizierten Endpunkt `GET /api/vault/external-links` ausgeliefert sowie clientseitig in IndexedDB zwischengespeichert.
 
 ---
 

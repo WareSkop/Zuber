@@ -12,15 +12,18 @@ import {
   ArrowLeft,
   Copy,
   Database,
+  ExternalLink,
   FileDown,
   FilePlus,
   FileText,
   Folder,
   FolderOpen,
   FolderPlus,
+  Globe,
   Hash,
   Image as ImageIcon,
   LayoutTemplate,
+  Link2,
   Mail,
   MoreVertical,
   Pencil,
@@ -37,7 +40,8 @@ import {
   LockOpen,
   X,
 } from 'lucide-react';
-import type { FileTreeNode } from '../../shared/types';
+import type { AggregatedExternalLink, CanvasTreeMetadata, FileTreeNode } from '../../shared/types';
+import { getAttachmentKind } from '../../shared/markdownUtils';
 import { LOCK_FILENAME, getLogicalExtension, isZencPath, stripZencExt } from '../crypto/folderCrypto';
 import { unlockedFoldersStore } from '../crypto/unlockedFoldersStore';
 import { api } from '../api';
@@ -45,6 +49,13 @@ import { useTranslation } from '../i18n';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
 import { MoveToModal } from './MoveToModal';
 import { BottomSheet, useIsMobile } from './BottomSheet';
+import {
+  buildCanvasTreeModel,
+  extractDisplayDomain,
+  findParentCanvasForCompanionFile,
+  type CanvasTreeModel,
+} from '../utils/canvasTreeUtils';
+import { routeExternalLinkClick } from '../utils/researchLinkUtils';
 import {
   sortTreeNodes,
   getTreeSortMode,
@@ -62,12 +73,24 @@ import {
 
 export type { FavoriteItem } from '../utils/vaultNavigation';
 
-function getVisiblePaths(nodes: FileTreeNode[], expanded: Record<string, boolean>): string[] {
+function getVisiblePaths(
+  nodes: FileTreeNode[],
+  expanded: Record<string, boolean>,
+  canvasTreeModel?: CanvasTreeModel
+): string[] {
   const result: string[] = [];
   for (const node of nodes) {
+    if (node.type === 'folder' && canvasTreeModel?.suppressedFolderPaths.has(node.path)) {
+      continue;
+    }
     result.push(node.path);
     if (node.type === 'folder' && expanded[node.path] && node.children) {
-      result.push(...getVisiblePaths(node.children, expanded));
+      result.push(...getVisiblePaths(node.children, expanded, canvasTreeModel));
+    } else if (node.type === 'file' && expanded[node.path]) {
+      const virtual = canvasTreeModel?.canvasChildrenByPath.get(node.path);
+      if (virtual && virtual.directFiles.length > 0) {
+        result.push(...getVisiblePaths(virtual.directFiles, expanded, canvasTreeModel));
+      }
     }
   }
   return result;
@@ -118,6 +141,9 @@ interface FileSidebarProps {
   onTargetFolderChange?: (folder: string) => void;
   onExportPdf?: (path: string) => void;
   onSendEmail?: (path: string) => void;
+  canvasMeta?: Record<string, CanvasTreeMetadata>;
+  externalLinks?: AggregatedExternalLink[];
+  onOpenExternalUrl?: (url: string, event?: React.MouseEvent) => void;
 }
 
 const FileSidebarImpl: React.FC<FileSidebarProps> = ({
@@ -152,6 +178,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   onTargetFolderChange,
   onExportPdf,
   onSendEmail,
+  canvasMeta = {},
+  externalLinks = [],
+  onOpenExternalUrl,
 }) => {
   const { t } = useTranslation();
   const [, setLockTick] = useState(0);
@@ -216,6 +245,15 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const [favorites, setFavorites] = useState<FavoriteItem[]>(() => loadFavorites());
   const [recentNotesList, setRecentNotesList] = useState<string[]>(() => loadRecentNotes());
+  const [showExternalLinksPanel, setShowExternalLinksPanel] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('zuber_show_external_links_panel') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [externalLinksFilter, setExternalLinksFilter] = useState('');
+  const [expandedExternalUrls, setExpandedExternalUrls] = useState<Record<string, boolean>>({});
 
   // File tree sorting state
   const [treeSortMode, setTreeSortMode] = useState<TreeSortMode>(getTreeSortMode);
@@ -226,6 +264,24 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   const sortedTree = useMemo<FileTreeNode[]>(() => {
     return sortTreeNodes(tree, treeSortMode);
   }, [tree, treeSortMode]);
+
+  const canvasTreeModel = useMemo(
+    () => buildCanvasTreeModel(sortedTree, canvasMeta, treeSortMode),
+    [sortedTree, canvasMeta, treeSortMode]
+  );
+
+  const filteredExternalLinks = useMemo(() => {
+    const q = externalLinksFilter.trim().toLowerCase();
+    if (!q) return externalLinks;
+    return externalLinks.filter((item) => {
+      if (item.url.toLowerCase().includes(q)) return true;
+      if (item.domain.toLowerCase().includes(q)) return true;
+      if (item.title && item.title.toLowerCase().includes(q)) return true;
+      return item.sources.some(
+        (s) => s.name.toLowerCase().includes(q) || s.path.toLowerCase().includes(q)
+      );
+    });
+  }, [externalLinks, externalLinksFilter]);
 
   const handleSelectSortMode = (mode: TreeSortMode) => {
     setTreeSortMode(mode);
@@ -463,12 +519,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   }, [selectedTagFilter]);
 
-  // Automatically expand ancestor folders when activePath changes
+  // Automatically expand ancestor folders (and owning .canvas virtual tree) when activePath changes
   useEffect(() => {
-    if (!activePath || !activePath.includes('/')) return;
-    const parts = activePath.split('/');
-    parts.pop(); // remove filename
-    if (parts.length === 0) return;
+    if (!activePath) return;
+    const owningCanvas = findParentCanvasForCompanionFile(activePath, canvasTreeModel);
+    const parts = activePath.includes('/') ? activePath.split('/') : [];
+    if (parts.length > 0) parts.pop(); // remove filename
+    if (parts.length === 0 && !owningCanvas) return;
+
     setExpandedFolders((prev) => {
       let changed = false;
       const next = { ...prev };
@@ -480,9 +538,13 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           changed = true;
         }
       }
+      if (owningCanvas && !next[owningCanvas]) {
+        next[owningCanvas] = true;
+        changed = true;
+      }
       return changed ? next : prev;
     });
-  }, [activePath]);
+  }, [activePath, canvasTreeModel]);
 
   // Synchronize activePath with selectedPaths
   useEffect(() => {
@@ -622,7 +684,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
 
     if (isShift && lastClickedPathRef.current) {
-      const visible = getVisiblePaths(sortedTree, expandedFolders);
+      const visible = getVisiblePaths(sortedTree, expandedFolders, canvasTreeModel);
       const anchorIdx = visible.indexOf(lastClickedPathRef.current);
       const targetIdx = visible.indexOf(node.path);
       if (anchorIdx !== -1 && targetIdx !== -1) {
@@ -661,7 +723,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
 
     if (isShift && lastClickedPathRef.current) {
-      const visible = getVisiblePaths(sortedTree, expandedFolders);
+      const visible = getVisiblePaths(sortedTree, expandedFolders, canvasTreeModel);
       const anchorIdx = visible.indexOf(lastClickedPathRef.current);
       const targetIdx = visible.indexOf(node.path);
       if (anchorIdx !== -1 && targetIdx !== -1) {
@@ -818,6 +880,18 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
     e.dataTransfer.setData('application/x-knowmesh-paths', JSON.stringify(pathsToMove));
     e.dataTransfer.setData('application/x-knowmesh-file-path', node.path);
+    if (node.type === 'file') {
+      const kind = node.attachmentKind || getAttachmentKind(stripZencExt(node.path));
+      e.dataTransfer.setData(
+        'application/x-zuber-file',
+        JSON.stringify({
+          path: node.path,
+          name: node.name,
+          kind,
+          extension: node.extension || getLogicalExtension(node.path),
+        })
+      );
+    }
     e.dataTransfer.setData('text/plain', node.path);
     e.dataTransfer.effectAllowed = 'copyMove';
   };
@@ -935,11 +1009,41 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   };
 
+  const handleOpenExternalLinkItem = (url: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onOpenExternalUrl) {
+      onOpenExternalUrl(url, e);
+      return;
+    }
+    routeExternalLinkClick({
+      url,
+      isResearchOpen,
+      event: e,
+      openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+    });
+  };
+
+  const renderFileNodeIcon = (
+    isCanvasFile: boolean,
+    isBaseFile: boolean,
+    isMdFile: boolean,
+    isPdfFile: boolean
+  ) => {
+    if (isCanvasFile) return <WorkflowCanvasIcon size={14} className="tree-canvas-icon" />;
+    if (isBaseFile) return <Database size={14} className="tree-base-icon" />;
+    if (isMdFile || isPdfFile) return <FileText size={14} />;
+    return <ImageIcon size={14} />;
+  };
+
   const renderTreeNode = (node: FileTreeNode, depth = 0) => {
     if (node.type === 'file' && node.name === LOCK_FILENAME) {
       return null;
     }
     if (node.type === 'folder') {
+      if (canvasTreeModel.suppressedFolderPaths.has(node.path)) {
+        return null;
+      }
       const isExpanded = Boolean(expandedFolders[node.path]);
       const isSelected = selectedPaths.has(node.path);
       const isDropTarget = dropTargetFolder === node.path;
@@ -1032,6 +1136,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     const logicalName = stripZencExt(node.name);
     const logicalExt = getLogicalExtension(node.name);
     const isMd = logicalExt === 'md';
+    const isPdf = logicalExt === 'pdf';
     const isCanvas =
       logicalExt === 'canvas' ||
       stripZencExt(node.path).endsWith('.canvas') ||
@@ -1051,11 +1156,15 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       ? logicalName.replace(/\.base$/i, '')
       : logicalName;
 
-    return (
+    const virtualChildren = isCanvas ? canvasTreeModel.canvasChildrenByPath.get(node.path) : undefined;
+    const hasCanvasChildren = Boolean(isCanvas && virtualChildren?.hasChildren);
+    const isCanvasExpanded = Boolean(hasCanvasChildren && expandedFolders[node.path]);
+
+    const fileRow = (
       <div
-        key={node.path}
+        key={hasCanvasChildren ? undefined : node.path}
         className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''} ${!isMd && !isCanvas && !isBase ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''} ${isBase ? 'base-item' : ''}`}
-        style={{ paddingLeft: `${26 + depth * 14}px` }}
+        style={{ paddingLeft: `${(hasCanvasChildren ? 10 : 26) + depth * 14}px` }}
         draggable={true}
         onDragStart={(e) => handleDragStart(e, node)}
         onDragOver={(e) => handleDragOverItem(e, node)}
@@ -1071,16 +1180,23 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchEnd}
       >
+        {hasCanvasChildren && (
+          <button
+            type="button"
+            className="tree-chevron tree-canvas-chevron-btn"
+            aria-expanded={isCanvasExpanded}
+            aria-label={isCanvasExpanded ? t('sidebar.collapseCanvas') : t('sidebar.expandCanvas')}
+            title={isCanvasExpanded ? t('sidebar.collapseCanvas') : t('sidebar.expandCanvas')}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFolder(node.path);
+            }}
+          >
+            {isCanvasExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        )}
         <span className="tree-icon">
-          {isCanvas ? (
-            <WorkflowCanvasIcon size={14} className="tree-canvas-icon" />
-          ) : isBase ? (
-            <Database size={14} className="tree-base-icon" />
-          ) : isMd ? (
-            <FileText size={14} />
-          ) : (
-            <ImageIcon size={14} />
-          )}
+          {renderFileNodeIcon(isCanvas, isBase, isMd, isPdf)}
         </span>
         <span className="tree-label" title={node.path}>
           {displayName}
@@ -1110,6 +1226,95 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         >
           <MoreVertical size={14} />
         </button>
+      </div>
+    );
+
+    if (!hasCanvasChildren || !virtualChildren) {
+      return fileRow;
+    }
+
+    return (
+      <div key={node.path} className="tree-canvas-group">
+        {fileRow}
+        {isCanvasExpanded && (
+          <div className="tree-canvas-children">
+            {/* 1. Physical companion files inside <Canvas>.canvas.assets/ */}
+            {virtualChildren.directFiles.map((child) => renderTreeNode(child, depth + 1))}
+
+            {/* 2. Linked vault files residing outside the companion folder */}
+            {virtualChildren.linkedFiles.map((linkedNode) => {
+              const linkedLogicalName = stripZencExt(linkedNode.name);
+              const linkedExt = getLogicalExtension(linkedNode.name);
+              const linkedIsMd = linkedExt === 'md';
+              const linkedIsPdf = linkedExt === 'pdf';
+              const linkedIsCanvas = linkedExt === 'canvas';
+              const linkedIsBase = linkedExt === 'base';
+              const linkedDisplayName = linkedIsMd
+                ? linkedLogicalName.replace(/\.md$/i, '')
+                : linkedIsCanvas
+                ? linkedLogicalName.replace(/\.canvas$/i, '')
+                : linkedIsBase
+                ? linkedLogicalName.replace(/\.base$/i, '')
+                : linkedLogicalName;
+
+              return (
+                <div
+                  key={`linked::${node.path}::${linkedNode.path}`}
+                  className={`tree-item tree-file-item canvas-linked-file-item ${
+                    activePath === linkedNode.path ? 'active' : ''
+                  }`}
+                  style={{ paddingLeft: `${26 + (depth + 1) * 14}px` }}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, linkedNode)}
+                  onClick={(e) => handleFileClick(e, linkedNode)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openContextMenu(linkedNode, e.clientX, e.clientY);
+                  }}
+                >
+                  <span className="tree-icon">
+                    {renderFileNodeIcon(linkedIsCanvas, linkedIsBase, linkedIsMd, linkedIsPdf)}
+                  </span>
+                  <span
+                    className="tree-label"
+                    title={`${t('sidebar.linkedFromCanvas')}: ${linkedNode.path}`}
+                  >
+                    {linkedDisplayName}
+                  </span>
+                  <span
+                    className="canvas-linked-indicator"
+                    title={`${t('sidebar.linkedFromCanvas')}: ${linkedNode.path}`}
+                  >
+                    <Link2 size={12} />
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* 3. External Web Links referenced on the canvas */}
+            {virtualChildren.externalLinks.map((ext) => {
+              const label = ext.title || extractDisplayDomain(ext.url);
+              return (
+                <div
+                  key={`ext::${node.path}::${ext.url}`}
+                  className="tree-item canvas-external-link-item"
+                  style={{ paddingLeft: `${26 + (depth + 1) * 14}px` }}
+                  title={ext.url}
+                  onClick={(e) => handleOpenExternalLinkItem(ext.url, e)}
+                >
+                  <span className="tree-icon external-link-icon">
+                    <Globe size={13} />
+                  </span>
+                  <span className="tree-label">{label}</span>
+                  <span className="external-link-open-icon">
+                    <ExternalLink size={11} />
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -1592,6 +1797,127 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             }}
           >
             {sortedTree.map((node) => renderTreeNode(node, 0))}
+          </div>
+
+          {/* Collapsible Vault-Wide External Links Section */}
+          <div className={`sidebar-external-links-section ${showExternalLinksPanel ? 'is-expanded' : ''}`}>
+            <button
+              type="button"
+              className="sidebar-external-links-header"
+              aria-expanded={showExternalLinksPanel}
+              onClick={() => {
+                setShowExternalLinksPanel((prev) => {
+                  const next = !prev;
+                  try {
+                    localStorage.setItem('zuber_show_external_links_panel', String(next));
+                  } catch {}
+                  return next;
+                });
+              }}
+            >
+              <span className="sidebar-external-links-header-left">
+                {showExternalLinksPanel ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                <Globe size={13} />
+                <span>{t('sidebar.externalLinks')}</span>
+              </span>
+              <span className="sidebar-section-count">({externalLinks.length})</span>
+            </button>
+
+            {showExternalLinksPanel && (
+              <div className="sidebar-external-links-body">
+                <div className="sidebar-external-links-filter">
+                  <Search size={13} className="external-filter-icon" />
+                  <input
+                    type="search"
+                    placeholder={t('sidebar.externalLinksFilterPlaceholder')}
+                    value={externalLinksFilter}
+                    onChange={(e) => setExternalLinksFilter(e.target.value)}
+                  />
+                  {externalLinksFilter && (
+                    <button
+                      type="button"
+                      className="search-clear-btn"
+                      onClick={() => setExternalLinksFilter('')}
+                      aria-label={t('common.close')}
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                <div className="sidebar-external-links-list scroller">
+                  {filteredExternalLinks.length === 0 ? (
+                    <div className="sidebar-empty-hint small">
+                      {externalLinks.length === 0
+                        ? t('sidebar.noExternalLinks')
+                        : t('sidebar.noMatchingExternalLinks')}
+                    </div>
+                  ) : (
+                    filteredExternalLinks.map((link) => {
+                      const isSourcesExpanded = Boolean(expandedExternalUrls[link.url]);
+                      const primaryLabel = link.title || link.domain;
+                      return (
+                        <div key={link.url} className="external-link-entry">
+                          <div
+                            className="external-link-row"
+                            onClick={(e) => handleOpenExternalLinkItem(link.url, e)}
+                            title={link.url}
+                          >
+                            <Globe size={13} className="external-link-globe-icon" />
+                            <div className="external-link-text">
+                              <span className="external-link-title">{primaryLabel}</span>
+                              <span className="external-link-domain">{link.domain}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className={`external-link-sources-btn ${isSourcesExpanded ? 'active' : ''}`}
+                              title={t('sidebar.referencedBy')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedExternalUrls((prev) => ({
+                                  ...prev,
+                                  [link.url]: !prev[link.url],
+                                }));
+                              }}
+                            >
+                              {link.sources.length}
+                            </button>
+                          </div>
+                          {isSourcesExpanded && (
+                            <div className="external-link-sources-list">
+                              {link.sources.map((src) => (
+                                <button
+                                  key={`${link.url}::${src.path}`}
+                                  type="button"
+                                  className="external-link-source-chip"
+                                  title={src.path}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (e.altKey) {
+                                      e.preventDefault();
+                                      onSelectNote(src.path, { altKey: true });
+                                    } else {
+                                      onSelectNote(src.path);
+                                    }
+                                  }}
+                                >
+                                  {src.kind === 'canvas' ? (
+                                    <WorkflowCanvasIcon size={11} />
+                                  ) : (
+                                    <FileText size={11} />
+                                  )}
+                                  <span>{src.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

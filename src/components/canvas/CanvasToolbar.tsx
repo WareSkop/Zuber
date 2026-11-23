@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   FileText,
+  FilePlus,
   FolderPlus,
   GitBranch,
   Network,
@@ -22,8 +23,9 @@ import {
   Presentation,
   Image as ImageIcon,
   Upload,
+  Settings,
 } from 'lucide-react';
-import type { CanvasShape } from '../../../shared/canvasTypes';
+import { isPdfFilePath, type CanvasShape } from '../../../shared/canvasTypes';
 import { isImageFilePath, renderShapeMiniIcon } from './nodes/canvasShapeGeometry';
 import { stripZencExt } from '../../crypto/folderCrypto';
 import { useTranslation } from '../../i18n';
@@ -54,6 +56,10 @@ interface CanvasToolbarProps {
   allNotes: { path: string; name: string; basename: string }[];
   allFiles?: { path: string; name: string; basename?: string }[];
   onUploadImageFiles?: (files: File[]) => void | Promise<void>;
+  onRequestCreateNote?: () => void;
+  assetsFolder?: string;
+  defaultAssetsFolder?: string;
+  onChangeAssetsFolder?: (folder: string | undefined) => void;
   isPresentationPanelOpen?: boolean;
   onTogglePresentationPanel?: () => void;
   presentationSlideCount?: number;
@@ -77,6 +83,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
   allNotes,
   allFiles = [],
   onUploadImageFiles,
+  onRequestCreateNote,
+  assetsFolder,
+  defaultAssetsFolder,
+  onChangeAssetsFolder,
   isPresentationPanelOpen = false,
   onTogglePresentationPanel,
   presentationSlideCount = 0,
@@ -96,12 +106,17 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
       onToggleGrid();
     }
   };
-  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | 'image' | 'grid' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'workflow' | 'network' | 'file' | 'image' | 'grid' | 'settings' | null>(null);
   const [fileSearch, setFileSearch] = useState('');
   const [imageSearch, setImageSearch] = useState('');
+  const [assetsFolderDraft, setAssetsFolderDraft] = useState(assetsFolder || '');
   const toolbarRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setAssetsFolderDraft(assetsFolder || '');
+  }, [assetsFolder, openDropdown]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -147,14 +162,33 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
     requestAnimationFrame(clamp);
   }, [openDropdown]);
 
-  const filteredNotes = allNotes
+  const pickerFileCandidates = useMemo(() => {
+    const map = new Map<string, { path: string; title: string; isPdf: boolean }>();
+    for (const n of allNotes) {
+      map.set(n.path, {
+        path: n.path,
+        title: n.basename || n.name,
+        isPdf: isPdfFilePath(n.path),
+      });
+    }
+    for (const f of allFiles) {
+      if (isPdfFilePath(f.path) && !map.has(f.path)) {
+        const logical = stripZencExt(f.path);
+        const title = logical.split('/').pop() || f.name;
+        map.set(f.path, { path: f.path, title, isPdf: true });
+      }
+    }
+    return Array.from(map.values());
+  }, [allNotes, allFiles]);
+
+  const filteredNotes = pickerFileCandidates
     .filter(
       (n) =>
         !fileSearch ||
-        n.name.toLowerCase().includes(fileSearch.toLowerCase()) ||
+        n.title.toLowerCase().includes(fileSearch.toLowerCase()) ||
         n.path.toLowerCase().includes(fileSearch.toLowerCase())
     )
-    .slice(0, 15);
+    .slice(0, 20);
 
   const filteredImages = allFiles
     .filter((f) => isImageFilePath(f.path))
@@ -183,6 +217,22 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
           <Plus size={15} />
           <span className="canvas-toolbar-label">{t('canvas.addText')}</span>
         </button>
+
+        {onRequestCreateNote && (
+          <button
+            type="button"
+            className="canvas-toolbar-btn"
+            onClick={() => {
+              onRequestCreateNote();
+              setOpenDropdown(null);
+            }}
+            title={t('canvas.newNoteTooltip')}
+            aria-label={t('canvas.newNoteTooltip')}
+          >
+            <FilePlus size={15} />
+            <span className="canvas-toolbar-label">{t('canvas.newNote')}</span>
+          </button>
+        )}
 
         {/* Embed note/file picker */}
         <div className="canvas-toolbar-dropdown">
@@ -224,7 +274,10 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
                         setOpenDropdown(null);
                       }}
                     >
-                      <span className="picker-item-title">{note.basename || note.name}</span>
+                      <span className="picker-item-title">
+                        {note.title}
+                        {note.isPdf && <span className="picker-item-badge">{t('canvas.pdfBadge')}</span>}
+                      </span>
                       <span className="picker-item-path">{note.path}</span>
                     </button>
                   ))
@@ -616,6 +669,66 @@ export const CanvasToolbar: React.FC<CanvasToolbarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Canvas Settings (Target Companion Assets Folder) */}
+        {onChangeAssetsFolder && (
+          <div className="canvas-toolbar-dropdown">
+            <button
+              type="button"
+              className={`canvas-toolbar-btn icon-only ${openDropdown === 'settings' ? 'active' : ''}`}
+              onClick={() => setOpenDropdown((prev) => (prev === 'settings' ? null : 'settings'))}
+              title={t('canvas.settingsTooltip')}
+              aria-label={t('canvas.settingsTooltip')}
+            >
+              <Settings size={16} />
+            </button>
+            {openDropdown === 'settings' && (
+              <div ref={dropdownRef} className="canvas-dropdown-menu canvas-settings-menu">
+                <div className="canvas-dropdown-title">{t('canvas.assetsFolderTitle')}</div>
+                <div className="canvas-settings-hint">{t('canvas.assetsFolderHint')}</div>
+                <input
+                  type="text"
+                  className="canvas-settings-input"
+                  value={assetsFolderDraft}
+                  placeholder={defaultAssetsFolder || ''}
+                  onChange={(e) => setAssetsFolderDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const clean = assetsFolderDraft.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+                      onChangeAssetsFolder(clean || undefined);
+                      setOpenDropdown(null);
+                    }
+                  }}
+                />
+                <div className="canvas-settings-actions">
+                  <button
+                    type="button"
+                    className="canvas-settings-btn primary"
+                    onClick={() => {
+                      const clean = assetsFolderDraft.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+                      onChangeAssetsFolder(clean || undefined);
+                      setOpenDropdown(null);
+                    }}
+                  >
+                    {t('common.save')}
+                  </button>
+                  <button
+                    type="button"
+                    className="canvas-settings-btn"
+                    onClick={() => {
+                      setAssetsFolderDraft('');
+                      onChangeAssetsFolder(undefined);
+                      setOpenDropdown(null);
+                    }}
+                  >
+                    {t('canvas.resetAssetsFolder')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {onTogglePresentationPanel && (
           <>

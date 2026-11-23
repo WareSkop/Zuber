@@ -15,9 +15,15 @@ import {
   EyeOff,
   Check,
   X,
+  RectangleHorizontal,
 } from 'lucide-react';
-import type { CanvasShape, CanvasEdgeStyle } from '../../../shared/canvasTypes';
-import { OBSIDIAN_CANVAS_COLORS } from '../../../shared/canvasTypes';
+import {
+  supportsFileDisplayMode,
+  OBSIDIAN_CANVAS_COLORS,
+  type CanvasShape,
+  type CanvasEdgeStyle,
+  type CanvasFileDisplayMode,
+} from '../../../shared/canvasTypes';
 import { isImageFilePath, renderShapeMiniIcon } from './nodes/canvasShapeGeometry';
 import { useTranslation } from '../../i18n';
 
@@ -26,6 +32,7 @@ interface CanvasInspectorProps {
   selectedEdge: Edge | null;
   contextMenuPos?: { x: number; y: number } | null;
   onUpdateNodeData: (nodeId: string, partialData: Record<string, any>) => void;
+  onToggleFileDisplayMode?: (nodeId: string, mode: CanvasFileDisplayMode) => void;
   onUpdateEdgeData: (edgeId: string, partialData: Record<string, any>, label?: string) => void;
   onDuplicateNode: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
@@ -41,6 +48,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   selectedEdge,
   contextMenuPos,
   onUpdateNodeData,
+  onToggleFileDisplayMode,
   onUpdateEdgeData,
   onDuplicateNode,
   onDeleteNode,
@@ -180,6 +188,40 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
       {/* --- NODE INSPECTOR --- */}
       {selectedNode ? (
         <div className="inspector-content-row">
+          {/* Card / Preview Display Mode Toggle for .md and .pdf File Nodes */}
+          {selectedNode.type === 'canvasFile' &&
+            supportsFileDisplayMode(selectedNode.data?.file as string) &&
+            onToggleFileDisplayMode && (
+              <div
+                className="inspector-btn-toggle-group inspector-display-mode-toggle"
+                role="group"
+                aria-label={t('canvas.displayModeGroup')}
+              >
+                <button
+                  type="button"
+                  className={`inspector-toggle-btn inspector-mode-toggle-btn ${
+                    selectedNode.data?.displayMode === 'card' ? 'active' : ''
+                  }`}
+                  onClick={() => onToggleFileDisplayMode(selectedNode.id, 'card')}
+                  title={t('canvas.displayModeCardTitle')}
+                >
+                  <RectangleHorizontal size={14} />
+                  <span>{t('canvas.displayModeCard')}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`inspector-toggle-btn inspector-mode-toggle-btn ${
+                    selectedNode.data?.displayMode !== 'card' ? 'active' : ''
+                  }`}
+                  onClick={() => onToggleFileDisplayMode(selectedNode.id, 'preview')}
+                  title={t('canvas.displayModePreviewTitle')}
+                >
+                  <Eye size={14} />
+                  <span>{t('canvas.displayModePreview')}</span>
+                </button>
+              </div>
+            )}
+
           {/* Shape Switcher (text/shape nodes and image file nodes) */}
           {(selectedNode.type === 'canvasShape' ||
             (selectedNode.type === 'canvasFile' && isImageFilePath(selectedNode.data?.file as string))) && (
