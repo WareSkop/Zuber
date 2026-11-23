@@ -54,7 +54,13 @@ export function isPrivateOrLocalHostname(hostname: string): boolean {
     if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
     if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
   } else if (ipVersion === 6) {
-    if (lower === '::' || lower === '::1' || lower.startsWith('fe80:') || lower.startsWith('fc') || lower.startsWith('fd')) {
+    if (
+      lower === '::' ||
+      lower === '::1' ||
+      /^fe[89ab][0-9a-f]:/i.test(lower) ||
+      /^f[cd][0-9a-f]{2}:/i.test(lower) ||
+      lower.startsWith('ff')
+    ) {
       return true;
     }
   }

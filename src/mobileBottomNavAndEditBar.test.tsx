@@ -56,6 +56,7 @@ function createMockEditorRef(): React.RefObject<LivePreviewEditorRef | null> {
       focus: vi.fn(),
       focusAtEnd: vi.fn(),
       focusBelowHeading: vi.fn(),
+      insertMarkdownBlock: vi.fn(),
       blur: vi.fn(),
     },
   };

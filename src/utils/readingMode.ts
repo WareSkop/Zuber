@@ -1,4 +1,6 @@
-import { marked } from 'marked';
+import { marked, Marked } from 'marked';
+
+const webArticleMarked = new Marked({ gfm: true, breaks: true });
 import DOMPurify from 'dompurify';
 import { api } from '../api';
 import { stripZencExt } from '../crypto/folderCrypto';
@@ -90,7 +92,7 @@ export function renderReadingHtml(
         .split('\n')
         .map((l) => l.replace(/^>\s?/, ''))
         .join('\n');
-      const innerHtml = marked.parse(innerLines, { async: false, gfm: true }) as string;
+      const innerHtml = marked.parse(innerLines, { async: false, gfm: true, breaks: true }) as string;
       return `<div class="reading-callout callout-${type}"><div class="reading-callout-title">${title}</div><div class="reading-callout-body">${innerHtml}</div></div>\n`;
     }
   );
@@ -371,7 +373,7 @@ export function renderReadingHtml(
     '$1<span class="reading-tag" data-tag="$2">#$2</span>'
   );
 
-  let rawHtml = marked.parse(processed, { async: false, gfm: true }) as string;
+  let rawHtml = marked.parse(processed, { async: false, gfm: true, breaks: true }) as string;
   // Add task-list-item class to <li> containing input checkbox for reliable styling
   rawHtml = rawHtml.replace(
     /<li(\s*[^>]*)>(?:\s*<p>)?\s*(<input\s+[^>]*type=["']checkbox["'][^>]*>)/gi,
@@ -412,5 +414,45 @@ export function renderReadingHtml(
       'ry',
       'd',
     ],
+  });
+}
+
+/**
+ * Renders extracted external web article Markdown to strictly sanitized HTML.
+ * Uses explicit element/attribute allowlists and blocks unsafe tags, inline styles, data/aria attributes, and non-HTTP(S) URIs.
+ */
+export function renderWebArticleHtml(markdown: string): string {
+  let rawHtml = webArticleMarked.parse(markdown || '', {
+    async: false,
+  }) as string;
+
+  rawHtml = rawHtml.replace(
+    /<li(\s*[^>]*)>(?:\s*<p>)?\s*(<input\s+[^>]*type=["']checkbox["'][^>]*>)/gi,
+    '<li$1 class="task-list-item">$2'
+  );
+
+  return DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'p', 'br', 'blockquote',
+      'ul', 'ol', 'li',
+      'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+      'pre', 'code',
+      'a', 'img', 'hr',
+      'strong', 'b', 'em', 'i', 'del', 's', 'sub', 'sup', 'mark',
+      'figure', 'figcaption',
+      'input', 'span', 'div',
+    ],
+    ALLOWED_ATTR: [
+      'href', 'target', 'rel',
+      'src', 'alt', 'title',
+      'type', 'checked', 'disabled',
+      'class', 'colspan', 'rowspan',
+    ],
+    ALLOW_ARIA_ATTR: false,
+    ALLOW_DATA_ATTR: false,
+    FORBID_TAGS: ['iframe', 'script', 'style', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['style', 'srcdoc'],
+    ALLOWED_URI_REGEXP: /^https?:\/\//i,
   });
 }

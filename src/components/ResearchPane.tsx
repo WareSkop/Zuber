@@ -17,15 +17,19 @@ import {
   Check,
   ExternalLink,
   ShieldAlert,
+  FilePlus,
+  Quote,
 } from 'lucide-react';
 import { createRoot, type Root } from 'react-dom/client';
 import DOMPurify from 'dompurify';
 import { useTranslation } from '../i18n';
 import { api } from '../api';
 import { syncEngine } from '../sync/syncEngine';
-import type { GraphData } from '../../shared/types';
+import type { GraphData, WebExtractResponse } from '../../shared/types';
 import { WorkflowCanvasIcon } from './canvas/WorkflowCanvasIcon';
-import { renderReadingHtml, loadAndInitMermaid, escapeHtml } from '../utils/readingMode';
+import { renderReadingHtml, renderWebArticleHtml, loadAndInitMermaid, escapeHtml } from '../utils/readingMode';
+import { ResearchPdfViewer } from './ResearchPdfViewer';
+import { ZUBER_QUOTE_MIME, type ZuberQuotePayload } from '../utils/quoteUtils';
 import { BaseView } from './BaseView';
 import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { CanvasEmbedWidget } from './canvas/CanvasEmbedWidget';
@@ -65,6 +69,14 @@ export interface ResearchPaneProps {
   onNavigate: (target: string, event?: { altKey?: boolean; preventDefault?: () => void }) => void;
   onShowGraph: () => void;
   onOpenWebUrl?: (url: string) => void;
+  onSaveWebNote?: (article: {
+    title: string;
+    url: string;
+    byline?: string | null;
+    siteName?: string | null;
+    markdown: string;
+  }) => void | Promise<void>;
+  onInsertQuote?: (payload: ZuberQuotePayload) => void;
   graphData: GraphData;
   allNotes: { path: string; name: string; basename: string }[];
   activeNotePath: string | null;
@@ -80,6 +92,8 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   onNavigate,
   onShowGraph,
   onOpenWebUrl,
+  onSaveWebNote,
+  onInsertQuote,
   graphData,
   allNotes,
   activeNotePath,
@@ -91,11 +105,27 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   const [canvasRawContent, setCanvasRawContent] = useState<string>('{}');
   const [imageZoom, setImageZoom] = useState<number>(1);
   const [webInputValue, setWebInputValue] = useState<string>('');
+  const [webViewMode, setWebViewMode] = useState<'markdown' | 'html'>('markdown');
+  const [extractedWeb, setExtractedWeb] = useState<WebExtractResponse | null>(null);
+  const [webExtractLoading, setWebExtractLoading] = useState<boolean>(false);
+  const [webExtractError, setWebExtractError] = useState<string | null>(null);
+  const [webReloadTick, setWebReloadTick] = useState<number>(0);
+  const [savingWebNote, setSavingWebNote] = useState<boolean>(false);
+  const [savedWebNoteUrl, setSavedWebNoteUrl] = useState<string | null>(null);
   const [iframeReloadKey, setIframeReloadKey] = useState<number>(0);
   const [embedBlocked, setEmbedBlocked] = useState<boolean>(false);
   const [urlCopied, setUrlCopied] = useState<boolean>(false);
   const [decryptedMediaUrl, setDecryptedMediaUrl] = useState<string | null>(null);
+  const [quotePopover, setQuotePopover] = useState<{
+    x: number;
+    y: number;
+    payload: ZuberQuotePayload;
+  } | null>(null);
+
   const readingContainerRef = useRef<HTMLDivElement>(null);
+  const contentContainerRef = useRef<HTMLDivElement>(null);
+  const quotePopoverRef = useRef<HTMLButtonElement | null>(null);
+  const webExtractCacheRef = useRef<Map<string, WebExtractResponse>>(new Map());
 
   useEffect(() => {
     let revokedUrl: string | null = null;
@@ -120,36 +150,76 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   }, [target?.path, target?.type]);
   const webInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync address bar input and check X-Frame-Options / CSP when web target changes
+  // Sync address bar, reset web reader state on URL change, and fetch Reader Markdown or HTML embed check
   useEffect(() => {
+    setQuotePopover(null);
     if (target?.type !== 'web') {
       setEmbedBlocked(false);
+      setExtractedWeb(null);
+      setWebExtractError(null);
+      setWebExtractLoading(false);
       return;
     }
     setWebInputValue(target.path || '');
     setEmbedBlocked(false);
     setUrlCopied(false);
+    setWebViewMode('markdown');
+    setExtractedWeb(null);
+    setWebExtractError(null);
 
     if (!target.path) {
+      setWebExtractLoading(false);
       const timer = window.setTimeout(() => webInputRef.current?.focus(), 30);
       return () => window.clearTimeout(timer);
     }
+  }, [target?.type, target?.path]);
 
+  useEffect(() => {
+    if (target?.type !== 'web' || !target.path) return;
     let cancelled = false;
-    api
-      .checkLinkEmbed(target.path)
-      .then((res) => {
-        if (!cancelled && res && res.embeddable === false) {
-          setEmbedBlocked(true);
-        }
-      })
-      .catch(() => {
-        // Ignore network/offline pre-check errors; let iframe try loading
-      });
+
+    if (webViewMode === 'markdown') {
+      const cached = webExtractCacheRef.current.get(target.path);
+      if (cached) {
+        setExtractedWeb(cached);
+        setWebExtractError(null);
+        setWebExtractLoading(false);
+        return;
+      }
+
+      setWebExtractLoading(true);
+      setWebExtractError(null);
+      api
+        .extractWebUrl(target.path)
+        .then((res) => {
+          if (cancelled) return;
+          webExtractCacheRef.current.set(target.path, res);
+          setExtractedWeb(res);
+          setWebExtractLoading(false);
+        })
+        .catch((err: any) => {
+          if (cancelled) return;
+          setExtractedWeb(null);
+          setWebExtractError(err?.message || t('research.extractErrorTitle'));
+          setWebExtractLoading(false);
+        });
+    } else {
+      api
+        .checkLinkEmbed(target.path)
+        .then((res) => {
+          if (!cancelled && res && res.embeddable === false) {
+            setEmbedBlocked(true);
+          }
+        })
+        .catch(() => {
+          // Ignore network/offline pre-check errors; let iframe try loading
+        });
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [target?.type, target?.path]);
+  }, [target?.type, target?.path, webViewMode, webReloadTick, t]);
 
   // Load content when target changes
   useEffect(() => {
@@ -230,6 +300,36 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   }, [target?.type, target?.path, noteContent, allNotes, t]);
 
   const readingHtmlObj = useMemo(() => ({ __html: renderedHtml }), [renderedHtml]);
+
+  const renderedWebHtml = useMemo(() => {
+    if (target?.type !== 'web' || webViewMode !== 'markdown' || extractedWeb?.type !== 'article') {
+      return '';
+    }
+    return renderWebArticleHtml(extractedWeb.markdown);
+  }, [target?.type, webViewMode, extractedWeb]);
+
+  const webHtmlObj = useMemo(() => ({ __html: renderedWebHtml }), [renderedWebHtml]);
+
+  // Dismiss quick-quote popover on Escape or outside mousedown
+  useEffect(() => {
+    if (!quotePopover) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setQuotePopover(null);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (quotePopoverRef.current?.contains(e.target as Node)) return;
+      // Selection change / click inside content will re-evaluate on mouseup
+      if (!contentContainerRef.current?.contains(e.target as Node)) {
+        setQuotePopover(null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [quotePopover]);
 
   // Setup Mermaid diagrams, Base blocks, and event listeners in reading view
   useEffect(() => {
@@ -510,7 +610,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
   const isGraph = !target || target.type === 'graph';
   const isWeb = target?.type === 'web';
   const fileName = isWeb
-    ? target?.path || t('research.openWebUrl')
+    ? extractedWeb?.title || target?.path || t('research.openWebUrl')
     : target?.path
     ? target.path.split('/').pop() || target.path
     : '';
@@ -529,6 +629,153 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
     : target?.type === 'pdf'
     ? 'PDF'
     : 'REF';
+
+  const buildSelectionQuotePayload = (fallbackTarget?: EventTarget | null): ZuberQuotePayload | null => {
+    if (!target || isGraph || target.type === 'image' || target.type === 'canvas' || target.type === 'base') {
+      return null;
+    }
+    const sel = window.getSelection?.();
+    const selectedText = sel?.toString().trim() || '';
+    if (!selectedText) return null;
+
+    const resolveElement = (node: Node | null | undefined): HTMLElement | null => {
+      if (!node) return null;
+      return node.nodeType === 3 ? node.parentElement : (node as HTMLElement);
+    };
+
+    const anchorEl = resolveElement(sel?.anchorNode);
+    const focusEl = resolveElement(sel?.focusNode);
+    const fallbackEl =
+      fallbackTarget && typeof (fallbackTarget as Node).nodeType === 'number'
+        ? resolveElement(fallbackTarget as Node)
+        : null;
+
+    if (
+      contentContainerRef.current &&
+      anchorEl &&
+      !contentContainerRef.current.contains(anchorEl) &&
+      (!focusEl || !contentContainerRef.current.contains(focusEl))
+    ) {
+      return null;
+    }
+
+    const pageEl =
+      anchorEl?.closest('[data-pdf-page]') ||
+      focusEl?.closest('[data-pdf-page]') ||
+      fallbackEl?.closest('[data-pdf-page]');
+    const rawPage = pageEl?.getAttribute('data-pdf-page');
+    const parsedPage = rawPage ? Number(rawPage) : undefined;
+    const validPage =
+      typeof parsedPage === 'number' && Number.isFinite(parsedPage) && parsedPage > 0
+        ? parsedPage
+        : undefined;
+
+    if (target.type === 'pdf') {
+      return {
+        text: selectedText,
+        url: target.path,
+        title: target.path.split('/').pop() || target.path,
+        page: validPage,
+        isInternal: true,
+      };
+    }
+
+    if (target.type === 'web') {
+      const isExternalPdf = extractedWeb?.type === 'pdf';
+      return {
+        text: selectedText,
+        url: extractedWeb?.url || target.path,
+        title: extractedWeb?.title || target.path,
+        ...(isExternalPdf && validPage ? { page: validPage } : {}),
+        isInternal: false,
+      };
+    }
+
+    if (target.type === 'note') {
+      return {
+        text: selectedText,
+        url: target.path,
+        title: (target.path.split('/').pop() || target.path).replace(/\.md$/i, ''),
+        isInternal: true,
+      };
+    }
+
+    return null;
+  };
+
+  const handleContentDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    const payload = buildSelectionQuotePayload(e.target);
+    if (!payload) return;
+    setQuotePopover(null);
+    e.dataTransfer.setData(ZUBER_QUOTE_MIME, JSON.stringify(payload));
+    e.dataTransfer.setData('text/plain', payload.text);
+    e.dataTransfer.effectAllowed = 'copy';
+  };
+
+  const handleContentSelectionEnd = (e: React.SyntheticEvent<HTMLDivElement>) => {
+    if (!onInsertQuote) {
+      if (quotePopover) setQuotePopover(null);
+      return;
+    }
+    // Keep current selection check
+    const payload = buildSelectionQuotePayload(e.target);
+    if (!payload) {
+      setQuotePopover(null);
+      return;
+    }
+    const sel = window.getSelection?.();
+    let rect: DOMRect | null = null;
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      if (typeof range.getBoundingClientRect === 'function') {
+        rect = range.getBoundingClientRect();
+      }
+    }
+    if (!rect || (rect.width === 0 && rect.height === 0 && rect.top === 0 && rect.left === 0)) {
+      rect = contentContainerRef.current?.getBoundingClientRect?.() || null;
+    }
+    if (!rect) {
+      setQuotePopover(null);
+      return;
+    }
+    const rawX = rect.left + Math.max(rect.width / 2, 0);
+    const rawY = Math.max(12, rect.top - 8);
+    const clampedX = Math.max(84, Math.min(rawX || 140, (window.innerWidth || 1024) - 84));
+    const clampedY = Math.max(12, Math.min(rawY, (window.innerHeight || 768) - 48));
+    setQuotePopover({ x: clampedX, y: clampedY, payload });
+  };
+
+  const handleWebReaderClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const anchor = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const href = anchor.getAttribute('href') || anchor.href;
+    if (!href || !/^https?:\/\//i.test(href)) return;
+    routeExternalLinkClick({
+      url: href,
+      isResearchOpen: true,
+      event: e,
+      onOpenInResearch: onOpenWebUrl,
+      openExternal: (u) => window.open(u, '_blank', 'noopener,noreferrer'),
+    });
+  };
+
+  const handleSaveArticleClick = async () => {
+    if (!onSaveWebNote || extractedWeb?.type !== 'article' || savingWebNote) return;
+    setSavingWebNote(true);
+    try {
+      await onSaveWebNote({
+        title: extractedWeb.title,
+        url: extractedWeb.url,
+        byline: extractedWeb.byline,
+        siteName: extractedWeb.siteName,
+        markdown: extractedWeb.markdown,
+      });
+      setSavedWebNoteUrl(extractedWeb.url);
+      window.setTimeout(() => setSavedWebNoteUrl(null), 2200);
+    } finally {
+      setSavingWebNote(false);
+    }
+  };
 
   return (
     <aside className="research-pane-container" aria-label={t('research.title', 'Rechercheansicht')}>
@@ -639,7 +886,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
         </div>
       </header>
 
-      {/* Interactive Web Browser Address Bar */}
+      {/* Interactive Web Browser Address Bar, Mode Toggle & Save as Note */}
       {isWeb && (
         <form
           className="research-web-bar"
@@ -649,6 +896,7 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             const normalized = normalizeWebUrl(webInputValue);
             if (normalized && onOpenWebUrl) {
               setEmbedBlocked(false);
+              setWebExtractError(null);
               onOpenWebUrl(normalized);
             }
           }}
@@ -663,6 +911,52 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             value={webInputValue}
             onChange={(e) => setWebInputValue(e.target.value)}
           />
+          <div
+            className="research-web-mode-toggle"
+            role="group"
+            aria-label={t('research.viewModeGroup')}
+            data-testid="research-web-mode-toggle"
+          >
+            <button
+              type="button"
+              className={`research-web-mode-btn ${webViewMode === 'markdown' ? 'active' : ''}`}
+              data-testid="research-web-mode-markdown"
+              onClick={() => setWebViewMode('markdown')}
+            >
+              {t('research.modeMarkdown')}
+            </button>
+            <button
+              type="button"
+              className={`research-web-mode-btn ${webViewMode === 'html' ? 'active' : ''}`}
+              data-testid="research-web-mode-html"
+              onClick={() => setWebViewMode('html')}
+            >
+              {t('research.modeHtml')}
+            </button>
+          </div>
+          {onSaveWebNote && (
+            <button
+              type="button"
+              className={`research-web-save-btn ${savedWebNoteUrl && extractedWeb?.type === 'article' && savedWebNoteUrl === extractedWeb.url ? 'saved' : ''}`}
+              data-testid="research-web-save-note-btn"
+              disabled={savingWebNote || extractedWeb?.type !== 'article'}
+              title={t('research.saveAsNote')}
+              aria-label={t('research.saveAsNote')}
+              onClick={handleSaveArticleClick}
+            >
+              {savedWebNoteUrl && extractedWeb?.type === 'article' && savedWebNoteUrl === extractedWeb.url ? (
+                <>
+                  <Check size={14} />
+                  <span className="btn-label-desktop">{t('research.savedAsNote')}</span>
+                </>
+              ) : (
+                <>
+                  <FilePlus size={14} />
+                  <span className="btn-label-desktop">{t('research.saveAsNote')}</span>
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
             className="research-web-bar-btn"
@@ -671,8 +965,16 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             title={t('research.reloadWeb')}
             aria-label={t('research.reloadWeb')}
             onClick={() => {
+              if (target?.path) {
+                webExtractCacheRef.current.delete(target.path);
+              }
               setEmbedBlocked(false);
-              setIframeReloadKey((k) => k + 1);
+              setWebExtractError(null);
+              if (webViewMode === 'markdown') {
+                setWebReloadTick((k) => k + 1);
+              } else {
+                setIframeReloadKey((k) => k + 1);
+              }
             }}
           >
             <RotateCw size={15} />
@@ -713,7 +1015,16 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
       )}
 
       {/* Pane Content Area */}
-      <div className="research-pane-content">
+      <div
+        className="research-pane-content"
+        ref={contentContainerRef}
+        onDragStart={handleContentDragStart}
+        onMouseUp={handleContentSelectionEnd}
+        onKeyUp={handleContentSelectionEnd}
+        onScrollCapture={() => {
+          if (quotePopover) setQuotePopover(null);
+        }}
+      >
         {loading ? (
           <div className="empty-state">
             <span className="sync-spinner" />
@@ -744,6 +1055,71 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
               <Globe size={36} />
               <p>{t('research.urlPlaceholder')}</p>
             </div>
+          ) : webViewMode === 'markdown' ? (
+            webExtractLoading ? (
+              <div className="empty-state" data-testid="research-web-extract-loading">
+                <span className="sync-spinner" />
+                <p>{t('research.extractingArticle')}</p>
+              </div>
+            ) : webExtractError ? (
+              <div className="research-web-blocked-card" data-testid="research-web-extract-error">
+                <ShieldAlert size={36} className="research-web-blocked-icon" />
+                <h3>{t('research.extractErrorTitle')}</h3>
+                <p>{webExtractError}</p>
+                <code className="research-web-blocked-url">{target.path}</code>
+                <div className="research-web-error-actions">
+                  <button
+                    type="button"
+                    className="research-web-blocked-btn"
+                    data-testid="research-web-switch-html-btn"
+                    onClick={() => setWebViewMode('html')}
+                  >
+                    {t('research.switchToHtml')}
+                  </button>
+                  <button
+                    type="button"
+                    className="research-web-secondary-btn"
+                    onClick={() => window.open(target.path, '_blank', 'noopener,noreferrer')}
+                  >
+                    {t('research.openExternalBrowser')}
+                  </button>
+                </div>
+              </div>
+            ) : extractedWeb?.type === 'pdf' ? (
+              <ResearchPdfViewer
+                src={api.getWebProxyPdfUrl(extractedWeb.url)}
+                title={extractedWeb.title}
+                externalOpenUrl={extractedWeb.url}
+              />
+            ) : extractedWeb?.type === 'article' ? (
+              <div
+                className="research-web-reader scroller"
+                data-testid="research-web-reader"
+                onClick={handleWebReaderClick}
+              >
+                <article className="reading-view-container research-reading-container">
+                  <header className="research-web-article-header">
+                    <h1>{extractedWeb.title}</h1>
+                    <div className="research-web-article-meta">
+                      {extractedWeb.siteName && <span>{extractedWeb.siteName}</span>}
+                      {extractedWeb.byline && <span>{extractedWeb.byline}</span>}
+                      <a
+                        href={extractedWeb.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="research-web-article-source-link"
+                      >
+                        {extractedWeb.url}
+                      </a>
+                    </div>
+                  </header>
+                  <div
+                    className="reading-view-content research-web-article-body"
+                    dangerouslySetInnerHTML={webHtmlObj}
+                  />
+                </article>
+              </div>
+            ) : null
           ) : embedBlocked ? (
             <div className="research-web-blocked-card" data-testid="research-web-blocked-card">
               <ShieldAlert size={36} className="research-web-blocked-icon" />
@@ -837,13 +1213,11 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             </div>
           </div>
         ) : target?.type === 'pdf' ? (
-          <div className="research-pdf-wrapper">
-            <iframe
-              src={`${decryptedMediaUrl || api.getAttachmentUrl(target.path)}#toolbar=1&view=FitH`}
-              className="research-pdf-frame"
-              title={fileName}
-            />
-          </div>
+          <ResearchPdfViewer
+            src={decryptedMediaUrl || api.getAttachmentUrl(target.path)}
+            title={fileName}
+            externalOpenUrl={decryptedMediaUrl || api.getAttachmentUrl(target.path)}
+          />
         ) : target?.type === 'base' ? (
           <div className="research-base-wrapper" style={{ padding: 12, height: '100%', overflow: 'auto' }}>
             <BaseEmbedWidget
@@ -857,6 +1231,29 @@ export const ResearchPane: React.FC<ResearchPaneProps> = ({
             <FileText size={36} />
             <p>{language === 'de' ? 'Nicht unterstütztes Format' : 'Unsupported format'}</p>
           </div>
+        )}
+
+        {quotePopover && onInsertQuote && (
+          <button
+            ref={quotePopoverRef}
+            type="button"
+            className="research-quote-popover"
+            data-testid="research-quote-popover"
+            style={{ left: `${quotePopover.x}px`, top: `${quotePopover.y}px` }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onInsertQuote(quotePopover.payload);
+              setQuotePopover(null);
+            }}
+          >
+            <Quote size={13} />
+            <span>{t('research.insertAsQuote')}</span>
+          </button>
         )}
       </div>
     </aside>

@@ -112,7 +112,15 @@ describe('ResearchPane Web Browser', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders address bar, sandboxed iframe, and normalizes submitted URL', async () => {
+  it('renders Markdown reader by default, switches to sandboxed iframe in HTML mode, and normalizes submitted URL', async () => {
+    vi.spyOn(api, 'extractWebUrl').mockResolvedValue({
+      type: 'article',
+      url: 'https://example.com/',
+      title: 'Example Domain',
+      byline: null,
+      siteName: 'Example',
+      markdown: 'Sample extracted article body.',
+    });
     vi.spyOn(api, 'checkLinkEmbed').mockResolvedValue({ embeddable: true });
     const onOpenWebUrl = vi.fn();
 
@@ -136,6 +144,20 @@ describe('ResearchPane Web Browser', () => {
       );
     });
 
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('[data-testid="research-web-reader"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="research-web-iframe"]')).toBeNull();
+
+    // Switch to HTML mode -> renders sandboxed iframe
+    const htmlBtn = container.querySelector('[data-testid="research-web-mode-html"]') as HTMLButtonElement;
+    expect(htmlBtn).toBeTruthy();
+    await act(async () => {
+      htmlBtn.click();
+    });
+
     const iframe = container.querySelector('[data-testid="research-web-iframe"]') as HTMLIFrameElement;
     expect(iframe).toBeTruthy();
     expect(iframe.src).toBe('https://example.com/');
@@ -154,7 +176,15 @@ describe('ResearchPane Web Browser', () => {
     expect(onOpenWebUrl).toHaveBeenCalledWith('https://wikipedia.org/');
   });
 
-  it('shows fallback card when embed pre-check reports X-Frame-Options/CSP block', async () => {
+  it('shows fallback card in HTML mode when embed pre-check reports X-Frame-Options/CSP block', async () => {
+    vi.spyOn(api, 'extractWebUrl').mockResolvedValue({
+      type: 'article',
+      url: 'https://github.com/',
+      title: 'GitHub',
+      byline: null,
+      siteName: 'GitHub',
+      markdown: 'Repo content.',
+    });
     vi.spyOn(api, 'checkLinkEmbed').mockResolvedValue({
       embeddable: false,
       reason: 'x-frame-options',
@@ -179,6 +209,13 @@ describe('ResearchPane Web Browser', () => {
           />
         </I18nProvider>
       );
+    });
+
+    await act(async () => {
+      (container.querySelector('[data-testid="research-web-mode-html"]') as HTMLButtonElement).click();
+    });
+    await act(async () => {
+      await Promise.resolve();
     });
 
     const card = container.querySelector('[data-testid="research-web-blocked-card"]');

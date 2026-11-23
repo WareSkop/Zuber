@@ -354,6 +354,27 @@ export interface GitFileVersionResponse {
 }
 ```
 
+### 1.6 Web-Reader & Artikel-Extraktion ([`shared/types.ts`](../shared/types.ts))
+
+```ts
+export interface WebExtractArticleResponse {
+  type: 'article';
+  url: string;
+  title: string;
+  byline: string | null;
+  siteName: string | null;
+  markdown: string;
+}
+
+export interface WebExtractPdfResponse {
+  type: 'pdf';
+  url: string;
+  title: string;
+}
+
+export type WebExtractResponse = WebExtractArticleResponse | WebExtractPdfResponse;
+```
+
 ---
 
 ## 2. REST-API Endpunkte ([`server/index.ts`](../server/index.ts))
@@ -437,6 +458,15 @@ Alle `/api/*`-Endpunkte (außer `/api/auth/*`) sind durch [`authMiddleware`](../
 | `POST` | `/api/email/test-imap` | Testet die IMAP-Anmeldung, prüft die Existenz von `mailboxFolder` und listet verfügbare Ordner bei Fehlen auf. | Body: `{ imap?: Partial<ImapConfig> }` | `{ ok: boolean, messageCount?: number, availableFolders?: string[] }` |
 | `POST` | `/api/email/poll-now` | Führt sofort einen manuellen IMAP-Abruf für `mailboxFolder` aus. | — | `{ ok: true, imported: number, status: EmailConfig }` |
 | `POST` | `/api/email/send-note` | Sendet eine Notiz per SMTP als `.md` (inkl. lokaler Embeds) oder clientseitig generiertes `.pdf`. | JSON oder `multipart/form-data`: `{ notePath, to, subject?, message?, format: 'md' \| 'pdf', pdfBase64? }` | `{ ok: true }` |
+
+### 2.8 Web-Reader & Externer PDF-Proxy ([`server/webReaderService.ts`](../server/webReaderService.ts))
+
+Beide Endpunkte sind über `requireAuth` geschützt und nutzen `assertSafeExternalUrl()` (SSRF-Schutz: erlaubt nur `http:`/`https:`, blockiert `localhost`, Loopback, RFC-1918/Link-Local/ULA-IPs inkl. IPv6 `fe80::/10` sowie DNS-Rebinding und unsichere Redirect-Hops).
+
+| Methode | Pfad | Beschreibung | Query-Parameter | Response |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/web/extract` | Lädt eine externe Webseite mit `12s`-Timeout, löst relative `img`/`a`-Pfade vorab gegen die finale URL auf, erkennt PDFs oder extrahiert den Hauptartikel via `@mozilla/readability` + `turndown` + `turndown-plugin-gfm` in GFM-Markdown. | `?url=<encodedUrl>` | `WebExtractResponse` (`200 OK`) oder `400`/`403`/`413`/`415`/`502`/`504` |
+| `GET` | `/api/web/proxy-pdf` | Streamt externe PDFs ohne CORS-Blockade an den clientseitigen `pdf.js`-Viewer (`Content-Type: application/pdf`, `max-age=600`, striktes `50 MB`-Größenlimit). | `?url=<encodedUrl>` | Binärer PDF-Stream (`200 OK`) oder `400`/`403`/`413`/`415`/`502` |
 
 ---
 

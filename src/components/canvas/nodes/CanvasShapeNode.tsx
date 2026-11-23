@@ -173,7 +173,7 @@ export const CanvasShapeNode: React.FC<NodeProps> = ({ id, data, selected, width
       '$1<span class="reading-tag canvas-tag nodrag" data-tag="$2">#$2</span>'
     );
 
-    const rawParsed = marked.parse(processed, { async: false, gfm: true }) as string;
+    const rawParsed = marked.parse(processed, { async: false, gfm: true, breaks: true }) as string;
     return DOMPurify.sanitize(rawParsed, {
       ADD_ATTR: ['data-wiki-target', 'data-tag', 'target', 'href'],
     });

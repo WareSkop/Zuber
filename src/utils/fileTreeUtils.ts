@@ -57,3 +57,75 @@ export function collectAncestorFolders(folderPath: string): string[] {
   }
   return result;
 }
+
+/**
+ * Additively expands all ancestor folders (and the folder itself if `options.isFolder` is true,
+ * plus any owning `.canvas` virtual tree) without collapsing any currently expanded folders.
+ */
+export function revealPathInExpandedFolders(
+  prev: Record<string, boolean>,
+  targetPath: string,
+  options?: { isFolder?: boolean; owningCanvasPath?: string | null }
+): Record<string, boolean> {
+  const normalized = targetPath.replace(/^\/+|\/+$/g, '');
+  if (!normalized && !options?.owningCanvasPath) return prev;
+
+  let ancestors: string[] = [];
+  if (normalized) {
+    if (options?.isFolder) {
+      ancestors = collectAncestorFolders(normalized);
+    } else {
+      const slashIdx = normalized.lastIndexOf('/');
+      if (slashIdx > 0) {
+        ancestors = collectAncestorFolders(normalized.slice(0, slashIdx));
+      }
+    }
+  }
+
+  const pathsToExpand = options?.owningCanvasPath
+    ? [...ancestors, options.owningCanvasPath]
+    : ancestors;
+
+  if (pathsToExpand.length === 0) return prev;
+
+  let changed = false;
+  let next: Record<string, boolean> | null = null;
+  for (const p of pathsToExpand) {
+    if (!prev[p]) {
+      if (!next) next = { ...prev };
+      next[p] = true;
+      changed = true;
+    }
+  }
+  return changed && next ? next : prev;
+}
+
+/**
+ * Escapes an attribute value for use in `querySelector` when `CSS.escape` may or may not exist.
+ */
+export function escapeTreePathSelector(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  return value.replace(/["\\]/g, '\\$&');
+}
+
+/**
+ * Scrolls only the given tree scroll container so `targetEl` aligns near its top edge (`topOffset` px).
+ * Never scrolls the outer viewport/window.
+ */
+export function scrollTreeElementToTop(
+  container: HTMLElement | null,
+  targetEl: HTMLElement | null,
+  topOffset = 4
+): boolean {
+  if (!container || !targetEl) return false;
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = targetEl.getBoundingClientRect();
+  const nextScrollTop = Math.max(
+    0,
+    Math.round(container.scrollTop + (targetRect.top - containerRect.top) - topOffset)
+  );
+  container.scrollTop = nextScrollTop;
+  return true;
+}

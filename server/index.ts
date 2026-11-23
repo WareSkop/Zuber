@@ -26,6 +26,12 @@ import { GitService } from './gitService';
 import { EmailService } from './emailService';
 import { serverLogger } from './logger';
 import { checkUrlEmbeddable } from './linkEmbedCheck';
+import {
+  extractWebUrl,
+  fetchExternalPdfStream,
+  MAX_PROXY_PDF_BYTES,
+  WebReaderError,
+} from './webReaderService';
 import type { LogLevel } from '../shared/types';
 import { getAttachmentKind } from '../shared/markdownUtils';
 
@@ -1145,6 +1151,105 @@ export function createApp(vaultService: VaultService, gitService?: GitService, e
     }
     const result = await checkUrlEmbeddable(rawUrl);
     res.json(result);
+  });
+
+  // --- Web Reader Extraction & External PDF Proxy ---
+  app.get('/api/web/extract', requireAuth, async (req, res) => {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) {
+      res.status(400).json({ error: 'Missing url parameter', code: 'invalid-url' });
+      return;
+    }
+    try {
+      const result = await extractWebUrl(rawUrl);
+      res.json(result);
+    } catch (err) {
+      if (err instanceof WebReaderError) {
+        res.status(err.statusCode).json({ error: err.message, code: err.code });
+        return;
+      }
+      serverLogger.warn('web-reader', `Extraction failed for "${rawUrl}"`, String(err));
+      res.status(502).json({ error: (err as Error).message || 'Web extraction failed', code: 'extract-failed' });
+    }
+  });
+
+  app.get('/api/web/proxy-pdf', requireAuth, async (req, res) => {
+    const rawUrl = String(req.query.url || '').trim();
+    if (!rawUrl) {
+      res.status(400).json({ error: 'Missing url parameter', code: 'invalid-url' });
+      return;
+    }
+    try {
+      const { response, contentLength } = await fetchExternalPdfStream(rawUrl);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline');
+      res.setHeader('Cache-Control', 'private, max-age=600');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      if (contentLength !== null) {
+        res.setHeader('Content-Length', String(contentLength));
+      }
+
+      if (!response.body) {
+        const buf = Buffer.from(await response.arrayBuffer());
+        if (buf.byteLength > MAX_PROXY_PDF_BYTES) {
+          res.status(413).json({ error: 'PDF exceeds 50 MB size limit', code: 'payload-too-large' });
+          return;
+        }
+        res.send(buf);
+        return;
+      }
+
+      const reader = response.body.getReader();
+      let received = 0;
+      let aborted = false;
+
+      req.on('close', () => {
+        if (!res.writableEnded) {
+          aborted = true;
+          reader.cancel().catch(() => {});
+        }
+      });
+
+      while (!aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value || value.byteLength === 0) continue;
+        received += value.byteLength;
+        if (received > MAX_PROXY_PDF_BYTES) {
+          reader.cancel().catch(() => {});
+          if (!res.headersSent) {
+            res.status(413).json({ error: 'PDF exceeds 50 MB size limit', code: 'payload-too-large' });
+          } else {
+            res.destroy();
+          }
+          return;
+        }
+        const canContinue = res.write(Buffer.from(value));
+        if (!canContinue) {
+          await new Promise<void>((resolve) => {
+            res.once('drain', resolve);
+          });
+        }
+      }
+      if (!aborted && !res.writableEnded) {
+        res.end();
+      }
+    } catch (err) {
+      if (err instanceof WebReaderError) {
+        if (!res.headersSent) {
+          res.status(err.statusCode).json({ error: err.message, code: err.code });
+        } else {
+          res.destroy();
+        }
+        return;
+      }
+      serverLogger.warn('web-proxy-pdf', `PDF proxy failed for "${rawUrl}"`, String(err));
+      if (!res.headersSent) {
+        res.status(502).json({ error: (err as Error).message || 'PDF proxy failed', code: 'proxy-failed' });
+      } else {
+        res.destroy();
+      }
+    }
   });
 
   // --- Logs & Diagnostics Endpoints ---

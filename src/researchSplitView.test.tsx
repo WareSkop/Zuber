@@ -273,7 +273,7 @@ Check out [[OtherNote|Alias]] and ==highlighted text==.
       expect(container.querySelector('button[title="Fit / 100%"]')).not.toBeNull();
     });
 
-    it('renders pdf iframe viewer for pdf documents', () => {
+    it('renders pdf viewer with text-layer container and zoom controls for pdf documents', () => {
       act(() => {
         root.render(
           <ResearchPane
@@ -293,8 +293,10 @@ Check out [[OtherNote|Alias]] and ==highlighted text==.
 
       const badge = container.querySelector('.research-type-badge');
       expect(badge?.textContent).toBe('PDF');
-      const iframe = container.querySelector('iframe.research-pdf-frame');
-      expect(iframe).not.toBeNull();
+      const pdfViewer = container.querySelector('[data-testid="research-pdf-viewer"]');
+      expect(pdfViewer).not.toBeNull();
+      expect(container.querySelector('.research-pdf-toolbar')).not.toBeNull();
+      expect(container.querySelector('[data-testid="research-pdf-page-indicator"]')).not.toBeNull();
     });
   });
 

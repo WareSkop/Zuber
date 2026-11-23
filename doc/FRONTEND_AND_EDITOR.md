@@ -1224,20 +1224,20 @@ Auf Mobilgeräten (`< 768px`) öffnet der **Suche**-Button in `<MobileBottomNav 
 
 ---
 
-## 35. Eingebetteter Web-Browser in der Rechercheansicht (`ResearchPane`)
+## 35. Eingebetteter Web-Browser, Web-Reader (`Markdown | HTML`) & PDF-Text-Layer (`ResearchPane`)
 
 Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `http://`- / `https://`-Links nahtlos in das rechte/untere Split-Fenster geroutet:
 
 - **Split-Only-Link-Routing (`src/utils/researchLinkUtils.ts`, `LivePreviewEditor.tsx`, `ResearchPane.tsx`, `App.tsx`):**
   - Bei geschlossener Rechercheansicht öffnen externe Links weiterhin im neuen System-Browser-Tab (`target="_blank"`).
-  - Bei geöffneter Rechercheansicht öffnet ein normaler Linksklick in `LivePreviewEditor` (Live-Preview & Lesemodus) sowie in Markdown-Notizen von `ResearchPane` die Ziel-URL direkt im integrierten Web-Browser (`ResearchTarget.type = 'web'`) und legt sie in `researchHistory` ab, sodass der Topbar-Zurück-Button (`←`) nahtlos zur vorherigen Notiz oder Webseite zurückkehrt.
+  - Bei geöffneter Rechercheansicht öffnet ein normaler Linksklick in `LivePreviewEditor` (Live-Preview & Lesemodus), in Markdown-Notizen und Web-Reader-Artikeln von `ResearchPane` sowie in `FileSidebar` die Ziel-URL direkt im integrierten Web-Browser (`ResearchTarget.type = 'web'`) und legt sie in `researchHistory` ab.
   - **`Ctrl + Klick` / `Cmd + Klick` / Mittelklick (`button === 1`):** Umgeht den Split-Browser und öffnet die URL direkt in einem neuen externen Browser-Tab. Hover-Tooltips weisen bei aktivem Split-View auf diese Tastenkombination hin (`research.linkTooltipSplit`).
-- **Interaktive Adressleiste & Sandbox-`<iframe>` (`src/components/ResearchPane.tsx`, `src/styles.css`):**
-  - Über den `🌐`-Button im `ResearchPane`-Header oder beim Öffnen eines Links erscheint eine `40px`-Adressleiste (`.research-web-bar`) mit editierbarem URL-Eingabefeld (`normalizeWebUrl` ergänzt fehlendes `https://`), **Neu laden (`↻`)**, **URL kopieren** und **Im externen Browser öffnen (`↗`)**.
-  - Die Webseite läuft in einem Sandbox-`<iframe>` (`sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"`).
-- **`X-Frame-Options` / `CSP`-Erkennung & Fallback-Karte (`server/linkEmbedCheck.ts`, `server/index.ts`, `src/api.ts`):**
-  - `GET /api/link-embed-check?url=...` prüft (mit `2500ms`-Timeout und SSRF-Schutz gegen private/Loopback-Hosts) `X-Frame-Options` und `Content-Security-Policy` (`frame-ancestors`).
-  - Blockiert die Zielseite das Embedding (oder schlägt das Laden fehl), zeigt `ResearchPane` eine zentrierte Fallback-Karte (`.research-web-blocked-card`) mit Erklärung, URL-Vorschau und prominentem Button **„Im Browser öffnen ↗“**.
+- **Standard-Reader-Modus (`Markdown`) & `[ Markdown | HTML ]`-Umschalter (`ResearchPane.tsx`, `src/utils/readingMode.ts`):**
+  - Standardmäßig ruft `ResearchPane` beim Öffnen einer URL `GET /api/web/extract` auf, rendert den werbefreien Artikel via isoliertem `Marked({ gfm: true, breaks: true })` + strengem `DOMPurify`-Allowlist-Filter (`renderWebArticleHtml()`) inkl. aufgelöster Artikelbilder (`research-web-reader`) und umgeht so sowohl Werbung als auch `X-Frame-Options` / CSP-Sperren.
+  - Der Segmented-Toggle `[ Markdown | HTML ]` in der Adressleiste wechselt bei Bedarf auf die interaktive Sandbox-`<iframe>`-Ansicht (inkl. `GET /api/link-embed-check` Fallback-Karte).
+  - **„Als Notiz speichern“:** Speichert extrahierte Artikel direkt inklusive YAML-Frontmatter (`source`, `clipped`, optional `site` und `author`) über `getUniqueDefaultName()` als neue `.md`-Notiz im aktuellen Zielordner und öffnet sie im Haupteditor.
+- **Offline-fähiger PDF-Viewer mit selektierbarem Text-Layer (`src/components/ResearchPdfViewer.tsx`, `pdfjs-dist`):**
+  - Sowohl lokale Vault-PDFs (`/api/vault/attachment`) als auch über `/api/web/proxy-pdf` geladene Web-PDFs werden clientseitig über `pdfjs-dist` (lokal gebündelter Worker `pdfjs-dist/build/pdf.worker.min.mjs?url`, ohne externes CDN) als HiDPI-`<canvas>` mit deckungsgleicher `.research-pdf-text-layer` (`.textLayer`), Seitenzähler und Zoom-Steuerung gerendert.
 
 ---
 
@@ -1304,3 +1304,18 @@ Bei geöffneter Rechercheansicht (`isResearchOpen === true`) werden externe `htt
 - **Einklappbare Sektion „External Links / Externe Links“ in `FileSidebar.tsx`:**
   - Am unteren Rand der linken Sidebar aggregiert ein einklappbares Panel (Zustand persistiert unter `zuber_show_external_links_panel`) alle vaultweiten externen `http(s)://`-URLs aus Markdown-Notizen und `.canvas`-Dokumenten.
   - Bietet Live-Filterung über Titel, Domain, URL und Quell-Notiznamen, einen Quellen-Zähler je URL (Klick klappt anklickbare Quell-Chips aus) sowie Klick-Routing gemäß Zubers Research-Split- bzw. `Ctrl+Klick`-/Externer-Browser-Regeln (`routeExternalLinkClick()`).
+
+---
+
+## 40. Dateibaum Auto-Reveal, Blockquote-Rendering & Drag-&-Drop-Zitate (`FileSidebar`, `LivePreviewEditor`, `ResearchPane`)
+
+- **Additives Auto-Reveal & Scroll-to-Top im Dateibaum (`src/utils/fileTreeUtils.ts`, `src/components/FileSidebar.tsx`):**
+  - `revealPathInExpandedFolders()` expandiert alle übergeordneten Elternordner (bzw. bei Ordnern zusätzlich den Ordner selbst und bei Companion-Dateien den Eltern-Canvas) streng **additiv**, ohne jemals andere vom Benutzer geöffnete Ordner einzuklappen.
+  - Jede kanonische Baumzeile trägt `data-tree-path={node.path}`. Über `scrollTreeElementToTop()` per `requestAnimationFrame` wird ausschließlich der Baum-Container (`.file-tree-scroller`) auf `4px` Abstand unterhalb der Oberkante gescrollt (ausgelöst bei Klicks auf **Favoriten**, **Zuletzt verwendet** sowie beim Wechsel von `activePath` ohne aktive Mehrfachauswahl oder direkten Baum-Klick).
+- **Blockquote-Akzentbalken & Zeilenumbrüche (`src/styles.css`, `src/utils/readingMode.ts`, `LivePreviewEditor.tsx`, `CanvasShapeNode.tsx`):**
+  - `.reading-view-container blockquote`, `.reading-view-content blockquote` und `.markdown-rendered blockquote` erhalten einen `3px`-Akzentbalken links sowie eigene Einrückung für verschachtelte Zitate (`border-left-color: var(--accent-color)`).
+  - `marked` läuft durchgängig mit `{ gfm: true, breaks: true }`, damit mehrzeilige Zitate (`> Zeile 1\n> Zeile 2`) ihre Zeilenumbrüche behalten.
+- **Drag-&-Drop-Zitate & Quick-Quote-Popover (`src/utils/quoteUtils.ts`, `ResearchPane.tsx`, `LivePreviewEditor.tsx`, `App.tsx`):**
+  - Markierter Text im Web-Reader, PDF-Text-Layer (`data-pdf-page`) oder in Lese-Notizen von `ResearchPane` setzt bei `dragstart` neben `text/plain` das strukturierte Payload `application/x-zuber-quote` (`ZUBER_QUOTE_MIME`: `{ text, url, title, page, isInternal }`).
+  - `LivePreviewEditor` berechnet beim `drop` die exakte Einfügeposition via `view.posAtCoords({ x, y })`, formatiert über `formatQuoteMarkdown()` + `wrapQuoteForInsertion()` einen mehrzeiligen Blockquote samt klickbarer Quellenzeile (`> — [Titel (S. N)](URL)`) und fügt ihn mit sauberen Leerzeilen davor/danach ein.
+  - Alternativ (Touch/Trackpad) blendet `ResearchPane` beim Markieren von Text das schwebende Mini-Popover **„Als Zitat einfügen ↵“** (`.research-quote-popover`) ein, das dasselbe Zitat über `editorRef.current.insertMarkdownBlock()` am aktuellen Editor-Cursor einfügt.

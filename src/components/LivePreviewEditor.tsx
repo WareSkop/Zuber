@@ -42,6 +42,12 @@ import { BaseEmbedWidget } from './base/BaseEmbedWidget';
 import { BaseView } from './BaseView';
 import { renderReadingHtml } from '../utils/readingMode';
 import { routeExternalLinkClick } from '../utils/researchLinkUtils';
+import {
+  ZUBER_QUOTE_MIME,
+  formatQuoteMarkdown,
+  wrapQuoteForInsertion,
+  type ZuberQuotePayload,
+} from '../utils/quoteUtils';
 import { resolveDecryptedAttachmentUrl } from '../crypto/encryptedAttachmentUrl';
 import { stripZencExt } from '../crypto/folderCrypto';
 import { computeBodyCursorAfterHeading } from '../utils/editorCursorUtils';
@@ -172,6 +178,7 @@ const codeHighlighter = tagHighlighter([
 
 marked.use({
   gfm: true,
+  breaks: true,
   renderer: {
     code({ text, lang }: { text: string; lang?: string }) {
       const language = (lang || '').trim();
@@ -257,6 +264,7 @@ export interface LivePreviewEditorRef {
   focus: () => void;
   focusAtEnd: () => void;
   focusBelowHeading: () => void;
+  insertMarkdownBlock: (markdownBlock: string) => void;
   blur: () => void;
 }
 
@@ -3215,6 +3223,21 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
     view.focus();
   };
 
+  const insertMarkdownBlock = (markdownBlock: string) => {
+    const view = viewRef.current;
+    if (!view || !markdownBlock) return;
+    const docText = view.state.doc.toString();
+    const pos = view.state.selection.main.head;
+    const textToInsert = wrapQuoteForInsertion(docText, pos, markdownBlock);
+    const nextAnchor = pos + textToInsert.length;
+    view.dispatch({
+      changes: { from: pos, to: pos, insert: textToInsert },
+      selection: { anchor: nextAnchor },
+      effects: EditorView.scrollIntoView(nextAnchor, { y: 'center' }),
+    });
+    view.focus();
+  };
+
   useImperativeHandle(ref, () => ({
     applyFormat,
     insertTable,
@@ -3260,6 +3283,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         pendingFocusActionRef.current = 'smart';
       }
     },
+    insertMarkdownBlock,
     blur: () => viewRef.current?.contentDOM.blur(),
   }));
 
@@ -3525,6 +3549,7 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
       },
       dragover(event, _view) {
         if (
+          event.dataTransfer?.types.includes(ZUBER_QUOTE_MIME) ||
           event.dataTransfer?.types.includes('application/x-knowmesh-file-path') ||
           event.dataTransfer?.types.includes('application/x-knowmesh-paths') ||
           event.dataTransfer?.types.includes('Files') ||
@@ -3540,9 +3565,12 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         const dt = event.dataTransfer;
         if (!dt) return false;
 
-        const dropPos =
-          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
-          view.state.selection.main.head;
+        let dropPos = view.state.selection.main.head;
+        try {
+          dropPos =
+            view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+            view.state.selection.main.head;
+        } catch {}
 
         // 1. Internal Drag & Drop from FileSidebar tree
         const internalFilePath = dt.getData('application/x-knowmesh-file-path');
@@ -3593,6 +3621,29 @@ export const LivePreviewEditor = forwardRef<LivePreviewEditorRef, LivePreviewEdi
         }
 
         const files = dt.files ? Array.from(dt.files) : [];
+
+        // Structured quote drag-and-drop from ResearchPane (Web Reader or PDF TextLayer)
+        const quoteRaw = dt.getData(ZUBER_QUOTE_MIME);
+        if (quoteRaw) {
+          try {
+            const payload = JSON.parse(quoteRaw) as ZuberQuotePayload;
+            if (payload && typeof payload.text === 'string' && payload.text.trim()) {
+              event.preventDefault();
+              event.stopPropagation();
+              const pageAbbr = callbacksRef.current.t('research.pageAbbr', 'p.');
+              const quoteBlock = formatQuoteMarkdown(payload, pageAbbr);
+              if (quoteBlock) {
+                const snippet = wrapQuoteForInsertion(view.state.doc.toString(), dropPos, quoteBlock);
+                view.dispatch({
+                  changes: { from: dropPos, to: dropPos, insert: snippet },
+                  selection: { anchor: dropPos + snippet.length },
+                });
+                view.focus();
+                return true;
+              }
+            }
+          } catch {}
+        }
 
         // Fall D: Plain text drop (no files)
         if (files.length === 0) {

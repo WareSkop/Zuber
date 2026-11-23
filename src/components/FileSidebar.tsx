@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { resolveTargetFolder, collectAncestorFolders } from '../utils/fileTreeUtils';
+import {
+  resolveTargetFolder,
+  collectAncestorFolders,
+  findTreeNodeByPath,
+  revealPathInExpandedFolders,
+  escapeTreePathSelector,
+  scrollTreeElementToTop,
+} from '../utils/fileTreeUtils';
 import {
   ArrowUpDown,
   Calendar,
@@ -355,9 +362,14 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const isFavorite = (path: string) => favorites.some((f) => f.path === path);
 
-  // Multi-Select state
+  // Multi-Select & Auto-Reveal state
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set());
+  const selectedPathsRef = useRef<Set<string>>(selectedPaths);
+  selectedPathsRef.current = selectedPaths;
   const lastClickedPathRef = useRef<string | null>(null);
+  const justClickedInTreeRef = useRef<string | null>(null);
+  const fileTreeScrollerRef = useRef<HTMLDivElement | null>(null);
+  const [revealRequest, setRevealRequest] = useState<{ path: string; seq: number } | null>(null);
 
   // Drag & Drop state
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null);
@@ -519,40 +531,81 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   }, [selectedTagFilter]);
 
-  // Automatically expand ancestor folders (and owning .canvas virtual tree) when activePath changes
-  useEffect(() => {
-    if (!activePath) return;
-    const owningCanvas = findParentCanvasForCompanionFile(activePath, canvasTreeModel);
-    const parts = activePath.includes('/') ? activePath.split('/') : [];
-    if (parts.length > 0) parts.pop(); // remove filename
-    if (parts.length === 0 && !owningCanvas) return;
+  const revealPathInTree = useCallback(
+    (targetPath: string, options?: { isFolder?: boolean; skipScroll?: boolean }) => {
+      if (!targetPath) return;
+      const detectedFolder =
+        options?.isFolder !== undefined
+          ? options.isFolder
+          : findTreeNodeByPath(tree, targetPath)?.type === 'folder';
+      const owningCanvasPath = detectedFolder
+        ? null
+        : findParentCanvasForCompanionFile(targetPath, canvasTreeModel);
 
-    setExpandedFolders((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      let current = '';
-      for (const p of parts) {
-        current = current ? `${current}/${p}` : p;
-        if (!next[current]) {
-          next[current] = true;
-          changed = true;
-        }
-      }
-      if (owningCanvas && !next[owningCanvas]) {
-        next[owningCanvas] = true;
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [activePath, canvasTreeModel]);
+      setExpandedFolders((prev) =>
+        revealPathInExpandedFolders(prev, targetPath, {
+          isFolder: detectedFolder,
+          owningCanvasPath,
+        })
+      );
 
-  // Synchronize activePath with selectedPaths
+      if (!options?.skipScroll) {
+        setRevealRequest((prev) => ({
+          path: targetPath,
+          seq: (prev?.seq ?? 0) + 1,
+        }));
+      }
+    },
+    [tree, canvasTreeModel]
+  );
+
+  // Scroll only the file tree container so the revealed item aligns near the top edge
   useEffect(() => {
-    if (activePath) {
+    if (!revealRequest) return;
+    let rafId: number | null = null;
+    const targetPath = revealRequest.path;
+
+    const runScroll = () => {
+      const container = fileTreeScrollerRef.current;
+      if (!container) return;
+      const selector = `[data-tree-path="${escapeTreePathSelector(targetPath)}"]`;
+      const targetEl = container.querySelector<HTMLElement>(selector);
+      scrollTreeElementToTop(container, targetEl, 4);
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      rafId = requestAnimationFrame(runScroll);
+      return () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+      };
+    }
+    runScroll();
+  }, [revealRequest]);
+
+  const prevActivePathRef = useRef<string | null>(null);
+
+  // Automatically expand ancestor folders & scroll to activePath when activePath changes (unless multi-selecting)
+  useEffect(() => {
+    if (!activePath) {
+      prevActivePathRef.current = null;
+      return;
+    }
+    const activeChanged = prevActivePathRef.current !== activePath;
+    prevActivePathRef.current = activePath;
+    const isDirectTreeClick = justClickedInTreeRef.current === activePath;
+    justClickedInTreeRef.current = null;
+    const isMultiSelecting = selectedPathsRef.current.size > 1;
+    if (!isMultiSelecting) {
+      revealPathInTree(activePath, {
+        isFolder: false,
+        skipScroll: !activeChanged || isDirectTreeClick,
+      });
+    }
+    if (activeChanged) {
       setSelectedPaths(new Set([activePath]));
       lastClickedPathRef.current = activePath;
     }
-  }, [activePath]);
+  }, [activePath, revealPathInTree]);
 
   const targetFolder = useMemo(() => resolveTargetFolder(selectedPaths, tree), [selectedPaths, tree]);
 
@@ -702,7 +755,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     lastClickedPathRef.current = node.path;
   };
 
-  const handleFileClick = (e: React.MouseEvent, node: FileTreeNode) => {
+  const handleFileClick = (e: React.MouseEvent, node: FileTreeNode, fromPrimaryTree = false) => {
     e.stopPropagation();
 
     const isCtrlOrCmd = e.ctrlKey || e.metaKey;
@@ -737,6 +790,10 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
     if (e.altKey) {
       e.preventDefault();
+    }
+
+    if (fromPrimaryTree) {
+      justClickedInTreeRef.current = node.path;
     }
 
     // Normal click on file (without modifier or with Alt)
@@ -1052,6 +1109,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       return (
         <div key={node.path} className="tree-folder-group">
           <div
+            data-tree-path={node.path}
             className={`tree-item tree-folder-item ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''}`}
             style={{ paddingLeft: `${10 + depth * 14}px` }}
             draggable={true}
@@ -1163,6 +1221,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     const fileRow = (
       <div
         key={hasCanvasChildren ? undefined : node.path}
+        data-tree-path={node.path}
         className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''} ${!isMd && !isCanvas && !isBase ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''} ${isBase ? 'base-item' : ''}`}
         style={{ paddingLeft: `${(hasCanvasChildren ? 10 : 26) + depth * 14}px` }}
         draggable={true}
@@ -1170,7 +1229,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
         onDragOver={(e) => handleDragOverItem(e, node)}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, getParentFolder(node.path))}
-        onClick={(e) => handleFileClick(e, node)}
+        onClick={(e) => handleFileClick(e, node, true)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1645,6 +1704,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                         className={`tree-item favorite-item ${activePath === fav.path ? 'active' : ''}`}
                         onClick={(e) => {
                           if (fav.type === 'file') {
+                            revealPathInTree(fav.path, { isFolder: false });
                             if (e.altKey) {
                               e.preventDefault();
                               onSelectNote(fav.path, { altKey: true });
@@ -1652,16 +1712,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                               onSelectNote(fav.path);
                             }
                           } else {
-                            const parts = fav.path.split('/');
-                            setExpandedFolders((prev) => {
-                              const next = { ...prev };
-                              let current = '';
-                              for (const p of parts) {
-                                current = current ? `${current}/${p}` : p;
-                                next[current] = true;
-                              }
-                              return next;
-                            });
+                            setSelectedPaths(new Set([fav.path]));
+                            lastClickedPathRef.current = fav.path;
+                            revealPathInTree(fav.path, { isFolder: true });
                           }
                         }}
                         onContextMenu={(e) => {
@@ -1740,6 +1793,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                         key={notePath}
                         className={`tree-item recent-item ${activePath === notePath ? 'active' : ''}`}
                         onClick={(e) => {
+                          revealPathInTree(notePath, { isFolder: false });
                           if (e.altKey) {
                             e.preventDefault();
                             onSelectNote(notePath, { altKey: true });
@@ -1780,6 +1834,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
           )}
 
           <div
+            ref={fileTreeScrollerRef}
             className={`file-tree-scroller scroller ${dropTargetFolder === '' ? 'is-drop-target' : ''}`}
             onClick={(e) => {
               if (!(e.target as HTMLElement).closest('.tree-item')) {

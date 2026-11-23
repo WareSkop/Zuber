@@ -22,6 +22,7 @@ import type {
   UpdateSecurityRequest,
   UploadResponse,
   VaultProfile,
+  WebExtractResponse,
   LogLevel,
   LogsResponse,
 } from '../shared/types';
@@ -1208,6 +1209,20 @@ export const api = {
     uncertain?: boolean;
   }> {
     return apiFetch(`/api/link-embed-check?url=${encodeURIComponent(url)}`);
+  },
+
+  async extractWebUrl(url: string): Promise<WebExtractResponse> {
+    return apiFetch<WebExtractResponse>(`/api/web/extract?url=${encodeURIComponent(url)}`, {
+      timeoutMs: 15000,
+    });
+  },
+
+  getWebProxyPdfUrl(url: string): string {
+    const token = getStoredToken();
+    const params = new URLSearchParams({ url });
+    if (token) params.set('token', token);
+    const baseUrl = getBaseUrl();
+    return `${baseUrl}/api/web/proxy-pdf?${params.toString()}`;
   },
 
   async getEmailStatus(): Promise<EmailConfig> {

@@ -352,6 +352,27 @@ export type {
   CanvasPresentation,
 } from './canvasTypes';
 
+// ==========================================
+// Web Reader & Article Extraction Types
+// ==========================================
+
+export interface WebExtractArticleResponse {
+  type: 'article';
+  url: string;
+  title: string;
+  byline: string | null;
+  siteName: string | null;
+  markdown: string;
+}
+
+export interface WebExtractPdfResponse {
+  type: 'pdf';
+  url: string;
+  title: string;
+}
+
+export type WebExtractResponse = WebExtractArticleResponse | WebExtractPdfResponse;
+
 
 
 

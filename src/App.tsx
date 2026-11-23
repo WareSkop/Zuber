@@ -67,6 +67,11 @@ import type {
 } from '../shared/types';
 import { routeExternalLinkClick } from './utils/researchLinkUtils';
 import {
+  formatQuoteMarkdown,
+  wrapQuoteForInsertion,
+  type ZuberQuotePayload,
+} from './utils/quoteUtils';
+import {
   parseMarkdownWithFrontmatter,
   serializeMarkdownWithFrontmatter,
 } from '../shared/markdownUtils';
@@ -3057,6 +3062,90 @@ export const App: React.FC = () => {
     []
   );
 
+  const handleSaveWebNote = useCallback(
+    async (article: {
+      title: string;
+      url: string;
+      byline?: string | null;
+      siteName?: string | null;
+      markdown: string;
+    }) => {
+      const targetDir = (sidebarTargetFolder || '').trim().replace(/^\/+|\/+$/g, '');
+      if (targetDir && !guardUnlockedTargetFolder(targetDir)) return;
+
+      const cleanTitle =
+        (article.title || '')
+          .replace(/[<>:"/\\|?*\x00-\x1f]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 100) || 'Web Article';
+      const uniqueName = getUniqueDefaultName(cleanTitle, 'file', targetDir || undefined);
+      const targetPath = targetDir ? `${targetDir}/${uniqueName}.md` : `${uniqueName}.md`;
+      const todayIso = new Date().toISOString().slice(0, 10);
+
+      const properties: FrontmatterProperty[] = [
+        { key: 'source', type: 'text', value: article.url },
+        { key: 'clipped', type: 'date', value: todayIso },
+      ];
+      if (article.siteName?.trim()) {
+        properties.push({ key: 'site', type: 'text', value: article.siteName.trim() });
+      }
+      if (article.byline?.trim()) {
+        properties.push({ key: 'author', type: 'text', value: article.byline.trim() });
+      }
+
+      const body = `# ${article.title?.trim() || cleanTitle}\n\n${article.markdown || ''}`.trimEnd() + '\n';
+      try {
+        const created = await syncEngine.saveNote({
+          path: targetPath,
+          body,
+          properties,
+          forceOverwrite: true,
+        });
+        const savedPath = created?.path || targetPath;
+        recentSelfWritesRef.current.set(savedPath, Date.now());
+        await loadVaultIndex();
+        setActiveNote(created);
+        setSaveState('saved');
+        recordLastActiveNote(savedPath);
+        recordRecentNote(savedPath);
+        showToast(t('research.saveNoteToast', { title: uniqueName }));
+      } catch (err) {
+        console.error('Failed to save web article as note:', err);
+        showToast(t('research.saveNoteError', { error: (err as Error).message || String(err) }));
+      }
+    },
+    [
+      sidebarTargetFolder,
+      guardUnlockedTargetFolder,
+      getUniqueDefaultName,
+      loadVaultIndex,
+      showToast,
+      t,
+    ]
+  );
+
+  const handleInsertResearchQuote = useCallback(
+    (payload: ZuberQuotePayload) => {
+      const current = activeNoteRef.current;
+      if (!current || !stripZencExt(current.path).toLowerCase().endsWith('.md')) {
+        showToast(t('research.noEditableNoteForQuote'));
+        return;
+      }
+      const quoteBlock = formatQuoteMarkdown(payload, t('research.pageAbbr', 'p.'));
+      if (!quoteBlock) return;
+
+      if (editorRef.current) {
+        editorRef.current.insertMarkdownBlock(quoteBlock);
+      } else {
+        const currentBody = current.body || '';
+        const wrapped = wrapQuoteForInsertion(currentBody, currentBody.length, quoteBlock);
+        handleBodyChange(`${currentBody}${wrapped}`);
+      }
+    },
+    [showToast, t]
+  );
+
   const handleUploadImageClick = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -4070,6 +4159,8 @@ export const App: React.FC = () => {
         }}
         onShowGraph={() => setResearchTarget({ path: '', type: 'graph' })}
         onOpenWebUrl={(url) => setResearchTarget({ path: url, type: 'web' })}
+        onSaveWebNote={handleSaveWebNote}
+        onInsertQuote={handleInsertResearchQuote}
         graphData={graphData}
         allNotes={allNotesForEditor}
         activeNotePath={activeNote?.path ?? null}
