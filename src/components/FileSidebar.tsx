@@ -375,6 +375,39 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
   const [dropTargetFolder, setDropTargetFolder] = useState<string | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const clearDragState = useCallback(() => {
+    setDropTargetFolder(null);
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'files') {
+      clearDragState();
+    }
+  }, [activeTab, clearDragState]);
+
+  useEffect(() => {
+    if (dropTargetFolder === null) return;
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearDragState();
+      }
+    };
+    window.addEventListener('dragend', clearDragState);
+    window.addEventListener('drop', clearDragState, true);
+    window.addEventListener('blur', clearDragState);
+    window.addEventListener('keydown', handleWindowKeyDown);
+    return () => {
+      window.removeEventListener('dragend', clearDragState);
+      window.removeEventListener('drop', clearDragState, true);
+      window.removeEventListener('blur', clearDragState);
+      window.removeEventListener('keydown', handleWindowKeyDown);
+    };
+  }, [dropTargetFolder, clearDragState]);
+
   // MoveToModal state
   const [moveToModalPaths, setMoveToModalPaths] = useState<string[] | null>(null);
 
@@ -718,6 +751,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const handleFolderClick = (e: React.MouseEvent, node: FileTreeNode) => {
     e.stopPropagation();
+    if (dropTargetFolder !== null) {
+      clearDragState();
+    }
 
     const isCtrlOrCmd = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
@@ -757,6 +793,9 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
 
   const handleFileClick = (e: React.MouseEvent, node: FileTreeNode, fromPrimaryTree = false) => {
     e.stopPropagation();
+    if (dropTargetFolder !== null) {
+      clearDragState();
+    }
 
     const isCtrlOrCmd = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
@@ -999,14 +1038,17 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
     }
   };
 
+  const handleScrollerDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    const related = e.relatedTarget as Node | null;
+    if (!related || !e.currentTarget.contains(related)) {
+      clearDragState();
+    }
+  };
+
   const handleDrop = async (e: React.DragEvent, targetFolder: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setDropTargetFolder(null);
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
+    clearDragState();
 
     // Case A: Internal move
     if (e.dataTransfer.types.includes('application/x-knowmesh-paths')) {
@@ -1114,6 +1156,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             style={{ paddingLeft: `${10 + depth * 14}px` }}
             draggable={true}
             onDragStart={(e) => handleDragStart(e, node)}
+            onDragEnd={clearDragState}
             onDragOver={(e) => handleDragOverItem(e, node)}
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, node.path)}
@@ -1205,7 +1248,6 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       node.attachmentKind === 'base';
     const isActive = activePath === node.path;
     const isSelected = selectedPaths.has(node.path);
-    const isDropTarget = dropTargetFolder === getParentFolder(node.path);
     const displayName = isMd
       ? logicalName.replace(/\.md$/i, '')
       : isCanvas
@@ -1222,10 +1264,11 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
       <div
         key={hasCanvasChildren ? undefined : node.path}
         data-tree-path={node.path}
-        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${isDropTarget ? 'is-drop-target' : ''} ${!isMd && !isCanvas && !isBase ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''} ${isBase ? 'base-item' : ''}`}
+        className={`tree-item tree-file-item ${isActive ? 'active' : ''} ${isSelected ? 'is-selected' : ''} ${!isMd && !isCanvas && !isBase ? 'attachment-item' : ''} ${isCanvas ? 'canvas-item' : ''} ${isBase ? 'base-item' : ''}`}
         style={{ paddingLeft: `${(hasCanvasChildren ? 10 : 26) + depth * 14}px` }}
         draggable={true}
         onDragStart={(e) => handleDragStart(e, node)}
+        onDragEnd={clearDragState}
         onDragOver={(e) => handleDragOverItem(e, node)}
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, getParentFolder(node.path))}
@@ -1325,6 +1368,7 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
                   style={{ paddingLeft: `${26 + (depth + 1) * 14}px` }}
                   draggable={true}
                   onDragStart={(e) => handleDragStart(e, linkedNode)}
+                  onDragEnd={clearDragState}
                   onClick={(e) => handleFileClick(e, linkedNode)}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -1837,13 +1881,16 @@ const FileSidebarImpl: React.FC<FileSidebarProps> = ({
             ref={fileTreeScrollerRef}
             className={`file-tree-scroller scroller ${dropTargetFolder === '' ? 'is-drop-target' : ''}`}
             onClick={(e) => {
+              if (dropTargetFolder !== null) {
+                clearDragState();
+              }
               if (!(e.target as HTMLElement).closest('.tree-item')) {
                 setSelectedPaths(new Set());
                 lastClickedPathRef.current = null;
               }
             }}
             onDragOver={handleDragOverScroller}
-            onDragLeave={handleDragLeave}
+            onDragLeave={handleScrollerDragLeave}
             onDrop={(e) => handleDrop(e, '')}
             onContextMenu={(e) => {
               if ((e.target as HTMLElement).closest('.tree-item')) return;

@@ -272,4 +272,138 @@ describe('FileSidebar Multi-Select & Selection Logic', () => {
     });
     expect(rootDocItem.classList.contains('is-selected')).toBe(false);
   });
+
+  const dispatchDragOver = (el: HTMLElement) => {
+    const evt = new Event('dragover', { bubbles: true, cancelable: true }) as unknown as DragEvent;
+    Object.defineProperty(evt, 'dataTransfer', {
+      value: { dropEffect: 'none', types: ['application/x-knowmesh-paths'] },
+      writable: true,
+    });
+    el.dispatchEvent(evt);
+  };
+
+  const getFolderItem = (name: string) => {
+    const label = Array.from(container.querySelectorAll('.tree-folder-item .tree-label')).find(
+      (el) => el.textContent === name
+    );
+    return label!.closest('.tree-folder-item') as HTMLElement;
+  };
+
+  const getFileItem = (name: string) => {
+    const label = Array.from(container.querySelectorAll('.tree-file-item .tree-label')).find(
+      (el) => el.textContent === name
+    );
+    return label!.closest('.tree-file-item') as HTMLElement;
+  };
+
+  it('6. dragover on a folder or its child file highlights ONLY the folder row, never sibling child files', () => {
+    renderSidebar();
+
+    // Expand FolderA
+    act(() => {
+      getFolderItem('FolderA').click();
+    });
+
+    const folderA = getFolderItem('FolderA');
+    const child1 = getFileItem('Child1');
+    const child2 = getFileItem('Child2');
+
+    // Drag over Child1 inside FolderA
+    act(() => {
+      dispatchDragOver(child1);
+    });
+
+    expect(folderA.classList.contains('is-drop-target')).toBe(true);
+    expect(child1.classList.contains('is-drop-target')).toBe(false);
+    expect(child2.classList.contains('is-drop-target')).toBe(false);
+  });
+
+  it('7. sticky drop-target highlight clears on scroller dragleave, item dragend, window drop/blur/Escape, file click, and tab switch', () => {
+    renderSidebar();
+
+    // Expand FolderA and verify Child1 is rendered
+    act(() => {
+      getFolderItem('FolderA').click();
+    });
+
+    // 7a. Leaving .file-tree-scroller clears drop target
+    act(() => {
+      dispatchDragOver(getFolderItem('FolderA'));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+
+    const scroller = container.querySelector('.file-tree-scroller') as HTMLElement;
+    // Moving between child items inside the scroller must NOT prematurely clear dropTargetFolder
+    act(() => {
+      const innerLeaveEvt = new Event('dragleave', { bubbles: true }) as unknown as DragEvent;
+      Object.defineProperty(innerLeaveEvt, 'relatedTarget', { value: getFolderItem('FolderA') });
+      getFileItem('Child1').dispatchEvent(innerLeaveEvt);
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+
+    // Leaving .file-tree-scroller completely (relatedTarget outside scroller / null) MUST clear dropTargetFolder
+    act(() => {
+      const leaveEvt = new Event('dragleave', { bubbles: true }) as unknown as DragEvent;
+      Object.defineProperty(leaveEvt, 'relatedTarget', { value: null });
+      scroller.dispatchEvent(leaveEvt);
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(false);
+
+    // 7b. Item onDragEnd (e.g. dropped onto canvas/editor outside sidebar) clears drop target
+    act(() => {
+      dispatchDragOver(getFolderItem('FolderA'));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+    act(() => {
+      getFileItem('RootDoc').dispatchEvent(new Event('dragend', { bubbles: true }));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(false);
+
+    // 7c. Window capture drop outside sidebar clears drop target
+    act(() => {
+      dispatchDragOver(getFolderItem('FolderA'));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+    act(() => {
+      window.dispatchEvent(new Event('drop', { bubbles: true }));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(false);
+
+    // 7d. Pressing Escape clears drop target
+    act(() => {
+      dispatchDragOver(getFolderItem('FolderA'));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(false);
+
+    // 7e. Normal click on another file clears any residual drop target
+    act(() => {
+      dispatchDragOver(getFolderItem('FolderA'));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+    act(() => {
+      getFileItem('OtherDoc').click();
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(false);
+
+    // 7f. Switching to Search tab and back to Files leaves zero drop-target highlights
+    act(() => {
+      dispatchDragOver(getFolderItem('FolderA'));
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(true);
+    const tabBtns = container.querySelectorAll('.sidebar-tabs .sidebar-tab-btn');
+    const filesTabBtn = tabBtns[0] as HTMLElement;
+    const searchTabBtn = tabBtns[1] as HTMLElement;
+    act(() => {
+      searchTabBtn.click();
+    });
+    act(() => {
+      filesTabBtn.click();
+    });
+    expect(getFolderItem('FolderA').classList.contains('is-drop-target')).toBe(false);
+    expect(container.querySelectorAll('.is-drop-target').length).toBe(0);
+  });
 });
