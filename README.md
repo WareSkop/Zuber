@@ -34,7 +34,8 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 
 ### 1. Markdown Editor & Writing Experience
 - **Live-Preview Mode (CodeMirror 6):** Obsidian-like rich editing that visually renders headings, bold/italic formatting, highlights, task checkboxes, tables, callouts, and internal links while the cursor is outside the element.
-- **Reading & Source Modes:** Instant switching between fully rendered HTML reading view and raw Markdown source view.
+- **Reading & Source Modes:** Instant switching between fully rendered HTML reading view and raw Markdown source view, with clean vertical-accent blockquote styling and preserved multi-line GFM line breaks.
+- **Research Split-View, Web Reader & Offline PDF Text-Layer:** Side-by-side 70/30 reference pane with an ad-free **`[ Markdown | HTML ]` Web Reader** (SSRF-protected Readability + Turndown extraction + one-click **Save as Note**), offline `pdfjs-dist` selectable PDF text layer, and **Drag & Drop / `Insert as Quote ↵`** blockquotes with page-numbered attribution links.
 - **Visual In-Place Markdown Tables:** Interactive `TableWidget` editing right inside Live-Preview with `Tab`/`Enter` cell navigation, column-width drag-resizing (`_tableWidths`), and physical sorting.
 - **PDF Export & Email Integration (SMTP / IMAP):** Client-side note printing/PDF export (`Export as PDF…` with `<!-- pagebreak -->` support and canvas/base capture), outbound email export as `.md` or `.pdf`, and an optional IMAP Mail-to-Inbox watcher (`Inbox/YYYY-MM-DD <Subject>.md`).
 - **Visual Properties Editor:** Interactive form above the note body to manage frontmatter properties (`text`, `number`, `checkbox`, `date`, `list`, `tags`) without exposing raw YAML syntax.
@@ -46,6 +47,7 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 - **Obsidian JSON Canvas 1.0 Compatible:** Native visual canvas editor powered by `@xyflow/react` that reads and writes standard `.canvas` files.
 - **Extended Workflow & Network Shapes:** Includes 11 shape primitives for workflow modeling and network diagrams (`rectangle`, `rounded`, `circle`, `diamond`, `parallelogram`, `hexagon`, `cylinder`, `cloud`, `server`, `router`, `workstation`) with graceful degradation in standard Obsidian, plus a compact 4-column icon shape picker with hover tooltips.
 - **Images, Custom Shapes & Clickable Links:** Insert images via the toolbar **Image** picker (upload from device or pick existing vault images), **Drag & Drop** from the File Tree or desktop, or **Paste (`Ctrl+V`)**. Any image node can be masked into any of the 11 shapes, attached with clickable links (`link`) to vault notes or external web URLs, and connected via enlarged desktop/touch edge handles.
+- **Compact & Preview File Nodes (`displayMode`) + Companion Folder Tree:** Embed `.md` and `.pdf` files as sleek single-row compact cards or expandable previews with remembered custom dimensions (`previewWidth` / `previewHeight`), create new notes directly on the canvas via **+ New Note** / pane right-click, drop OS PDFs/images straight into a hidden `<Canvas>.canvas.assets/` companion directory (surfaced as an expandable virtual tree under the `.canvas` file alongside linked vault files and external URLs), and browse vault-wide external links in a collapsible sidebar section.
 - **Canvas Presentation Mode:** Turn any canvas into a resolution-independent presentation with world-space slides, smooth camera zoom arcs, per-slide element visibility/ghosting (`hiddenNodeIds`), progressive reveals, and a distraction-free fullscreen player HUD.
 - **Vault Integration & Cycle Guard:** Embed Markdown notes (`CanvasFileNode`) with full image, callout, `.zenc`, and nested non-circular `.canvas` rendering while automatically preventing infinite circular canvas recursion.
 
@@ -70,7 +72,8 @@ Zuber is built on the conviction that personal knowledge should never be trapped
 - **Filter & Color Groups:** Custom color rules by folder `path:`, `#tags`, or search queries.
 
 ### 6. UI, Navigation & Diagnostics
-- **Latching Favorites & Recent Notes:** Toggleable panels positioned above the file tree to quickly access starred files/folders and the last 10 visited notes.
+- **Latching Favorites, Recent Notes & Additive Auto-Reveal:** Toggleable panels positioned above the file tree to quickly access starred files/folders and the last 10 visited notes, automatically expanding ancestor folders without collapsing open folders and scrolling the highlighted entry cleanly to the top of the tree.
+- **Global External Links Panel:** Collapsible bottom section in the left sidebar aggregating all external `http(s)://` URLs referenced across Markdown notes and `.canvas` files with live filtering, source chips, and Research Split routing.
 - **Resizable Sidebars:** Smooth drag-resizing for left and right sidebars on desktop with persistent width storage.
 - **Mobile Drawer & Touch Gestures:** Full-screen mobile sidebars (100vw) that open and dismiss via smooth horizontal swipe gestures.
 - **Configurable Font Sizes:** Independent font size sliders for UI elements vs. editor content across desktop and mobile devices.

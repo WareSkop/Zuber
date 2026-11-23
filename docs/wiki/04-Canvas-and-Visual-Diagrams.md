@@ -21,13 +21,26 @@ Every `.canvas` file is saved as clean, standard JSON (without YAML frontmatter)
 
 Use the top floating **Canvas Toolbar** (automatically collapsing button labels on viewports `<= 900px` for maximum smartphone space) to add elements:
 - **+ Text:** Add a Markdown text/shape node. Double-click any shape (or select it and start typing directly — *Type-to-Edit*) to edit its Markdown content, including inline `![[image]]` embeds.
-- **Embed Note:** Search and embed any `.md` note from your vault as a live preview card (`CanvasFileNode`) with full Reading Mode rendering (inline images, callouts, `.zenc` decryption, and live non-circular nested `.canvas` embeds) plus an **Open ↗** button.
+- **+ New Note:** Click **+ New Note** in the toolbar—or right-click empty canvas space → **Create New Note…**—to open an inline prompt and create a fresh `.md` note directly on the canvas. The new file is automatically saved inside the canvas's companion folder without manual path typing.
+- **+ File / Embed Note:** Search and embed any `.md`, `.pdf`, or vault file as a `CanvasFileNode` with quick open (`↗`), node color tinting, and optional live preview.
+- **Compact Card vs. Preview Mode (`displayMode`) with Remembered Size:** Newly added `.md` and `.pdf` file nodes start as sleek, single-row **Compact Cards** (`220×58`, icon + clean title + `↗` open button, no scrollbars). Click `[ Card | Preview ]` in the **Canvas Inspector** (or the quick toggle on the node) to expand any `.md` or `.pdf` node into a scrollable **Markdown Reading Preview** (complete with images, callouts, `.zenc` decryption, and cycle-safe nested `.canvas` embeds) or an embedded **PDF Preview**. Whenever you resize a node in **Preview** mode and switch back to **Card**, Zuber remembers your custom `previewWidth` and `previewHeight`—staying 100% backward-compatible with JSON Canvas 1.0.
 - **Image ⌄:** Upload an image directly from your device or choose any existing vault image (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.avif`, including `.zenc`).
-- **Drag & Drop & Paste (`Ctrl+V`):** Drag images or notes straight from the left **File Tree**, drop image files from your desktop, or paste clipboard images onto the canvas.
+- **Multi-Source Drag & Drop & Paste (`Ctrl+V`):** Drag existing `.md`, `.pdf`, or image files straight from the left **File Tree** (`FileSidebar`), drop `.pdf` or image files directly from your OS file manager (auto-saved into the canvas companion folder), or paste clipboard images onto the canvas.
 - **Group:** Create a labeled visual container. Dragging a group automatically moves all enclosed child nodes together.
 - **Workflow ⌄ / Network ⌄:** Drop pre-styled workflow or infrastructure shapes onto the canvas.
 - **Box Select (`Marquee`):** Toggle drag-box selection (or hold `Shift` + drag) to select, move, duplicate, or delete multiple nodes at once.
-- **Grid & Snap:** Configure grid visibility (`Dots`, `Lines`, `Off`) and snap size (`10px`, `15px`, `20px`, `25px`).
+- **Grid & Snap & Canvas Settings (`⚙`):** Configure grid visibility (`Dots`, `Lines`, `Off`), snap size (`10px`, `15px`, `20px`, `25px`), and customize the canvas's **Assets Folder (`assetsFolder`)** override.
+
+### Companion Folder (`<CanvasName>.canvas.assets/`) & Virtual Sidebar Tree
+When you create a new note or drop an external image/PDF onto a canvas (for example, `Projects/System-Architecture.canvas`), Zuber lazily creates its companion directory `System-Architecture.canvas.assets/` right alongside it (unless overridden via `assetsFolder` in Canvas Settings):
+- **Decluttered Sidebar:** Raw `.canvas.assets/` folders are hidden as standalone directories in the left **File Tree**.
+- **Expandable Canvas Row (`▸` / `▾`):** Every `.canvas` file with companion assets, referenced vault notes, or external URLs displays an expand chevron revealing:
+  1. Physical companion notes, PDFs, and images inside `<Canvas>.canvas.assets/`,
+  2. Linked vault files residing in other folders (marked with a link badge), and
+  3. External `http(s)://` URLs referenced by canvas link or text nodes (globe icon).
+- **Atomic Rename & Move Sync:** Renaming or moving `System-Architecture.canvas` in the File Tree automatically moves `System-Architecture.canvas.assets/` along with it and updates every internal node and link across the vault.
+
+![Canvas Compact and Preview File Nodes, Inspector Toggle and Companion Folder Tree](images/29-canvas-compact-nodes-and-tree.png)
 
 ### Image Shapes & Clickable Links
 - **All 11 Shapes for Images:** Select any image node and pick any of the 11 shapes (`circle`, `rounded`, `diamond`, `hexagon`, `cloud`, etc.) from the compact **4-column icon Shape Picker** (hover over any symbol to view its localized name). Images clip cleanly inside the shape border.

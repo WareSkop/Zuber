@@ -41,6 +41,9 @@ Use Obsidian-compatible callout syntax (`> [!NOTE]`, `> [!TIP]`, `> [!INFO]`, `>
 > You can embed any `.base` board or `.canvas` diagram inside a note using `![[Name.base]]` or `![[Diagram.canvas]]`.
 ```
 
+### Blockquotes & Multi-Line Quotes
+Standard Markdown blockquotes (`> Quote line`) are rendered across Live-Preview, Reading Mode, and the Research Split-View with a crisp `3px` vertical left accent border (nested blockquotes highlight cleanly with the active theme's accent color). Both Reading Mode and Research Pane rendering preserve GFM line breaks (`breaks: true`), so consecutive quote lines (`> Line 1` followed by `> Line 2`) keep their intended structure instead of merging into a single wrapped line.
+
 ### Interactive Visual Markdown Tables (In-Place Editing, `_tableWidths` & Sorting)
 Standard GFM tables (`| Column | Column |`) render as interactive HTML tables in Live-Preview and Reading modes:
 - **Stay Rendered on Click:** Clicking any header or body cell edits that cell directly in-place without collapsing back into raw pipe-delimited Markdown. (Switch to **Source Mode** anytime to edit raw pipes.)

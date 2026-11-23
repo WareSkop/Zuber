@@ -31,24 +31,35 @@ When the Research Split-View is **open**:
 
 ## 3. Supported Reference Formats
 
-The Research Pane renders all major vault formats natively:
-1. **Markdown Notes (`.md`):** Full Reading Mode rendering (Callouts, Task lists, Tables, Mermaid diagrams, Inline Images, PDF embeds).
+The Research Pane renders all major vault and web formats natively:
+1. **Markdown Notes (`.md`):** Full Reading Mode rendering (Callouts, styled Blockquotes with preserved multi-line breaks, Task lists, Tables, Mermaid diagrams, Inline Images, PDF embeds).
 2. **Canvas Diagrams (`.canvas`):** Interactive read-only pan and zoom viewer powered by `@xyflow/react`.
 3. **Bases (`.base`):** Interactive read-only database view.
 4. **Images (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`):** Centered viewer with Zoom In / Zoom Out / Fit controls.
-5. **PDF Documents (`.pdf`):** Embedded PDF viewer.
+5. **PDF Documents (`.pdf`) via Offline Text-Layer Viewer:** Rendered locally with bundled `pdfjs-dist` (zero external CDN requests — works offline for both Vault PDFs and proxied Web PDFs). Displays HiDPI `<canvas>` pages with a transparent selectable `.textLayer`, live page indicator (`Page N / M`), zoom controls (`-`, `+`, Reset `115%`), and an external open button.
 6. **Knowledge Graph (`graph`):** Toggle directly to the interactive Knowledge Graph inside the Research Pane header.
-7. **Integrated Split-View Web Browser (`http://` / `https://`):**
-   - When Research Split-View is **open**, normal left-clicks on external `http://` or `https://` links inside notes load the web page directly inside the right Research Pane instead of opening a new browser tab.
-   - **`Ctrl + Click` / `Cmd + Click` / Middle-Click:** Bypasses the split-pane browser and opens the URL in a new external system browser tab.
-   - **Address Bar & Controls:** Edit URLs directly in the top address bar, reload, copy the URL, or navigate back (`←`) through mixed note/web `researchHistory`.
-   - **Embed-Blocked Fallback:** Websites that disallow iframe embedding via `X-Frame-Options` or CSP `frame-ancestors` automatically display a clean **Embed-Blocked Fallback Card** with a one-click **Open in Browser ↗** button.
+7. **Ad-Free Web Reader & Browser (`http://` / `https://`):**
+   - When Research Split-View is **open**, clicking an external `http://` or `https://` link inside any note or the Global External Links sidebar loads it inside the right Research Pane instead of leaving Zuber (use **`Ctrl+Click` / `Cmd+Click` / Middle-Click** to open directly in an external browser tab).
+   - **`[ Markdown | HTML ]` Segmented Toggle:** Defaults to **Markdown**, which fetches the target via Zuber's SSRF-hardened backend extractor (`@mozilla/readability` + `turndown` + GFM tables/checklists, resolving relative image `src` and link `href` paths against the final URL) and renders the ad-free article in clean typography. Switch to **HTML** anytime to inspect the live page inside a sandboxed `<iframe>` (with an automatic **Embed-Blocked Fallback Card** if the site sets `X-Frame-Options` or CSP `frame-ancestors`). Web PDFs are automatically detected and handed off to the offline PDF Text-Layer Viewer via `/api/web/proxy-pdf`.
+   - **Save as Note:** Click **Save as Note** in the Web Reader toolbar to clip the entire extracted Markdown article into your vault with automatic YAML metadata (`source`, `clipped`, and optional `site` / `author`).
 
-![Integrated Web Browser in Research Split-View](images/18-research-web-browser.png)
+![Research Split-View Web Reader with Markdown Toggle and Quick-Quote Popover](images/18-research-web-browser.png)
 
 ---
 
-## 4. Automatic Back-Button & Right-Sidebar Sync
+## 4. Offline PDF Text-Layer & Drag-and-Drop Blockquote Citations
+
+Zuber turns the Research Split-View into a friction-free literature synthesis workspace:
+
+- **Highlight & Click `Insert as Quote ↵`:** Select any text inside a Web Reader article, an offline PDF page, or a Research Reading-Mode note to surface the floating **Insert as Quote ↵** popover right above your selection. Clicking it inserts the formatted blockquote straight into your active editor note.
+- **Direct Drag & Drop onto Exact Line:** Drag any selected passage from the Web Reader, PDF Text-Layer, or Research Reading View and drop it directly onto the target line in the left **Live-Preview Editor** (`view.posAtCoords` places it precisely at the drop cursor).
+- **Automatic Page & Source Attribution:** Dropped or inserted quotes preserve multi-line Markdown line breaks (`> ...`) and automatically append a clean citation footer — including exact page numbers for PDF quotes (for example, `> — [Architecture-Whitepaper.pdf (p. 1)](attachments/Architecture-Whitepaper.pdf)` or `> — [Article Title](https://...)`).
+
+![Offline PDF Text-Layer Viewer and Cited Blockquote in Research Split-View](images/28-research-pdf-text-layer.png)
+
+---
+
+## 5. Automatic Back-Button & Right-Sidebar Sync
 
 Zuber keeps navigation and context coherent while Research Split-View is active:
 
@@ -57,7 +68,7 @@ Zuber keeps navigation and context coherent while Research Split-View is active:
 
 ---
 
-## 5. Zen Split-View (`Alt+Z`) & Mobile Vertical Split
+## 6. Zen Split-View (`Alt+Z`) & Mobile Vertical Split
 
 - **Zen Mode (`Alt+Z`):** Enabling Zen Mode while Research Split-View is open hides the topbar, sidebars, and toolbars while **preserving both split panes** and keeping the 1px center divider draggable.
 - **Mobile Vertical Split (`< 768px`):** On smartphones, Research Split-View automatically switches from a horizontal side-by-side layout to a **vertical top/bottom split** (reference pane on top, editor on bottom) so the on-screen keyboard never obscures your reference material. You can also toggle Columns ⇄ Rows manually using the orientation button in the Research Pane header.

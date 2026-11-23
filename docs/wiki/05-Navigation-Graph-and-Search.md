@@ -8,6 +8,7 @@ Zuber is built for vaults with thousands of interconnected notes, diagrams, and 
 
 The **Left Sidebar** (`Ctrl+\`) provides a hierarchical file explorer with dedicated badges for `.base` (`BASE`), `.canvas` (workflow icon), Templates, and Send Targets (🎯):
 
+- **Expandable `.canvas` Companion Trees (`▸` / `▾`):** Canvas companion directories (`<CanvasName>.canvas.assets/`) are hidden as standalone folders to keep your tree clean. Instead, each `.canvas` file with companion files or links gets an expand chevron surfacing its physical companion assets, linked external vault notes (link indicator), and external URLs (globe icon) directly underneath.
 - **Sorting (`⇅`):** Sort the tree by Name (`A–Z` / `Z–A`) or Modification Date (`Newest first` / `Oldest first`). Folders always stay grouped at the top, and date sorting recursively evaluates the newest file inside each folder.
 - **Multi-Select:**
   - `Ctrl+Click` / `Cmd+Click` toggles individual files or folders.
@@ -15,7 +16,7 @@ The **Left Sidebar** (`Ctrl+\`) provides a hierarchical file explorer with dedic
 - **Drag & Drop & "Move to…":**
   - Drag single or multi-selected items onto any folder in the tree (hovering over a collapsed folder for `500ms` auto-expands it).
   - Or right-click → **Move to…** to open a keyboard-searchable folder picker (`MoveToModal`), preventing circular folder moves.
-  - **Drag into Editor:** Dragging a note, image, PDF, or canvas from the File Tree into the Markdown editor automatically inserts a `[[Wiki-Link]]` or `![[Embed]]` at the drop position.
+  - **Drag into Editor or Canvas:** Dragging a note, image, PDF, or canvas from the File Tree into the Markdown editor inserts a `[[Wiki-Link]]` or `![[Embed]]`; dragging it onto a **Canvas** creates a file or image node directly at the drop coordinates.
   - **External File Drop & Download:** Drop files or folders from your OS file manager straight onto the File Tree to upload them, or right-click any file/folder → **Download** (folders stream as `.zip` archives).
 
 ---
@@ -32,16 +33,30 @@ Whenever you **rename** or **move** a note, canvas, attachment, or entire folder
 
 ---
 
-## 3. Latching Favorites & Recent Notes Panels
+## 3. Latching Favorites, Recent Notes & Additive Auto-Reveal
 
 Next to the **Files**, **Search**, and **Tags** tabs in the left sidebar are two latching toggle buttons:
 - **Favorites (`★`):** Pins a persistent Favorites panel above the file tree. Right-click any file or folder → **Add to Favorites** / **Remove from Favorites**.
 - **Recent Notes (`🕒`):** Displays the last 10 opened notes and canvases for one-click context switching.
 - Both panels stay synchronized automatically when files are renamed or deleted.
+- **Additive Auto-Reveal & Container Scroll-to-Top:** Clicking any item in **Favorites** (file or folder), **Recent Notes**, or navigating via `[[Wiki-Links]]`, Backlinks, or Unified Search automatically reveals the target inside the File Tree (`revealPathInTree`):
+  - **Never Collapses Existing Folders:** Ancestor folders along the target path are added to the expanded set additively—folders you already opened stay open.
+  - **Clean Top Alignment:** Only the File Tree's scroll container scrolls smoothly so the highlighted item sits cleanly at the top edge (`4px` offset) without shifting surrounding layout panes.
 
 ---
 
-## 4. Unified 4-Mode Search, In-Note Jump Bar & Command Palette
+## 4. Global External Links Panel
+
+At the bottom of the left **File Sidebar** sits the collapsible **External Links** section:
+- **Vault-Wide URL Aggregation:** Collects every external `http://` / `https://` link referenced inside Markdown notes and `.canvas` files (including canvas link nodes and URLs inside text nodes).
+- **Live Search Filter & Backlink Chips:** Filter links instantly by title, URL, or domain. Click the numeric source badge on any link to expand clickable chips for every note or canvas referencing that URL.
+- **Smart Link Routing:** Clicking an external link opens it inside the **Research Split-View Web Reader** if Split-View is active (or use `Ctrl+Click` / normal behavior when Split-View is closed to open in a browser tab).
+
+![File Tree Auto-Reveal, Blockquotes and Collapsible External Links Section](images/30-sidebar-external-links-and-reveal.png)
+
+---
+
+## 5. Unified 4-Mode Search, In-Note Jump Bar & Command Palette
 
 Zuber uses a unified whole-word search engine (`shared/searchEngine.ts`) across Desktop, Mobile, and Offline IndexedDB cache:
 
@@ -59,7 +74,7 @@ Zuber uses a unified whole-word search engine (`shared/searchEngine.ts`) across 
 
 ---
 
-## 5. Interactive 2D Knowledge Graph
+## 6. Interactive 2D Knowledge Graph
 
 Zuber renders a force-directed **2D Knowledge Graph** (`GraphView`) in three places:
 1. **Global Graph:** Full-vault network view accessible from the topbar/Command Palette.

@@ -3,6 +3,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync, spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
+import { jsPDF } from 'jspdf';
 
 const ROOT_DIR = process.cwd();
 const OUT_DIR = path.join(ROOT_DIR, 'docs', 'wiki', 'images');
@@ -10,6 +11,7 @@ const DEMO_VAULT_DIR = path.join(os.tmpdir(), 'zuber-manual-demo-vault');
 const DEMO_CONFIG_PATH = path.join(os.tmpdir(), 'zuber-manual-demo-config.json');
 const PORT = 3499;
 const BASE_URL = `http://127.0.0.1:${PORT}`;
+const ONLY_NEW = process.argv.includes('--only-new');
 
 function ensureCleanDir(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -20,6 +22,35 @@ function writeFile(relPath, content) {
   const fullPath = path.join(DEMO_VAULT_DIR, relPath);
   fs.mkdirSync(path.dirname(fullPath), { recursive: true });
   fs.writeFileSync(fullPath, content, 'utf-8');
+}
+
+function writeDemoPdf(relPath, pages) {
+  const fullPath = path.join(DEMO_VAULT_DIR, relPath);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  pages.forEach((pageContent, idx) => {
+    if (idx > 0) doc.addPage();
+    let y = 56;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(17);
+    doc.text(pageContent.heading, 48, y);
+    y += 28;
+    if (pageContent.subheading) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.text(pageContent.subheading, 48, y);
+      y += 20;
+    }
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    for (const para of pageContent.paragraphs) {
+      const lines = doc.splitTextToSize(para, 495);
+      doc.text(lines, 48, y);
+      y += lines.length * 16 + 12;
+    }
+  });
+  const arrayBuffer = doc.output('arraybuffer');
+  fs.writeFileSync(fullPath, Buffer.from(arrayBuffer));
 }
 
 function git(cmd) {
@@ -572,10 +603,48 @@ views:
         id: 'n-file',
         type: 'file',
         file: 'Server-Setup.md',
+        displayMode: 'preview',
+        previewWidth: 280,
+        previewHeight: 220,
         x: 860,
-        y: 70,
-        width: 260,
+        y: 25,
+        width: 280,
         height: 220,
+      },
+      {
+        id: 'n-compact-md',
+        type: 'file',
+        file: 'System-Architecture.canvas.assets/Edge-Notes.md',
+        displayMode: 'card',
+        previewWidth: 340,
+        previewHeight: 260,
+        x: 860,
+        y: 265,
+        width: 220,
+        height: 58,
+        color: '4',
+      },
+      {
+        id: 'n-compact-pdf',
+        type: 'file',
+        file: 'System-Architecture.canvas.assets/Security-Spec.pdf',
+        displayMode: 'card',
+        previewWidth: 380,
+        previewHeight: 420,
+        x: 860,
+        y: 345,
+        width: 220,
+        height: 58,
+        color: '2',
+      },
+      {
+        id: 'n-link-ext',
+        type: 'link',
+        url: 'https://docs.example.org/architecture/local-first-pkm',
+        x: 20,
+        y: 375,
+        width: 210,
+        height: 58,
       },
     ],
     edges: [
@@ -640,10 +709,130 @@ views:
         toSide: 'left',
         toEnd: 'arrow',
       },
+      {
+        id: 'e8',
+        fromNode: 'n-decision',
+        fromSide: 'right',
+        toNode: 'n-compact-md',
+        toSide: 'left',
+        toEnd: 'arrow',
+        label: 'Companion',
+      },
+      {
+        id: 'e9',
+        fromNode: 'n-hex',
+        fromSide: 'right',
+        toNode: 'n-compact-pdf',
+        toSide: 'left',
+        toEnd: 'arrow',
+        label: 'Audit PDF',
+      },
     ],
   };
 
   writeFile('System-Architecture.canvas', JSON.stringify(canvasDoc, null, 2));
+
+  // Companion assets for System-Architecture.canvas (kept hidden as standalone folder in sidebar)
+  writeFile(
+    'System-Architecture.canvas.assets/Edge-Notes.md',
+    `# Edge Termination & Keepalives
+
+- TLS 1.3 terminated at Nginx Proxy Manager (:443)
+- WebSocket heartbeat every 25s on \`/ws\`
+- See [[Server-Setup]] for proxy headers
+`
+  );
+
+  writeDemoPdf('System-Architecture.canvas.assets/Security-Spec.pdf', [
+    {
+      heading: 'Zuber Edge Security Specification',
+      subheading: 'Canvas Companion Brief (v1.0)',
+      paragraphs: [
+        'All traffic entering the Zuber reverse proxy uses TLS 1.3 with strict origin checks and HttpOnly HMAC-SHA256 session cookies.',
+        'Companion PDF attachments stay neatly grouped inside the canvas companion tree without cluttering top-level vault folders.',
+      ],
+    },
+  ]);
+
+  // Multi-page selectable PDF for Research Split-View Text-Layer screenshot
+  writeDemoPdf('attachments/Architecture-Whitepaper.pdf', [
+    {
+      heading: 'Zuber Offline-First Architecture Whitepaper',
+      subheading: '1. Local-First Data Ownership & Sync',
+      paragraphs: [
+        'Every note remains a plain Markdown file on disk, enabling seamless interoperability with Git, local LLMs, and desktop tools across every platform.',
+        'Changes authored while offline queue inside a persistent IndexedDB outbox and synchronize automatically over WebSockets once connectivity resumes.',
+        'Interactive Research Split-View keeps your primary editor undisturbed on the left while rendering Markdown, PDFs, or clean Web Reader articles on the right.',
+      ],
+    },
+    {
+      heading: 'Research Split-View & Citation Workflow',
+      subheading: '2. Zero-Friction Literature Capturing',
+      paragraphs: [
+        'Highlight any passage inside a PDF document or extracted Web Reader article to surface the floating Insert as Quote popover or drag the selection onto an exact editor line.',
+        'Zuber automatically preserves multi-line Markdown blockquotes and appends structured page-numbered attribution links for fast verification.',
+      ],
+    },
+  ]);
+
+  // Research synthesis note showcasing multiline blockquotes, PDF link, and external web reader link
+  writeFile(
+    'Research-Notes.md',
+    `---
+status: Active
+tags:
+  - research
+  - architecture
+created: 2026-11-22
+---
+
+# Local-First Research Synthesis
+
+Synthesizing architecture notes from primary whitepapers and technical articles side-by-side.
+
+> Every note remains a plain Markdown file on disk,
+> enabling seamless interoperability with Git, local LLMs, and desktop tools.
+> — [Architecture-Whitepaper.pdf (p. 1)](attachments/Architecture-Whitepaper.pdf)
+
+## Source Material
+
+- Primary Whitepaper: [[Architecture-Whitepaper.pdf]]
+- Web Reference: [Local-First Knowledge Management](https://docs.example.org/architecture/local-first-pkm)
+- Spec Overview: [JSON Canvas 1.0 Specification](https://jsoncanvas.org/spec/1.0/)
+`
+  );
+
+  // Nested hierarchy & sibling folders to showcase additive File Tree Auto-Reveal + scroll-to-top
+  writeFile('Archive/2025-Migration-Log.md', '# 2025 Migration Log\n\nCompleted migration from flat folders to structured bases.\n');
+  writeFile('Archive/Legacy-Notes.md', '# Legacy Notes\n\nArchived meeting snippets from Q4.\n');
+  writeFile('Guides/Quick-Start.md', '# Quick Start Guide\n\nStart writing in Markdown and press `Ctrl+O` to jump anywhere.\n');
+  writeFile('Guides/Keyboard-Shortcuts.md', '# Keyboard Shortcuts\n\n- `Alt+Z`: Zen Mode\n- `Ctrl+Shift+F`: Unified Search\n');
+  writeFile(
+    'Projects/Subsystems/Networking/Zero-Trust-Gateway.md',
+    `---
+status: Active
+tags:
+  - networking
+  - security
+created: 2026-11-20
+---
+
+# Zero-Trust Gateway
+
+Reverse-proxy hardening notes opened via **Favorites** to verify additive File Tree auto-reveal.
+
+> Multi-line blockquotes keep their line breaks intact
+> without collapsing adjacent quote lines together.
+>
+> > Nested blockquotes stand out with the theme accent border
+> > in both Reading View and Research Split-View.
+
+## External Specs
+
+- [Local-First Knowledge Management](https://docs.example.org/architecture/local-first-pkm)
+- [JSON Canvas 1.0 Specification](https://jsoncanvas.org/spec/1.0/)
+`
+  );
 
   git('add -A');
   git('commit -m "feat: add demo bases, templates, canvas, and interconnected notes"');
@@ -734,12 +923,260 @@ async function run() {
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
     try {
       await page.waitForSelector('.left-sidebar', { timeout: 10000 });
+      await page.waitForSelector('.tree-item', { timeout: 10000 });
     } catch (e) {
       const html = await page.evaluate(() => document.body.innerHTML.slice(0, 1000));
       console.error('[Debug DOM]', html);
       throw e;
     }
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(600);
+
+    const captureNewAndRefreshedDesktop = async () => {
+      // Dedicated balanced 48/52 Split context so Web Reader toolbar & full A4 PDF page width fit cleanly without cropping
+      const researchCtx = await browser.newContext({
+        viewport: { width: 1440, height: 900 },
+        deviceScaleFactor: 2,
+      });
+      await researchCtx.addInitScript(() => {
+        localStorage.setItem('zuber_language', 'en');
+        localStorage.setItem('zuber_split_ratio', '48');
+        Object.defineProperty(navigator, 'onLine', { get: () => true });
+      });
+      const rPage = await researchCtx.newPage();
+
+      // Mock Web Reader extraction endpoint deterministically for offline reliability
+      const mockExtractHandler = async (route) => {
+        const url = route.request().url();
+        if (url.includes('local-first-pkm')) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              type: 'article',
+              url: 'https://docs.example.org/architecture/local-first-pkm',
+              title: 'Local-First Knowledge Management',
+              byline: 'Dr. Elena Vance',
+              siteName: 'Architecture Digest',
+              excerpt: 'Why plain-text Markdown vaults paired with offline-first replication outlast proprietary silos.',
+              markdown: [
+                'Software should never hold your personal writing hostage inside proprietary cloud silos.',
+                '',
+                '> Local-first architectures give users ownership of plain files on disk',
+                '> while preserving instant search, split-pane research, and multi-device sync.',
+                '',
+                '## Key Storage Guarantees',
+                '',
+                '- **Zero Vendor Lock-In:** Plain `.md` notes and standard JSON Canvas files remain readable anywhere.',
+                '- **Offline Resilience:** Edits queue locally in IndexedDB and flush automatically upon reconnect.',
+                '',
+                '| Capability | Proprietary Cloud | Local-First Vault |',
+                '| :--- | :--- | :--- |',
+                '| File Ownership | Locked export | 100% plain disk files |',
+                '| Offline Edits | Read-only cache | Full read/write outbox |',
+              ].join('\n'),
+            }),
+          });
+          return;
+        }
+        await route.continue();
+      };
+      await rPage.route('**/api/web/extract*', mockExtractHandler);
+
+      try {
+        await rPage.goto(BASE_URL, { waitUntil: 'networkidle' });
+        await rPage.waitForSelector('.tree-item', { timeout: 10000 });
+        await rPage.waitForTimeout(500);
+
+        const rightSidebarClose = rPage.locator('.right-sidebar .close-sidebar-btn').first();
+        if (await rightSidebarClose.isVisible()) {
+          await rightSidebarClose.click();
+          await rPage.waitForTimeout(250);
+        }
+
+        // 18 (Refreshed). 18-research-web-browser.png — Ad-Free Web Reader [Markdown|HTML] + Save as Note + Quick-Quote Popover
+        await openFileFromTree(rPage, 'Research-Notes');
+        await rPage.waitForTimeout(400);
+        const researchToggle = rPage.locator('.ribbon-btn[title*="Research"], .ribbon-btn[title*="Recherche"]').first();
+        await researchToggle.click();
+        await rPage.waitForSelector('.research-pane-container', { timeout: 5000 });
+        await rPage.waitForTimeout(300);
+
+        // Open Web URL inside Research Pane via its Web button + URL input
+        await rPage.locator('[data-testid="research-open-web-btn"]').click();
+        await rPage.waitForSelector('[data-testid="research-web-url-input"]', { timeout: 5000 });
+        const urlInput = rPage.locator('[data-testid="research-web-url-input"]');
+        await urlInput.fill('https://docs.example.org/architecture/local-first-pkm');
+        await urlInput.press('Enter');
+        await rPage.waitForSelector('[data-testid="research-web-reader"] .research-web-article-body p', {
+          timeout: 8000,
+        });
+        await rPage.waitForTimeout(500);
+
+        // Highlight first article paragraph cleanly and trigger Quick-Quote Popover ("Insert as Quote ↵")
+        await rPage.evaluate(() => {
+          const p = document.querySelector('.research-web-article-body p');
+          if (!p) return;
+          const range = document.createRange();
+          range.selectNodeContents(p);
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+          p.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        });
+        await rPage.waitForSelector('[data-testid="research-quote-popover"]', { timeout: 5000 });
+        await rPage.waitForTimeout(300);
+        await capture(rPage, '18-research-web-browser.png');
+
+        // Clear selection/popover before PDF screenshot
+        await rPage.evaluate(() => {
+          window.getSelection()?.removeAllRanges();
+          document.querySelector('.research-pane-content')?.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        });
+
+        // 28. 28-research-pdf-text-layer.png — Offline PDF Text-Layer Viewer + Page Indicator + Quick-Quote Popover
+        const attachmentsFolder = rPage.locator('.tree-folder-item[data-tree-path="attachments"]').first();
+        if (await attachmentsFolder.isVisible()) {
+          const isExpanded = await attachmentsFolder.getAttribute('aria-expanded');
+          if (isExpanded !== 'true') {
+            await attachmentsFolder.click();
+            await rPage.waitForTimeout(300);
+          }
+        }
+        const pdfTreeItem = rPage.locator('.tree-item[data-tree-path="attachments/Architecture-Whitepaper.pdf"]').first();
+        await pdfTreeItem.waitFor({ state: 'visible', timeout: 6000 });
+        await pdfTreeItem.click();
+        await rPage.waitForSelector('[data-testid="research-pdf-viewer"]', { timeout: 8000 });
+        await rPage.waitForFunction(() => {
+          const spans = document.querySelectorAll('.research-pdf-text-layer[data-pdf-page="1"] span');
+          const canvas = document.querySelector('.research-pdf-canvas');
+          return spans.length > 5 && canvas && canvas.width > 0;
+        }, { timeout: 10000 });
+        await rPage.waitForTimeout(300);
+
+        // Zoom out twice (115% -> 85%) so full A4 PDF page width fits crisply inside Research Pane
+        const pdfZoomOutBtn = rPage.locator('.research-pdf-toolbar-right .image-tool-btn').first();
+        await pdfZoomOutBtn.click();
+        await pdfZoomOutBtn.click();
+        await rPage.waitForFunction(() => {
+          const spans = document.querySelectorAll('.research-pdf-text-layer[data-pdf-page="1"] span');
+          const canvas = document.querySelector('.research-pdf-canvas');
+          return spans.length > 5 && canvas && canvas.width > 0;
+        }, { timeout: 10000 });
+        await rPage.waitForTimeout(450);
+
+        // Select text spans inside Page 1 TextLayer so native highlight + "Insert as Quote ↵" appear cleanly
+        await rPage.evaluate(() => {
+          const layer = document.querySelector('.research-pdf-text-layer[data-pdf-page="1"]');
+          if (!layer) return;
+          const spans = Array.from(layer.querySelectorAll('span')).filter((s) => (s.textContent || '').trim().length > 8);
+          const targetIdx = Math.min(3, Math.max(0, spans.length - 3));
+          const startSpan = spans[targetIdx];
+          const endSpan = spans[Math.min(targetIdx + 2, spans.length - 1)];
+          if (!startSpan?.firstChild || !endSpan?.firstChild) return;
+          const range = document.createRange();
+          range.setStart(startSpan.firstChild, 0);
+          range.setEnd(endSpan.firstChild, endSpan.firstChild.textContent?.length || 0);
+          const sel = window.getSelection();
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+          layer.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        });
+        await rPage.waitForSelector('[data-testid="research-quote-popover"]', { timeout: 5000 });
+        await rPage.waitForTimeout(350);
+        await capture(rPage, '28-research-pdf-text-layer.png');
+      } finally {
+        await rPage.unroute('**/api/web/extract*', mockExtractHandler).catch(() => {});
+        await researchCtx.close();
+      }
+
+      // Close Right Sidebar on main page so Canvas + Floating Inspector have maximum horizontal breathing room
+      const mainRightClose = page.locator('.right-sidebar .close-sidebar-btn').first();
+      if (await mainRightClose.isVisible()) {
+        await mainRightClose.click();
+        await page.waitForTimeout(200);
+      }
+
+      // 29. 29-canvas-compact-nodes-and-tree.png — Compact/Preview File Nodes + CanvasInspector Toggle + Virtual Companion Tree
+      const canvasItem = page.locator('.tree-file-item[data-tree-path="System-Architecture.canvas"]').first();
+      await canvasItem.waitFor({ state: 'visible', timeout: 6000 });
+      await canvasItem.click();
+      await page.waitForSelector('.react-flow__node', { timeout: 8000 });
+      await page.waitForSelector('.canvas-file-compact-row', { timeout: 6000 });
+      await page.waitForTimeout(500);
+
+      // Expand System-Architecture.canvas virtual companion tree in left sidebar
+      const canvasChevron = page.locator('.tree-file-item[data-tree-path="System-Architecture.canvas"] .tree-canvas-chevron-btn').first();
+      if ((await canvasChevron.getAttribute('aria-expanded')) !== 'true') {
+        await canvasChevron.click();
+        await page.waitForTimeout(350);
+      }
+
+      // Click compact Markdown node so Floating Inspector displays [ Card | Preview ] display mode toggle
+      const compactNode = page.locator('[data-id="n-compact-md"]').first();
+      await compactNode.click();
+      await page.waitForSelector('.canvas-floating-inspector', { timeout: 5000 });
+      await page.waitForTimeout(450);
+      await capture(page, '29-canvas-compact-nodes-and-tree.png');
+
+      // 30. 30-sidebar-external-links-and-reveal.png — Additive Auto-Reveal (without collapsing open folders) + Blockquotes + External Links Section
+      // Ensure a sibling folder ("Guides") is explicitly open before auto-reveal runs
+      const guidesFolder = page.locator('.tree-folder-item[data-tree-path="Guides"]').first();
+      if ((await guidesFolder.getAttribute('aria-expanded')) !== 'true') {
+        await guidesFolder.click();
+        await page.waitForTimeout(250);
+      }
+
+      // Seed Favorites with deep nested note + open Favorites panel
+      await page.evaluate(() => {
+        localStorage.setItem(
+          'zuber_favorites',
+          JSON.stringify([
+            { path: 'Projects/Subsystems/Networking/Zero-Trust-Gateway.md', type: 'file' },
+            { path: 'System-Architecture.canvas', type: 'file' },
+          ])
+        );
+        window.dispatchEvent(new CustomEvent('zuber_favorites_changed'));
+      });
+      await page.waitForTimeout(250);
+
+      const favLatchBtn = page.locator('.sidebar-tab-btn.latch-btn').first();
+      const isFavActive = await favLatchBtn.evaluate((el) => el.classList.contains('active'));
+      if (!isFavActive) {
+        await favLatchBtn.click();
+        await page.waitForSelector('.sidebar-favorites-panel', { timeout: 4000 });
+      }
+
+      // Expand global External Links panel & first entry's source chips first (so tree height settles before reveal scroll)
+      const extLinksHeader = page.locator('.sidebar-external-links-header').first();
+      if ((await extLinksHeader.getAttribute('aria-expanded')) !== 'true') {
+        await extLinksHeader.click();
+        await page.waitForTimeout(300);
+      }
+      const firstSourceBadge = page.locator('.external-link-sources-btn').first();
+      if (await firstSourceBadge.isVisible()) {
+        await firstSourceBadge.click();
+        await page.waitForTimeout(200);
+      }
+
+      // Click Favorite item -> additively reveals Projects/Subsystems/Networking without collapsing Guides + scrolls Zero-Trust-Gateway to top!
+      await page.locator('.favorite-item', { hasText: 'Zero-Trust-Gateway' }).first().click();
+      await page.waitForSelector('[data-tree-path="Projects/Subsystems/Networking/Zero-Trust-Gateway.md"]', { timeout: 6000 });
+      await page.waitForTimeout(500);
+
+      // Switch active note to Reading Mode so multiline + nested blockquotes display cleanly with vertical left border
+      const readingModeBtn = page.locator('.editor-mode-switcher button.mode-btn').nth(1);
+      await readingModeBtn.click();
+      await page.waitForSelector('.reading-view-container blockquote', { timeout: 5000 });
+      await page.waitForTimeout(450);
+      await capture(page, '30-sidebar-external-links-and-reveal.png');
+    };
+
+    if (ONLY_NEW) {
+      await captureNewAndRefreshedDesktop();
+      await context.close();
+      console.log('[Done] New & refreshed screenshots (18, 28, 29, 30) captured successfully.');
+      return;
+    }
 
     // 1. 01-editor-live-preview.png (Server-Setup.md with Properties, Callout & Markdown)
     await openFileFromTree(page, 'Server-Setup');
@@ -880,18 +1317,8 @@ async function run() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
 
-    // 18. 18-research-web-browser.png (Open Research Split-View + click external link)
-    const researchToggle = page.locator('.ribbon-btn[title*="Research"], .ribbon-btn[title*="Recherche"]').first();
-    await researchToggle.click();
-    await page.waitForSelector('.research-pane-container', { timeout: 5000 });
-    await page.waitForTimeout(400);
-    const extLink = page.locator('a[href*="github.com"], .cm-external-link').first();
-    await extLink.click();
-    await page.waitForSelector('[data-testid="research-web-bar"]', { timeout: 6000 });
-    await page.waitForTimeout(1200);
-    await capture(page, '18-research-web-browser.png');
-    await researchToggle.click();
-    await page.waitForTimeout(300);
+    // 18 & 28–30: Web Reader + Quick-Quote, PDF Text-Layer, Canvas Compact/Preview & Tree, Reveal & External Links
+    await captureNewAndRefreshedDesktop();
 
     // 21. 21-folder-encryption-unlock.png (Right-click folder -> Encrypt Folder…)
     const folderItem = page.locator('.tree-folder-item').first();
